@@ -7,6 +7,11 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+axum.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
+better-tracing.workspace = true
+tracing.workspace = true
 
 [lints]
 workspace = true
