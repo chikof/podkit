@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/database", "server"]
+members = ["crates/crypto", "crates/database", "server"]
 
 [profile.release]
 opt-level = "z"
@@ -23,13 +23,22 @@ anyhow = "=1.0.102"
 tracing = "=0.1.44"
 better-tracing = { version = "=0.6.0", features = ["env-filter"] }
 bollard = { version = "=0.20.2", features = [
-    "buildkit",
-    "chrono",
-    "websocket",
+	"buildkit",
+	"chrono",
+	"websocket",
 ] }
-sqlx = { version = "=0.8.6", features = ["runtime-tokio", "tls-rustls"] }
+time = "=0.3.47"
+sqlx = { version = "=0.8.6", features = [
+	"runtime-tokio",
+	"tls-rustls",
+	"macros",
+	"postgres",
+] }
+nanoid = "=0.5.0"
 axum = "=0.8.9"
 age = "=0.11.2"
+
+crypto = { path = "./crates/crypto" }
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
