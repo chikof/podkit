@@ -1,0 +1,43 @@
+# @use ./rts/helpers.rts
+
+### Health check
+# @name Health
+GET {{base.url}}/status/200
+
+### Echo JSON
+# @name Echo
+POST {{base.url}}/post
+Content-Type: application/json
+Authorization: Bearer {{auth.token}}
+
+{
+  "hello": "resterm",
+  "time": "{{$timestampISO8601}}"
+}
+
+### Capture value from response
+# @name CaptureToken
+# @capture file-secret auth.token = response.json.uuid
+GET {{base.url}}/uuid
+
+### Reuse captured value
+# @name UseToken
+GET {{base.url}}/anything
+Authorization: Bearer {{auth.token}}
+
+### Query params
+# @name Query
+# @var request hello resterm
+GET {{base.url}}/get?hello={{hello}}
+
+### Scripted header
+# @name ScriptedHeader
+GET {{base.url}}/anything
+Authorization: {{= helpers.authHeader(vars.get("auth.token"), env.get("auth.token")) }}
+
+### Use last response
+# @name UseLast
+# Uses last.* from the most recent request in this session.
+# Run CaptureToken first, otherwise last.json("uuid") is empty.
+GET {{base.url}}/anything
+X-Last-UUID: {{= last.json("uuid") ?? "" }}

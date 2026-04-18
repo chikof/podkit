@@ -12,6 +12,8 @@ time.workspace = true
 nanoid.workspace = true
 thiserror.workspace = true
 crypto.workspace = true
+zeroize.workspace = true
+anyhow.workspace = true
 
 [lints]
 workspace = true

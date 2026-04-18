@@ -8,10 +8,21 @@ rust-version.workspace = true
 
 [dependencies]
 axum.workspace = true
+axum-extra.workspace = true
+axum_thiserror.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
 better-tracing.workspace = true
 tracing.workspace = true
+anyhow.workspace = true
+jsonwebtoken.workspace = true
+time.workspace = true
+serde.workspace = true
+forgeconf.workspace = true
+dirs.workspace = true
+tower-cookies.workspace = true
+zeroize.workspace = true
+database.workspace = true
 
 [lints]
 workspace = true
