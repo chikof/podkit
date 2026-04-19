@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use database::connection::{get_db_connection, migrate};
-use database::PgPool;
 use database::models::token_revocations::TokenRevocation;
+use database::PgPool;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
 
@@ -37,7 +37,7 @@ async fn main() -> AppResult<()> {
 
 	// run db migrations
 	migrate().await?;
-    clean_expired_tokens(state.pool);
+	clean_expired_tokens(state.pool);
 
 	let routes = routes(state).await?;
 	let listener = TcpListener::bind(&addr).await?;
@@ -50,13 +50,13 @@ async fn main() -> AppResult<()> {
 
 // Runs every hour and cleans up expired revocation rows
 fn clean_expired_tokens(pool: &'static PgPool) {
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(std::time::Duration::from_hours(1));
-        loop {
-            interval.tick().await;
-            if let Err(e) = TokenRevocation::purge_expired(pool).await {
-                warn!("failed to purge expired token revocations: {e}");
-            }
-        }
-    });
+	tokio::spawn(async move {
+		let mut interval = tokio::time::interval(std::time::Duration::from_hours(1));
+		loop {
+			interval.tick().await;
+			if let Err(e) = TokenRevocation::purge_expired(pool).await {
+				warn!("failed to purge expired token revocations: {e}");
+			}
+		}
+	});
 }
