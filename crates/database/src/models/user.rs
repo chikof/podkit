@@ -8,7 +8,7 @@ use crate::{DatabaseError, DbExecutor};
 
 #[derive(Debug, Clone, FromRow)]
 pub struct UserModel {
-	pub id: String,
+	pub id: i64,
 	pub name: String,
 	pub email: String,
 	pub password_hash: String,

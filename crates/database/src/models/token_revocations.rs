@@ -7,7 +7,7 @@ pub struct TokenRevocation;
 impl TokenRevocation {
 	pub async fn revoke<'e>(
 		exec: impl DbExecutor<'e>,
-		jti: String,
+		jti: i64,
 		expires_at: OffsetDateTime,
 	) -> Result<(), DatabaseError> {
 		sqlx::query!(
@@ -27,7 +27,7 @@ impl TokenRevocation {
 
 	pub async fn is_revoked<'e>(
 		exec: impl DbExecutor<'e>,
-		jti: &String,
+		jti: i64,
 	) -> Result<bool, DatabaseError> {
 		let row = sqlx::query!(
 			"SELECT 1 AS exists FROM token_revocations WHERE jti = $1",

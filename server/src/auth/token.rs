@@ -5,8 +5,8 @@ use time::OffsetDateTime;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-	pub sub: String,
-	pub jti: String,
+	pub sub: i64,
+	pub jti: i64,
 	pub exp: i64,
 	pub iat: i64,
 }
@@ -25,7 +25,7 @@ impl TokenService {
 		}
 	}
 
-	pub fn issue(&self, user_id: String) -> anyhow::Result<String> {
+	pub fn issue(&self, user_id: i64) -> anyhow::Result<String> {
 		let now = OffsetDateTime::now_utc();
 		let claims = Claims {
 			sub: user_id,

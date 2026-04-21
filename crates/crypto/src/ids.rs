@@ -97,17 +97,16 @@ fn machine_id() -> u64 {
 static GENERATOR: LazyLock<Mutex<SnowflakeGenerator>> =
 	LazyLock::new(|| Mutex::new(SnowflakeGenerator::new()));
 
-/// Generates a unique Snowflake ID as a decimal string.
+/// Generates a unique Snowflake ID.
 ///
 /// Layout: 41-bit ms timestamp | 10-bit machine ID | 12-bit sequence.
 /// Monotonically increasing, time-sortable, safe for concurrent use.
 ///
 /// # Panics
 /// Panics if the internal mutex is poisoned (should never happen in normal operation).
-pub fn generate_id() -> String {
+pub fn generate_id() -> i64 {
 	GENERATOR
 		.lock()
 		.expect("snowflake generator mutex poisoned")
-		.next()
-		.to_string()
+		.next() as i64
 }

@@ -1,5 +1,5 @@
 CREATE TABLE IF NOT EXISTS token_revocations (
-	jti VARCHAR(21) PRIMARY KEY,
+	jti BIGINT PRIMARY KEY,
 	expires_at TIMESTAMPTZ NOT NULL
 );
 

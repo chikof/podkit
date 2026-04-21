@@ -7,19 +7,19 @@ use crate::{DatabaseError, DbExecutor};
 
 #[derive(Debug, Clone, FromRow)]
 pub struct TeamModel {
-	pub id: String,
+	pub id: i64,
 	pub name: String,
 	pub slug: String,
 	pub logo: String,
 	pub created_at: OffsetDateTime,
-	pub owner_id: String,
+	pub owner_id: i64,
 }
 
 #[derive(Debug)]
 pub struct NewTeam {
 	pub name: String,
 	pub logo: String,
-	pub owner_id: String,
+	pub owner_id: i64,
 }
 
 impl TeamModel {

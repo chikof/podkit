@@ -26,7 +26,7 @@ impl FromRequestParts<AppState> for AuthUser {
 			.verify(&token)
 			.map_err(|_| ServerError::InvalidToken)?;
 
-		let revoked = TokenRevocation::is_revoked(state.pool, &claims.jti)
+		let revoked = TokenRevocation::is_revoked(state.pool, claims.jti)
 			.await
 			.map_err(|_| ServerError::Internal)?;
 
