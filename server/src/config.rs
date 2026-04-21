@@ -28,7 +28,7 @@ pub struct ServerConfig {
 	#[field(env = "HOST", default = "0.0.0.0".into())]
 	pub host: String,
 
-	#[field(env = "PORT", default = 8080)]
+	#[field(env = "PORT", default = 8080)] // detski NOTE: This thing gave me a lovely Os { code: 98, kind: AddrInUse, message: "Address already in use" }
 	pub port: i32,
 }
 
