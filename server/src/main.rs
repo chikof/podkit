@@ -24,6 +24,10 @@ pub struct AppState {
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
+
+	#[cfg(debug_assertions)]
+	dotenvy::dotenv().ok(); // I wasn’t really sure whether we should use dotenv_override() or not
+
 	better_tracing::fmt().init();
 
 	let config = ServerConfig::load()?;

@@ -6,6 +6,8 @@ result
 
 # Resterm
 resterm.env.json
+Cargo.lock
+.env
 
 # Devenv
 .devenv*

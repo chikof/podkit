@@ -24,6 +24,7 @@ tower-cookies.workspace = true
 zeroize.workspace = true
 database.workspace = true
 crypto.workspace = true
+dotenvy = "0.15.7"
 
 [lints]
 workspace = true
