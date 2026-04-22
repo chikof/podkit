@@ -1,4 +1,20 @@
+# Rust
 /target
-.direnv/
+
+# Nix
 result
+
+# Resterm
 resterm.env.json
+
+# Devenv
+.devenv*
+.env
+devenv.local.nix
+devenv.local.yaml
+
+# direnv
+.direnv
+
+# pre-commit
+.pre-commit-config.yaml
