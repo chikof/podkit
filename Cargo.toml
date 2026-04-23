@@ -1,6 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["crates/crypto", "crates/database", "crates/macros", "server"]
+members = [
+	"crates/core",
+	"crates/crypto",
+	"crates/database",
+	"crates/macros",
+	"server",
+]
 
 [profile.release]
 opt-level = "z"
@@ -43,7 +49,7 @@ zeroize = "=1.8.2"
 jsonwebtoken = { version = "=10.3.0", features = ["rust_crypto"] }
 tower-cookies = "=0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
-forgeconf = { version = "0.5.0" , default-features = false, features = [
+forgeconf = { version = "0.5.0", default-features = false, features = [
 	"toml",
 	"miette",
 	"validators",
