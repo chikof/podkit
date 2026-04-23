@@ -1,5 +1,5 @@
 use axum::{Json, extract::State, http::StatusCode};
-use crypto::passwords;
+use crypto::argon2;
 use database::models::user::{NewUser, UserModel};
 use serde::Deserialize;
 use zeroize::Zeroizing;
@@ -17,7 +17,7 @@ pub async fn register(
 	State(state): State<AppState>,
 	Json(body): Json<RegisterRequest>,
 ) -> Result<StatusCode, ServerError> {
-	let password_hash = passwords::hash(Zeroizing::new(body.password))
+	let password_hash = argon2::hash(Zeroizing::new(body.password))
 		.await
 		.map_err(|_| ServerError::Internal)?;
 

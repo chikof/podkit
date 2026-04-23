@@ -1,7 +1,7 @@
 use sqlx::{PgPool, prelude::FromRow};
 use time::OffsetDateTime;
 
-use crypto::{ids::generate_id, passwords};
+use crypto::{argon2, generate_id};
 use zeroize::Zeroizing;
 
 use crate::{DatabaseError, DbExecutor};
@@ -66,13 +66,13 @@ impl UserModel {
 	) -> Result<Option<Self>, DatabaseError> {
 		let Some(user) = Self::find_by_email(pool, email).await? else {
 			// Run verify anyway to prevent timing-based user enumeration
-			passwords::verify(password, passwords::DUMMY_HASH.clone())
+			argon2::verify(password, argon2::DUMMY_HASH.clone())
 				.await
 				.ok();
 			return Ok(None);
 		};
 
-		let valid = passwords::verify(password, user.password_hash.clone()).await?;
+		let valid = argon2::verify(password, user.password_hash.clone()).await?;
 
 		Ok(valid.then_some(user))
 	}

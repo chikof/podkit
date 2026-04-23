@@ -1,4 +1,4 @@
-use crypto::ids::generate_id;
+use crypto::generate_id;
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;

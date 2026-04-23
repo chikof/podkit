@@ -108,5 +108,6 @@ pub fn generate_id() -> i64 {
 	GENERATOR
 		.lock()
 		.expect("snowflake generator mutex poisoned")
-		.next() as i64
+		.next()
+		.cast_signed()
 }

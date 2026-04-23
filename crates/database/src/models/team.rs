@@ -1,7 +1,7 @@
 use sqlx::prelude::FromRow;
 use time::OffsetDateTime;
 
-use crypto::ids::generate_id;
+use crypto::generate_id;
 
 use crate::{DatabaseError, DbExecutor};
 
