@@ -17,9 +17,11 @@ pub async fn get_db_connection<'r>(url: Option<&str>) -> Result<&'r Pool<Postgre
 	}
 
 	let pool = PgPoolOptions::new()
-		.max_connections(5)
-		.connect(url.unwrap_or(env!("DATABASE_URL")))
-		.await?;
+    .max_connections(5)
+    .connect(
+        url.unwrap_or(&std::env::var("DATABASE_URL")?) // omg I hated env! stopping my compilation
+    )
+    .await?;
 
 	Ok(CONNECTION.get_or_init(|| pool))
 }
