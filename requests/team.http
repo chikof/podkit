@@ -1,0 +1,23 @@
+### Create
+# @name Create
+# @capture file-secret team.id = response.json.id
+POST {{base.url}}/teams
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+{
+  "name": "podkit",
+  "slug": "podkit",
+  "logo": "https://i.chiko.dev/u/podkit.png"
+}
+
+### List
+# @name List
+GET {{base.url}}/teams
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+### List members
+# @name Members
+GET {{base.url}}/teams/{{team.id}}/members
+Authorization: Bearer {{auth.token}}
