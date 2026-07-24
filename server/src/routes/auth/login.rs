@@ -1,9 +1,8 @@
 use axum::{Json, extract::State};
+use crypto::argon2;
 use serde::{Deserialize, Serialize};
 use tower_cookies::{Cookie, Cookies};
 use zeroize::Zeroizing;
-
-use database::models::user::UserModel;
 
 use crate::{AppState, error::ServerError};
 
@@ -23,14 +22,26 @@ pub async fn login(
 	cookies: Cookies,
 	Json(body): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, ServerError> {
-	let user = UserModel::authenticate(state.pool, &body.email, Zeroizing::new(body.password))
-		.await
-		.map_err(|_| ServerError::Internal)?
-		.ok_or(ServerError::InvalidCredentials)?;
+	let Some(user) = state.users.find_by_email(&body.email).await? else {
+		// Run verify anyway to prevent timing-based user enumeration
+		argon2::verify(Zeroizing::new(body.password), argon2::DUMMY_HASH.clone())
+			.await
+			.ok();
+		return Err(ServerError::InvalidCredentials);
+	};
+
+	let valid = state
+		.password_hasher
+		.verify(&body.password, &user.password_hash)
+		.await?;
+
+	if !valid {
+		return Err(ServerError::InvalidCredentials);
+	}
 
 	let token = state
 		.tokens
-		.issue(user.id)
+		.issue(user.id.0)
 		.map_err(|_| ServerError::Internal)?;
 
 	cookies.add(

@@ -2,7 +2,18 @@ use std::sync::Arc;
 
 use database::PgPool;
 use database::connection::{get_db_connection, migrate};
+use database::hashing::Argon2PasswordHasher;
 use database::models::token_revocations::TokenRevocation;
+use database::repositories::authorizer::PgAuthorizer;
+use database::repositories::role::PgRoleRepository;
+use database::repositories::team::PgTeamRepository;
+use database::repositories::team_member::PgTeamMemberRepository;
+use database::repositories::user::PgUserRepository;
+use podkit_core::domain::role::repository::RoleRepository;
+use podkit_core::domain::shared::authorization::Authorizer;
+use podkit_core::domain::team::repository::TeamRepository;
+use podkit_core::domain::team_member::repository::TeamMemberRepository;
+use podkit_core::domain::user::{PasswordHasher, UserRepository};
 use tokio::net::TcpListener;
 use tracing::{info, warn};
 
@@ -20,6 +31,12 @@ mod routes;
 pub struct AppState {
 	pub tokens: Arc<TokenService>,
 	pub pool: &'static PgPool,
+	pub users: Arc<dyn UserRepository>,
+	pub teams: Arc<dyn TeamRepository>,
+	pub team_members: Arc<dyn TeamMemberRepository>,
+	pub roles: Arc<dyn RoleRepository>,
+	pub authorizer: Arc<dyn Authorizer>,
+	pub password_hasher: Arc<dyn PasswordHasher>,
 }
 
 #[tokio::main]
@@ -36,9 +53,16 @@ async fn main() -> AppResult<()> {
 	info!(version = env!("CARGO_PKG_VERSION"), "podkit starting");
 
 	let addr = format!("{}:{}", config.host, config.port);
+	let pool = get_db_connection(Some(&config.database_url)).await?;
 	let state = AppState {
 		tokens: Arc::new(TokenService::new(config.jwt_secret.as_bytes())),
-		pool: get_db_connection(Some(&config.database_url)).await?,
+		pool,
+		users: Arc::new(PgUserRepository(pool)),
+		teams: Arc::new(PgTeamRepository(pool)),
+		team_members: Arc::new(PgTeamMemberRepository(pool)),
+		roles: Arc::new(PgRoleRepository(pool)),
+		authorizer: Arc::new(PgAuthorizer(pool)),
+		password_hasher: Arc::new(Argon2PasswordHasher),
 	};
 
 	// run db migrations
