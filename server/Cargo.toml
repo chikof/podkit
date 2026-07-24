@@ -27,6 +27,8 @@ tower-cookies.workspace = true
 zeroize.workspace = true
 database.workspace = true
 crypto.workspace = true
+podkit-core.workspace = true
+async-trait.workspace = true
 dotenvy = "0.15.7"
 
 [lints]
