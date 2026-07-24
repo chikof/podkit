@@ -1,8 +1,5 @@
-use sqlx::{PgPool, prelude::FromRow};
+use sqlx::prelude::FromRow;
 use time::OffsetDateTime;
-
-use crypto::{argon2, generate_id};
-use zeroize::Zeroizing;
 
 use crate::{DatabaseError, DbExecutor};
 
@@ -18,9 +15,10 @@ pub struct UserModel {
 
 #[derive(Debug)]
 pub struct NewUser {
+	pub id: i64,
 	pub email: String,
 	pub name: String,
-	pub pasword: String,
+	pub password_hash: String,
 }
 
 impl UserModel {
@@ -39,13 +37,24 @@ impl UserModel {
 				VALUES ($1, $2, $3, $4)
 				RETURNING *
 			"#,
-			generate_id(),
+			new.id,
 			new.name,
 			new.email,
-			new.pasword
+			new.password_hash
 		)
 		.fetch_one(exec)
 		.await?)
+	}
+
+	pub async fn find_by_id<'e>(
+		exec: impl DbExecutor<'e>,
+		id: i64,
+	) -> Result<Option<Self>, DatabaseError> {
+		Ok(
+			sqlx::query_as!(Self, "SELECT * FROM users WHERE id = $1", id)
+				.fetch_optional(exec)
+				.await?,
+		)
 	}
 
 	pub async fn find_by_email<'e>(
@@ -59,21 +68,23 @@ impl UserModel {
 		)
 	}
 
-	pub async fn authenticate(
-		pool: &PgPool,
+	pub async fn exists_by_email<'e>(
+		exec: impl DbExecutor<'e>,
 		email: &str,
-		password: Zeroizing<String>,
-	) -> Result<Option<Self>, DatabaseError> {
-		let Some(user) = Self::find_by_email(pool, email).await? else {
-			// Run verify anyway to prevent timing-based user enumeration
-			argon2::verify(password, argon2::DUMMY_HASH.clone())
-				.await
-				.ok();
-			return Ok(None);
-		};
+	) -> Result<bool, DatabaseError> {
+		let exists = sqlx::query_scalar!(
+			r#"SELECT EXISTS(SELECT 1 FROM users WHERE email = $1) AS "exists!""#,
+			email
+		)
+		.fetch_one(exec)
+		.await?;
+		Ok(exists)
+	}
 
-		let valid = argon2::verify(password, user.password_hash.clone()).await?;
-
-		Ok(valid.then_some(user))
+	pub async fn delete<'e>(exec: impl DbExecutor<'e>, id: i64) -> Result<(), DatabaseError> {
+		sqlx::query!("DELETE FROM users WHERE id = $1", id)
+			.execute(exec)
+			.await?;
+		Ok(())
 	}
 }

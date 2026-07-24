@@ -1,5 +1,4 @@
-{ pkgs, ... }:
-{
+{ pkgs, ... }: {
   packages = with pkgs; [
     sqlx-cli
     resterm
@@ -34,6 +33,11 @@
           name = "podkit";
           user = "podkit";
           pass = "podkit";
+
+          initialSQL = ''
+            ALTER SCHEMA public OWNER TO podkit;
+            GRANT ALL ON SCHEMA public TO podkit;
+          '';
         }
       ];
       listen_addresses = "127.0.0.1";

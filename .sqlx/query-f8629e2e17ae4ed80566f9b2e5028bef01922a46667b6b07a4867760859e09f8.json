@@ -1,0 +1,49 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\t\tINSERT INTO team_members (id, team_id, user_id, role_id)\n\t\t\t\tVALUES ($1, $2, $3, $4)\n\t\t\t\tON CONFLICT (id) DO UPDATE SET role_id = EXCLUDED.role_id\n\t\t\t\tRETURNING *\n\t\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "team_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "user_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "role_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "joined_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f8629e2e17ae4ed80566f9b2e5028bef01922a46667b6b07a4867760859e09f8"
+}

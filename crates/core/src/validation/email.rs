@@ -331,6 +331,8 @@ fn validate_domain(domain: &str) -> Result<(), EmailError> {
 ///
 /// # Example
 /// ```
+/// use podkit_core::validation::validate_email;
+///
 /// let ve = validate_email("user+tag@mail.example.com").unwrap();
 /// assert_eq!(ve.normalize(), "user+tag@mail.example.com");
 /// assert!(validate_email("bad..dots@example.com").is_err());

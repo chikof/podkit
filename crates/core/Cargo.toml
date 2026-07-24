@@ -1,5 +1,5 @@
 [package]
-name = "core"
+name = "podkit-core"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -7,7 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-async-trait = "0.1"
+async-trait.workspace = true
 thiserror.workspace = true
 time.workspace = true
 

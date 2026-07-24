@@ -38,6 +38,7 @@ sqlx = { version = "=0.8.6", features = [
 	"runtime-tokio",
 	"tls-rustls",
 	"macros",
+	"migrate",
 	"postgres",
 	"time",
 ] }
@@ -55,7 +56,9 @@ forgeconf = { version = "0.5.0", default-features = false, features = [
 	"validators",
 ] }
 dirs = "=6.0.0"
+async-trait = "0.1"
 
+podkit-core = { path = "./crates/core" }
 crypto = { path = "./crates/crypto" }
 database = { path = "./crates/database" }
 macros = { path = "./crates/macros" }

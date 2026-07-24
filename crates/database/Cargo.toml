@@ -13,6 +13,8 @@ thiserror.workspace = true
 crypto.workspace = true
 zeroize.workspace = true
 anyhow.workspace = true
+podkit-core.workspace = true
+async-trait.workspace = true
 
 [lints]
 workspace = true

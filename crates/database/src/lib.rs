@@ -1,6 +1,8 @@
 pub mod connection;
 pub mod error;
+pub mod hashing;
 pub mod models;
+pub mod repositories;
 
 pub use error::DatabaseError;
 pub use sqlx::PgPool;

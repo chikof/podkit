@@ -1,9 +1,7 @@
-pub mod shared;
-pub mod user;
-pub mod workspace;
-pub mod team;
-pub mod membership;
+pub mod permission;
 pub mod project;
-
-// --- PLEASE READ CAREFULLY ---
-// we lack data validation :sob:, please consider implementing data validation.
+pub mod role;
+pub mod shared;
+pub mod team;
+pub mod team_member;
+pub mod user;

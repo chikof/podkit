@@ -1,7 +1,7 @@
 use std::env::VarError;
 
-use sqlx::migrate::MigrateError;
 use sqlx::Error as SqlxError;
+use sqlx::migrate::MigrateError;
 use thiserror::Error as ThisError;
 
 #[derive(ThisError, Debug)]

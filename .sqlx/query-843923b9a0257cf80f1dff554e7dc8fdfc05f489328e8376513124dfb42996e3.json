@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\t\tINSERT INTO teams (id, name, logo, owner_id)\n\t\t\t\tVALUES ($1, $2, $3, $4)\n\t\t\t\tRETURNING *\n\t\t\t",
+  "query": "SELECT * FROM users WHERE id = $1",
   "describe": {
     "columns": [
       {
@@ -15,12 +15,12 @@
       },
       {
         "ordinal": 2,
-        "name": "slug",
+        "name": "email",
         "type_info": "Varchar"
       },
       {
         "ordinal": 3,
-        "name": "logo",
+        "name": "password_hash",
         "type_info": "Text"
       },
       {
@@ -30,15 +30,12 @@
       },
       {
         "ordinal": 5,
-        "name": "owner_id",
-        "type_info": "Int8"
+        "name": "updated_at",
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8",
-        "Varchar",
-        "Text",
         "Int8"
       ]
     },
@@ -51,5 +48,5 @@
       false
     ]
   },
-  "hash": "f385ea394d44a84e8a1d5094c9e78c121fcc50c3807988c5b37322b7c667910b"
+  "hash": "843923b9a0257cf80f1dff554e7dc8fdfc05f489328e8376513124dfb42996e3"
 }

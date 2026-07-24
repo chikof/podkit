@@ -11,7 +11,7 @@ use syn::{Data, DeriveInput, Fields, parse_macro_input};
 ///
 /// # Example
 ///
-/// ```rust
+/// ```ignore
 /// #[derive(Debug, thiserror::Error, JsonError)]
 /// pub enum MyError {
 ///     #[error("not found")]

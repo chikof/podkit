@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS permissions (
+	id BIGINT PRIMARY KEY NOT NULL,
+	action VARCHAR(30) NOT NULL,
+	resource VARCHAR(30) NOT NULL,
+	UNIQUE (action, resource)
+)

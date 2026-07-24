@@ -1,0 +1,11 @@
+CREATE TABLE IF NOT EXISTS projects (
+	id BIGINT PRIMARY KEY NOT NULL,
+	team_id BIGINT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+	name VARCHAR(60) NOT NULL,
+	slug VARCHAR(60) NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	UNIQUE (team_id, slug)
+);
+
+CREATE INDEX IF NOT EXISTS idx_projects_team_id ON projects (team_id);
