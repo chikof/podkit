@@ -30,6 +30,7 @@ pub struct ServerConfig {
 
 	#[field(env = "PORT", default = 8080)]
 	// detski NOTE: This thing gave me a lovely Os { code: 98, kind: AddrInUse, message: "Address already in use" }
+	// chiko NOTE: should be fixed by now, ill leave the comment anyways in case it happens again.
 	pub port: i32,
 }
 
