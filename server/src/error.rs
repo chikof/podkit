@@ -53,6 +53,10 @@ pub enum ServerError {
 	#[status(StatusCode::BAD_REQUEST)]
 	RoleNotAllowed,
 
+	#[error("project not found")]
+	#[status(StatusCode::NOT_FOUND)]
+	ProjectNotFound,
+
 	#[error("you don't have permission to do that")]
 	#[status(StatusCode::FORBIDDEN)]
 	Forbidden,

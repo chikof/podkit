@@ -5,10 +5,12 @@ use database::connection::{get_db_connection, migrate};
 use database::hashing::Argon2PasswordHasher;
 use database::models::token_revocations::TokenRevocation;
 use database::repositories::authorizer::PgAuthorizer;
+use database::repositories::project::PgProjectRepository;
 use database::repositories::role::PgRoleRepository;
 use database::repositories::team::PgTeamRepository;
 use database::repositories::team_member::PgTeamMemberRepository;
 use database::repositories::user::PgUserRepository;
+use podkit_core::domain::project::repository::ProjectRepository;
 use podkit_core::domain::role::repository::RoleRepository;
 use podkit_core::domain::shared::authorization::Authorizer;
 use podkit_core::domain::team::repository::TeamRepository;
@@ -35,6 +37,7 @@ pub struct AppState {
 	pub teams: Arc<dyn TeamRepository>,
 	pub team_members: Arc<dyn TeamMemberRepository>,
 	pub roles: Arc<dyn RoleRepository>,
+	pub projects: Arc<dyn ProjectRepository>,
 	pub authorizer: Arc<dyn Authorizer>,
 	pub password_hasher: Arc<dyn PasswordHasher>,
 }
@@ -61,6 +64,7 @@ async fn main() -> AppResult<()> {
 		teams: Arc::new(PgTeamRepository(pool)),
 		team_members: Arc::new(PgTeamMemberRepository(pool)),
 		roles: Arc::new(PgRoleRepository(pool)),
+		projects: Arc::new(PgProjectRepository(pool)),
 		authorizer: Arc::new(PgAuthorizer(pool)),
 		password_hasher: Arc::new(Argon2PasswordHasher),
 	};

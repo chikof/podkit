@@ -1,0 +1,21 @@
+### Create
+# @name Create
+# @capture file-secret project.id = response.json.id
+POST {{base.url}}/teams/{{team.id}}/projects
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+{
+  "name": "my-app",
+  "slug": "my-app"
+}
+
+### List
+# @name List
+GET {{base.url}}/teams/{{team.id}}/projects
+Authorization: Bearer {{auth.token}}
+
+### Delete
+# @name Delete
+DELETE {{base.url}}/teams/{{team.id}}/projects/{{project.id}}
+Authorization: Bearer {{auth.token}}
