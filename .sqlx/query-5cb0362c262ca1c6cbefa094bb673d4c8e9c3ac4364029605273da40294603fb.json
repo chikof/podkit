@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO team_members (id, team_id, user_id, role_id) VALUES\n\t\t\t\t(3001, 2001, 1001, 1),\n\t\t\t\t(3002, 2001, 1002, 2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "5cb0362c262ca1c6cbefa094bb673d4c8e9c3ac4364029605273da40294603fb"
+}
