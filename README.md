@@ -1,5 +1,8 @@
 # Podkit
 
+[![CI](https://github.com/chikof/podkit/actions/workflows/ci.yml/badge.svg)](https://github.com/chikof/podkit/actions/workflows/ci.yml)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](LICENSE)
+
 Self-hosted PaaS on [Podman](https://podman.io) instead of Docker.
 
 ## Status
@@ -24,3 +27,12 @@ Requires `git`, `ssh`, a reachable Podman socket
 applications using the `nixpacks` build strategy) the `nixpacks` CLI on
 `PATH` (in `devenv.nix`'s `packages` for local dev). Dockerfile-strategy
 apps don't need it. See `.env.example` for required environment variables.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues: see
+[SECURITY.md](SECURITY.md). Please don't file those as public issues.
+
+## License
+
+[AGPL-3.0-or-later](LICENSE).

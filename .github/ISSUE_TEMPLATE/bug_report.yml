@@ -1,0 +1,60 @@
+name: Bug report
+description: Something in podkit isn't working right
+labels: ["bug", "triage"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, what did you get instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / output
+      description: Server logs, `cargo run` output, browser console, etc. Redact secrets/tokens.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: podkit version / commit
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      multiple: true
+      options:
+        - server (crates/core, crates/database, crates/runtime, server/)
+        - dashboard (SvelteKit)
+        - deploy/build pipeline (nixpacks, podman)
+        - other/unsure
+    validations:
+      required: true
+
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      placeholder: |
+        OS:
+        Podman version:
+        Deploy target (local / remote via SSH):
+    validations:
+      required: false
