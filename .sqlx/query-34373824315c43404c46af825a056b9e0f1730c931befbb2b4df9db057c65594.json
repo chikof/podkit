@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM servers WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "team_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "hostname",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "ssh_port",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "ssh_user",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "ssh_private_key",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 7,
+        "name": "podman_socket_path",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 8,
+        "name": "is_local",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "status",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "34373824315c43404c46af825a056b9e0f1730c931befbb2b4df9db057c65594"
+}

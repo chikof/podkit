@@ -1,0 +1,25 @@
+### List
+# @name List
+# note: the team's `local` server is auto-provisioned when the team is
+# created (see team.http Create) — no request needed to get one.
+GET {{base.url}}/teams/{{team.id}}/servers
+Authorization: Bearer {{auth.token}}
+
+### Create remote
+# @name Create
+# @capture file-secret server.id = response.json.id
+POST {{base.url}}/teams/{{team.id}}/servers
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+{
+  "name": "remote-1",
+  "hostname": "10.0.0.5",
+  "ssh_user": "deploy",
+  "ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nfakefakefake\n-----END OPENSSH PRIVATE KEY-----"
+}
+
+### Delete
+# @name Delete
+DELETE {{base.url}}/teams/{{team.id}}/servers/{{server.id}}
+Authorization: Bearer {{auth.token}}

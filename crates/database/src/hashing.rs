@@ -6,6 +6,7 @@ use podkit_core::domain::user::value_objects::PasswordHash;
 use crypto::argon2;
 use zeroize::Zeroizing;
 
+/// Argon2-backed implementation of `podkit_core`'s `PasswordHasher` trait.
 pub struct Argon2PasswordHasher;
 
 #[async_trait]

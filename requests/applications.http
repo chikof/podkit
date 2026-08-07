@@ -1,0 +1,62 @@
+### Create
+# @name Create
+# @capture file-secret application.id = response.json.id
+# @capture file-secret application.webhook_secret = response.json.webhook_secret
+# note: server.id comes from servers.http Create, or use the team's
+# auto-provisioned `local` server — GET servers List and pick is_local=true.
+POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+{
+  "name": "my-web-app",
+  "slug": "my-web-app",
+  "server_id": "{{server.id}}",
+  "repo_url": "https://github.com/example/repo.git",
+  "git_ref": "main",
+  "container_port": 3000,
+  "deploy_key": ""
+}
+
+### List
+# @name List
+GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications
+Authorization: Bearer {{auth.token}}
+
+### Update
+# @name Update
+# Everything except server_id is editable (moving servers isn't a config
+# edit). Applies on the next deploy — a running container isn't touched.
+# deploy_key omitted/empty leaves the stored key untouched.
+PATCH {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+{
+  "name": "my-web-app",
+  "slug": "my-web-app",
+  "repo_url": "https://github.com/example/repo.git",
+  "git_ref": "main",
+  "container_port": 3000
+}
+
+### Stop
+# @name Stop
+# Halts the currently running deployment (stops + removes its container).
+# 400s if the application isn't currently running. Use Restart to bring it
+# back — this does not delete anything, deployment history is untouched.
+POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/stop
+Authorization: Bearer {{auth.token}}
+
+### Restart
+# @name Restart
+# Redeploys the most recent successfully-built image — no git clone or
+# rebuild, same zero-downtime swap as any other deploy. 400s if the
+# application has never produced a build.
+POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/restart
+Authorization: Bearer {{auth.token}}
+
+### Delete
+# @name Delete
+DELETE {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}
+Authorization: Bearer {{auth.token}}

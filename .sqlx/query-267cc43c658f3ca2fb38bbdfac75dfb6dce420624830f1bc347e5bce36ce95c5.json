@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM applications WHERE server_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "server_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "slug",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "repo_url",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "git_ref",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 7,
+        "name": "deploy_key",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 8,
+        "name": "build_strategy",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 9,
+        "name": "dockerfile_path",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 10,
+        "name": "container_port",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "webhook_secret",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 14,
+        "name": "memory_limit_mb",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 15,
+        "name": "cpu_limit",
+        "type_info": "Float4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "267cc43c658f3ca2fb38bbdfac75dfb6dce420624830f1bc347e5bce36ce95c5"
+}

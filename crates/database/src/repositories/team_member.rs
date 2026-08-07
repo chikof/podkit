@@ -7,6 +7,7 @@ use podkit_core::domain::team_member::repository::TeamMemberRepository;
 use crate::PgPool;
 use crate::models::team_members::{NewTeamMember, TeamMemberModel};
 
+/// Postgres-backed `TeamMemberRepository`.
 pub struct PgTeamMemberRepository(pub &'static PgPool);
 
 fn to_infra(e: &crate::DatabaseError) -> DomainError {

@@ -8,6 +8,7 @@ use podkit_core::domain::user::value_objects::{Email, PasswordHash, UserSettings
 use crate::PgPool;
 use crate::models::user::{NewUser, UserModel};
 
+/// Postgres-backed `UserRepository`.
 pub struct PgUserRepository(pub &'static PgPool);
 
 fn to_infra(e: &crate::DatabaseError) -> DomainError {

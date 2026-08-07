@@ -1,0 +1,10 @@
+### Deploy via webhook secret (header)
+# @name DeployHeader
+# secret comes from applications.http Create response (webhook_secret,
+# only ever shown once).
+POST {{base.url}}/webhooks/deploy/{{application.id}}
+X-Webhook-Secret: {{application.webhook_secret}}
+
+### Deploy via webhook secret (query param — for providers that can't set headers)
+# @name DeployQuery
+POST {{base.url}}/webhooks/deploy/{{application.id}}?secret={{application.webhook_secret}}

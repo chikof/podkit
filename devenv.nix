@@ -4,6 +4,8 @@
     resterm
     lazysql
     sccache
+    bun
+    nixpacks
   ];
 
   env.RUSTC_WRAPPER = "${pkgs.sccache}/bin/sccache";

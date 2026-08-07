@@ -21,3 +21,10 @@ Content-Type: application/json
 # @name Members
 GET {{base.url}}/teams/{{team.id}}/members
 Authorization: Bearer {{auth.token}}
+
+### List roles
+# @name Roles
+# Built-in roles (shared globally) plus any this team owns — use to
+# populate a role picker for the Members endpoints above.
+GET {{base.url}}/teams/{{team.id}}/roles
+Authorization: Bearer {{auth.token}}

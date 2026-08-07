@@ -1,0 +1,24 @@
+[package]
+name = "runtime"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+bollard.workspace = true
+crypto.workspace = true
+futures-util.workspace = true
+podkit-core.workspace = true
+tar = "0.4"
+tempfile.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }

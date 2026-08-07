@@ -7,6 +7,7 @@ use podkit_core::domain::shared::ids::{ProjectId, TeamId};
 use crate::PgPool;
 use crate::models::project::{NewProject, ProjectModel};
 
+/// Postgres-backed `ProjectRepository`.
 pub struct PgProjectRepository(pub &'static PgPool);
 
 fn to_infra(e: &crate::DatabaseError) -> DomainError {

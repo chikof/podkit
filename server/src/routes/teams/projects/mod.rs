@@ -1,3 +1,4 @@
+mod applications;
 mod create;
 mod delete;
 mod list;
@@ -15,4 +16,5 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.route("/", post(create_project).get(list_projects))
 		.route("/{project_id}", delete(delete_project))
+		.nest("/{project_id}/applications", applications::router())
 }

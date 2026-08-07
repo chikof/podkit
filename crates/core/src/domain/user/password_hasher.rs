@@ -4,6 +4,7 @@ use async_trait::async_trait;
 
 // contract owned by the domain, implemented in infrastructure
 // application layer receives this as a dependency and domain never calls it
+/// Hashes and verifies passwords. Contract owned by the domain, implemented in infrastructure.
 #[async_trait]
 pub trait PasswordHasher: Send + Sync {
 	/// Hashes a plaintext password.

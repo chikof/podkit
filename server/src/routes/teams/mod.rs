@@ -2,6 +2,8 @@ mod create;
 mod list;
 mod members;
 mod projects;
+mod roles;
+mod servers;
 
 use axum::Router;
 use axum::routing::{get, patch, post};
@@ -22,5 +24,7 @@ pub fn router() -> Router<AppState> {
 			"/{team_id}/members/{user_id}",
 			patch(members::update_member_role),
 		)
+		.route("/{team_id}/roles", get(roles::list_roles))
 		.nest("/{team_id}/projects", projects::router())
+		.nest("/{team_id}/servers", servers::router())
 }

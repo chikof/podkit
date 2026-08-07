@@ -7,6 +7,7 @@ use podkit_core::domain::shared::ids::{RoleId, TeamId};
 use crate::PgPool;
 use crate::models::roles::{NewRole, RoleModel};
 
+/// Postgres-backed `RoleRepository`.
 pub struct PgRoleRepository(pub &'static PgPool);
 
 fn to_infra(e: &crate::DatabaseError) -> DomainError {

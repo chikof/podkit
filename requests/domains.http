@@ -1,0 +1,24 @@
+### Create
+# @name Create
+# @capture file-secret domain.id = response.json.id
+# Point this hostname's DNS at the target server before (or after) adding
+# it here — podkit doesn't verify DNS, it's self-evident when it's wrong.
+# With ACME_EMAIL configured server-side, this domain gets an HTTPS router
+# on the next deploy.
+POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/domains
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+{
+  "hostname": "app.example.com"
+}
+
+### List
+# @name List
+GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/domains
+Authorization: Bearer {{auth.token}}
+
+### Delete
+# @name Delete
+DELETE {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/domains/{{domain.id}}
+Authorization: Bearer {{auth.token}}

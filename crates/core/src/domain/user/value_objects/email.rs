@@ -1,6 +1,8 @@
 use crate::domain::shared::errors::{DomainError, DomainResult};
 use crate::validation::validate_email;
 
+/// A validated, normalized email address. Only constructible via [`Email::new`],
+/// so any `Email` in hand is known-valid.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Email(String);
 

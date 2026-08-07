@@ -25,7 +25,7 @@ liability arising from or related to this file or its use.
 //!   TLD: alphabetic only, minimum 2 characters.
 //!   Minimum 2 labels (e.g. `example.com`). Max 255 characters total.
 //! - Total length ≤ 254 characters (RFC 5321 §4.5.3).
-//! - ASCII only — use punycode for international domain names.
+//! - ASCII only, use punycode for international domain names.
 //!
 //! ## Rejects (intentionally)
 //!
@@ -191,7 +191,7 @@ impl std::error::Error for EmailError {}
 /// Proof that the wrapped `&str` has passed [`validate_email`].
 ///
 /// The idea is that you validate once and then pass this around instead of
-/// a raw &str — the type carries the guarantee so you don't have to re-check.
+/// a raw &str, so the type carries the guarantee and callers don't re-check.
 // could add an into_string() or something later if needed
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ValidatedEmail<'a>(&'a str);
@@ -294,7 +294,7 @@ fn validate_domain(domain: &str) -> Result<(), EmailError> {
 		return Err(EmailError::DomainTrailingDot);
 	}
 
-	// rfind to split off the TLD — avoids collecting into a vec just to grab the last element
+	// rfind to split off the TLD, avoids collecting into a vec just to grab the last element
 	let last_dot = domain.rfind('.').ok_or(EmailError::DomainMissingTld)?;
 	let body = &domain[..last_dot];
 	let tld = &domain[last_dot + 1..];
@@ -337,6 +337,11 @@ fn validate_domain(domain: &str) -> Result<(), EmailError> {
 /// assert_eq!(ve.normalize(), "user+tag@mail.example.com");
 /// assert!(validate_email("bad..dots@example.com").is_err());
 /// ```
+///
+/// # Errors
+///
+/// Returns [`EmailError`] describing which part of the address failed
+/// (empty, too long, bad local part, bad domain, and so on).
 pub fn validate_email(email: &str) -> Result<ValidatedEmail<'_>, EmailError> {
 	if email.is_empty() {
 		return Err(EmailError::Empty);

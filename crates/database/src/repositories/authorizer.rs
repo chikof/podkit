@@ -5,6 +5,7 @@ use podkit_core::domain::shared::ids::{TeamId, UserId};
 
 use crate::PgPool;
 
+/// Postgres-backed permission checks: does a role have a given permission.
 pub struct PgAuthorizer(pub &'static PgPool);
 
 #[async_trait]

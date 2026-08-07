@@ -5,6 +5,7 @@ members = [
 	"crates/crypto",
 	"crates/database",
 	"crates/macros",
+	"crates/runtime",
 	"server",
 ]
 
@@ -56,18 +57,24 @@ forgeconf = { version = "0.5.0", default-features = false, features = [
 	"validators",
 ] }
 dirs = "=6.0.0"
+tower-http = { version = "=0.6.6", features = ["cors"] }
 async-trait = "0.1"
+futures-util = "0.3"
+tempfile = "3"
 
 podkit-core = { path = "./crates/core" }
 crypto = { path = "./crates/crypto" }
 database = { path = "./crates/database" }
 macros = { path = "./crates/macros" }
+runtime = { path = "./crates/runtime" }
 
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 redundant_clone = "deny"
-nesdless_collect = "deny"
-missing_docs = "deny"
+needless_collect = "deny"
 cast_precision_loss = "allow"
+
+[workspace.lints.rust]
+missing_docs = "warn"

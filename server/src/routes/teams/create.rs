@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::extract::State;
 use database::models::team::TeamModel;
+use runtime::local_socket_path;
 use serde::{Deserialize, Serialize};
 
 use crate::{AppState, auth::extractor::AuthUser, error::ServerError};
@@ -38,9 +39,15 @@ pub async fn create_team(
 	AuthUser(claims): AuthUser,
 	Json(body): Json<CreateTeamRequest>,
 ) -> Result<Json<TeamResponse>, ServerError> {
-	let team =
-		TeamModel::create_with_owner(state.pool, body.name, body.slug, body.logo, claims.sub)
-			.await?;
+	let team = TeamModel::create_with_owner(
+		state.pool,
+		body.name,
+		body.slug,
+		body.logo,
+		claims.sub,
+		&local_socket_path(),
+	)
+	.await?;
 
 	Ok(Json(team.into()))
 }

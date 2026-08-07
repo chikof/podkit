@@ -1,0 +1,32 @@
+### Trigger
+# @name Trigger
+# @capture file-secret deployment.id = response.json.id
+# Queues + spawns the build/run pipeline in the background; returns
+# immediately with status "queued". Poll Get below for progress.
+POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments
+Authorization: Bearer {{auth.token}}
+
+### List
+# @name List
+GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments
+Authorization: Bearer {{auth.token}}
+
+### Get
+# @name Get
+GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}
+Authorization: Bearer {{auth.token}}
+
+### Rollback
+# @name Rollback
+# Redeploys an earlier deployment's already-built image — no rebuild,
+# same zero-downtime swap. Set deployment.id below to the target to roll
+# back to (e.g. capture it from an earlier List response).
+POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/rollback
+Authorization: Bearer {{auth.token}}
+
+### Logs
+# @name Logs
+# Buffered snapshot of the deployment's container stdout/stderr (no
+# live-follow yet). Empty array before a container exists (queued/building).
+GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/logs?tail=200
+Authorization: Bearer {{auth.token}}

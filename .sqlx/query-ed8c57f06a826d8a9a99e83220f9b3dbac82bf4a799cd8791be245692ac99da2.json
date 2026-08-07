@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\t\tINSERT INTO env_vars (id, application_id, key, value)\n\t\t\t\tVALUES ($1, $2, $3, $4)\n\t\t\t\tON CONFLICT (application_id, key)\n\t\t\t\tDO UPDATE SET value = EXCLUDED.value, updated_at = NOW()\n\t\t\t\tRETURNING *\n\t\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "application_id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "key",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "value",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Varchar",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ed8c57f06a826d8a9a99e83220f9b3dbac82bf4a799cd8791be245692ac99da2"
+}

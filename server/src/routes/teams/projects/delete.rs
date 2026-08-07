@@ -12,7 +12,7 @@ pub struct DeleteProjectResponse {
 }
 
 /// Deletes a project; caller must hold `delete project` on the owning team.
-/// The project must belong to the team named in the path — otherwise 404,
+/// The project must belong to the team named in the path, otherwise 404,
 /// same as if it never existed, to avoid leaking cross-team project ids.
 pub async fn delete_project(
 	State(state): State<AppState>,

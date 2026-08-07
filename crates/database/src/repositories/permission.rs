@@ -7,6 +7,7 @@ use podkit_core::domain::shared::ids::PermissionId;
 use crate::PgPool;
 use crate::models::permissions::PermissionModel;
 
+/// Postgres-backed `PermissionRepository`.
 pub struct PgPermissionRepository(pub &'static PgPool);
 
 fn to_infra(e: &crate::DatabaseError) -> DomainError {

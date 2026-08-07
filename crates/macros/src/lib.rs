@@ -1,3 +1,8 @@
+//! Derive macros shared across the podkit workspace.
+//!
+//! Currently just [`macro@JsonError`], which cuts down on the boilerplate of
+//! turning a `thiserror` enum into an axum JSON error response.
+
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{Data, DeriveInput, Fields, parse_macro_input};

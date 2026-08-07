@@ -57,6 +57,42 @@ pub enum ServerError {
 	#[status(StatusCode::NOT_FOUND)]
 	ProjectNotFound,
 
+	#[error("server not found")]
+	#[status(StatusCode::NOT_FOUND)]
+	ServerNotFound,
+
+	#[error("application not found")]
+	#[status(StatusCode::NOT_FOUND)]
+	ApplicationNotFound,
+
+	#[error("deployment not found")]
+	#[status(StatusCode::NOT_FOUND)]
+	DeploymentNotFound,
+
+	#[error("env var not found")]
+	#[status(StatusCode::NOT_FOUND)]
+	EnvVarNotFound,
+
+	#[error("domain not found")]
+	#[status(StatusCode::NOT_FOUND)]
+	DomainNotFound,
+
+	#[error("that hostname is already routed to another application")]
+	#[status(StatusCode::CONFLICT)]
+	DomainTaken,
+
+	#[error("that slug is already used by another application on this server")]
+	#[status(StatusCode::CONFLICT)]
+	ApplicationSlugTaken,
+
+	#[error("the local server cannot be deleted")]
+	#[status(StatusCode::BAD_REQUEST)]
+	CannotDeleteLocalServer,
+
+	#[error("invalid AGE_SECRET_KEY: {0}")]
+	#[status(StatusCode::INTERNAL_SERVER_ERROR)]
+	InvalidSecretKey(String),
+
 	#[error("you don't have permission to do that")]
 	#[status(StatusCode::FORBIDDEN)]
 	Forbidden,

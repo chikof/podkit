@@ -24,10 +24,12 @@ serde.workspace = true
 forgeconf.workspace = true
 dirs.workspace = true
 tower-cookies.workspace = true
+tower-http.workspace = true
 zeroize.workspace = true
 database.workspace = true
 crypto.workspace = true
 podkit-core.workspace = true
+runtime.workspace = true
 async-trait.workspace = true
 dotenvy = "0.15.7"
 
