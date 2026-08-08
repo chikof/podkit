@@ -20,7 +20,7 @@ RUN --mount=type=bind,source=crates,target=crates \
 SQLX_OFFLINE=true cargo build --locked --release && \
 cp ./target/release/$APP_NAME /bin/podkit
 
-FROM alpine:3.21 AS final
+FROM alpine:3.24 AS final
 
 ARG UID=10001
 RUN adduser \
