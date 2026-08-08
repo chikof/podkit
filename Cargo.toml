@@ -34,7 +34,7 @@ bollard = { version = "=0.20.2", features = [
 	"chrono",
 	"websocket",
 ] }
-time = "=0.3.47"
+time = "=0.3.55"
 sqlx = { version = "=0.9.0", features = [
 	"runtime-tokio",
 	"tls-rustls",
