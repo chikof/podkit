@@ -30,7 +30,7 @@ services:
           memory: 512M
 
   database:
-    image: postgres:17-alpine3.22
+    image: postgres:18-alpine3.22
     restart: always
     user: postgres
     secrets:
