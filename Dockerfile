@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-ARG RUST_VERSION=1.94-alpine3.21
+ARG RUST_VERSION=1.97-alpine3.21
 ARG APP_NAME=server
 
 FROM rust:${RUST_VERSION} AS build
