@@ -47,7 +47,7 @@ axum = "=0.8.9"
 axum-extra = { version = "0.12.6", features = ["typed-header"] }
 age = "=0.11.2"
 argon2 = "=0.5.3"
-zeroize = "=1.8.2"
+zeroize = "=1.9.0"
 jsonwebtoken = { version = "=11.0.0", features = ["rust_crypto"] }
 tower-cookies = "=0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
