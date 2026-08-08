@@ -57,7 +57,7 @@ forgeconf = { version = "0.5.0", default-features = false, features = [
 	"validators",
 ] }
 dirs = "=6.0.0"
-tower-http = { version = "=0.6.6", features = ["cors"] }
+tower-http = { version = "=0.7.0", features = ["cors"] }
 async-trait = "0.1"
 futures-util = "0.3"
 tempfile = "3"
