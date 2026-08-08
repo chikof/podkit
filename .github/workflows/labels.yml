@@ -8,6 +8,9 @@ on:
       - .github/workflows/labels.yml
   workflow_dispatch:
 
+permissions:
+  issues: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
