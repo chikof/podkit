@@ -3,14 +3,11 @@ use axum::routing::{delete, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use super::{Domain, HOSTNAME_CONSTRAINT};
+use super::{Domain, service};
 use crate::auth::AuthUser;
-use crate::auth::permission::{Action, Resource, authorize};
-use crate::db::is_unique_violation;
-use crate::error::{AppResult, ServerError};
+use crate::error::AppResult;
 use crate::ids::{ApplicationId, DomainId, ProjectId, TeamId};
 use crate::state::AppState;
-use crate::{scope, validate};
 
 pub fn router() -> Router<AppState> {
 	Router::new()
@@ -57,22 +54,7 @@ pub async fn create(
 	Path((team, project, app)): Path<(TeamId, ProjectId, ApplicationId)>,
 	Json(body): Json<CreateDomainRequest>,
 ) -> AppResult<Json<DomainResponse>> {
-	authorize(&s.db, user.id, team, Action::Create, Resource::Domain).await?;
-	let app = scope::application(&s.db, team, project, app).await?;
-
-	let hostname = body.hostname.to_ascii_lowercase();
-	if !validate::hostname(&hostname) {
-		return Err(ServerError::Validation("invalid hostname".to_string()));
-	}
-
-	let domain = super::insert(&s.db, app.id, &hostname).await.map_err(|e| {
-		if is_unique_violation(&e, HOSTNAME_CONSTRAINT) {
-			ServerError::DomainTaken
-		} else {
-			e.into()
-		}
-	})?;
-
+	let domain = service::create(&s.db, user.id, team, project, app, &body.hostname).await?;
 	Ok(Json(DomainResponse::from(&domain)))
 }
 
@@ -83,11 +65,10 @@ pub async fn list(
 	user: AuthUser,
 	Path((team, project, app)): Path<(TeamId, ProjectId, ApplicationId)>,
 ) -> AppResult<Json<Vec<DomainResponse>>> {
-	authorize(&s.db, user.id, team, Action::Read, Resource::Domain).await?;
-	let app = scope::application(&s.db, team, project, app).await?;
-
-	let domains = super::list(&s.db, app.id).await?;
-	Ok(Json(domains.iter().map(DomainResponse::from).collect()))
+	let list = service::list(&s.db, user.id, team, project, app).await?;
+	Ok(Json(
+		list.domains.iter().map(DomainResponse::from).collect(),
+	))
 }
 
 /// Unroutes a custom domain; caller must hold `delete domain` on the team.
@@ -97,11 +78,6 @@ pub async fn remove(
 	user: AuthUser,
 	Path((team, project, app, id)): Path<(TeamId, ProjectId, ApplicationId, DomainId)>,
 ) -> AppResult<Json<DeleteDomainResponse>> {
-	authorize(&s.db, user.id, team, Action::Delete, Resource::Domain).await?;
-	let app = scope::application(&s.db, team, project, app).await?;
-
-	if !super::delete(&s.db, app.id, id).await? {
-		return Err(ServerError::DomainNotFound);
-	}
+	let id = service::remove(&s.db, user.id, team, project, app, id).await?;
 	Ok(Json(DeleteDomainResponse { id }))
 }

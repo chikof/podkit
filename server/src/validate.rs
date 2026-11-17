@@ -88,6 +88,15 @@ pub fn abs_path(s: &str) -> bool {
 			.all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'/' | b'-'))
 }
 
+/// An environment variable name: 1-255 chars of `[A-Za-z0-9_]`, not starting
+/// with a digit.
+pub fn env_key(s: &str) -> bool {
+	let b = s.as_bytes();
+	(1..=255).contains(&b.len())
+		&& !b[0].is_ascii_digit()
+		&& b.iter().all(|c| c.is_ascii_alphanumeric() || *c == b'_')
+}
+
 /// Non-empty relative path with no `..` component (used for `dockerfile_path`).
 pub fn rel_path(s: &str) -> bool {
 	!s.is_empty() && !s.starts_with('/') && s.split('/').all(|part| part != "..")

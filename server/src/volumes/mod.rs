@@ -3,6 +3,7 @@
 use crate::ids::{ApplicationId, VolumeId};
 
 pub mod routes;
+pub mod service;
 
 pub use routes::router;
 

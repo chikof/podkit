@@ -200,3 +200,52 @@ pub async fn seed_deployment(db: &PgPool, application: i64, status: &str) {
 		.await
 		.unwrap();
 }
+
+/// The id of the only row in `table`.
+pub async fn only_id(db: &PgPool, table: &str) -> i64 {
+	sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT id FROM {table}")))
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// The id of the env var named `key`.
+pub async fn env_var_id(db: &PgPool, key: &str) -> i64 {
+	sqlx::query_scalar("SELECT id FROM env_vars WHERE key = $1")
+		.bind(key)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// The stored (encrypted) value of the env var named `key`.
+pub async fn env_var_ciphertext(db: &PgPool, key: &str) -> Vec<u8> {
+	sqlx::query_scalar("SELECT value FROM env_vars WHERE key = $1")
+		.bind(key)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// Takes `action` on `resource` away from `role`, to test each permission alone.
+pub async fn revoke_permission(db: &PgPool, role: i64, action: &str, resource: &str) {
+	sqlx::query(
+		"DELETE FROM role_permissions WHERE role_id = $1 AND permission_id =
+			(SELECT id FROM permissions WHERE action = $2 AND resource = $3)",
+	)
+	.bind(role)
+	.bind(action)
+	.bind(resource)
+	.execute(db)
+	.await
+	.unwrap();
+}
+
+/// Renames every application, e.g. to a hostile name.
+pub async fn rename_applications(db: &PgPool, name: &str) {
+	sqlx::query("UPDATE applications SET name = $1")
+		.bind(name)
+		.execute(db)
+		.await
+		.unwrap();
+}
