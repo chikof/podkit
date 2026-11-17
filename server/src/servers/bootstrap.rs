@@ -249,6 +249,10 @@ pub async fn run(
 		.await
 		.map_err(|e| db_failed(&e))?;
 	note(log, &format!("agent {version} is running")).await;
+	// Best effort; the sync loop retries.
+	if let Ok(client) = state.agents.client(state, &server).await {
+		super::hardware::refresh(&state.db, server.id, &client).await;
+	}
 	Ok(())
 }
 

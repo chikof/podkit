@@ -1,6 +1,7 @@
 //! Servers: podman hosts a team can deploy to. The local one is created with the team.
 
 pub mod bootstrap;
+pub mod hardware;
 mod routes;
 pub mod sync;
 
@@ -65,6 +66,80 @@ pub struct Server {
 	pub arch: Option<String>,
 	/// Why the server is not `active`, when known.
 	pub status_message: Option<String>,
+	/// Latest hardware snapshot from the agent.
+	pub hardware: Option<sqlx::types::Json<proto::Hardware>>,
+	/// When `hardware` was taken.
+	pub hardware_at: Option<time::OffsetDateTime>,
+}
+
+/// AMD GPUs below this are integrated parts that cannot run an engine.
+const MIN_AMD_GPU_VRAM_MB: u64 = 2048;
+
+/// The GPU vendors a container on this server can use, NVIDIA first: NVIDIA
+/// needs a GPU and a `nvidia.com/gpu` CDI spec (`docs/spikes/gpu-cdi.md`), AMD
+/// a discrete card. Empty before the first snapshot.
+#[must_use]
+pub fn gpu_vendors(server: &Server) -> Vec<proto::GpuVendor> {
+	let Some(hardware) = server.hardware.as_ref().map(|h| &h.0) else {
+		return Vec::new();
+	};
+	let mut vendors = Vec::new();
+	if hardware.gpus.iter().any(|g| g.vendor == "nvidia")
+		&& hardware.cdi.devices.iter().any(|k| k == "nvidia.com/gpu")
+	{
+		vendors.push(proto::GpuVendor::Nvidia);
+	}
+	if hardware
+		.gpus
+		.iter()
+		.any(|g| g.vendor == "amd" && g.vram_mb >= MIN_AMD_GPU_VRAM_MB)
+	{
+		vendors.push(proto::GpuVendor::Amd);
+	}
+	vendors
+}
+
+/// Total VRAM, in MB, of the usable GPUs of `vendor`.
+#[must_use]
+pub fn vram_mb(server: &Server, vendor: proto::GpuVendor) -> u64 {
+	let name = match vendor {
+		proto::GpuVendor::Nvidia => "nvidia",
+		proto::GpuVendor::Amd => "amd",
+	};
+	server.hardware.as_ref().map_or(0, |h| {
+		h.gpus
+			.iter()
+			.filter(|g| {
+				g.vendor == name
+					&& (vendor == proto::GpuVendor::Nvidia || g.vram_mb >= MIN_AMD_GPU_VRAM_MB)
+			})
+			.map(|g| g.vram_mb)
+			.sum()
+	})
+}
+
+/// Why `vendor` cannot be used on this server, for an error message.
+#[must_use]
+pub fn gpu_problem(server: &Server, vendor: proto::GpuVendor) -> String {
+	let Some(hardware) = server.hardware.as_ref().map(|h| &h.0) else {
+		return format!("{} has not reported its hardware yet", server.name);
+	};
+	match vendor {
+		proto::GpuVendor::Nvidia if hardware.gpus.iter().any(|g| g.vendor == "nvidia") => format!(
+			"{} has an NVIDIA GPU but no CDI spec for it (install nvidia-container-toolkit and \
+			generate one, see docs/spikes/gpu-cdi.md)",
+			server.name
+		),
+		proto::GpuVendor::Nvidia => format!("{} has no NVIDIA GPU", server.name),
+		proto::GpuVendor::Amd => format!("{} has no discrete AMD GPU", server.name),
+	}
+}
+
+/// Whether the server's latest inventory shows a GPU a container can use.
+/// `false` before the first snapshot.
+#[must_use]
+pub fn gpu_capable(server: &Server) -> bool {
+	!gpu_vendors(server).is_empty()
 }
 
 impl Server {
@@ -95,6 +170,8 @@ impl Server {
 			agent_version: None,
 			arch: None,
 			status_message: None,
+			hardware: None,
+			hardware_at: None,
 		}
 	}
 }
@@ -171,7 +248,8 @@ pub async fn find(
 			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
 				ssh_user, ssh_private_key, podman_socket_path, is_local,
 				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
-				arch, status_message
+				arch, status_message,
+				hardware AS "hardware?: sqlx::types::Json<proto::Hardware>", hardware_at
 			FROM servers
 			WHERE id = $1
 		"#,
@@ -191,7 +269,8 @@ pub async fn list_by_team(
 			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
 				ssh_user, ssh_private_key, podman_socket_path, is_local,
 				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
-				arch, status_message
+				arch, status_message,
+				hardware AS "hardware?: sqlx::types::Json<proto::Hardware>", hardware_at
 			FROM servers
 			WHERE team_id = $1
 		"#,
@@ -209,7 +288,8 @@ pub async fn list_for_sync(db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Server>,
 			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
 				ssh_user, ssh_private_key, podman_socket_path, is_local,
 				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
-				arch, status_message
+				arch, status_message,
+				hardware AS "hardware?: sqlx::types::Json<proto::Hardware>", hardware_at
 			FROM servers
 			WHERE status = 'active' OR is_local OR (status = 'unreachable' AND agent_version IS NOT NULL)
 		"#
@@ -316,6 +396,63 @@ pub async fn delete(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::ids::TeamId;
+	use proto::{Cdi, Cpu, Gpu, Hardware, Memory};
+
+	fn server_with(gpus: &[(&str, u64)], cdi: &[&str]) -> Server {
+		let mut server = Server::new_remote(
+			TeamId(1),
+			"s".to_string(),
+			"h".to_string(),
+			22,
+			"root".to_string(),
+			vec![1],
+			"/run/podman.sock".to_string(),
+		);
+		server.hardware = Some(sqlx::types::Json(Hardware {
+			cpu: Cpu {
+				model: "c".to_string(),
+				threads: 1,
+			},
+			memory: Memory {
+				total_mb: 1,
+				available_mb: 1,
+			},
+			disks: vec![],
+			gpus: gpus
+				.iter()
+				.map(|(vendor, vram_mb)| Gpu {
+					vendor: (*vendor).to_string(),
+					name: "g".to_string(),
+					vram_mb: *vram_mb,
+					vram_used_mb: None,
+				})
+				.collect(),
+			cdi: Cdi {
+				available: !cdi.is_empty(),
+				devices: cdi.iter().map(|k| (*k).to_string()).collect(),
+			},
+		}));
+		server
+	}
+
+	#[test]
+	fn gpu_capable_follows_the_inventory() {
+		let mut none = server_with(&[], &[]);
+		none.hardware = None;
+		assert!(!gpu_capable(&none));
+		assert!(gpu_capable(&server_with(
+			&[("nvidia", 12288)],
+			&["nvidia.com/gpu"]
+		)));
+		// The GPU is there but the toolkit's CDI spec is not.
+		assert!(!gpu_capable(&server_with(&[("nvidia", 12288)], &[])));
+		// A spec without a GPU.
+		assert!(!gpu_capable(&server_with(&[], &["nvidia.com/gpu"])));
+		// Integrated AMD graphics do not count; a discrete card does.
+		assert!(!gpu_capable(&server_with(&[("amd", 512)], &[])));
+		assert!(gpu_capable(&server_with(&[("amd", 16384)], &[])));
+	}
 
 	const ED25519: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIJchJVs7z1tmicd4SpMN5UdQGOeEF7c+3zkUwGLv44BI";
 	const ED25519_FP: &str = "SHA256:ywBw9jYLna1cd5Li260999IYfpxB/BrS/G6GhT1Xkwg";

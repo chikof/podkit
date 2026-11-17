@@ -33,6 +33,7 @@ const DEFAULT_PREFIX: &str = "podkit-";
 pub fn router(ctx: Arc<Ctx>) -> Router {
 	Router::new()
 		.route("/v1/health", get(health))
+		.route("/v1/hardware", get(hardware))
 		.route("/v1/deploy", post(deploy_route))
 		.route("/v1/containers", get(list_containers))
 		.route("/v1/containers/{id}/start", post(start_container))
@@ -43,6 +44,8 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/backups/dump", post(backup_dump))
 		.route("/v1/backups/upload", post(backup_upload))
 		.route("/v1/backups/restore", post(backup_restore))
+		.route("/v1/model-downloads", post(model_download_route))
+		.route("/v1/probes", post(probe_route))
 		.with_state(ctx)
 }
 
@@ -136,6 +139,12 @@ async fn health(State(ctx): State<Arc<Ctx>>) -> Result<Json<Health>, ApiError> {
 		version: env!("CARGO_PKG_VERSION").to_string(),
 		podman_version,
 	}))
+}
+
+/// Never fails: parts the host cannot report are empty.
+async fn hardware(State(ctx): State<Arc<Ctx>>) -> Json<proto::Hardware> {
+	let graph_root = ctx.podman().graph_root().await.ok().flatten();
+	Json(crate::hardware::collect(graph_root.as_deref(), &ctx.data_dir).await)
 }
 
 async fn deploy_route(State(ctx): State<Arc<Ctx>>, Json(spec): Json<DeploySpec>) -> Response {
@@ -355,6 +364,25 @@ async fn delete_volume(
 			&e,
 		)),
 	}
+}
+
+async fn probe_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::ProbeRequest>,
+) -> Result<Json<proto::ProbeResponse>, ApiError> {
+	check_ref(&req.container_id)?;
+	crate::probe::validate(&req).map_err(|m| ApiError::new(StatusCode::BAD_REQUEST, m))?;
+	crate::probe::run(&ctx.podman(), &req)
+		.await
+		.map(Json)
+		.map_err(|m| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, m))
+}
+
+async fn model_download_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::ModelDownloadRequest>,
+) -> Response {
+	ndjson(move |tx| crate::model_download::run(ctx, req, tx))
 }
 
 async fn backup_dump(State(ctx): State<Arc<Ctx>>, Json(req): Json<DumpRequest>) -> Response {

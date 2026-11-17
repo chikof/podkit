@@ -15,6 +15,72 @@ pub struct Health {
 	pub podman_version: String,
 }
 
+/// `GET /v1/hardware` response: a snapshot of what the host offers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Hardware {
+	/// Processor.
+	pub cpu: Cpu,
+	/// RAM.
+	pub memory: Memory,
+	/// The Podman graph root and the agent data dir (one entry each, when they differ).
+	pub disks: Vec<Disk>,
+	/// Detected GPUs, NVIDIA first.
+	pub gpus: Vec<Gpu>,
+	/// CDI specs on the host.
+	pub cdi: Cdi,
+}
+
+/// Processor.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Cpu {
+	/// Model name as the kernel reports it.
+	pub model: String,
+	/// Logical CPUs.
+	pub threads: u32,
+}
+
+/// RAM.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Memory {
+	/// Total, in MB.
+	pub total_mb: u64,
+	/// Available without swapping, in MB.
+	pub available_mb: u64,
+}
+
+/// Space on the filesystem holding `path`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Disk {
+	/// Directory the figures are for.
+	pub path: String,
+	/// Free to unprivileged users, in MB.
+	pub free_mb: u64,
+	/// Total, in MB.
+	pub total_mb: u64,
+}
+
+/// One GPU.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Gpu {
+	/// `nvidia` or `amd`.
+	pub vendor: String,
+	/// Marketing name.
+	pub name: String,
+	/// Total VRAM, in MB.
+	pub vram_mb: u64,
+	/// `None` when the source cannot tell (AMD sysfs without `mem_info_vram_used`).
+	pub vram_used_mb: Option<u64>,
+}
+
+/// Container Device Interface specs found on the host.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Cdi {
+	/// True when `/etc/cdi` or `/var/run/cdi` hold at least one spec file.
+	pub available: bool,
+	/// The spec files' `kind`s, e.g. `nvidia.com/gpu`.
+	pub devices: Vec<String>,
+}
+
 /// `POST /v1/deploy` body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploySpec {
@@ -46,6 +112,50 @@ pub struct DeploySpec {
 	pub strategy: Strategy,
 	/// Traefik settings for the server.
 	pub ingress: Ingress,
+	/// GPUs to hand to the container; `None` for none. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub gpus: Option<GpuRequest>,
+	/// Replaces the image entrypoint. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub entrypoint: Option<Vec<String>>,
+	/// Size of `/dev/shm` in bytes; `None` keeps the runtime default.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub shm_bytes: Option<i64>,
+	/// Seconds between SIGTERM and SIGKILL when the container is stopped.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub stop_timeout_s: Option<u32>,
+}
+
+/// GPUs a container asks for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GpuRequest {
+	/// Whose GPUs.
+	pub vendor: GpuVendor,
+	/// Which of them.
+	pub devices: GpuDevices,
+}
+
+/// GPU vendor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GpuVendor {
+	/// NVIDIA, through CDI (`nvidia.com/gpu=...`).
+	Nvidia,
+	/// AMD, through `/dev/kfd` and `/dev/dri`.
+	Amd,
+}
+
+/// Which GPUs of a vendor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GpuDevices {
+	/// Every GPU.
+	All,
+	/// The first `n` GPUs (NVIDIA only).
+	Count(u32),
+	/// Specific devices: indices or UUIDs for NVIDIA, render node names
+	/// (`renderD128`) for AMD.
+	Ids(Vec<String>),
 }
 
 /// Image source of a deploy.
@@ -119,6 +229,9 @@ pub struct VolumeMount {
 	pub name: String,
 	/// Absolute mount path in the container.
 	pub path: String,
+	/// Mount read-only. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub read_only: bool,
 }
 
 /// A host port mapping.
@@ -166,6 +279,11 @@ pub enum Event {
 	Phase {
 		/// The phase entered.
 		phase: Phase,
+	},
+	/// Bytes of a model download written so far; not terminal.
+	Progress {
+		/// Size of the download volume's contents.
+		bytes: u64,
 	},
 	/// Terminal: deploy succeeded.
 	Deployed {
@@ -357,6 +475,75 @@ pub struct RestoreRequest {
 	pub url: String,
 }
 
+/// `POST /v1/model-downloads` body. Streams [`Event::Log`] and
+/// [`Event::Progress`], then [`Event::Done`] or [`Event::Failed`].
+///
+/// Running it again for the same `volume` resumes: the volume keeps the files
+/// and the partial downloads.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ModelDownloadRequest {
+	/// Podman volume that receives the files; created when missing.
+	pub volume: String,
+	/// Hugging Face repo id, `owner/name`.
+	pub repo: String,
+	/// Branch, tag or commit.
+	pub revision: String,
+	/// `hf download --include` patterns; empty downloads the whole repo.
+	pub include: Vec<String>,
+	/// Hugging Face token for gated repos. Passed to the container in its
+	/// environment; the agent never logs it.
+	pub token: Option<String>,
+}
+
+impl std::fmt::Debug for ModelDownloadRequest {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("ModelDownloadRequest")
+			.field("volume", &self.volume)
+			.field("repo", &self.repo)
+			.field("revision", &self.revision)
+			.field("include", &self.include)
+			.field("token", &self.token.as_ref().map(|_| "<redacted>"))
+			.finish()
+	}
+}
+
+/// `POST /v1/probes` body: one HTTP request to a container's port, made from
+/// a throwaway container on the `podkit` network so it works with rootless
+/// Podman, where the host cannot reach container addresses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProbeRequest {
+	/// Container to check; the request goes to it.
+	pub container_id: String,
+	/// DNS name on the `podkit` network (one of the container's aliases).
+	pub host: String,
+	/// Port inside the container.
+	pub port: u16,
+	/// `GET` or `POST`.
+	pub method: String,
+	/// Path and query, starting with `/`.
+	pub path: String,
+	/// Request body, sent as JSON for `POST`.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub body: Option<String>,
+	/// Seconds before the request is given up on.
+	pub timeout_s: u32,
+}
+
+/// `POST /v1/probes` response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProbeResponse {
+	/// False when the container has exited; no request was made then.
+	pub running: bool,
+	/// HTTP status, or `None` when nothing answered (connection refused, timeout).
+	pub status: Option<u16>,
+	/// Start of the response body or the transport error.
+	pub detail: String,
+}
+
+/// Shown when Hugging Face answers a download or listing with 401 or 403.
+pub const GATED_MODEL_MESSAGE: &str =
+	"gated model: accept the license on huggingface.co and add an HF token";
+
 /// Body of every non-2xx agent response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorBody {
@@ -367,6 +554,45 @@ pub struct ErrorBody {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	const OLD_DEPLOY: &str = r#"{
+		"service": "app-1", "instance_id": 3,
+		"source": {"type": "image", "reference": "alpine:3", "pull": true},
+		"env": [], "command": null, "container_port": null, "routing": null,
+		"network_aliases": [], "volumes": [], "published_ports": [],
+		"memory_bytes": null, "cpu_cores": null, "strategy": "rolling",
+		"ingress": {"http_port": 80, "https_port": 443, "acme_email": null}
+	}"#;
+
+	#[test]
+	fn deploy_spec_without_gpus_still_deserializes() {
+		let spec: DeploySpec = serde_json::from_str(OLD_DEPLOY).unwrap();
+		assert_eq!(spec.gpus, None);
+		// `None` is not written, so older agents accept new payloads without gpus.
+		assert!(!serde_json::to_string(&spec).unwrap().contains("gpus"));
+	}
+
+	#[test]
+	fn gpu_request_wire_format() {
+		let with = |gpus: &str| {
+			let json = OLD_DEPLOY.replacen('{', &format!("{{\"gpus\": {gpus},"), 1);
+			serde_json::from_str::<DeploySpec>(&json).unwrap().gpus
+		};
+		let want = |vendor, devices| Some(GpuRequest { vendor, devices });
+		assert_eq!(
+			with(r#"{"vendor": "nvidia", "devices": "all"}"#),
+			want(GpuVendor::Nvidia, GpuDevices::All)
+		);
+		assert_eq!(
+			with(r#"{"vendor": "nvidia", "devices": {"count": 2}}"#),
+			want(GpuVendor::Nvidia, GpuDevices::Count(2))
+		);
+		assert_eq!(
+			with(r#"{"vendor": "amd", "devices": {"ids": ["renderD128"]}}"#),
+			want(GpuVendor::Amd, GpuDevices::Ids(vec!["renderD128".into()]))
+		);
+		assert_eq!(with("null"), None);
+	}
 
 	#[test]
 	fn events_use_snake_case_type_tags() {

@@ -1,0 +1,935 @@
+# Curated model catalog: models and the recipes (engine x quant x files) that run them.
+#
+# Embedded into the server with include_str!. Hand-edit the identity fields; the
+# `revision`, `total_bytes` and `est_*_mb` lines are written by
+# `scripts/catalog-verify.sh --fix` from the Hugging Face API (never guess them).
+# `scripts/catalog-verify.sh` (no flag) re-checks them against Hugging Face.
+#
+# Model fields:
+#   params_b / active_params_b  billions; total comes from the safetensors count
+#                               Hugging Face reports for `base_repo`, active only where
+#                               the model's own name says (A3B, A17B)
+#   tier                        chiko's tier list (S, A, B, D); absent = not ranked
+#   size_class                  Tiny < 8B <= Small < 16B <= Medium < 40B <= Large
+#   tags                        curated: coding, reasoning, vision
+# Recipe fields:
+#   engine        preferred engine; GGUF recipes say llama_cuda and fall back to
+#                 llama_cpu when the server has no usable GPU
+#   include/files globs and exact paths of the download; both empty = whole repo
+#   model_path    what the engine loads inside the download ("." = the directory)
+#   verified      true only for the tiny models the engine spike ran
+#   measured      decode tokens/s from docs/spikes/engines.json (same variant, same file)
+#   est_*_mb      weights + 15% + 512 MB + 8192 tokens of KV cache, like models::service::estimate
+
+[[model]]
+id = "qwen3-8-flash-next"
+name = "Qwen3.8-Flash-Next"
+family = "Qwen"
+base_repo = "Qwen/Qwen3.8-Flash-Next"
+params_b = 180.0
+license = "other"
+size_class = "Large"
+tags = ["reasoning", "vision"]
+
+[[model.recipe]]
+id = "ud-iq2-xs"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.8-Flash-Next-GGUF"
+revision = "f5d175de2cf7f720d45d6064019a81fcf056e986"
+include = ["UD-IQ2_XS/*.gguf"]
+files = []
+model_path = "UD-IQ2_XS/Qwen3.8-Flash-Next-UD-IQ2_XS-00001-of-00003.gguf"
+format = "gguf"
+quant = "UD-IQ2_XS"
+total_bytes = 75832093338
+est_ram_mb = 84704
+est_vram_mb = 84704
+verified = false
+
+[[model.recipe]]
+id = "ud-q4-k-xl"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.8-Flash-Next-GGUF"
+revision = "f5d175de2cf7f720d45d6064019a81fcf056e986"
+include = ["UD-Q4_K_XL/*.gguf"]
+files = []
+model_path = "UD-Q4_K_XL/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf"
+format = "gguf"
+quant = "UD-Q4_K_XL"
+total_bytes = 111334654778
+est_ram_mb = 123640
+est_vram_mb = 123640
+verified = false
+
+[[model]]
+id = "deepseek-v4-1-flash"
+name = "DeepSeek-V4.1-Flash"
+family = "DeepSeek"
+base_repo = "deepseek-ai/DeepSeek-V4.1-Flash"
+params_b = 763.2
+license = "mit"
+size_class = "Large"
+tags = ["reasoning", "vision"]
+
+[[model.recipe]]
+id = "ud-iq2-xxs"
+engine = "llama_cuda"
+repo = "unsloth/DeepSeek-V4.1-Flash-1017-GGUF"
+revision = "dfcee0ec8d6b874c6663eca0fc55d90ab32534c8"
+include = ["UD-IQ2_XXS/*.gguf"]
+files = []
+model_path = "UD-IQ2_XXS/DeepSeek-V4.1-Flash-1017-UD-IQ2_XXS-00001-of-00006.gguf"
+format = "gguf"
+quant = "UD-IQ2_XXS"
+note = "Built from the 1017 release."
+total_bytes = 300475464795
+est_ram_mb = 331075
+est_vram_mb = 331075
+verified = false
+
+[[model.recipe]]
+id = "ud-q4-k-xl"
+engine = "llama_cuda"
+repo = "unsloth/DeepSeek-V4.1-Flash-1017-GGUF"
+revision = "dfcee0ec8d6b874c6663eca0fc55d90ab32534c8"
+include = ["UD-Q4_K_XL/*.gguf"]
+files = []
+model_path = "UD-Q4_K_XL/DeepSeek-V4.1-Flash-1017-UD-Q4_K_XL-00001-of-00009.gguf"
+format = "gguf"
+quant = "UD-Q4_K_XL"
+note = "Built from the 1017 release."
+total_bytes = 500707576573
+est_ram_mb = 550674
+est_vram_mb = 550674
+verified = false
+
+[[model]]
+id = "kimi-k3"
+name = "Kimi K3"
+family = "Kimi"
+base_repo = "moonshotai/Kimi-K3"
+params_b = 2779.9
+license = "other"
+tier = "S"
+size_class = "Large"
+tags = ["reasoning", "vision"]
+
+[[model.recipe]]
+id = "ud-iq2-xxs"
+engine = "llama_cuda"
+repo = "unsloth/Kimi-K3-GGUF"
+revision = "a0836360ce58dfec088d966a97f2ddc8a606279b"
+include = ["UD-IQ2_XXS/*.gguf"]
+files = []
+model_path = "UD-IQ2_XXS/Kimi-K3-UD-IQ2_XXS-00001-of-00016.gguf"
+format = "gguf"
+quant = "UD-IQ2_XXS"
+total_bytes = 711067773664
+est_ram_mb = 781383
+est_vram_mb = 781383
+verified = false
+
+[[model]]
+id = "glm-5-3"
+name = "GLM-5.3"
+family = "GLM"
+base_repo = "zai-org/GLM-5.3"
+params_b = 753.3
+license = "other"
+tier = "S"
+size_class = "Large"
+tags = ["reasoning", "coding"]
+
+[[model.recipe]]
+id = "ud-iq2-m"
+engine = "llama_cuda"
+repo = "unsloth/GLM-5.3-GGUF"
+revision = "346b3591c7f28d1a23716f97a065ecf12ec14771"
+include = ["UD-IQ2_M/*.gguf"]
+files = []
+model_path = "UD-IQ2_M/GLM-5.3-UD-IQ2_M-00001-of-00006.gguf"
+format = "gguf"
+quant = "UD-IQ2_M"
+total_bytes = 238577585701
+est_ram_mb = 263190
+est_vram_mb = 263190
+verified = false
+
+[[model.recipe]]
+id = "ud-q4-k-xl"
+engine = "llama_cuda"
+repo = "unsloth/GLM-5.3-GGUF"
+revision = "346b3591c7f28d1a23716f97a065ecf12ec14771"
+include = ["UD-Q4_K_XL/*.gguf"]
+files = []
+model_path = "UD-Q4_K_XL/GLM-5.3-UD-Q4_K_XL-00001-of-00011.gguf"
+format = "gguf"
+quant = "UD-Q4_K_XL"
+total_bytes = 467289116837
+est_ram_mb = 514024
+est_vram_mb = 514024
+verified = false
+
+[[model]]
+id = "mimo-v2-6-pro"
+name = "MiMo-V2.6-Pro"
+family = "MiMo"
+base_repo = "XiaomiMiMo/MiMo-V2.6-Pro-RL"
+params_b = 1024.2
+license = "mit"
+tier = "S"
+size_class = "Large"
+tags = ["reasoning", "vision"]
+
+[[model.recipe]]
+id = "mxfp4"
+engine = "llama_cuda"
+repo = "ggml-org/MiMo-V2.6-Pro-RL-GGUF"
+revision = "5f387f5260fc110678396a3076a140c469b41eaa"
+include = ["MiMo-V2.6-Pro-RL-MXFP4*.gguf"]
+files = []
+model_path = "MiMo-V2.6-Pro-RL-MXFP4-00001-of-00007.gguf"
+format = "gguf"
+quant = "MXFP4"
+note = "Built from the RL checkpoint."
+total_bytes = 554211764672
+est_ram_mb = 609354
+est_vram_mb = 609354
+verified = false
+
+[[model]]
+id = "deepseek-v4-pro"
+name = "DeepSeek-V4-Pro"
+family = "DeepSeek"
+base_repo = "deepseek-ai/DeepSeek-V4-Pro"
+params_b = 1598.8
+license = "mit"
+tier = "S"
+size_class = "Large"
+tags = ["reasoning", "coding"]
+
+[[model.recipe]]
+id = "ud-q4-k-xl"
+engine = "llama_cuda"
+repo = "unsloth/DeepSeek-V4-Pro-0813-GGUF"
+revision = "6d053616d152293da72569f56b861466f10ace7d"
+include = ["UD-Q4_K_XL/*.gguf"]
+files = []
+model_path = "UD-Q4_K_XL/DeepSeek-V4-Pro-0813-UD-Q4_K_XL-00001-of-00020.gguf"
+format = "gguf"
+quant = "UD-Q4_K_XL"
+note = "Built from the 0813 release."
+total_bytes = 849683927055
+est_ram_mb = 933406
+est_vram_mb = 933406
+verified = false
+
+[[model]]
+id = "qwen3-5-397b"
+name = "Qwen3.5 397B-A17B"
+family = "Qwen"
+base_repo = "Qwen/Qwen3.5-397B-A17B"
+params_b = 403.4
+active_params_b = 17.0
+license = "apache-2.0"
+tier = "S"
+size_class = "Large"
+tags = ["reasoning", "vision"]
+
+[[model.recipe]]
+id = "ud-iq2-xxs"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.5-397B-A17B-GGUF"
+revision = "da33c16fa4440f831149fcf53b98a22bc07785e5"
+include = ["UD-IQ2_XXS/*.gguf"]
+files = []
+model_path = "UD-IQ2_XXS/Qwen3.5-397B-A17B-UD-IQ2_XXS-00001-of-00004.gguf"
+format = "gguf"
+quant = "UD-IQ2_XXS"
+total_bytes = 114872940736
+est_ram_mb = 127520
+est_vram_mb = 127520
+verified = false
+
+[[model.recipe]]
+id = "q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.5-397B-A17B-GGUF"
+revision = "da33c16fa4440f831149fcf53b98a22bc07785e5"
+include = ["Q4_K_M/*.gguf"]
+files = []
+model_path = "Q4_K_M/Qwen3.5-397B-A17B-Q4_K_M-00001-of-00006.gguf"
+format = "gguf"
+quant = "Q4_K_M"
+total_bytes = 244093630912
+est_ram_mb = 269239
+est_vram_mb = 269239
+verified = false
+
+[[model]]
+id = "deepseek-v4-flash"
+name = "DeepSeek-V4-Flash"
+family = "DeepSeek"
+base_repo = "deepseek-ai/DeepSeek-V4-Flash"
+params_b = 290.9
+license = "mit"
+tier = "A"
+size_class = "Large"
+tags = ["reasoning"]
+
+[[model.recipe]]
+id = "safetensors"
+engine = "vllm"
+repo = "deepseek-ai/DeepSeek-V4-Flash"
+revision = "60d8d70770c6776ff598c94bb586a859a38244f1"
+include = []
+files = []
+model_path = "."
+format = "safetensors"
+quant = "native"
+total_bytes = 159630041626
+est_ram_mb = 176607
+est_vram_mb = 176607
+verified = false
+
+[[model]]
+id = "glm-5-3-flash"
+name = "GLM-5.3-Flash"
+family = "GLM"
+base_repo = "zai-org/GLM-5.3-Flash"
+params_b = 321.3
+license = "mit"
+tier = "A"
+size_class = "Large"
+tags = ["reasoning", "coding", "vision"]
+
+[[model.recipe]]
+id = "ud-iq2-xxs"
+engine = "llama_cuda"
+repo = "unsloth/GLM-5.3-Flash-GGUF"
+revision = "a38483c8cd5df544f53d70fb281afe97369d5ab6"
+include = ["UD-IQ2_XXS/*.gguf"]
+files = []
+model_path = "UD-IQ2_XXS/GLM-5.3-Flash-UD-IQ2_XXS-00001-of-00004.gguf"
+format = "gguf"
+quant = "UD-IQ2_XXS"
+total_bytes = 101844951904
+est_ram_mb = 113232
+est_vram_mb = 113232
+verified = false
+
+[[model.recipe]]
+id = "ud-q4-k-xl"
+engine = "llama_cuda"
+repo = "unsloth/GLM-5.3-Flash-GGUF"
+revision = "a38483c8cd5df544f53d70fb281afe97369d5ab6"
+include = ["UD-Q4_K_XL/*.gguf"]
+files = []
+model_path = "UD-Q4_K_XL/GLM-5.3-Flash-UD-Q4_K_XL-00001-of-00006.gguf"
+format = "gguf"
+quant = "UD-Q4_K_XL"
+total_bytes = 199707321472
+est_ram_mb = 220560
+est_vram_mb = 220560
+verified = false
+
+[[model]]
+id = "qwen3-8-27b"
+name = "Qwen3.8 27B"
+family = "Qwen"
+base_repo = "Qwen/Qwen3.8-27B"
+params_b = 27.8
+license = "apache-2.0"
+tier = "A"
+size_class = "Medium"
+tags = ["reasoning", "vision"]
+
+[[model.recipe]]
+id = "ud-iq2-xxs"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.8-27B-GGUF"
+revision = "4af51b3542f775b0a8e4b310bfb3f17e01c306c9"
+include = []
+files = ["Qwen3.8-27B-UD-IQ2_XXS.gguf"]
+model_path = "Qwen3.8-27B-UD-IQ2_XXS.gguf"
+format = "gguf"
+quant = "UD-IQ2_XXS"
+total_bytes = 7206043648
+est_ram_mb = 9439
+est_vram_mb = 9439
+verified = false
+
+[[model.recipe]]
+id = "q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.8-27B-GGUF"
+revision = "4af51b3542f775b0a8e4b310bfb3f17e01c306c9"
+include = []
+files = ["Qwen3.8-27B-UD-Q4_K_M.gguf"]
+model_path = "Qwen3.8-27B-UD-Q4_K_M.gguf"
+format = "gguf"
+quant = "UD-Q4_K_M"
+total_bytes = 16564259744
+est_ram_mb = 19702
+est_vram_mb = 19702
+verified = false
+
+[[model]]
+id = "qwen3-6-27b"
+name = "Qwen3.6 27B"
+family = "Qwen"
+base_repo = "Qwen/Qwen3.6-27B"
+params_b = 27.8
+license = "apache-2.0"
+tier = "A"
+size_class = "Medium"
+tags = ["reasoning", "vision"]
+
+[[model.recipe]]
+id = "ud-iq2-xxs"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.6-27B-GGUF"
+revision = "82d411acf4a06cfb8d9b073a5211bf410bfc29bf"
+include = []
+files = ["Qwen3.6-27B-UD-IQ2_XXS.gguf"]
+model_path = "Qwen3.6-27B-UD-IQ2_XXS.gguf"
+format = "gguf"
+quant = "UD-IQ2_XXS"
+total_bytes = 9388779744
+est_ram_mb = 11833
+est_vram_mb = 11833
+verified = false
+
+[[model.recipe]]
+id = "q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.6-27B-GGUF"
+revision = "82d411acf4a06cfb8d9b073a5211bf410bfc29bf"
+include = []
+files = ["Qwen3.6-27B-Q4_K_M.gguf"]
+model_path = "Qwen3.6-27B-Q4_K_M.gguf"
+format = "gguf"
+quant = "Q4_K_M"
+total_bytes = 16817244384
+est_ram_mb = 19980
+est_vram_mb = 19980
+verified = false
+
+[[model]]
+id = "qwen3-6-35b-a3b"
+name = "Qwen3.6 35B-A3B"
+family = "Qwen"
+base_repo = "Qwen/Qwen3.6-35B-A3B"
+params_b = 36.0
+active_params_b = 3.0
+license = "apache-2.0"
+tier = "A"
+size_class = "Medium"
+tags = ["reasoning", "vision"]
+
+[[model.recipe]]
+id = "ud-iq2-xxs"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.6-35B-A3B-GGUF"
+revision = "a483e9e6cbd595906af30beda3187c2663a1118c"
+include = []
+files = ["Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf"]
+model_path = "Qwen3.6-35B-A3B-UD-IQ2_XXS.gguf"
+format = "gguf"
+quant = "UD-IQ2_XXS"
+total_bytes = 10756586464
+est_ram_mb = 13333
+est_vram_mb = 13333
+verified = false
+
+[[model.recipe]]
+id = "ud-q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.6-35B-A3B-GGUF"
+revision = "a483e9e6cbd595906af30beda3187c2663a1118c"
+include = []
+files = ["Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"]
+model_path = "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf"
+format = "gguf"
+quant = "UD-Q4_K_M"
+total_bytes = 22134528992
+est_ram_mb = 25812
+est_vram_mb = 25812
+verified = false
+
+[[model]]
+id = "gemma-4-31b"
+name = "Gemma 4 31B"
+family = "Gemma"
+base_repo = "google/gemma-4-31B-it"
+params_b = 31.3
+license = "apache-2.0"
+tier = "A"
+size_class = "Medium"
+tags = ["vision"]
+
+[[model.recipe]]
+id = "ud-iq2-xxs"
+engine = "llama_cuda"
+repo = "unsloth/gemma-4-31B-it-GGUF"
+revision = "c1ac76e99d5513b141e8adde7288b85c3f9c32ec"
+include = []
+files = ["gemma-4-31B-it-UD-IQ2_XXS.gguf"]
+model_path = "gemma-4-31B-it-UD-IQ2_XXS.gguf"
+format = "gguf"
+quant = "UD-IQ2_XXS"
+total_bytes = 8534295488
+est_ram_mb = 10895
+est_vram_mb = 10895
+verified = false
+
+[[model.recipe]]
+id = "q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/gemma-4-31B-it-GGUF"
+revision = "c1ac76e99d5513b141e8adde7288b85c3f9c32ec"
+include = []
+files = ["gemma-4-31B-it-Q4_K_M.gguf"]
+model_path = "gemma-4-31B-it-Q4_K_M.gguf"
+format = "gguf"
+quant = "Q4_K_M"
+total_bytes = 18323733440
+est_ram_mb = 21632
+est_vram_mb = 21632
+verified = false
+
+[[model]]
+id = "gpt-oss-120b"
+name = "GPT-oss 120B"
+family = "GPT-oss"
+base_repo = "openai/gpt-oss-120b"
+params_b = 116.8
+license = "apache-2.0"
+tier = "A"
+size_class = "Large"
+tags = ["reasoning"]
+
+[[model.recipe]]
+id = "mxfp4"
+engine = "llama_cuda"
+repo = "ggml-org/gpt-oss-120b-GGUF"
+revision = "f59990363fbbb67f01bce03e5e7bf0929e3e320b"
+include = []
+files = ["gpt-oss-120b-MXFP4.gguf"]
+model_path = "gpt-oss-120b-MXFP4.gguf"
+format = "gguf"
+quant = "MXFP4"
+total_bytes = 63387346208
+est_ram_mb = 71054
+est_vram_mb = 71054
+verified = false
+
+[[model]]
+id = "qwen3-coder-next"
+name = "Qwen3-Coder-Next"
+family = "Qwen"
+base_repo = "Qwen/Qwen3-Coder-Next"
+params_b = 79.7
+license = "apache-2.0"
+tier = "A"
+size_class = "Large"
+tags = ["coding"]
+
+[[model.recipe]]
+id = "ud-iq2-xxs"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3-Coder-Next-GGUF"
+revision = "ce09c67b53bc8739eef83fe67b2f5d293c270632"
+include = []
+files = ["Qwen3-Coder-Next-UD-IQ2_XXS.gguf"]
+model_path = "Qwen3-Coder-Next-UD-IQ2_XXS.gguf"
+format = "gguf"
+quant = "UD-IQ2_XXS"
+total_bytes = 23312490496
+est_ram_mb = 27103
+est_vram_mb = 27103
+verified = false
+
+[[model.recipe]]
+id = "q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3-Coder-Next-GGUF"
+revision = "ce09c67b53bc8739eef83fe67b2f5d293c270632"
+include = []
+files = ["Qwen3-Coder-Next-Q4_K_M.gguf"]
+model_path = "Qwen3-Coder-Next-Q4_K_M.gguf"
+format = "gguf"
+quant = "Q4_K_M"
+total_bytes = 48528320544
+est_ram_mb = 54759
+est_vram_mb = 54759
+verified = false
+
+[[model]]
+id = "qwen3-5-9b"
+name = "Qwen3.5 9B"
+family = "Qwen"
+base_repo = "Qwen/Qwen3.5-9B"
+params_b = 9.7
+license = "apache-2.0"
+tier = "A"
+size_class = "Small"
+tags = ["reasoning", "vision"]
+
+[[model.recipe]]
+id = "q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.5-9B-GGUF"
+revision = "3885219b6810b007914f3a7950a8d1b469d598a5"
+include = []
+files = ["Qwen3.5-9B-Q4_K_M.gguf"]
+model_path = "Qwen3.5-9B-Q4_K_M.gguf"
+format = "gguf"
+quant = "Q4_K_M"
+total_bytes = 5680522464
+est_ram_mb = 7766
+est_vram_mb = 7766
+verified = false
+
+[[model.recipe]]
+id = "q8-0"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.5-9B-GGUF"
+revision = "3885219b6810b007914f3a7950a8d1b469d598a5"
+include = []
+files = ["Qwen3.5-9B-Q8_0.gguf"]
+model_path = "Qwen3.5-9B-Q8_0.gguf"
+format = "gguf"
+quant = "Q8_0"
+total_bytes = 9527502048
+est_ram_mb = 11986
+est_vram_mb = 11986
+verified = false
+
+[[model]]
+id = "qwen3-5-4b"
+name = "Qwen3.5 4B"
+family = "Qwen"
+base_repo = "Qwen/Qwen3.5-4B"
+params_b = 4.7
+license = "apache-2.0"
+tier = "A"
+size_class = "Tiny"
+tags = ["reasoning", "vision"]
+
+[[model.recipe]]
+id = "q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.5-4B-GGUF"
+revision = "e87f176479d0855a907a41277aca2f8ee7a09523"
+include = []
+files = ["Qwen3.5-4B-Q4_K_M.gguf"]
+model_path = "Qwen3.5-4B-Q4_K_M.gguf"
+format = "gguf"
+quant = "Q4_K_M"
+total_bytes = 2740937888
+est_ram_mb = 4542
+est_vram_mb = 4542
+verified = false
+
+[[model.recipe]]
+id = "q8-0"
+engine = "llama_cuda"
+repo = "unsloth/Qwen3.5-4B-GGUF"
+revision = "e87f176479d0855a907a41277aca2f8ee7a09523"
+include = []
+files = ["Qwen3.5-4B-Q8_0.gguf"]
+model_path = "Qwen3.5-4B-Q8_0.gguf"
+format = "gguf"
+quant = "Q8_0"
+total_bytes = 4482403488
+est_ram_mb = 6452
+est_vram_mb = 6452
+verified = false
+
+[[model.recipe]]
+id = "bf16"
+engine = "vllm"
+repo = "Qwen/Qwen3.5-4B"
+revision = "851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a"
+include = []
+files = []
+model_path = "."
+format = "safetensors"
+quant = "BF16"
+total_bytes = 9342907469
+est_ram_mb = 11783
+est_vram_mb = 11783
+verified = false
+
+[[model]]
+id = "gpt-oss-20b"
+name = "GPT-oss 20B"
+family = "GPT-oss"
+base_repo = "openai/gpt-oss-20b"
+params_b = 20.9
+license = "apache-2.0"
+tier = "B"
+size_class = "Medium"
+tags = ["reasoning"]
+
+[[model.recipe]]
+id = "mxfp4"
+engine = "llama_cuda"
+repo = "ggml-org/gpt-oss-20b-GGUF"
+revision = "41e8a94d15d62070b36cf4553a0250717ecf46b8"
+include = []
+files = ["gpt-oss-20b-MXFP4.gguf"]
+model_path = "gpt-oss-20b-MXFP4.gguf"
+format = "gguf"
+quant = "MXFP4"
+total_bytes = 12109566624
+est_ram_mb = 14817
+est_vram_mb = 14817
+verified = false
+
+[[model]]
+id = "gemma-4-12b"
+name = "Gemma 4 12B"
+family = "Gemma"
+base_repo = "google/gemma-4-12B-it"
+params_b = 12.0
+license = "apache-2.0"
+tier = "B"
+size_class = "Small"
+tags = ["vision"]
+
+[[model.recipe]]
+id = "q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/gemma-4-12b-it-GGUF"
+revision = "fc034cfff751157913579611efad8462ac1be606"
+include = []
+files = ["gemma-4-12b-it-Q4_K_M.gguf"]
+model_path = "gemma-4-12b-it-Q4_K_M.gguf"
+format = "gguf"
+quant = "Q4_K_M"
+total_bytes = 7121861440
+est_ram_mb = 9346
+est_vram_mb = 9346
+verified = false
+
+[[model.recipe]]
+id = "ud-q2-k-xl"
+engine = "llama_cuda"
+repo = "unsloth/gemma-4-12b-it-GGUF"
+revision = "fc034cfff751157913579611efad8462ac1be606"
+include = []
+files = ["gemma-4-12b-it-UD-Q2_K_XL.gguf"]
+model_path = "gemma-4-12b-it-UD-Q2_K_XL.gguf"
+format = "gguf"
+quant = "UD-Q2_K_XL"
+total_bytes = 4661419840
+est_ram_mb = 6648
+est_vram_mb = 6648
+verified = false
+
+[[model]]
+id = "nemotron-3-nano"
+name = "Nemotron 3 Nano 30B-A3B"
+family = "Nemotron"
+base_repo = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16"
+params_b = 31.6
+active_params_b = 3.0
+license = "other"
+tier = "B"
+size_class = "Medium"
+tags = ["reasoning"]
+
+[[model.recipe]]
+id = "iq4-xs"
+engine = "llama_cuda"
+repo = "unsloth/Nemotron-3-Nano-30B-A3B-GGUF"
+revision = "9ad8b366c308f931b2a96b9306f0b41aef9cd405"
+include = []
+files = ["Nemotron-3-Nano-30B-A3B-IQ4_XS.gguf"]
+model_path = "Nemotron-3-Nano-30B-A3B-IQ4_XS.gguf"
+format = "gguf"
+quant = "IQ4_XS"
+total_bytes = 18168955680
+est_ram_mb = 21463
+est_vram_mb = 21463
+verified = false
+
+[[model.recipe]]
+id = "q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/Nemotron-3-Nano-30B-A3B-GGUF"
+revision = "9ad8b366c308f931b2a96b9306f0b41aef9cd405"
+include = []
+files = ["Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"]
+model_path = "Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
+format = "gguf"
+quant = "Q4_K_M"
+total_bytes = 24574373664
+est_ram_mb = 28487
+est_vram_mb = 28487
+verified = false
+
+[[model]]
+id = "mistral-small-4"
+name = "Mistral Small 4"
+family = "Mistral"
+base_repo = "mistralai/Mistral-Small-4-119B-2603"
+params_b = 119.4
+license = "apache-2.0"
+tier = "B"
+size_class = "Large"
+tags = ["coding", "vision"]
+
+[[model.recipe]]
+id = "ud-iq2-xxs"
+engine = "llama_cuda"
+repo = "unsloth/Mistral-Small-4-119B-2603-GGUF"
+revision = "bd93c721735aa32c035c0f19e738cb3371fd56ff"
+include = []
+files = ["Mistral-Small-4-119B-2603-UD-IQ2_XXS.gguf"]
+model_path = "Mistral-Small-4-119B-2603-UD-IQ2_XXS.gguf"
+format = "gguf"
+quant = "UD-IQ2_XXS"
+total_bytes = 34924187328
+est_ram_mb = 39839
+est_vram_mb = 39839
+verified = false
+
+[[model.recipe]]
+id = "ud-q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/Mistral-Small-4-119B-2603-GGUF"
+revision = "bd93c721735aa32c035c0f19e738cb3371fd56ff"
+include = ["UD-Q4_K_M/*.gguf"]
+files = []
+model_path = "UD-Q4_K_M/Mistral-Small-4-119B-2603-UD-Q4_K_M-00001-of-00003.gguf"
+format = "gguf"
+quant = "UD-Q4_K_M"
+total_bytes = 73763180544
+est_ram_mb = 82435
+est_vram_mb = 82435
+verified = false
+
+[[model]]
+id = "phi-4-mini"
+name = "Phi-4-mini"
+family = "Phi"
+base_repo = "microsoft/Phi-4-mini-instruct"
+params_b = 3.8
+license = "mit"
+tier = "D"
+size_class = "Tiny"
+tags = ["reasoning"]
+
+[[model.recipe]]
+id = "q4-k-m"
+engine = "llama_cuda"
+repo = "unsloth/Phi-4-mini-instruct-GGUF"
+revision = "78eb92a46fc37e6b524df991ed9aca9bc6aa7b80"
+include = []
+files = ["Phi-4-mini-instruct-Q4_K_M.gguf"]
+model_path = "Phi-4-mini-instruct-Q4_K_M.gguf"
+format = "gguf"
+quant = "Q4_K_M"
+total_bytes = 2491874272
+est_ram_mb = 4269
+est_vram_mb = 4269
+verified = false
+
+[[model]]
+id = "qwen3-4b"
+name = "Qwen3 4B"
+family = "Qwen"
+base_repo = "Qwen/Qwen3-4B"
+params_b = 4.0
+license = "apache-2.0"
+size_class = "Tiny"
+tags = ["reasoning"]
+
+[[model.recipe]]
+id = "q4-k-m"
+engine = "llama_cuda"
+repo = "Qwen/Qwen3-4B-GGUF"
+revision = "bc640142c66e1fdd12af0bd68f40445458f3869b"
+include = []
+files = ["Qwen3-4B-Q4_K_M.gguf"]
+model_path = "Qwen3-4B-Q4_K_M.gguf"
+format = "gguf"
+quant = "Q4_K_M"
+total_bytes = 2497280256
+est_ram_mb = 4275
+est_vram_mb = 4275
+verified = true
+
+[[model.recipe.measured]]
+variant = "llama-cuda"
+decode_tok_s = 170.56
+
+[[model.recipe.measured]]
+variant = "llama-cpu"
+decode_tok_s = 21.84
+
+[[model]]
+id = "qwen3-1-7b"
+name = "Qwen3 1.7B"
+family = "Qwen"
+base_repo = "Qwen/Qwen3-1.7B"
+params_b = 2.0
+license = "apache-2.0"
+size_class = "Tiny"
+tags = ["reasoning"]
+
+[[model.recipe]]
+id = "bf16"
+engine = "vllm"
+repo = "Qwen/Qwen3-1.7B"
+revision = "70d244cc86ccca08cf5af4e1e306ecf908b1ad5e"
+include = []
+files = []
+model_path = "."
+format = "safetensors"
+quant = "BF16"
+total_bytes = 4079450110
+est_ram_mb = 6010
+est_vram_mb = 6010
+verified = true
+
+[[model.recipe.measured]]
+variant = "vllm"
+decode_tok_s = 142.43
+
+[[model]]
+id = "olmoe-1b-7b"
+name = "OLMoE 1B-7B"
+family = "OLMoE"
+base_repo = "allenai/OLMoE-1B-7B-0125-Instruct"
+params_b = 6.9
+active_params_b = 1.0
+license = "apache-2.0"
+size_class = "Tiny"
+tags = []
+
+[[model.recipe]]
+id = "q4-k-s"
+engine = "colibri"
+repo = "allenai/OLMoE-1B-7B-0125-Instruct-GGUF"
+revision = "2ac1d27317927518c9ef7bd99f91f3f1e4ee288d"
+include = []
+files = ["OLMoE-1B-7B-0125-Instruct-Q4_K_S.gguf"]
+model_path = "OLMoE-1B-7B-0125-Instruct-Q4_K_S.gguf"
+format = "gguf"
+quant = "Q4_K_S"
+total_bytes = 3963688960
+est_ram_mb = 5884
+est_vram_mb = 5884
+verified = true
+
+[[model.recipe.measured]]
+variant = "colibri-cuda"
+decode_tok_s = 461.47
+
+[[model.recipe.measured]]
+variant = "colibri-cpu"
+decode_tok_s = 57.7

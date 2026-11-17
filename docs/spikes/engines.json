@@ -1,0 +1,979 @@
+[
+  {
+    "engine": "colibri-cpu",
+    "image": "localhost/podkit-colibri:cpu",
+    "image_digest": "sha256:cea0587c0c8402f8bc85e8cdf0351ce85b6b11a157c143f8d8f2e1c7fe73df88",
+    "image_size_mb": 126,
+    "model": "/home/chiko/.cache/podkit-spikes/models/OLMoE-1B-7B-0125-Instruct-Q4_K_S.gguf",
+    "model_feed": "gguf-import",
+    "container_port": 8000,
+    "launch_args": [],
+    "gpu": "none",
+    "mem_limit": "12g",
+    "context": 8192,
+    "readiness_endpoint": "/health",
+    "ready": true,
+    "cold_start_s": 0.825,
+    "server_up_s": 0.825,
+    "openai_models": true,
+    "model_id": "olmoe-colibri",
+    "first_chat_wall_s": 7.196,
+    "cold_to_first_answer_s": 8.024,
+    "openai_chat": true,
+    "chat_http_code": 200,
+    "usage_nonstream": {
+      "prompt_tokens": 32,
+      "completion_tokens": 256,
+      "total_tokens": 288
+    },
+    "usage_nonstream_has_fields": true,
+    "native_timings": null,
+    "stream_wall_s": 4.443,
+    "openai_stream": true,
+    "stream_include_usage": true,
+    "usage_stream": {
+      "prompt_tokens": 32,
+      "completion_tokens": 256,
+      "total_tokens": 288
+    },
+    "usage_stream_location": "final chunk with choices=[] (OpenAI style)",
+    "stream_finish_reason": "length",
+    "completion_tokens": 256,
+    "decode_tok_s": 57.7,
+    "ttft_s": 0.021,
+    "stream_native_timings": null,
+    "prompt_tokens": 1557,
+    "prompt_tok_s": 261.7,
+    "anthropic_messages": true,
+    "anthropic_http_code": 200,
+    "anthropic_usage": {
+      "input_tokens": 19,
+      "output_tokens": 6
+    },
+    "anthropic_stream": true,
+    "anthropic_stream_usage": [
+      {
+        "event": "message_start",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      {
+        "event": "message_delta",
+        "usage": {
+          "output_tokens": 6
+        }
+      }
+    ],
+    "peak_rss_mb": 4387,
+    "peak_cgroup_mb": 5246,
+    "vram_peak_mb": 0,
+    "vram_peak_container_mb": 0,
+    "vram_baseline_mb": 1499,
+    "sigterm_exit_s": 0.965,
+    "sigterm_exit_code": 0,
+    "sigterm_stopped": true,
+    "variant": "colibri-cpu",
+    "weights": {
+      "hf_repo": "allenai/OLMoE-1B-7B-0125-Instruct-GGUF",
+      "file": "OLMoE-1B-7B-0125-Instruct-Q4_K_S.gguf",
+      "bytes": 3963688960
+    }
+  },
+  {
+    "engine": "colibri-cuda",
+    "image": "localhost/podkit-colibri:cuda",
+    "image_digest": "sha256:d7fb41ee01aca0311d4157069d374df3c68e1b9ea1d2b589d99ffdcd0c01d315",
+    "image_size_mb": 3528,
+    "model": "/home/chiko/.cache/podkit-spikes/models/OLMoE-1B-7B-0125-Instruct-Q4_K_S.gguf",
+    "model_feed": "gguf-import",
+    "container_port": 8000,
+    "launch_args": [],
+    "gpu": "cdi",
+    "mem_limit": "12g",
+    "context": 8192,
+    "readiness_endpoint": "/health",
+    "ready": true,
+    "cold_start_s": 3.259,
+    "server_up_s": 3.259,
+    "openai_models": true,
+    "model_id": "olmoe-colibri",
+    "first_chat_wall_s": 0.613,
+    "cold_to_first_answer_s": 3.882,
+    "openai_chat": true,
+    "chat_http_code": 200,
+    "usage_nonstream": {
+      "prompt_tokens": 32,
+      "completion_tokens": 256,
+      "total_tokens": 288
+    },
+    "usage_nonstream_has_fields": true,
+    "native_timings": null,
+    "stream_wall_s": 0.566,
+    "openai_stream": true,
+    "stream_include_usage": true,
+    "usage_stream": {
+      "prompt_tokens": 32,
+      "completion_tokens": 256,
+      "total_tokens": 288
+    },
+    "usage_stream_location": "final chunk with choices=[] (OpenAI style)",
+    "stream_finish_reason": "length",
+    "completion_tokens": 256,
+    "decode_tok_s": 461.47,
+    "ttft_s": 0.012,
+    "stream_native_timings": null,
+    "prompt_tokens": 1557,
+    "prompt_tok_s": 13200.3,
+    "anthropic_messages": true,
+    "anthropic_http_code": 200,
+    "anthropic_usage": {
+      "input_tokens": 19,
+      "output_tokens": 6
+    },
+    "anthropic_stream": true,
+    "anthropic_stream_usage": [
+      {
+        "event": "message_start",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0
+        }
+      },
+      {
+        "event": "message_delta",
+        "usage": {
+          "output_tokens": 6
+        }
+      }
+    ],
+    "peak_rss_mb": 1027,
+    "peak_cgroup_mb": 4396,
+    "vram_peak_mb": 4903,
+    "vram_peak_container_mb": 4886,
+    "vram_baseline_mb": 1543,
+    "sigterm_exit_s": 0.339,
+    "sigterm_exit_code": 0,
+    "sigterm_stopped": true,
+    "variant": "colibri-cuda",
+    "weights": {
+      "hf_repo": "allenai/OLMoE-1B-7B-0125-Instruct-GGUF",
+      "file": "OLMoE-1B-7B-0125-Instruct-Q4_K_S.gguf",
+      "bytes": 3963688960
+    }
+  },
+  {
+    "engine": "llama-cpu",
+    "image": "ghcr.io/ggml-org/llama.cpp:server",
+    "image_digest": "sha256:9f11c1a27d5bdadef2ebf8c629706bf0ed48173f0fea1a78c4dd666918134a8e",
+    "image_size_mb": 837,
+    "model": "/home/chiko/.cache/podkit-spikes/models/Qwen3-4B-Q4_K_M.gguf",
+    "model_feed": "mount",
+    "container_port": 8080,
+    "launch_args": [
+      "-m",
+      "/models/Qwen3-4B-Q4_K_M.gguf",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "-c",
+      "8192",
+      "-np",
+      "1",
+      "-t",
+      "8",
+      "--no-webui",
+      "-ngl",
+      "0"
+    ],
+    "gpu": "none",
+    "mem_limit": "12g",
+    "context": 8192,
+    "readiness_endpoint": "/health",
+    "ready": true,
+    "cold_start_s": 1.136,
+    "server_up_s": 1.136,
+    "openai_models": true,
+    "model_id": "/models/Qwen3-4B-Q4_K_M.gguf",
+    "first_chat_wall_s": 11.909,
+    "cold_to_first_answer_s": 13.048,
+    "openai_chat": true,
+    "chat_http_code": 200,
+    "usage_nonstream": {
+      "completion_tokens": 256,
+      "prompt_tokens": 27,
+      "total_tokens": 283,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "usage_nonstream_has_fields": true,
+    "native_timings": {
+      "cache_n": 0,
+      "prompt_n": 27,
+      "prompt_ms": 122.616,
+      "prompt_per_token_ms": 4.541333333333333,
+      "prompt_per_second": 220.1996476805637,
+      "predicted_n": 256,
+      "predicted_ms": 11781.293,
+      "predicted_per_token_ms": 46.20114901960784,
+      "predicted_per_second": 21.644483334723958
+    },
+    "stream_wall_s": 11.825,
+    "openai_stream": true,
+    "stream_include_usage": true,
+    "usage_stream": {
+      "completion_tokens": 256,
+      "prompt_tokens": 27,
+      "total_tokens": 283,
+      "prompt_tokens_details": {
+        "cached_tokens": 26
+      }
+    },
+    "usage_stream_location": "final chunk with choices=[] (OpenAI style)",
+    "stream_finish_reason": "length",
+    "completion_tokens": 256,
+    "decode_tok_s": 21.84,
+    "ttft_s": 0.149,
+    "stream_native_timings": {
+      "cache_n": 26,
+      "prompt_n": 1,
+      "prompt_ms": 45.669,
+      "prompt_per_token_ms": 45.669,
+      "prompt_per_second": 21.89669140992796,
+      "predicted_n": 256,
+      "predicted_ms": 11767.239,
+      "predicted_per_token_ms": 46.146035294117645,
+      "predicted_per_second": 21.670334052023588
+    },
+    "prompt_tokens": 1729,
+    "prompt_tok_s": 287.7,
+    "anthropic_messages": true,
+    "anthropic_http_code": 200,
+    "anthropic_usage": {
+      "cache_read_input_tokens": 3,
+      "input_tokens": 11,
+      "output_tokens": 64
+    },
+    "anthropic_stream": true,
+    "anthropic_stream_usage": [
+      {
+        "event": "message_start",
+        "usage": {
+          "cache_read_input_tokens": 13,
+          "input_tokens": 1,
+          "output_tokens": 0
+        }
+      },
+      {
+        "event": "message_delta",
+        "usage": {
+          "output_tokens": 64
+        }
+      }
+    ],
+    "peak_rss_mb": 5693,
+    "peak_cgroup_mb": 3405,
+    "vram_peak_mb": 0,
+    "vram_peak_container_mb": 0,
+    "vram_baseline_mb": 1573,
+    "sigterm_exit_s": 0.322,
+    "sigterm_exit_code": 0,
+    "sigterm_stopped": true,
+    "variant": "llama-cpu",
+    "weights": {
+      "hf_repo": "Qwen/Qwen3-4B-GGUF",
+      "file": "Qwen3-4B-Q4_K_M.gguf",
+      "bytes": 2497280256
+    }
+  },
+  {
+    "engine": "llama-cuda",
+    "image": "ghcr.io/ggml-org/llama.cpp:server-cuda",
+    "image_digest": "sha256:6b1c681b535a15d406c7270fd2730f5bd36d3598fbb0ca894bfa47857a700fe3",
+    "image_size_mb": 4399,
+    "model": "/home/chiko/.cache/podkit-spikes/models/Qwen3-4B-Q4_K_M.gguf",
+    "model_feed": "mount",
+    "container_port": 8080,
+    "launch_args": [
+      "-m",
+      "/models/Qwen3-4B-Q4_K_M.gguf",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "-c",
+      "8192",
+      "-np",
+      "1",
+      "-t",
+      "8",
+      "--no-webui",
+      "-ngl",
+      "99"
+    ],
+    "gpu": "cdi",
+    "mem_limit": "12g",
+    "context": 8192,
+    "readiness_endpoint": "/health",
+    "ready": true,
+    "cold_start_s": 1.569,
+    "server_up_s": 1.569,
+    "openai_models": true,
+    "model_id": "/models/Qwen3-4B-Q4_K_M.gguf",
+    "first_chat_wall_s": 1.551,
+    "cold_to_first_answer_s": 3.122,
+    "openai_chat": true,
+    "chat_http_code": 200,
+    "usage_nonstream": {
+      "completion_tokens": 256,
+      "prompt_tokens": 27,
+      "total_tokens": 283,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "usage_nonstream_has_fields": true,
+    "native_timings": {
+      "cache_n": 0,
+      "prompt_n": 27,
+      "prompt_ms": 34.583,
+      "prompt_per_token_ms": 1.2808518518518517,
+      "prompt_per_second": 780.7304166787151,
+      "predicted_n": 256,
+      "predicted_ms": 1510.99,
+      "predicted_per_token_ms": 5.925450980392157,
+      "predicted_per_second": 168.7635259002376
+    },
+    "stream_wall_s": 1.526,
+    "openai_stream": true,
+    "stream_include_usage": true,
+    "usage_stream": {
+      "completion_tokens": 256,
+      "prompt_tokens": 27,
+      "total_tokens": 283,
+      "prompt_tokens_details": {
+        "cached_tokens": 26
+      }
+    },
+    "usage_stream_location": "final chunk with choices=[] (OpenAI style)",
+    "stream_finish_reason": "length",
+    "completion_tokens": 256,
+    "decode_tok_s": 170.56,
+    "ttft_s": 0.03,
+    "stream_native_timings": {
+      "cache_n": 26,
+      "prompt_n": 1,
+      "prompt_ms": 6.492,
+      "prompt_per_token_ms": 6.492,
+      "prompt_per_second": 154.03573629081947,
+      "predicted_n": 256,
+      "predicted_ms": 1507.112,
+      "predicted_per_token_ms": 5.910243137254902,
+      "predicted_per_second": 169.1977769402672
+    },
+    "prompt_tokens": 1728,
+    "prompt_tok_s": 7856,
+    "anthropic_messages": true,
+    "anthropic_http_code": 200,
+    "anthropic_usage": {
+      "cache_read_input_tokens": 3,
+      "input_tokens": 11,
+      "output_tokens": 64
+    },
+    "anthropic_stream": true,
+    "anthropic_stream_usage": [
+      {
+        "event": "message_start",
+        "usage": {
+          "cache_read_input_tokens": 13,
+          "input_tokens": 1,
+          "output_tokens": 0
+        }
+      },
+      {
+        "event": "message_delta",
+        "usage": {
+          "output_tokens": 64
+        }
+      }
+    ],
+    "peak_rss_mb": 2780,
+    "peak_cgroup_mb": 1476,
+    "vram_peak_mb": 3818,
+    "vram_peak_container_mb": 3810,
+    "vram_baseline_mb": 1571,
+    "sigterm_exit_s": 0.596,
+    "sigterm_exit_code": 0,
+    "sigterm_stopped": true,
+    "variant": "llama-cuda",
+    "weights": {
+      "hf_repo": "Qwen/Qwen3-4B-GGUF",
+      "file": "Qwen3-4B-Q4_K_M.gguf",
+      "bytes": 2497280256
+    }
+  },
+  {
+    "engine": "llama-vulkan",
+    "image": "ghcr.io/ggml-org/llama.cpp:server-vulkan",
+    "image_digest": "sha256:e6d7878609b545fa70a22585838cf914e2eaf14ff0daee6c89212562efeb45f5",
+    "image_size_mb": 882,
+    "model": "/home/chiko/.cache/podkit-spikes/models/Qwen3-4B-Q4_K_M.gguf",
+    "model_feed": "mount",
+    "container_port": 8080,
+    "launch_args": [
+      "-m",
+      "/models/Qwen3-4B-Q4_K_M.gguf",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8080",
+      "-c",
+      "8192",
+      "-np",
+      "1",
+      "-t",
+      "8",
+      "--no-webui",
+      "-ngl",
+      "99"
+    ],
+    "gpu": "dri",
+    "mem_limit": "12g",
+    "context": 8192,
+    "readiness_endpoint": "/health",
+    "ready": true,
+    "cold_start_s": 1.666,
+    "server_up_s": 1.666,
+    "openai_models": true,
+    "model_id": "/models/Qwen3-4B-Q4_K_M.gguf",
+    "first_chat_wall_s": 24.223,
+    "cold_to_first_answer_s": 25.891,
+    "openai_chat": true,
+    "chat_http_code": 200,
+    "usage_nonstream": {
+      "completion_tokens": 256,
+      "prompt_tokens": 27,
+      "total_tokens": 283,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    },
+    "usage_nonstream_has_fields": true,
+    "native_timings": {
+      "cache_n": 0,
+      "prompt_n": 27,
+      "prompt_ms": 731.797,
+      "prompt_per_token_ms": 27.103592592592594,
+      "prompt_per_second": 36.89547784426556,
+      "predicted_n": 256,
+      "predicted_ms": 23485.673,
+      "predicted_per_token_ms": 92.10067843137254,
+      "predicted_per_second": 10.857683320380048
+    },
+    "stream_wall_s": 23.695,
+    "openai_stream": true,
+    "stream_include_usage": true,
+    "usage_stream": {
+      "completion_tokens": 256,
+      "prompt_tokens": 27,
+      "total_tokens": 283,
+      "prompt_tokens_details": {
+        "cached_tokens": 26
+      }
+    },
+    "usage_stream_location": "final chunk with choices=[] (OpenAI style)",
+    "stream_finish_reason": "length",
+    "completion_tokens": 256,
+    "decode_tok_s": 10.9,
+    "ttft_s": 0.298,
+    "stream_native_timings": {
+      "cache_n": 26,
+      "prompt_n": 1,
+      "prompt_ms": 93.198,
+      "prompt_per_token_ms": 93.198,
+      "prompt_per_second": 10.729843988068414,
+      "predicted_n": 256,
+      "predicted_ms": 23578.964,
+      "predicted_per_token_ms": 92.46652549019608,
+      "predicted_per_second": 10.814724514613959
+    },
+    "prompt_tokens": 1727,
+    "prompt_tok_s": 80.1,
+    "anthropic_messages": true,
+    "anthropic_http_code": 200,
+    "anthropic_usage": {
+      "cache_read_input_tokens": 3,
+      "input_tokens": 11,
+      "output_tokens": 64
+    },
+    "anthropic_stream": true,
+    "anthropic_stream_usage": [
+      {
+        "event": "message_start",
+        "usage": {
+          "cache_read_input_tokens": 13,
+          "input_tokens": 1,
+          "output_tokens": 0
+        }
+      },
+      {
+        "event": "message_delta",
+        "usage": {
+          "output_tokens": 64
+        }
+      }
+    ],
+    "peak_rss_mb": 520,
+    "peak_cgroup_mb": 703,
+    "vram_peak_mb": 46,
+    "vram_peak_container_mb": 0,
+    "vram_baseline_mb": 1571,
+    "sigterm_exit_s": 0.327,
+    "sigterm_exit_code": 0,
+    "sigterm_stopped": true,
+    "variant": "llama-vulkan",
+    "weights": {
+      "hf_repo": "Qwen/Qwen3-4B-GGUF",
+      "file": "Qwen3-4B-Q4_K_M.gguf",
+      "bytes": 2497280256
+    }
+  },
+  {
+    "engine": "ollama-cpu",
+    "image": "docker.io/ollama/ollama:latest",
+    "image_digest": "sha256:a372a1c0d1e15b68e9521189785c3ca17795c26c2356f8b1b10122cfb59ed0d7",
+    "image_size_mb": 5103,
+    "model": "/home/chiko/.cache/podkit-spikes/models/Qwen3-4B-Q4_K_M.gguf",
+    "model_feed": "gguf-import",
+    "container_port": 11434,
+    "launch_args": [
+      "serve"
+    ],
+    "gpu": "none",
+    "mem_limit": "12g",
+    "context": 8192,
+    "readiness_endpoint": "/",
+    "ready": true,
+    "ollama_import_s": 3.026,
+    "ollama_load_s": 1.301,
+    "ollama_ps": [
+      {
+        "name": "spike:latest",
+        "size": 3888675552,
+        "size_vram": 0,
+        "context_length": 8192
+      }
+    ],
+    "cold_start_s": 4.925,
+    "server_up_s": 0.596,
+    "openai_models": true,
+    "model_id": "spike",
+    "first_chat_wall_s": 15.498,
+    "cold_to_first_answer_s": 20.427,
+    "openai_chat": true,
+    "chat_http_code": 200,
+    "usage_nonstream": {
+      "prompt_tokens": 27,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "completion_tokens": 256,
+      "total_tokens": 283
+    },
+    "usage_nonstream_has_fields": true,
+    "native_timings": null,
+    "stream_wall_s": 14.508,
+    "openai_stream": true,
+    "stream_include_usage": true,
+    "usage_stream": {
+      "prompt_tokens": 27,
+      "prompt_tokens_details": {
+        "cached_tokens": 26
+      },
+      "completion_tokens": 256,
+      "total_tokens": 283
+    },
+    "usage_stream_location": "final chunk with choices=[] (OpenAI style)",
+    "stream_finish_reason": "length",
+    "completion_tokens": 256,
+    "decode_tok_s": 17.85,
+    "ttft_s": 0.223,
+    "stream_native_timings": {
+      "prompt_n": 27,
+      "prompt_ms": 61,
+      "prompt_per_token_ms": 2.259259259259259,
+      "prompt_per_second": 442.62295081967216,
+      "predicted_n": 256,
+      "predicted_ms": 14406,
+      "predicted_per_token_ms": 56.2734375,
+      "predicted_per_second": 17.77037345550465
+    },
+    "prompt_tokens": 1727,
+    "prompt_tok_s": 176,
+    "anthropic_messages": true,
+    "anthropic_http_code": 200,
+    "anthropic_usage": {
+      "input_tokens": 11,
+      "cache_read_input_tokens": 3,
+      "output_tokens": 64
+    },
+    "anthropic_stream": true,
+    "anthropic_stream_usage": [
+      {
+        "event": "message_start",
+        "usage": {
+          "input_tokens": 7,
+          "output_tokens": 0
+        }
+      },
+      {
+        "event": "message_delta",
+        "usage": {
+          "input_tokens": 1,
+          "cache_read_input_tokens": 13,
+          "output_tokens": 64
+        }
+      }
+    ],
+    "peak_rss_mb": 4332,
+    "peak_cgroup_mb": 5999,
+    "vram_peak_mb": 0,
+    "vram_peak_container_mb": 0,
+    "vram_baseline_mb": 1583,
+    "sigterm_exit_s": 0.328,
+    "sigterm_exit_code": 0,
+    "sigterm_stopped": true,
+    "variant": "ollama-cpu",
+    "weights": {
+      "hf_repo": "Qwen/Qwen3-4B-GGUF",
+      "file": "Qwen3-4B-Q4_K_M.gguf",
+      "bytes": 2497280256
+    }
+  },
+  {
+    "engine": "ollama-cuda",
+    "image": "docker.io/ollama/ollama:latest",
+    "image_digest": "sha256:a372a1c0d1e15b68e9521189785c3ca17795c26c2356f8b1b10122cfb59ed0d7",
+    "image_size_mb": 5103,
+    "model": "/home/chiko/.cache/podkit-spikes/models/Qwen3-4B-Q4_K_M.gguf",
+    "model_feed": "gguf-import",
+    "container_port": 11434,
+    "launch_args": [
+      "serve"
+    ],
+    "gpu": "cdi",
+    "mem_limit": "12g",
+    "context": 8192,
+    "readiness_endpoint": "/",
+    "ready": true,
+    "ollama_import_s": 2.984,
+    "ollama_load_s": 17.850,
+    "ollama_ps": [
+      {
+        "name": "spike:latest",
+        "size": 3877571133,
+        "size_vram": 3877571133,
+        "context_length": 8192
+      }
+    ],
+    "cold_start_s": 23.955,
+    "server_up_s": 3.120,
+    "openai_models": true,
+    "model_id": "spike",
+    "first_chat_wall_s": 18.353,
+    "cold_to_first_answer_s": 42.311,
+    "openai_chat": true,
+    "chat_http_code": 200,
+    "usage_nonstream": {
+      "prompt_tokens": 27,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "completion_tokens": 256,
+      "total_tokens": 283
+    },
+    "usage_nonstream_has_fields": true,
+    "native_timings": null,
+    "stream_wall_s": 1.649,
+    "openai_stream": true,
+    "stream_include_usage": true,
+    "usage_stream": {
+      "prompt_tokens": 27,
+      "prompt_tokens_details": {
+        "cached_tokens": 26
+      },
+      "completion_tokens": 256,
+      "total_tokens": 283
+    },
+    "usage_stream_location": "final chunk with choices=[] (OpenAI style)",
+    "stream_finish_reason": "length",
+    "completion_tokens": 256,
+    "decode_tok_s": 158.18,
+    "ttft_s": 0.035,
+    "stream_native_timings": {
+      "prompt_n": 27,
+      "prompt_ms": 6,
+      "prompt_per_token_ms": 0.2222222222222222,
+      "prompt_per_second": 4500,
+      "predicted_n": 256,
+      "predicted_ms": 1627,
+      "predicted_per_token_ms": 6.35546875,
+      "predicted_per_second": 157.34480639213277
+    },
+    "prompt_tokens": 1729,
+    "prompt_tok_s": 7465,
+    "anthropic_messages": true,
+    "anthropic_http_code": 200,
+    "anthropic_usage": {
+      "input_tokens": 11,
+      "cache_read_input_tokens": 3,
+      "output_tokens": 64
+    },
+    "anthropic_stream": true,
+    "anthropic_stream_usage": [
+      {
+        "event": "message_start",
+        "usage": {
+          "input_tokens": 7,
+          "output_tokens": 0
+        }
+      },
+      {
+        "event": "message_delta",
+        "usage": {
+          "input_tokens": 1,
+          "cache_read_input_tokens": 13,
+          "output_tokens": 64
+        }
+      }
+    ],
+    "peak_rss_mb": 1858,
+    "peak_cgroup_mb": 4067,
+    "vram_peak_mb": 3943,
+    "vram_peak_container_mb": 3900,
+    "vram_baseline_mb": 1587,
+    "sigterm_exit_s": 0.555,
+    "sigterm_exit_code": 0,
+    "sigterm_stopped": true,
+    "variant": "ollama-cuda",
+    "weights": {
+      "hf_repo": "Qwen/Qwen3-4B-GGUF",
+      "file": "Qwen3-4B-Q4_K_M.gguf",
+      "bytes": 2497280256
+    }
+  },
+  {
+    "engine": "ollama-cuda",
+    "image": "docker.io/ollama/ollama:latest",
+    "image_digest": "sha256:a372a1c0d1e15b68e9521189785c3ca17795c26c2356f8b1b10122cfb59ed0d7",
+    "image_size_mb": 5103,
+    "model": "qwen3:4b",
+    "model_feed": "pull",
+    "container_port": 11434,
+    "launch_args": [
+      "serve"
+    ],
+    "gpu": "cdi",
+    "mem_limit": "12g",
+    "context": 8192,
+    "readiness_endpoint": "/",
+    "ready": true,
+    "ollama_import_s": 19.936,
+    "ollama_load_s": 17.900,
+    "ollama_ps": [
+      {
+        "name": "qwen3:4b",
+        "size": 3877571133,
+        "size_vram": 3877571133,
+        "context_length": 8192
+      }
+    ],
+    "cold_start_s": 40.523,
+    "server_up_s": 2.686,
+    "openai_models": true,
+    "model_id": "qwen3:4b",
+    "first_chat_wall_s": 18.096,
+    "cold_to_first_answer_s": 58.621,
+    "openai_chat": true,
+    "chat_http_code": 200,
+    "usage_nonstream": {
+      "prompt_tokens": 29,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "completion_tokens": 256,
+      "total_tokens": 285
+    },
+    "usage_nonstream_has_fields": true,
+    "native_timings": null,
+    "stream_wall_s": 1.509,
+    "openai_stream": true,
+    "stream_include_usage": true,
+    "usage_stream": {
+      "prompt_tokens": 29,
+      "prompt_tokens_details": {
+        "cached_tokens": 28
+      },
+      "completion_tokens": 256,
+      "total_tokens": 285
+    },
+    "usage_stream_location": "final chunk with choices=[] (OpenAI style)",
+    "stream_finish_reason": "length",
+    "completion_tokens": 256,
+    "decode_tok_s": 171.41,
+    "ttft_s": 0.021,
+    "stream_native_timings": {
+      "prompt_n": 29,
+      "prompt_ms": 6,
+      "prompt_per_token_ms": 0.20689655172413793,
+      "prompt_per_second": 4833.333333333333,
+      "predicted_n": 256,
+      "predicted_ms": 1487,
+      "predicted_per_token_ms": 5.80859375,
+      "predicted_per_second": 172.15870880968393
+    },
+    "prompt_tokens": 1729,
+    "prompt_tok_s": 7670,
+    "anthropic_messages": true,
+    "anthropic_http_code": 200,
+    "anthropic_usage": {
+      "input_tokens": 13,
+      "cache_read_input_tokens": 3,
+      "output_tokens": 64
+    },
+    "anthropic_stream": true,
+    "anthropic_stream_usage": [
+      {
+        "event": "message_start",
+        "usage": {
+          "input_tokens": 7,
+          "output_tokens": 0
+        }
+      },
+      {
+        "event": "message_delta",
+        "usage": {
+          "input_tokens": 1,
+          "cache_read_input_tokens": 15,
+          "output_tokens": 64
+        }
+      }
+    ],
+    "peak_rss_mb": 1859,
+    "peak_cgroup_mb": 3973,
+    "vram_peak_mb": 3912,
+    "vram_peak_container_mb": 3900,
+    "vram_baseline_mb": 1594,
+    "sigterm_exit_s": 0.529,
+    "sigterm_exit_code": 0,
+    "sigterm_stopped": true,
+    "variant": "ollama-cuda-pull",
+    "weights": {
+      "ollama_tag": "qwen3:4b",
+      "note": "pulled from the Ollama registry by the engine itself; about 2.5 GB, Q4_K_M"
+    }
+  },
+  {
+    "engine": "vllm",
+    "image": "docker.io/vllm/vllm-openai:v0.34.0-x86_64",
+    "image_digest": "sha256:cf5b2fdd087eb4f6d261736967cc5cde974bd22ff4df50365f8fa419b6b4c484",
+    "image_size_mb": 25935,
+    "model": "/home/chiko/.cache/podkit-spikes/models/Qwen3-1.7B",
+    "model_feed": "mount",
+    "container_port": 8000,
+    "launch_args": [
+      "--model",
+      "/model",
+      "--served-model-name",
+      "spike",
+      "--max-model-len",
+      "4096",
+      "--gpu-memory-utilization",
+      "0.75",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8000"
+    ],
+    "gpu": "cdi",
+    "mem_limit": "12g",
+    "context": 4096,
+    "readiness_endpoint": "/health",
+    "ready": true,
+    "cold_start_s": 128.117,
+    "server_up_s": 128.117,
+    "openai_models": true,
+    "model_id": "spike",
+    "first_chat_wall_s": 1.767,
+    "cold_to_first_answer_s": 129.887,
+    "openai_chat": true,
+    "chat_http_code": 200,
+    "usage_nonstream": {
+      "prompt_tokens": 27,
+      "total_tokens": 283,
+      "completion_tokens": 256,
+      "completion_tokens_details": null
+    },
+    "usage_nonstream_has_fields": true,
+    "native_timings": null,
+    "stream_wall_s": 1.820,
+    "openai_stream": true,
+    "stream_include_usage": true,
+    "usage_stream": {
+      "prompt_tokens": 27,
+      "total_tokens": 283,
+      "completion_tokens": 256
+    },
+    "usage_stream_location": "final chunk with choices=[] (OpenAI style)",
+    "stream_finish_reason": "length",
+    "completion_tokens": 256,
+    "decode_tok_s": 142.43,
+    "ttft_s": 0.029,
+    "stream_native_timings": null,
+    "prompt_tokens": 1728,
+    "prompt_tok_s": 15409.7,
+    "anthropic_messages": true,
+    "anthropic_http_code": 200,
+    "anthropic_usage": {
+      "input_tokens": 14,
+      "output_tokens": 64
+    },
+    "anthropic_stream": true,
+    "anthropic_stream_usage": [
+      {
+        "event": "message_start",
+        "usage": {
+          "input_tokens": 14,
+          "output_tokens": 0
+        }
+      },
+      {
+        "event": "message_delta",
+        "usage": {
+          "input_tokens": 14,
+          "output_tokens": 64
+        }
+      }
+    ],
+    "peak_rss_mb": 6116,
+    "peak_cgroup_mb": 8214,
+    "vram_peak_mb": 8532,
+    "vram_peak_container_mb": 8602,
+    "vram_baseline_mb": 1581,
+    "sigterm_exit_s": 1.469,
+    "sigterm_exit_code": 0,
+    "sigterm_stopped": true,
+    "variant": "vllm",
+    "weights": {
+      "hf_repo": "Qwen/Qwen3-1.7B",
+      "files": [
+        "model-00001-of-00002.safetensors",
+        "model-00002-of-00002.safetensors"
+      ],
+      "bytes": 4063515592
+    }
+  }
+]

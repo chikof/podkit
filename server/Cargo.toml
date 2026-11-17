@@ -36,6 +36,7 @@ http-body-util.workspace = true
 tokio-util.workspace = true
 bytes.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 reqwest.workspace = true
 rustls.workspace = true
 futures-util.workspace = true
@@ -53,4 +54,6 @@ workspace = true
 encre-css.workspace = true
 
 [dev-dependencies]
+# Live model-download test runs the real agent in process.
+agent = { path = "../agent" }
 tower.workspace = true

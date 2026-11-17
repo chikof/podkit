@@ -1,0 +1,3 @@
+[spike:colibri-cuda] image localhost/podkit-colibri:cuda (3528 MB), feed=gguf-import, port 18544
+[spike:colibri-cuda] ready in 3.259s
+[spike:colibri-cuda] model id: olmoe-colibri

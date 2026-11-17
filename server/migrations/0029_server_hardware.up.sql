@@ -1,0 +1,2 @@
+ALTER TABLE servers ADD COLUMN hardware JSONB;
+ALTER TABLE servers ADD COLUMN hardware_at TIMESTAMPTZ;

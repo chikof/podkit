@@ -38,6 +38,8 @@ pub enum Resource {
 	Database,
 	Volume,
 	Backup,
+	ModelFile,
+	Model,
 }
 
 impl Resource {
@@ -55,6 +57,8 @@ impl Resource {
 			Self::Database => "database",
 			Self::Volume => "volume",
 			Self::Backup => "backup",
+			Self::ModelFile => "model_file",
+			Self::Model => "model",
 		}
 	}
 }

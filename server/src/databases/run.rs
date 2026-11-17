@@ -127,7 +127,12 @@ async fn provision(
 				return Ok(());
 			}
 			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),
-			Some(Ok(Event::Phase { .. } | Event::DumpWritten { .. } | Event::Done)) => {}
+			Some(Ok(
+				Event::Phase { .. }
+				| Event::Progress { .. }
+				| Event::DumpWritten { .. }
+				| Event::Done,
+			)) => {}
 			Some(Err(e)) => {
 				warn!(
 					database = database.id.0,
@@ -179,6 +184,7 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 		volumes: vec![VolumeMount {
 			name: data_volume(database.id),
 			path: engine.data_path(&database.version).to_owned(),
+			read_only: false,
 		}],
 		published_ports,
 		memory_bytes: database
@@ -186,6 +192,10 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 			.map(|mb| i64::from(mb) * 1024 * 1024),
 		cpu_cores: database.cpu_limit.map(f64::from),
 		strategy: Strategy::Recreate,
+		gpus: None,
+		entrypoint: None,
+		shm_bytes: None,
+		stop_timeout_s: None,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,

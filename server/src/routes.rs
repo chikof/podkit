@@ -5,12 +5,13 @@ use tower_cookies::CookieManagerLayer;
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
-	applications, auth, backups, databases, deployments, domains, env_vars, members, projects,
-	servers, teams, ui, volumes, webhooks,
+	applications, auth, backups, catalog, databases, deployments, domains, env_vars, members,
+	model_files, models, projects, servers, teams, ui, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
 const DB: &str = "/teams/{team_id}/projects/{project_id}/databases";
+const MODELS: &str = "/teams/{team_id}/projects/{project_id}/models";
 
 async fn health() -> &'static str {
 	"ok"
@@ -41,6 +42,14 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			backups::targets::router(),
 		)
 		.nest(DB, databases::router())
+		.nest(MODELS, models::router())
+		.nest("/catalog", catalog::router())
+		.nest("/huggingface", catalog::hf_router())
+		.nest("/teams/{team_id}/model-files", model_files::router())
+		.nest(
+			"/teams/{team_id}/huggingface-token",
+			model_files::token::router(),
+		)
 		.nest(&format!("{DB}/{{database_id}}/backups"), backups::router())
 		.nest("/webhooks", webhooks::router());
 	Ok(Router::new()

@@ -1,0 +1,3 @@
+[spike:colibri-cpu] image localhost/podkit-colibri:cpu (126 MB), feed=gguf-import, port 18213
+[spike:colibri-cpu] ready in 0.825s
+[spike:colibri-cpu] model id: olmoe-colibri

@@ -3150,6 +3150,7 @@ dependencies = [
 name = "server"
 version = "0.1.0"
 dependencies = [
+ "agent",
  "anyhow",
  "axum",
  "axum-extra",
@@ -3182,6 +3183,7 @@ dependencies = [
  "time",
  "tokio",
  "tokio-util",
+ "toml 0.9.12+spec-1.1.0",
  "tower",
  "tower-cookies",
  "tracing",
