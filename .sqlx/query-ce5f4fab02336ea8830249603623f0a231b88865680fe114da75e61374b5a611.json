@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT EXISTS (\n\t\t\t\tSELECT 1 FROM roles WHERE id = $1 AND (team_id IS NULL OR team_id = $2)\n\t\t\t) AS \"exists!\"\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ce5f4fab02336ea8830249603623f0a231b88865680fe114da75e61374b5a611"
+}

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tUPDATE deployments SET\n\t\t\t\tstatus = $2,\n\t\t\t\tcommit_sha = $3,\n\t\t\t\timage_tag = $4,\n\t\t\t\tcontainer_id = $5,\n\t\t\t\terror_message = $6,\n\t\t\t\tstarted_at = $7,\n\t\t\t\tfinished_at = $8\n\t\t\tWHERE id = $1\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Varchar",
+        "Text",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4211941135a0d62a4070a4547b818b2e7a6b31d0a423fa3a9f92e9bd9a832c39"
+}

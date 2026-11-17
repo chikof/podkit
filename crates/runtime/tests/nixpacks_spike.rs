@@ -19,11 +19,9 @@
 //! system) and a live podman.sock. Run explicitly:
 //! `cargo test -p runtime --test nixpacks_spike -- --ignored`.
 
-use podkit_core::domain::runtime::container_runtime::ContainerRuntime;
-use podkit_core::domain::runtime::entity::{
-	BuildSpec, ContainerId, ContainerSpec, ImageRef, LogsQuery,
+use runtime::{
+	BuildSpec, ContainerId, ContainerRuntime, ContainerSpec, ImageRef, LogsQuery, PodmanRuntime,
 };
-use runtime::PodmanRuntime;
 
 fn tar_directory(dir: &std::path::Path) -> Vec<u8> {
 	let mut builder = tar::Builder::new(Vec::new());
@@ -88,8 +86,8 @@ async fn nixpacks_output_builds_and_runs_via_podman_runtime() {
 			networks: vec![],
 			labels: vec![],
 			binds: vec![],
-			resource_limits: podkit_core::domain::runtime::entity::ResourceLimits::default(),
-			restart_policy: podkit_core::domain::runtime::entity::RestartPolicy::Never,
+			resource_limits: runtime::ResourceLimits::default(),
+			restart_policy: runtime::RestartPolicy::Never,
 		})
 		.await
 		.expect("create container from nixpacks image");
@@ -101,7 +99,7 @@ async fn nixpacks_output_builds_and_runs_via_podman_runtime() {
 	let logs = rt.logs(&id, LogsQuery::default()).await.unwrap_or_default();
 	assert_eq!(
 		status.state,
-		podkit_core::domain::runtime::entity::ContainerState::Running,
+		runtime::ContainerState::Running,
 		"nixpacks-built container did not stay running; logs: {logs:?}"
 	);
 

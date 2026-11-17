@@ -1,10 +1,8 @@
-use podkit_core::domain::runtime::container_runtime::ContainerRuntime;
-use podkit_core::domain::runtime::entity::{
-	ContainerId, ContainerSpec, ContainerState, ImageRef, PortMapping, Protocol, ResourceLimits,
-	RestartPolicy,
+use crate::RuntimeError;
+use crate::types::{
+	ContainerId, ContainerRuntime, ContainerSpec, ContainerState, ImageRef, PortMapping, Protocol,
+	ResourceLimits, RestartPolicy,
 };
-use podkit_core::domain::server::Server;
-use podkit_core::domain::shared::errors::DomainResult;
 
 /// Podman network shared by Traefik and every app container on a server.
 /// App containers publish no host ports, Traefik reaches them over this
@@ -43,7 +41,7 @@ pub async fn ensure_traefik(
 	ingress_port: u16,
 	https_port: u16,
 	acme: Option<&AcmeConfig<'_>>,
-) -> DomainResult<()> {
+) -> Result<(), RuntimeError> {
 	rt.ensure_network(NETWORK).await?;
 
 	let id = ContainerId(TRAEFIK_CONTAINER_NAME.to_string());
@@ -193,62 +191,9 @@ pub fn secure_routing_labels(
 	]
 }
 
-/// Derives the zero-config public hostname for an app on `server`, via
-/// sslip.io wildcard DNS. We don't own a wildcard domain ourselves in v1,
-/// so this is the workaround.
-///
-/// For a local server this resolves to `127.0.0.1`, genuinely reachable
-/// and testable on the same machine, not just a placeholder. For a remote
-/// server, `server.hostname` is assumed to already be a bare IPv4 address.
-/// Resolving DNS-name servers to an IP is a known gap for a later version.
-#[must_use]
-pub fn public_hostname(application_slug: &str, server: &Server) -> String {
-	let dashed_ip = if server.is_local {
-		"127-0-0-1".to_string()
-	} else {
-		server.hostname.replace('.', "-")
-	};
-	format!("{application_slug}.{dashed_ip}.sslip.io")
-}
-
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use podkit_core::domain::server::Server;
-	use podkit_core::domain::shared::ids::{ServerId, TeamId};
-
-	#[test]
-	fn local_server_hostname_uses_loopback() {
-		let server = Server::new_local(
-			ServerId(1),
-			TeamId(1),
-			"local".to_string(),
-			"localhost".to_string(),
-			"/run/podman/podman.sock".to_string(),
-		);
-		assert_eq!(
-			public_hostname("my-app", &server),
-			"my-app.127-0-0-1.sslip.io"
-		);
-	}
-
-	#[test]
-	fn remote_server_hostname_dashes_the_ip() {
-		let server = Server::new_remote(
-			ServerId(1),
-			TeamId(1),
-			"remote".to_string(),
-			"203.0.113.42".to_string(),
-			22,
-			"deploy".to_string(),
-			vec![],
-			"/run/podman/podman.sock".to_string(),
-		);
-		assert_eq!(
-			public_hostname("my-app", &server),
-			"my-app.203-0-113-42.sslip.io"
-		);
-	}
 
 	#[test]
 	fn routing_labels_key_by_slug() {

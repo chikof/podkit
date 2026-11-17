@@ -10,15 +10,13 @@ use bollard::query_parameters::{
 	LogsOptions, RemoveContainerOptions, StartContainerOptions, StopContainerOptions,
 };
 use futures_util::StreamExt;
-use podkit_core::domain::runtime::container_runtime::ContainerRuntime;
-use podkit_core::domain::runtime::entity::{
-	BuildSpec, ContainerId, ContainerSpec, ContainerState, ContainerStatus, ImageRef, LogsQuery,
-	Protocol, RestartPolicy,
-};
-use podkit_core::domain::shared::errors::{DomainError, DomainResult};
 use std::collections::HashMap;
 
 use crate::RuntimeError;
+use crate::types::{
+	BuildSpec, ContainerId, ContainerRuntime, ContainerSpec, ContainerState, ContainerStatus,
+	ImageRef, LogsQuery, Protocol, RestartPolicy,
+};
 
 /// `ContainerRuntime` implementation backed by a podman REST socket (podman's
 /// API is Docker-Engine-API compatible, so `bollard` talks to it unmodified).
@@ -29,10 +27,6 @@ use crate::RuntimeError;
 /// [`crate::tunnel::SshTunnel`]) and pass that local path here.
 pub struct PodmanRuntime {
 	docker: Docker,
-}
-
-fn to_infra<E: std::fmt::Display>(e: E) -> DomainError {
-	DomainError::Infrastructure(e.to_string())
 }
 
 impl PodmanRuntime {
@@ -200,12 +194,12 @@ fn build_container_config(spec: &ContainerSpec) -> PodmanContainerConfig {
 
 #[async_trait]
 impl ContainerRuntime for PodmanRuntime {
-	async fn ping(&self) -> DomainResult<()> {
-		self.docker.ping().await.map_err(to_infra)?;
+	async fn ping(&self) -> Result<(), RuntimeError> {
+		self.docker.ping().await?;
 		Ok(())
 	}
 
-	async fn build_image(&self, spec: BuildSpec) -> DomainResult<ImageRef> {
+	async fn build_image(&self, spec: BuildSpec) -> Result<ImageRef, RuntimeError> {
 		let ImageRef(tag) = spec.tag.clone();
 
 		let mut build = self.docker.build_image(
@@ -221,9 +215,9 @@ impl ContainerRuntime for PodmanRuntime {
 		);
 
 		while let Some(chunk) = build.next().await {
-			let info = chunk.map_err(to_infra)?;
+			let info = chunk?;
 			if let Some(err) = info.error_detail {
-				return Err(DomainError::Infrastructure(
+				return Err(RuntimeError::Build(
 					err.message
 						.unwrap_or_else(|| "image build failed".to_string()),
 				));
@@ -233,7 +227,7 @@ impl ContainerRuntime for PodmanRuntime {
 		Ok(ImageRef(tag))
 	}
 
-	async fn pull_image(&self, image: &ImageRef) -> DomainResult<()> {
+	async fn pull_image(&self, image: &ImageRef) -> Result<(), RuntimeError> {
 		let (from_image, tag) = image
 			.0
 			.rsplit_once(':')
@@ -250,12 +244,12 @@ impl ContainerRuntime for PodmanRuntime {
 		);
 
 		while let Some(chunk) = pull.next().await {
-			chunk.map_err(to_infra)?;
+			chunk?;
 		}
 		Ok(())
 	}
 
-	async fn ensure_network(&self, name: &str) -> DomainResult<()> {
+	async fn ensure_network(&self, name: &str) -> Result<(), RuntimeError> {
 		match self
 			.docker
 			.create_network(NetworkCreateRequest {
@@ -268,11 +262,11 @@ impl ContainerRuntime for PodmanRuntime {
 			| Err(bollard::errors::Error::DockerResponseServerError {
 				status_code: 409, ..
 			}) => Ok(()),
-			Err(e) => Err(to_infra(e)),
+			Err(e) => Err(e.into()),
 		}
 	}
 
-	async fn create_container(&self, spec: ContainerSpec) -> DomainResult<ContainerId> {
+	async fn create_container(&self, spec: ContainerSpec) -> Result<ContainerId, RuntimeError> {
 		let cfg = build_container_config(&spec);
 
 		let response = self
@@ -300,27 +294,26 @@ impl ContainerRuntime for PodmanRuntime {
 					..Default::default()
 				},
 			)
-			.await
-			.map_err(to_infra)?;
+			.await?;
 
 		Ok(ContainerId(response.id))
 	}
 
-	async fn start_container(&self, id: &ContainerId) -> DomainResult<()> {
+	async fn start_container(&self, id: &ContainerId) -> Result<(), RuntimeError> {
 		self.docker
 			.start_container(&id.0, None::<StartContainerOptions>)
-			.await
-			.map_err(to_infra)
+			.await?;
+		Ok(())
 	}
 
-	async fn stop_container(&self, id: &ContainerId) -> DomainResult<()> {
+	async fn stop_container(&self, id: &ContainerId) -> Result<(), RuntimeError> {
 		self.docker
 			.stop_container(&id.0, None::<StopContainerOptions>)
-			.await
-			.map_err(to_infra)
+			.await?;
+		Ok(())
 	}
 
-	async fn remove_container(&self, id: &ContainerId, force: bool) -> DomainResult<()> {
+	async fn remove_container(&self, id: &ContainerId, force: bool) -> Result<(), RuntimeError> {
 		self.docker
 			.remove_container(
 				&id.0,
@@ -329,16 +322,15 @@ impl ContainerRuntime for PodmanRuntime {
 					..Default::default()
 				}),
 			)
-			.await
-			.map_err(to_infra)
+			.await?;
+		Ok(())
 	}
 
-	async fn inspect(&self, id: &ContainerId) -> DomainResult<ContainerStatus> {
+	async fn inspect(&self, id: &ContainerId) -> Result<ContainerStatus, RuntimeError> {
 		let info = self
 			.docker
 			.inspect_container(&id.0, None::<InspectContainerOptions>)
-			.await
-			.map_err(to_infra)?;
+			.await?;
 
 		let state = match info.state.and_then(|s| s.status) {
 			Some(ContainerStateStatusEnum::CREATED) => ContainerState::Created,
@@ -355,7 +347,7 @@ impl ContainerRuntime for PodmanRuntime {
 		})
 	}
 
-	async fn logs(&self, id: &ContainerId, query: LogsQuery) -> DomainResult<Vec<String>> {
+	async fn logs(&self, id: &ContainerId, query: LogsQuery) -> Result<Vec<String>, RuntimeError> {
 		let mut stream = self.docker.logs(
 			&id.0,
 			Some(LogsOptions {
@@ -370,7 +362,7 @@ impl ContainerRuntime for PodmanRuntime {
 
 		let mut lines = Vec::new();
 		while let Some(chunk) = stream.next().await {
-			let output = chunk.map_err(to_infra)?;
+			let output = chunk?;
 			lines.push(output.to_string());
 		}
 
@@ -430,7 +422,7 @@ mod tests {
 				networks: vec![],
 				labels: vec![],
 				binds: vec![],
-				resource_limits: podkit_core::domain::runtime::entity::ResourceLimits::default(),
+				resource_limits: crate::types::ResourceLimits::default(),
 				restart_policy: RestartPolicy::Never,
 			})
 			.await

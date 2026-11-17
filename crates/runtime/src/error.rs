@@ -38,4 +38,8 @@ pub enum RuntimeError {
 	/// Running `nixpacks` to generate a build failed.
 	#[error("nixpacks: {0}")]
 	Nixpacks(String),
+
+	/// The runtime reported a failure while building an image.
+	#[error("image build failed: {0}")]
+	Build(String),
 }

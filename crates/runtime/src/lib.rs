@@ -15,12 +15,13 @@ pub mod podman;
 pub mod traefik;
 /// Forwarding a remote server's podman socket over ssh.
 pub mod tunnel;
+/// Value types and the `ContainerRuntime` trait.
+pub mod types;
 
-pub use connection::ServerConnection;
+pub use connection::{ConnectTarget, ServerConnection};
 pub use error::RuntimeError;
 pub use git::{ClonedSource, clone_to_tar};
 pub use podman::{PodmanRuntime, local_socket_path};
-pub use traefik::{
-	AcmeConfig, ensure_traefik, public_hostname, routing_labels, secure_routing_labels,
-};
+pub use traefik::{AcmeConfig, ensure_traefik, routing_labels, secure_routing_labels};
 pub use tunnel::{SshTarget, SshTunnel};
+pub use types::*;

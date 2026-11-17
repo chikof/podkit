@@ -1,15 +1,16 @@
 use axum::Router;
 use axum::http::{HeaderValue, Method, header};
-use axum::routing::{get, post};
+use axum::routing::get;
 use tower_cookies::CookieManagerLayer;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
-mod auth;
-mod teams;
-mod webhooks;
-
-use crate::AppState;
 use crate::error::AppResult;
+use crate::state::AppState;
+use crate::{
+	applications, auth, deployments, domains, env_vars, members, projects, servers, teams, webhooks,
+};
+
+const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
 
 async fn health() -> &'static str {
 	"ok"
@@ -31,6 +32,7 @@ pub async fn routes(state: AppState, dashboard_origins: &str) -> AppResult<Route
 		.allow_methods([
 			Method::GET,
 			Method::POST,
+			Method::PUT,
 			Method::PATCH,
 			Method::DELETE,
 			Method::OPTIONS,
@@ -39,10 +41,18 @@ pub async fn routes(state: AppState, dashboard_origins: &str) -> AppResult<Route
 
 	Ok(Router::new()
 		.route("/health", get(health))
-		.route("/auth/register", post(auth::register))
-		.route("/auth/login", post(auth::login))
-		.route("/auth/logout", post(auth::logout))
+		.nest("/auth", auth::router())
 		.nest("/teams", teams::router())
+		.nest("/teams/{team_id}", members::router())
+		.nest("/teams/{team_id}/projects", projects::router())
+		.nest("/teams/{team_id}/servers", servers::router())
+		.nest(
+			"/teams/{team_id}/projects/{project_id}/applications",
+			applications::router(),
+		)
+		.nest(&format!("{APP}/deployments"), deployments::router())
+		.nest(&format!("{APP}/env-vars"), env_vars::router())
+		.nest(&format!("{APP}/domains"), domains::router())
 		.nest("/webhooks", webhooks::router())
 		.layer(CookieManagerLayer::new())
 		.layer(cors)

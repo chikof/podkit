@@ -22,9 +22,6 @@ pub struct ServerConfig {
 	#[config(env = "DATABASE_URL")]
 	pub database_url: String,
 
-	#[config(env = "JWT_SECRET")]
-	pub jwt_secret: String,
-
 	#[config(env = "AGE_SECRET_KEY")]
 	pub age_secret_key: String,
 

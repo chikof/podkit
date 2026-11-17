@@ -2,7 +2,7 @@
 //! auth), the exact shape needed before handing the tar to
 //! `ContainerRuntime::build_image`.
 
-use podkit_core::domain::application::BuildStrategy;
+use runtime::BuildStrategy;
 use std::io::Write;
 use std::process::{Command, Stdio};
 

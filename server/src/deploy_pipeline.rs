@@ -1,19 +1,18 @@
 use std::time::Duration;
 
-use crypto::generate_id;
-use podkit_core::domain::application::Application;
-use podkit_core::domain::deployment::{Deployment, DeploymentStatus};
-use podkit_core::domain::runtime::container_runtime::ContainerRuntime;
-use podkit_core::domain::runtime::entity::{
-	BuildSpec, ContainerId, ContainerSpec, ContainerState, ImageRef, ResourceLimits, RestartPolicy,
+use runtime::{
+	BuildSpec, ContainerId, ContainerRuntime, ContainerSpec, ContainerState, ImageRef,
+	ResourceLimits, RestartPolicy, ServerConnection,
 };
-use podkit_core::domain::server::Server;
-use podkit_core::domain::shared::errors::DomainResult;
-use podkit_core::domain::shared::ids::{DeploymentId, UserId};
-use runtime::ServerConnection;
 use tracing::{error, info, warn};
 
-use crate::AppState;
+use crate::applications::{self, Application};
+use crate::deployments::{self, Deployment, DeploymentStatus};
+use crate::error::ServerError;
+use crate::ids::{ApplicationId, ServerId, TeamId, UserId};
+use crate::servers::{Server, ServerStatus};
+use crate::state::AppState;
+use crate::{domains, env_vars};
 
 /// How many `inspect` polls (1s apart) a freshly-started container must
 /// survive before we call it healthy and retire the old one. This checks
@@ -26,15 +25,17 @@ const HEALTH_CHECK_ATTEMPTS: u32 = 3;
 /// authenticated trigger route and the webhook receiver, the only
 /// difference between them is who's allowed to call this and whether
 /// `triggered_by` is set.
+///
+/// # Errors
+/// Returns an error if the row can't be persisted.
 pub async fn queue_and_spawn(
-	state: AppState,
+	state: &AppState,
 	application: Application,
 	triggered_by: Option<UserId>,
-) -> DomainResult<Deployment> {
-	let deployment = Deployment::queued(DeploymentId(generate_id()), application.id, triggered_by);
-	state.deployments.save(&deployment).await?;
+) -> Result<Deployment, ServerError> {
+	let deployment = deployments::insert(&state.db, application.id, triggered_by, None).await?;
 
-	tokio::spawn(run(state, application, deployment.clone()));
+	tokio::spawn(run(state.clone(), application, deployment.clone()));
 
 	Ok(deployment)
 }
@@ -45,23 +46,28 @@ pub async fn queue_and_spawn(
 /// zero-downtime swap as a normal deploy.
 ///
 /// # Errors
-/// Returns an error if `target` never reached a build (no `image_tag`) or
-/// the row can't be persisted.
+/// Returns [`ServerError::Validation`] if `target` never reached a build (no
+/// `image_tag`), or an error if the row can't be persisted.
 pub async fn queue_rollback_and_spawn(
-	state: AppState,
+	state: &AppState,
 	application: Application,
 	target: &Deployment,
 	triggered_by: Option<UserId>,
-) -> Result<Deployment, RollbackError> {
-	let image_tag = target.image_tag.clone().ok_or(RollbackError::NoImage)?;
+) -> Result<Deployment, ServerError> {
+	let image_tag = target.image_tag.clone().ok_or_else(|| {
+		ServerError::Validation("target deployment never produced an image to roll back to".into())
+	})?;
 
-	let mut deployment =
-		Deployment::queued(DeploymentId(generate_id()), application.id, triggered_by);
-	deployment.commit_sha = target.commit_sha.clone();
-	state.deployments.save(&deployment).await?;
+	let deployment = deployments::insert(
+		&state.db,
+		application.id,
+		triggered_by,
+		target.commit_sha.as_deref(),
+	)
+	.await?;
 
 	tokio::spawn(run_rollback(
-		state,
+		state.clone(),
 		application,
 		deployment.clone(),
 		image_tag,
@@ -70,20 +76,12 @@ pub async fn queue_rollback_and_spawn(
 	Ok(deployment)
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum RollbackError {
-	#[error("target deployment never produced an image to roll back to")]
-	NoImage,
-	#[error("{0}")]
-	Domain(#[from] podkit_core::domain::shared::errors::DomainError),
-}
-
 /// Runs one deployment attempt end to end: git clone -> build image ->
 /// zero-downtime swap into place. Any failure short-circuits to `Failed`
 /// with `error_message` set, the currently-running container (if any) is
-/// left untouched. Spawned in the background by `create_deployment`,
+/// left untouched. Spawned in the background by [`queue_and_spawn`],
 /// the HTTP request returns as soon as the row is queued.
-pub async fn run(state: AppState, application: Application, mut deployment: Deployment) {
+async fn run(state: AppState, application: Application, mut deployment: Deployment) {
 	let Some(server) = lookup_server(&state, &mut deployment, &application).await else {
 		return;
 	};
@@ -92,18 +90,21 @@ pub async fn run(state: AppState, application: Application, mut deployment: Depl
 		return;
 	}
 
-	let deploy_key_pem = match application
-		.deploy_key
+	// One credential per application: an ssh key for ssh repo urls, a token
+	// for https ones. `create`/`update` only ever store the matching one.
+	let credential = match application
+		.git_token
 		.as_deref()
+		.or(application.deploy_key.as_deref())
 		.map(|enc| state.secrets.decrypt(enc))
 		.transpose()
 	{
-		Ok(key) => key,
+		Ok(credential) => credential,
 		Err(e) => {
 			fail(
 				&state,
 				&mut deployment,
-				format!("failed to decrypt deploy key: {e}"),
+				format!("failed to decrypt repository credential: {e}"),
 			)
 			.await;
 			return;
@@ -113,8 +114,8 @@ pub async fn run(state: AppState, application: Application, mut deployment: Depl
 	let cloned = match runtime::clone_to_tar(
 		&application.repo_url,
 		&application.git_ref,
-		deploy_key_pem.as_deref(),
-		application.build_strategy,
+		credential.as_deref(),
+		application.build_strategy.into(),
 		&application.dockerfile_path,
 	)
 	.await
@@ -127,7 +128,8 @@ pub async fn run(state: AppState, application: Application, mut deployment: Depl
 	};
 	deployment.commit_sha = Some(cloned.commit_sha.clone());
 
-	let connection = match ServerConnection::connect(&server, &state.secrets).await {
+	let connection = match ServerConnection::connect(&server.connect_target(), &state.secrets).await
+	{
 		Ok(c) => c,
 		Err(e) => {
 			fail(
@@ -185,7 +187,8 @@ async fn run_rollback(
 		return;
 	}
 
-	let connection = match ServerConnection::connect(&server, &state.secrets).await {
+	let connection = match ServerConnection::connect(&server.connect_target(), &state.secrets).await
+	{
 		Ok(c) => c,
 		Err(e) => {
 			fail(
@@ -214,7 +217,7 @@ async fn lookup_server(
 	deployment: &mut Deployment,
 	application: &Application,
 ) -> Option<Server> {
-	match state.servers.find_by_id(application.server_id).await {
+	match find_server(&state.db, application.id).await {
 		Ok(Some(server)) => Some(server),
 		Ok(None) => {
 			fail(state, deployment, "target server not found").await;
@@ -230,6 +233,28 @@ async fn lookup_server(
 			None
 		}
 	}
+}
+
+/// The pipeline runs without a team context, so the server is reached
+/// through the application that targets it rather than by its own id.
+pub(crate) async fn find_server(
+	db: impl sqlx::PgExecutor<'_>,
+	application_id: ApplicationId,
+) -> Result<Option<Server>, sqlx::Error> {
+	sqlx::query_as!(
+		Server,
+		r#"
+			SELECT s.id AS "id: ServerId", s.team_id AS "team_id: TeamId", s.name, s.hostname,
+				s.ssh_port, s.ssh_user, s.ssh_private_key, s.podman_socket_path, s.is_local,
+				s.status AS "status: ServerStatus"
+			FROM servers s
+			JOIN applications a ON a.server_id = s.id
+			WHERE a.id = $1
+		"#,
+		application_id.0
+	)
+	.fetch_optional(db)
+	.await
 }
 
 /// Shared tail of both [`run`] and [`run_rollback`]: `Deploying` ->
@@ -252,6 +277,7 @@ async fn deploy_and_swap(
 	}
 
 	let acme = state
+		.config
 		.acme_email
 		.as_deref()
 		.map(|email| runtime::AcmeConfig { email });
@@ -321,8 +347,8 @@ async fn provision_ingress(
 	if let Err(e) = runtime::ensure_traefik(
 		&connection.runtime,
 		&server.podman_socket_path,
-		state.ingress_port,
-		state.https_port,
+		state.config.ingress_port,
+		state.config.https_port,
 		acme,
 	)
 	.await
@@ -350,7 +376,7 @@ async fn create_and_start_container(
 	image_tag: String,
 	acme_enabled: bool,
 ) -> Option<ContainerId> {
-	let hostname = runtime::public_hostname(&application.slug, server);
+	let hostname = applications::public_hostname(&application.slug, server);
 	// Unique per deployment: the previous deployment's container keeps
 	// serving under its own name until we've confirmed this one is healthy.
 	let container_name = format!("podkit-app-{}-{}", application.id.0, deployment.id.0);
@@ -363,11 +389,7 @@ async fn create_and_start_container(
 		}
 	};
 
-	let custom_domains = match state
-		.custom_domains
-		.list_by_application(application.id)
-		.await
-	{
+	let custom_domains = match domains::list(&state.db, application.id).await {
 		Ok(rows) => rows.into_iter().map(|d| d.hostname).collect::<Vec<_>>(),
 		Err(e) => {
 			fail(
@@ -409,7 +431,7 @@ async fn create_and_start_container(
 				memory_bytes: application
 					.memory_limit_mb
 					.map(|mb| i64::from(mb) * 1024 * 1024),
-				cpu_cores: application.cpu_limit,
+				cpu_cores: application.cpu_limit.map(f64::from),
 			},
 			// Crash-restart by default with bounded retries, a genuinely
 			// broken image shouldn't loop forever; manual stop still wins
@@ -460,9 +482,7 @@ async fn load_env(
 	state: &AppState,
 	application: &Application,
 ) -> Result<Vec<(String, String)>, String> {
-	let rows = state
-		.env_vars
-		.list_by_application(application.id)
+	let rows = env_vars::list(&state.db, application.id)
 		.await
 		.map_err(|e| format!("failed to load env vars: {e}"))?;
 
@@ -490,20 +510,15 @@ async fn retire_previous_container(
 	current: &Deployment,
 	connection: &ServerConnection,
 ) {
-	let history = match state.deployments.list_by_application(application.id).await {
-		Ok(h) => h,
-		Err(e) => {
-			warn!("failed to look up deployment history for swap-out: {e}");
-			return;
-		}
-	};
-
-	let Some(mut previous) = history
-		.into_iter()
-		.find(|d| d.id != current.id && d.status == DeploymentStatus::Running)
-	else {
-		return; // first deploy for this app, nothing to retire
-	};
+	let mut previous =
+		match deployments::previous_running(&state.db, application.id, current.id).await {
+			Ok(Some(previous)) => previous,
+			Ok(None) => return, // first deploy for this app, nothing to retire
+			Err(e) => {
+				warn!("failed to look up previous deployment for swap-out: {e}");
+				return;
+			}
+		};
 
 	let Some(container_id) = previous.container_id.clone() else {
 		return;
@@ -527,7 +542,7 @@ async fn retire_previous_container(
 		warn!(deployment = previous.id.0, "{e}");
 		return;
 	}
-	if let Err(e) = state.deployments.update(&previous).await {
+	if let Err(e) = deployments::update(&state.db, &previous).await {
 		warn!(
 			deployment = previous.id.0,
 			"failed to persist retired deployment status: {e}"
@@ -543,7 +558,7 @@ async fn advance(state: &AppState, deployment: &mut Deployment, next: Deployment
 		error!(deployment = deployment.id.0, "{e}");
 		return false;
 	}
-	if let Err(e) = state.deployments.update(deployment).await {
+	if let Err(e) = deployments::update(&state.db, deployment).await {
 		error!(
 			deployment = deployment.id.0,
 			"failed to persist deployment status: {e}"
@@ -558,5 +573,5 @@ async fn fail(state: &AppState, deployment: &mut Deployment, message: impl Into<
 	error!(deployment = deployment.id.0, "{message}");
 	deployment.error_message = Some(message);
 	let _ = deployment.transition(DeploymentStatus::Failed);
-	let _ = state.deployments.update(deployment).await;
+	let _ = deployments::update(&state.db, deployment).await;
 }

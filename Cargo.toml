@@ -1,9 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-	"crates/core",
 	"crates/crypto",
-	"crates/database",
 	"crates/runtime",
 	"server",
 ]
@@ -48,7 +46,6 @@ axum-extra = { version = "=0.12.6", features = ["typed-header"] }
 age = "=0.12.1"
 argon2 = "=0.6.0"
 zeroize = "=1.9.1"
-jsonwebtoken = { version = "=12.0.0", features = ["rust_crypto"] }
 tower-cookies = "=0.11.0"
 serde = { version = "=1.0.229", features = ["derive"] }
 forgeconf = { version = "=1.0.0", default-features = false, features = ["toml"] }
@@ -75,9 +72,7 @@ reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-n
 rustls = { version = "=0.23.39", default-features = false, features = ["ring", "std", "tls12"] }
 tower = { version = "=0.5.3", features = ["util"] }
 
-podkit-core = { path = "./crates/core" }
 crypto = { path = "./crates/crypto" }
-database = { path = "./crates/database" }
 runtime = { path = "./crates/runtime" }
 
 

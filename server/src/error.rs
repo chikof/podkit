@@ -3,7 +3,6 @@ use axum::{
 	http::StatusCode,
 	response::{IntoResponse, Response},
 };
-use podkit_core::domain::shared::errors::DomainError;
 use serde::Serialize;
 use thiserror::Error as ThisError;
 
@@ -19,10 +18,7 @@ pub enum ServerError {
 	Forgeconf(#[from] forgeconf::ConfigError),
 
 	#[error("db: {0}")]
-	Database(#[from] database::DatabaseError),
-
-	#[error("domain: {0}")]
-	Domain(#[from] DomainError),
+	Sqlx(#[from] sqlx::Error),
 
 	#[error("You forgot the include the token buddy")]
 	MissingToken,
@@ -45,6 +41,10 @@ pub enum ServerError {
 	#[error("that role does not belong to this team")]
 	RoleNotAllowed,
 
+	#[error("{0}")]
+	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
+	Conflict(String),
+
 	#[error("project not found")]
 	ProjectNotFound,
 
@@ -63,6 +63,22 @@ pub enum ServerError {
 	#[error("domain not found")]
 	DomainNotFound,
 
+	#[error("database not found")]
+	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
+	DatabaseNotFound,
+
+	#[error("volume not found")]
+	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
+	VolumeNotFound,
+
+	#[error("backup not found")]
+	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
+	BackupNotFound,
+
+	#[error("backup target not found")]
+	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
+	BackupTargetNotFound,
+
 	#[error("that hostname is already routed to another application")]
 	DomainTaken,
 
@@ -80,6 +96,13 @@ pub enum ServerError {
 
 	#[error("internal error")]
 	Internal,
+
+	#[error("server agent unavailable")]
+	AgentUnavailable,
+
+	#[error("server agent is not installed yet; bootstrap the server first")]
+	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
+	ServerNotReady,
 }
 
 impl ServerError {
@@ -88,8 +111,7 @@ impl ServerError {
 			Self::StdIo(_)
 			| Self::Axum(_)
 			| Self::Forgeconf(_)
-			| Self::Database(_)
-			| Self::Domain(_)
+			| Self::Sqlx(_)
 			| Self::InvalidSecretKey(_)
 			| Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
 			Self::MissingToken
@@ -100,14 +122,21 @@ impl ServerError {
 			Self::EmailTaken
 			| Self::AlreadyMember
 			| Self::DomainTaken
-			| Self::ApplicationSlugTaken => StatusCode::CONFLICT,
+			| Self::ApplicationSlugTaken
+			| Self::Conflict(_)
+			| Self::ServerNotReady => StatusCode::CONFLICT,
 			Self::ProjectNotFound
 			| Self::ServerNotFound
 			| Self::ApplicationNotFound
 			| Self::DeploymentNotFound
 			| Self::EnvVarNotFound
-			| Self::DomainNotFound => StatusCode::NOT_FOUND,
+			| Self::DomainNotFound
+			| Self::DatabaseNotFound
+			| Self::VolumeNotFound
+			| Self::BackupNotFound
+			| Self::BackupTargetNotFound => StatusCode::NOT_FOUND,
 			Self::Forbidden => StatusCode::FORBIDDEN,
+			Self::AgentUnavailable => StatusCode::BAD_GATEWAY,
 		}
 	}
 }

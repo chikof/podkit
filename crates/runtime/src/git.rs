@@ -1,11 +1,11 @@
 use std::path::Path;
 use std::process::Stdio;
 
-use podkit_core::domain::application::BuildStrategy;
 use tokio::process::Command;
 
 use crate::RuntimeError;
 use crate::nixpacks;
+use crate::types::BuildStrategy;
 
 /// A cloned repo, packaged as a build context ready for
 /// `ContainerRuntime::build_image`.

@@ -10,9 +10,7 @@
 //!
 //! Run explicitly: `cargo test -p runtime --test traefik -- --ignored`.
 
-use podkit_core::domain::runtime::container_runtime::ContainerRuntime;
-use podkit_core::domain::runtime::entity::{BuildSpec, ContainerId, ContainerSpec, ImageRef};
-use runtime::PodmanRuntime;
+use runtime::{BuildSpec, ContainerId, ContainerRuntime, ContainerSpec, ImageRef, PodmanRuntime};
 
 const TEST_INGRESS_PORT: u16 = 18080;
 
@@ -78,8 +76,8 @@ async fn traefik_routes_to_app_container_via_docker_labels() {
 			networks: vec![runtime::traefik::NETWORK.to_string()],
 			labels,
 			binds: vec![],
-			resource_limits: podkit_core::domain::runtime::entity::ResourceLimits::default(),
-			restart_policy: podkit_core::domain::runtime::entity::RestartPolicy::Never,
+			resource_limits: runtime::ResourceLimits::default(),
+			restart_policy: runtime::RestartPolicy::Never,
 		})
 		.await
 		.expect("create app container");
@@ -165,15 +163,12 @@ async fn traefik_starts_cleanly_with_acme_configured() {
 	let status = rt.inspect(&traefik_id).await.expect("inspect traefik");
 	assert_eq!(
 		status.state,
-		podkit_core::domain::runtime::entity::ContainerState::Running,
+		runtime::ContainerState::Running,
 		"traefik did not stay running with acme configured, bad cli flags would crash it immediately"
 	);
 
 	let logs = rt
-		.logs(
-			&traefik_id,
-			podkit_core::domain::runtime::entity::LogsQuery::default(),
-		)
+		.logs(&traefik_id, runtime::LogsQuery::default())
 		.await
 		.unwrap_or_default()
 		.join("\n");
@@ -212,8 +207,8 @@ async fn traefik_starts_cleanly_with_acme_configured() {
 			networks: vec![runtime::traefik::NETWORK.to_string()],
 			labels,
 			binds: vec![],
-			resource_limits: podkit_core::domain::runtime::entity::ResourceLimits::default(),
-			restart_policy: podkit_core::domain::runtime::entity::RestartPolicy::Never,
+			resource_limits: runtime::ResourceLimits::default(),
+			restart_policy: runtime::RestartPolicy::Never,
 		})
 		.await
 		.expect("create app container");

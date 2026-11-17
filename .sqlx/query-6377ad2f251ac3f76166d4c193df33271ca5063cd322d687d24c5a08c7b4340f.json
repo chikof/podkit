@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO custom_domains (id, application_id, hostname)\n\t\t\tVALUES ($1, $2, $3)\n\t\t\tRETURNING id AS \"id: DomainId\", application_id AS \"application_id: ApplicationId\",\n\t\t\t\thostname\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: DomainId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "custom_domains",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "application_id: ApplicationId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "custom_domains",
+            "name": "application_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "hostname",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "custom_domains",
+            "name": "hostname"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "6377ad2f251ac3f76166d4c193df33271ca5063cd322d687d24c5a08c7b4340f"
+}

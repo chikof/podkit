@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO servers (id, team_id, name, hostname, podman_socket_path, is_local, status)\n\t\t\tVALUES ($1, $2, 'local', 'localhost', $3, TRUE, 'active')\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bb44c49496b874aa93ffb9d5ca203286ead912001997ea944193a704e0a425e9"
+}

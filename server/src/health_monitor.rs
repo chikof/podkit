@@ -1,14 +1,14 @@
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
-use podkit_core::domain::deployment::{Deployment, DeploymentStatus};
-use podkit_core::domain::runtime::container_runtime::ContainerRuntime;
-use podkit_core::domain::runtime::entity::{ContainerId, ContainerState};
-use podkit_core::domain::shared::ids::DeploymentId;
-use runtime::ServerConnection;
+use runtime::{ContainerId, ContainerRuntime, ContainerState, ServerConnection};
 use tracing::{info, warn};
 
-use crate::AppState;
+use crate::applications;
+use crate::deploy_pipeline::find_server;
+use crate::deployments::{self, Deployment, DeploymentStatus};
+use crate::ids::DeploymentId;
+use crate::state::AppState;
 
 const SWEEP_INTERVAL: Duration = Duration::from_secs(15);
 /// Restart attempts allowed per deployment before giving up and marking it
@@ -34,7 +34,7 @@ pub fn spawn(state: AppState) {
 }
 
 async fn sweep(state: &AppState, attempts: &mut HashMap<DeploymentId, u32>) {
-	let running = match state.deployments.list_running().await {
+	let running = match deployments::list_running(&state.db).await {
 		Ok(rows) => rows,
 		Err(e) => {
 			warn!("health monitor: failed to list running deployments: {e}");
@@ -63,21 +63,17 @@ async fn check_and_heal(
 		return Ok(()); // shouldn't happen for a Running row, but nothing to check
 	};
 
-	let application = state
-		.applications
-		.find_by_id(deployment.application_id)
+	let application = applications::find_by_id(&state.db, deployment.application_id)
 		.await
 		.map_err(|e| e.to_string())?
 		.ok_or("application not found")?;
 
-	let server = state
-		.servers
-		.find_by_id(application.server_id)
+	let server = find_server(&state.db, application.id)
 		.await
 		.map_err(|e| e.to_string())?
 		.ok_or("server not found")?;
 
-	let connection = ServerConnection::connect(&server, &state.secrets)
+	let connection = ServerConnection::connect(&server.connect_target(), &state.secrets)
 		.await
 		.map_err(|e| e.to_string())?;
 
@@ -106,7 +102,7 @@ async fn check_and_heal(
 			"container crashed and exceeded {MAX_RESTART_ATTEMPTS} restart attempts"
 		));
 		if dying.transition(DeploymentStatus::Stopped).is_ok() {
-			let _ = state.deployments.update(&dying).await;
+			let _ = deployments::update(&state.db, &dying).await;
 		}
 		attempts.remove(&deployment.id);
 		return Ok(());

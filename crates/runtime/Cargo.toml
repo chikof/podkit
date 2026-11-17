@@ -11,8 +11,7 @@ async-trait.workspace = true
 bollard.workspace = true
 crypto.workspace = true
 futures-util.workspace = true
-podkit-core.workspace = true
-tar = "0.4"
+tar.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
@@ -21,4 +20,4 @@ tokio.workspace = true
 workspace = true
 
 [dev-dependencies]
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "=0.13.5", default-features = false, features = ["rustls"] }

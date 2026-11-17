@@ -1,12 +1,17 @@
-use std::sync::LazyLock;
+use std::{num::NonZero, sync::LazyLock};
 
 use anyhow::{Context, anyhow};
 use argon2::{
 	Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version, password_hash,
 	password_hash::phc::PasswordHash,
 };
-use tokio::task;
+use tokio::{sync::Semaphore, task};
 use zeroize::Zeroizing;
+
+/// Caps concurrent hashing/verification so peak memory stays at
+/// permits x 64 MiB no matter how many logins arrive at once.
+static LIMIT: LazyLock<Semaphore> =
+	LazyLock::new(|| Semaphore::new(std::thread::available_parallelism().map_or(2, NonZero::get)));
 
 /// Builds an Argon2id instance with hardened parameters:
 /// m=64 MiB, t=3 iterations, p=4 lanes
@@ -42,6 +47,7 @@ pub static DUMMY_HASH: LazyLock<String> = LazyLock::new(|| {
 /// # Errors
 /// Fails if the Argon2 parameters are invalid or the hashing operation fails.
 pub async fn hash(password: Zeroizing<String>) -> anyhow::Result<String> {
+	let _permit = LIMIT.acquire().await.context("argon2 limiter closed")?;
 	task::spawn_blocking(move || {
 		Ok(argon2()?
 			.hash_password(password.as_bytes())
@@ -66,6 +72,7 @@ pub async fn hash(password: Zeroizing<String>) -> anyhow::Result<String> {
 /// # Errors
 /// Fails if `hash` is not a valid PHC string or the Argon2 operation fails.
 pub async fn verify(password: Zeroizing<String>, hash: String) -> anyhow::Result<bool> {
+	let _permit = LIMIT.acquire().await.context("argon2 limiter closed")?;
 	task::spawn_blocking(move || {
 		let hash =
 			PasswordHash::new(&hash).map_err(|e| anyhow!(e).context("invalid password hash"))?;

@@ -13,13 +13,10 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use crypto::age::SecretBox;
-use podkit_core::domain::runtime::container_runtime::ContainerRuntime;
-use podkit_core::domain::runtime::entity::{
-	BuildSpec, ContainerId, ContainerSpec, ImageRef, LogsQuery,
+use runtime::{
+	BuildSpec, ConnectTarget, ContainerId, ContainerRuntime, ContainerSpec, ImageRef, LogsQuery,
+	ServerConnection,
 };
-use podkit_core::domain::server::entity::Server;
-use podkit_core::domain::shared::ids::{ServerId, TeamId};
-use runtime::ServerConnection;
 
 /// A throwaway local sshd instance for the duration of one test.
 struct TestSshd {
@@ -143,18 +140,17 @@ async fn container_lifecycle_over_ssh_tunnel() {
 	let secrets = SecretBox::from_identity_str(&crypto::age::generate_identity()).unwrap();
 	let encrypted_key = secrets.encrypt(&sshd.client_key_pem()).unwrap();
 
-	let server = Server::new_remote(
-		ServerId(1),
-		TeamId(1),
-		"ssh-tunnel-test".to_string(),
-		"127.0.0.1".to_string(),
-		i32::from(sshd.port),
-		user,
-		encrypted_key,
-		runtime::local_socket_path(),
-	);
+	let podman_socket_path = runtime::local_socket_path();
+	let target = ConnectTarget {
+		is_local: false,
+		hostname: "127.0.0.1",
+		ssh_port: i32::from(sshd.port),
+		ssh_user: Some(&user),
+		ssh_private_key: Some(&encrypted_key),
+		podman_socket_path: &podman_socket_path,
+	};
 
-	let connection = ServerConnection::connect(&server, &secrets)
+	let connection = ServerConnection::connect(&target, &secrets)
 		.await
 		.expect("connect over ssh tunnel");
 
@@ -189,8 +185,8 @@ async fn container_lifecycle_over_ssh_tunnel() {
 			networks: vec![],
 			labels: vec![],
 			binds: vec![],
-			resource_limits: podkit_core::domain::runtime::entity::ResourceLimits::default(),
-			restart_policy: podkit_core::domain::runtime::entity::RestartPolicy::Never,
+			resource_limits: runtime::ResourceLimits::default(),
+			restart_policy: runtime::RestartPolicy::Never,
 		})
 		.await
 		.expect("create container over tunnel");
