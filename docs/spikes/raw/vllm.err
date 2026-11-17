@@ -1,0 +1,3 @@
+[spike:vllm] image docker.io/vllm/vllm-openai:v0.34.0-x86_64 (25934 MB), feed=mount, port 18259
+[spike:vllm] ready in 128.117s
+[spike:vllm] model id: spike

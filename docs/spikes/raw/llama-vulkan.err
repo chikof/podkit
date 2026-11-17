@@ -1,0 +1,3 @@
+[spike:llama-vulkan] image ghcr.io/ggml-org/llama.cpp:server-vulkan (882 MB), feed=mount, port 18872
+[spike:llama-vulkan] ready in 1.666s
+[spike:llama-vulkan] model id: /models/Qwen3-4B-Q4_K_M.gguf

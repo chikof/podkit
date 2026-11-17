@@ -1,0 +1,60 @@
+# colibri (https://github.com/JustVugg/colibri, Apache-2.0) as a podkit engine image.
+# JustVugg/colibri ships no official image; docker/Dockerfile.slim in the repo is
+# GLM-only (COLI_DOCKER_GLM_ONLY=1), so this builds the OLMoE engine (and with
+# the same recipe any other `make <engine>` target) from a pinned commit.
+#
+#   CPU:    podman build -t localhost/podkit-colibri:cpu \
+#             -f deploy/engines/colibri/Containerfile deploy/engines/colibri
+#   Vulkan: podman build -t localhost/podkit-colibri:vulkan \
+#             --build-arg MAKE_ARGS="VK=1" --build-arg EXTRA_BUILD_PKGS="libvulkan-dev glslc" \
+#             --build-arg EXTRA_RUN_PKGS="libvulkan1" \
+#             -f deploy/engines/colibri/Containerfile deploy/engines/colibri
+#   CUDA:   podman build -t localhost/podkit-colibri:cuda \
+#             --build-arg BUILD_BASE=docker.io/nvidia/cuda:12.8.1-devel-ubuntu24.04 \
+#             --build-arg RUN_BASE=docker.io/nvidia/cuda:12.8.1-runtime-ubuntu24.04 \
+#             --build-arg MAKE_ARGS="CUDA=1 CUDA_ARCH=portable" \
+#             -f deploy/engines/colibri/Containerfile deploy/engines/colibri
+#
+# Run:  the model is mounted read-only, a GGUF is imported in link mode (the
+# engine reads it in place) into a writable /tmp dir, then `coli serve` starts:
+#   podman run --rm -p 8000:8000 -v /models:/models:ro -e COLI_GGUF=/models/x.gguf localhost/podkit-colibri:cpu
+ARG BUILD_BASE=docker.io/library/debian:stable-slim
+ARG RUN_BASE=docker.io/library/debian:stable-slim
+
+FROM ${BUILD_BASE} AS build
+ARG COLIBRI_REPO=https://github.com/JustVugg/colibri
+# the commit this spike measured; override to track a newer one
+ARG COLIBRI_REF=0a5504a1dc64f86fcd0fe7db298b0448c730e7e6
+# portable AVX2 build: a -march=native build SIGILLs on a different host
+ARG ARCH=x86-64-v3
+ARG ENGINE=olmoe
+ARG MAKE_ARGS=""
+ARG EXTRA_BUILD_PKGS=""
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+		build-essential make git ca-certificates ${EXTRA_BUILD_PKGS} \
+	&& rm -rf /var/lib/apt/lists/*
+WORKDIR /src
+RUN git init -q . && git fetch -q --depth 1 ${COLIBRI_REPO} ${COLIBRI_REF} && git checkout -q FETCH_HEAD
+RUN make -C c ${ENGINE} ARCH=${ARCH} ${MAKE_ARGS}
+
+FROM ${RUN_BASE}
+ARG ENGINE=olmoe
+ARG EXTRA_RUN_PKGS=""
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+		python3 libgomp1 ${EXTRA_RUN_PKGS} \
+	&& rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+# the launcher resolves the engine binary, the gateway and the family registry next to itself
+COPY --from=build /src/c/${ENGINE} /app/${ENGINE}
+COPY --from=build /src/c/shaders /app/shaders
+COPY --from=build /src/c/coli /src/c/version.py /src/c/openai_server.py /src/c/v4_dsml.py /src/c/v41_dsml.py \
+	/src/c/family_registry.py /src/c/resource_plan.py /src/c/doctor.py /src/c/autotune.py \
+	/src/c/image_engine.py /src/c/term_image.py /app/
+COPY --from=build /src/c/tools /app/tools
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh /app/coli
+ENV PYTHONUNBUFFERED=1 \
+	COLI_PORT=8000
+EXPOSE 8000
+# exec form + `exec` in the script: SIGTERM reaches python/coli as PID 1
+ENTRYPOINT ["/app/entrypoint.sh"]
