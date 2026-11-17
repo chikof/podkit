@@ -72,7 +72,7 @@ url = "=2.5.8"
 croner = "=4.0.3"
 rusty-s3 = { version = "=0.11.0", default-features = false, features = ["rustcrypto"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider", "stream"] }
-rustls = { version = "=0.23.39", default-features = false, features = ["ring", "std", "tls12"] }
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 tower = { version = "=0.5.3", features = ["util"] }
 
 podkit-core = { path = "./crates/core" }
