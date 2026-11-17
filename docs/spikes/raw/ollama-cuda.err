@@ -1,0 +1,3 @@
+[spike:ollama-cuda] image docker.io/ollama/ollama:latest (5103 MB), feed=gguf-import, port 18648
+[spike:ollama-cuda] ready in 23.955s
+[spike:ollama-cuda] model id: spike

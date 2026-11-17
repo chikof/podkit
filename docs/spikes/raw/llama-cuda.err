@@ -1,0 +1,3 @@
+[spike:llama-cuda] image ghcr.io/ggml-org/llama.cpp:server-cuda (4399 MB), feed=mount, port 18909
+[spike:llama-cuda] ready in 1.569s
+[spike:llama-cuda] model id: /models/Qwen3-4B-Q4_K_M.gguf
