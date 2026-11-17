@@ -8,7 +8,7 @@ use std::sync::LazyLock;
 use axum::{
 	Router,
 	extract::State,
-	http::header,
+	http::{HeaderMap, header},
 	response::{IntoResponse, Redirect, Response, Sse, sse::Event},
 	routing::{get, post},
 };
@@ -133,12 +133,10 @@ async fn login_page() -> Markup {
 						input type="password" autocomplete="current-password" required "data-bind:password";
 					}
 					p.error role="alert" "data-show"="$_error" "data-text"="$_error" {}
-					// Browsers drop the `Secure` session cookie outside a secure context,
-					// which would bounce a "successful" sign-in back to this page.
-					p.error role="alert" "data-show"="!window.isSecureContext" style="display: none" {
-						"Sign-in needs HTTPS. Open podkit over https:// or on localhost."
+					p.muted "data-show"="!window.isSecureContext" style="display: none" {
+						"This connection isn't encrypted, so your password and session travel in plain text. Use HTTPS when podkit is reachable from other machines."
 					}
-					button type="submit" "data-indicator:_busy" "data-attr:disabled"="$_busy || !window.isSecureContext" { "Sign in" }
+					button type="submit" "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Sign in" }
 				}
 			}
 		},
@@ -155,9 +153,10 @@ fn one_event(event: Event) -> Response {
 async fn login(
 	State(s): State<AppState>,
 	cookies: Cookies,
+	headers: HeaderMap,
 	ReadSignals(credentials): ReadSignals<Credentials>,
 ) -> Response {
-	let message = match auth::log_in(&s, &cookies, credentials).await {
+	let message = match auth::log_in(&s, &cookies, &headers, credentials).await {
 		Ok(_) => {
 			return one_event(
 				ExecuteScript::new("window.location.assign('/')").write_as_axum_sse_event(),
@@ -247,6 +246,10 @@ mod tests {
 		assert!(body.contains("window.location.assign('/')"), "{body}");
 		let set_cookie = h[header::SET_COOKIE].to_str().unwrap();
 		assert!(set_cookie.contains("HttpOnly") && set_cookie.contains("SameSite=Strict"));
+		assert!(
+			!set_cookie.contains("Secure"),
+			"plain HTTP must get a usable cookie: {set_cookie}"
+		);
 		let cookie = set_cookie.split(';').next().unwrap().to_owned();
 
 		let (s, _, body) = send(&app, "GET", "/", Some(&cookie), None).await;
@@ -263,5 +266,23 @@ mod tests {
 			StatusCode::SEE_OTHER,
 			"revoked session must not render the page"
 		);
+	}
+
+	#[sqlx::test]
+	async fn session_cookie_is_secure_behind_an_https_proxy(db: PgPool) {
+		let app = app(db).await;
+		user_with_team(&app, "alice").await;
+
+		let req = Request::post("/login")
+			.header(header::CONTENT_TYPE, "application/json")
+			.header("datastar-request", "true")
+			.header("x-forwarded-proto", "https")
+			.body(Body::from(
+				r#"{"email":"alice@example.com","password":"correct horse battery"}"#,
+			))
+			.unwrap();
+		let resp = app.oneshot(req).await.unwrap();
+		let set_cookie = resp.headers()[header::SET_COOKIE].to_str().unwrap();
+		assert!(set_cookie.contains("Secure"), "{set_cookie}");
 	}
 }

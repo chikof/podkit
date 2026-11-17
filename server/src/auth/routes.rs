@@ -1,4 +1,9 @@
-use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
+use axum::{
+	Json, Router,
+	extract::State,
+	http::{HeaderMap, StatusCode},
+	routing::post,
+};
 use serde::{Deserialize, Serialize};
 use tower_cookies::{Cookie, Cookies, cookie::SameSite};
 use zeroize::Zeroizing;
@@ -64,17 +69,31 @@ struct LoginResponse {
 async fn login(
 	State(s): State<AppState>,
 	cookies: Cookies,
+	headers: HeaderMap,
 	Json(body): Json<Credentials>,
 ) -> Result<Json<LoginResponse>, ServerError> {
-	let token = log_in(&s, &cookies, body).await?;
+	let token = log_in(&s, &cookies, &headers, body).await?;
 	Ok(Json(LoginResponse { token }))
 }
 
+/// podkit serves plain HTTP; HTTPS ends at a reverse proxy, which reports the
+/// original scheme in `X-Forwarded-Proto`. A client forging the header only
+/// makes its own cookie stricter.
+fn reached_over_https(headers: &HeaderMap) -> bool {
+	headers
+		.get("x-forwarded-proto")
+		.and_then(|v| v.to_str().ok())
+		.and_then(|v| v.split(',').next())
+		.is_some_and(|proto| proto.trim().eq_ignore_ascii_case("https"))
+}
+
 /// Verifies credentials, opens a session and sets the `session` cookie.
-/// Returns the session token.
+/// Returns the session token. The cookie is `Secure` only for HTTPS requests,
+/// so sign-in also works on plain-HTTP homelab installs.
 pub async fn log_in(
 	s: &AppState,
 	cookies: &Cookies,
+	headers: &HeaderMap,
 	body: Credentials,
 ) -> Result<String, ServerError> {
 	let Some(user) = users::find_by_email(&s.db, &body.email).await? else {
@@ -97,7 +116,7 @@ pub async fn log_in(
 	cookies.add(
 		Cookie::build(("session", token.clone()))
 			.http_only(true)
-			.secure(true)
+			.secure(reached_over_https(headers))
 			.same_site(SameSite::Strict)
 			.max_age(session::SESSION_TTL)
 			.path("/")
