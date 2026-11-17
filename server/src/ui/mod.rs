@@ -3,6 +3,7 @@
 //! that login sets, so the UI needs no CORS and holds no token in the browser.
 
 use std::convert::Infallible;
+use std::sync::LazyLock;
 
 use axum::{
 	Router,
@@ -11,8 +12,10 @@ use axum::{
 	response::{IntoResponse, Redirect, Response, Sse, sse::Event},
 	routing::{get, post},
 };
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use datastar::{axum::ReadSignals, prelude::*};
-use maud::{DOCTYPE, Markup, PreEscaped, html};
+use maud::{DOCTYPE, Markup, html};
+use sha2::{Digest, Sha256};
 use tower_cookies::Cookies;
 
 use crate::auth::{self, AuthUser, Credentials, SessionToken};
@@ -24,19 +27,15 @@ use crate::teams;
 const DATASTAR_PATH: &str = "/static/datastar-1.0.5.js";
 const DATASTAR_JS: &str = include_str!("../../static/datastar-1.0.5.js");
 
-const CSS: &str = "
-body{font:15px/1.5 system-ui,sans-serif;margin:0;color:#1d1d1f;background:#f6f6f7}
-header{display:flex;justify-content:space-between;align-items:center;padding:.75rem 1.5rem;background:#fff;border-bottom:1px solid #e3e3e6}
-main{max-width:48rem;margin:2rem auto;padding:0 1.5rem}
-.auth{max-width:22rem}
-label{display:block;margin-bottom:1rem}
-input{display:block;width:100%;box-sizing:border-box;padding:.5rem;margin-top:.25rem;font:inherit}
-button{font:inherit;padding:.45rem 1rem;cursor:pointer}
-.error{color:#b42318}
-ul.cards{list-style:none;padding:0}
-ul.cards li{background:#fff;border:1px solid #e3e3e6;border-radius:6px;padding:.75rem 1rem;margin-bottom:.5rem}
-.muted{color:#6e6e73}
-";
+const APP_CSS: &str = include_str!("../../static/app.css");
+
+/// `/static/app.css?v=<content hash>`: a new hash on every stylesheet change
+/// lets browsers cache each version forever.
+static APP_CSS_HREF: LazyLock<String> = LazyLock::new(|| {
+	let hash = Sha256::digest(APP_CSS.as_bytes());
+	let short = URL_SAFE_NO_PAD.encode(&hash[..6]);
+	format!("/static/app.css?v={short}")
+});
 
 pub fn router() -> Router<AppState> {
 	Router::new()
@@ -44,6 +43,7 @@ pub fn router() -> Router<AppState> {
 		.route("/login", get(login_page).post(login))
 		.route("/logout", post(logout))
 		.route(DATASTAR_PATH, get(datastar_js))
+		.route("/static/app.css", get(app_css))
 }
 
 fn layout(title: &str, body: &Markup) -> Markup {
@@ -55,21 +55,29 @@ fn layout(title: &str, body: &Markup) -> Markup {
 				meta name="viewport" content="width=device-width, initial-scale=1";
 				title { (title) " · podkit" }
 				script type="module" src=(DATASTAR_PATH) {}
-				style { (PreEscaped(CSS)) }
+				link rel="stylesheet" href=(*APP_CSS_HREF);
 			}
 			body { (body) }
 		}
 	}
 }
 
-async fn datastar_js() -> impl IntoResponse {
+fn immutable(content_type: &'static str, body: &'static str) -> impl IntoResponse {
 	(
 		[
-			(header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+			(header::CONTENT_TYPE, content_type),
 			(header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
 		],
-		DATASTAR_JS,
+		body,
 	)
+}
+
+async fn datastar_js() -> impl IntoResponse {
+	immutable("text/javascript; charset=utf-8", DATASTAR_JS)
+}
+
+async fn app_css() -> impl IntoResponse {
+	immutable("text/css; charset=utf-8", APP_CSS)
 }
 
 async fn index(State(s): State<AppState>, user: Result<AuthUser, ServerError>) -> Response {
