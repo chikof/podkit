@@ -2,6 +2,7 @@
 
 pub mod bootstrap;
 mod routes;
+pub mod service;
 pub mod sync;
 
 pub use routes::router;

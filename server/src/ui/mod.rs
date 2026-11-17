@@ -34,6 +34,7 @@ mod layout;
 #[allow(dead_code)]
 mod live;
 mod projects;
+mod servers;
 mod sse;
 #[allow(dead_code)]
 mod status;
@@ -69,6 +70,7 @@ pub fn router() -> Router<AppState> {
 		.route("/static/app.css", get(app_css))
 		.merge(teams::router())
 		.merge(projects::router())
+		.merge(servers::router())
 		.merge(test_routes())
 		.layer(middleware::from_fn(origin_guard))
 }

@@ -4,14 +4,12 @@ use axum::routing::{delete, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
+use super::service::{self, DEFAULT_PODMAN_SOCKET_PATH, DEFAULT_SSH_PORT, NewServer};
 use super::{Server, ServerStatus, host_key_fingerprint};
 use crate::auth::AuthUser;
-use crate::auth::permission::{Action, Resource, authorize};
-use crate::error::{AppResult, ServerError};
+use crate::error::AppResult;
 use crate::ids::{ServerId, TeamId};
-use crate::jobs::{self, JobKind};
 use crate::state::AppState;
-use crate::{scope, validate};
 
 pub fn router() -> Router<AppState> {
 	Router::new()
@@ -21,12 +19,8 @@ pub fn router() -> Router<AppState> {
 }
 
 fn default_ssh_port() -> i32 {
-	22
+	DEFAULT_SSH_PORT
 }
-
-// `%t` is a systemd specifier: `/run` in system units (root), `$XDG_RUNTIME_DIR` in user
-// units. One default so the rendered unit points at the right podman socket in both modes.
-const DEFAULT_PODMAN_SOCKET_PATH: &str = "%t/podman/podman.sock";
 
 fn default_podman_socket_path() -> String {
 	DEFAULT_PODMAN_SOCKET_PATH.to_string()
@@ -94,18 +88,6 @@ struct DeleteServerResponse {
 	id: ServerId,
 }
 
-async fn enqueue_bootstrap(s: &AppState, server: &Server) -> AppResult<()> {
-	jobs::enqueue(
-		s,
-		JobKind::ServerBootstrap,
-		server.id,
-		server.id.0,
-		format!("server:{}", server.id),
-	)
-	.await?;
-	Ok(())
-}
-
 /// Registers a remote server for a team. The team's local server is
 /// provisioned automatically on team creation and cannot be created here.
 ///
@@ -117,40 +99,20 @@ async fn create(
 	Path(team): Path<TeamId>,
 	Json(body): Json<CreateServerRequest>,
 ) -> AppResult<(StatusCode, Json<ServerResponse>)> {
-	authorize(&s.db, user.id, team, Action::Create, Resource::Server).await?;
-
-	if !validate::server_host(&body.hostname) {
-		return Err(ServerError::Validation("invalid hostname".to_string()));
-	}
-	if !validate::ssh_user(&body.ssh_user) {
-		return Err(ServerError::Validation("invalid ssh_user".to_string()));
-	}
-	if !(validate::abs_path(&body.podman_socket_path)
-		|| body.podman_socket_path == DEFAULT_PODMAN_SOCKET_PATH)
-	{
-		return Err(ServerError::Validation(
-			"invalid podman_socket_path".to_string(),
-		));
-	}
-
-	let encrypted_key = s
-		.secrets
-		.encrypt(&body.ssh_private_key)
-		.map_err(|e| ServerError::Validation(format!("failed to encrypt ssh key: {e}")))?;
-
-	let server = Server::new_remote(
+	let server = service::create(
+		&s,
+		user.id,
 		team,
-		body.name,
-		body.hostname,
-		body.ssh_port,
-		body.ssh_user,
-		encrypted_key,
-		body.podman_socket_path,
-	);
-
-	super::insert(&s.db, &server).await?;
-	enqueue_bootstrap(&s, &server).await?;
-
+		NewServer {
+			name: body.name,
+			hostname: body.hostname,
+			ssh_port: body.ssh_port,
+			ssh_user: body.ssh_user,
+			ssh_private_key: body.ssh_private_key,
+			podman_socket_path: body.podman_socket_path,
+		},
+	)
+	.await?;
 	Ok((StatusCode::ACCEPTED, Json(ServerResponse::from(&server))))
 }
 
@@ -160,9 +122,7 @@ async fn list(
 	user: AuthUser,
 	Path(team): Path<TeamId>,
 ) -> AppResult<Json<Vec<ServerResponse>>> {
-	authorize(&s.db, user.id, team, Action::Read, Resource::Server).await?;
-
-	let servers = super::list_by_team(&s.db, team).await?;
+	let servers = service::list(&s.db, user.id, team).await?;
 	Ok(Json(servers.iter().map(ServerResponse::from).collect()))
 }
 
@@ -174,21 +134,7 @@ async fn bootstrap(
 	Path((team, id)): Path<(TeamId, ServerId)>,
 	Query(query): Query<BootstrapQuery>,
 ) -> AppResult<(StatusCode, Json<ServerResponse>)> {
-	authorize(&s.db, user.id, team, Action::Update, Resource::Server).await?;
-	let mut server = scope::server(&s.db, team, id).await?;
-
-	if server.is_local {
-		return Err(ServerError::Validation(
-			"local server agent is managed by the operator".to_string(),
-		));
-	}
-
-	if query.reset_host_key {
-		super::set_host_key(&s.db, server.id, None).await?;
-		server.host_key = None;
-	}
-	enqueue_bootstrap(&s, &server).await?;
-
+	let server = service::bootstrap(&s, user.id, team, id, query.reset_host_key).await?;
 	Ok((StatusCode::ACCEPTED, Json(ServerResponse::from(&server))))
 }
 
@@ -199,15 +145,6 @@ async fn remove(
 	user: AuthUser,
 	Path((team, id)): Path<(TeamId, ServerId)>,
 ) -> AppResult<Json<DeleteServerResponse>> {
-	authorize(&s.db, user.id, team, Action::Delete, Resource::Server).await?;
-	let server = scope::server(&s.db, team, id).await?;
-
-	if server.is_local {
-		return Err(ServerError::CannotDeleteLocalServer);
-	}
-
-	super::delete(&s.db, team, server.id).await?;
-	s.agents.forget(server.id);
-
+	let server = service::remove(&s, user.id, team, id).await?;
 	Ok(Json(DeleteServerResponse { id: server.id }))
 }

@@ -119,6 +119,19 @@ pub async fn project_id(db: &PgPool, slug: &str) -> i64 {
 		.unwrap()
 }
 
+/// Puts one application straight into `project`, running on `server`.
+pub async fn seed_application_on(db: &PgPool, project: i64, server: i64) {
+	sqlx::query(
+		"INSERT INTO applications (id, project_id, server_id, name, slug, repo_url, container_port)
+		 VALUES (5002, $1, $2, 'Pinned', 'pinned', 'https://example.com/r.git', 3000)",
+	)
+	.bind(project)
+	.bind(server)
+	.execute(db)
+	.await
+	.unwrap();
+}
+
 /// Puts an application and a database straight into `project`, on its team's
 /// local server, so pages that list them have something to show.
 pub async fn seed_app_and_database(db: &PgPool, team: i64, project: i64) {
