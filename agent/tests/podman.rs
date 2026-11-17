@@ -12,7 +12,7 @@ use futures_util::StreamExt;
 #[ignore = "requires a live podman.sock"]
 async fn full_lifecycle_against_live_podman() {
 	let podman = Podman::connect(&local_socket_path()).expect("connect to podman.sock");
-	assert!(!podman.version().await.expect("version").is_empty());
+	assert_ne!(podman.version().await.expect("version"), "");
 
 	let dir = tempfile::tempdir().unwrap();
 	let dockerfile =

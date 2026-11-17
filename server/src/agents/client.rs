@@ -345,7 +345,7 @@ mod tests {
 	fn line_split_across_chunks() {
 		let mut s = LineSplitter::new(64);
 		s.push(b"{\"a\":");
-		assert!(drain_lines(&mut s).is_empty());
+		assert_eq!(drain_lines(&mut s), Vec::<String>::new());
 		s.push(b"1}\n");
 		assert_eq!(drain_lines(&mut s), ["{\"a\":1}"]);
 		assert_eq!(s.finish(), None);

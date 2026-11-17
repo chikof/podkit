@@ -214,7 +214,10 @@ mod tests {
 
 	#[test]
 	fn no_hosts_no_router() {
-		assert!(secure_routing_labels("app-7", &[]).is_empty());
+		assert_eq!(
+			secure_routing_labels("app-7", &[]),
+			Vec::<(String, String)>::new()
+		);
 		let labels = routing_labels("app-7", &[], 3000);
 		assert!(labels.iter().all(|(k, _)| !k.contains(".routers.")));
 	}
