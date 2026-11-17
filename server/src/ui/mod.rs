@@ -23,6 +23,10 @@ use crate::error::ServerError;
 use crate::state::AppState;
 use crate::teams;
 
+mod components;
+
+use components::{BUTTON, BUTTON_OUTLINE, INPUT, LABEL, card, card_content, card_header};
+
 /// Versioned so browsers can cache it forever; bump with the vendored file.
 const DATASTAR_PATH: &str = "/static/datastar-1.0.5.js";
 const DATASTAR_JS: &str = include_str!("../../static/datastar-1.0.5.js");
@@ -37,11 +41,6 @@ static APP_CSS_HREF: LazyLock<String> = LazyLock::new(|| {
 	let short = URL_SAFE_NO_PAD.encode(&hash[..6]);
 	format!("/static/app.css?v={short}")
 });
-
-const INPUT: &str = "mt-1 block w-full rounded-md border border-zinc-300 bg-white px-3 py-2 font-normal focus:border-zinc-900 focus:outline-none";
-const BUTTON: &str = "cursor-pointer rounded-md bg-zinc-900 px-4 py-2 font-medium text-white hover:bg-zinc-700 disabled:cursor-not-allowed disabled:opacity-50";
-const BUTTON_QUIET: &str =
-	"cursor-pointer rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100";
 
 pub fn router() -> Router<AppState> {
 	Router::new()
@@ -63,7 +62,7 @@ fn layout(title: &str, body: &Markup) -> Markup {
 				script type="module" src=(DATASTAR_PATH) {}
 				link rel="stylesheet" href=(*APP_CSS_HREF);
 			}
-			body class="min-h-screen bg-zinc-50 font-sans text-zinc-900 antialiased" { (body) }
+			body class="min-h-screen font-sans" { (body) }
 		}
 	}
 }
@@ -102,26 +101,31 @@ async fn index(State(s): State<AppState>, user: Result<AuthUser, ServerError>) -
 	layout(
 		"Teams",
 		&html! {
-			header class="flex items-center justify-between border-b border-zinc-200 bg-white px-6 py-3" {
+			header class="flex items-center justify-between border-b border-border bg-card px-6 py-3" {
 				span class="font-semibold" { "podkit" }
 				form method="post" action="/logout" {
-					button type="submit" class=(BUTTON_QUIET) { "Sign out" }
+					button type="submit" class=(BUTTON_OUTLINE) { "Sign out" }
 				}
 			}
 			main class="mx-auto max-w-3xl px-6 py-8" {
-				h1 class="mb-4 text-2xl font-semibold" { "Teams" }
-				@if teams.is_empty() {
-					p class="text-zinc-500" { "You are not a member of any team yet." }
-				} @else {
-					ul class="space-y-2" {
-						@for team in &teams {
-							li class="rounded-lg border border-zinc-200 bg-white px-4 py-3" {
-								strong { (team.name) }
-								span class="ml-2 text-zinc-500" { (team.slug) }
+				(card(&html! {
+					(card_header("Teams", Some("Teams you are a member of.")))
+					(card_content(&html! {
+						@if teams.is_empty() {
+							p class="text-sm text-muted-foreground" { "You are not a member of any team yet." }
+						} @else {
+							// Not `divide-y`: encre-css 0.21.1 puts that border below each row.
+							ul {
+								@for team in &teams {
+									li class="flex items-baseline justify-between border-t border-border py-3 text-sm first:border-t-0" {
+										strong { (team.name) }
+										span class="text-muted-foreground" { (team.slug) }
+									}
+								}
 							}
 						}
-					}
-				}
+					}))
+				}))
 			}
 		},
 	)
@@ -133,22 +137,26 @@ async fn login_page() -> Markup {
 		"Sign in",
 		&html! {
 			main class="mx-auto mt-16 max-w-sm px-6" data-signals="{email: '', password: '', _error: ''}" {
-				h1 class="mb-6 text-2xl font-semibold" { "Sign in to podkit" }
-				form class="space-y-4" "data-on:submit"="evt.preventDefault(); @post('/login')" {
-					label class="block text-sm font-medium" {
-						"Email"
-						input class=(INPUT) type="email" autocomplete="username" required "data-bind:email";
-					}
-					label class="block text-sm font-medium" {
-						"Password"
-						input class=(INPUT) type="password" autocomplete="current-password" required "data-bind:password";
-					}
-					p class="text-sm text-red-700" role="alert" "data-show"="$_error" "data-text"="$_error" {}
-					p class="text-sm text-zinc-500" "data-show"="!window.isSecureContext" style="display: none" {
-						"This connection isn't encrypted, so your password and session travel in plain text. Use HTTPS when podkit is reachable from other machines."
-					}
-					button type="submit" class={ (BUTTON) " w-full" } "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Sign in" }
-				}
+				(card(&html! {
+					(card_header("Sign in to podkit", Some("Use the email and password of your podkit account.")))
+					(card_content(&html! {
+						form class="flex flex-col gap-4" "data-on:submit"="evt.preventDefault(); @post('/login')" {
+							label class=(LABEL) {
+								"Email"
+								input class=(INPUT) type="email" autocomplete="username" required "data-bind:email";
+							}
+							label class=(LABEL) {
+								"Password"
+								input class=(INPUT) type="password" autocomplete="current-password" required "data-bind:password";
+							}
+							p class="text-sm text-destructive" role="alert" "data-show"="$_error" "data-text"="$_error" {}
+							p class="text-sm text-muted-foreground" "data-show"="!window.isSecureContext" style="display: none" {
+								"This connection isn't encrypted, so your password and session travel in plain text. Use HTTPS when podkit is reachable from other machines."
+							}
+							button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Sign in" }
+						}
+					}))
+				}))
 			}
 		},
 	)

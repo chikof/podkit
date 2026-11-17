@@ -1,0 +1,44 @@
+/* Design tokens for the web UI. Components use only these semantic colors
+   (`bg-primary`, `text-muted-foreground`, `border-border`, ...), so restyling
+   means editing the values below. `build.rs` registers each token with
+   encre-css and puts this file ahead of the generated utilities.
+
+   Values come from Topcoat UI's "neutral" theme (MIT,
+   https://github.com/tokio-rs/topcoat). Dark mode follows the system setting. */
+
+:root {
+	--background: oklch(0.9875 0.003 260);
+	--foreground: oklch(0.24 0.012 260);
+	--card: oklch(0.995 0.003 260);
+	--card-foreground: oklch(0.24 0.012 260);
+	--muted-foreground: oklch(0.51 0.014 260);
+	--primary: oklch(0.21 0.02 260);
+	--primary-foreground: oklch(0.985 0.003 260);
+	--destructive: oklch(0.55 0.2 27);
+	--border: oklch(0.9 0.008 260);
+	--ring: oklch(0.32 0.02 260);
+	color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--background: oklch(0.17 0.012 260);
+		--foreground: oklch(0.93 0.006 260);
+		--card: oklch(0.22 0.012 260);
+		--card-foreground: oklch(0.93 0.006 260);
+		--muted-foreground: oklch(0.68 0.012 260);
+		--primary: oklch(0.92 0.008 260);
+		--primary-foreground: oklch(0.21 0.015 260);
+		--destructive: oklch(0.66 0.18 25);
+		--border: oklch(0.3 0.012 260);
+		--ring: oklch(0.6 0.02 260);
+	}
+}
+
+body {
+	background-color: var(--background);
+	color: var(--foreground);
+	/* Not a class: encre-css 0.21.1 names this utility `antialised`. */
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}

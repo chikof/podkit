@@ -39,9 +39,12 @@ HTML rendered by the server, made interactive with
 [Datastar](https://data-star.dev), so there is no separate front-end build.
 Templates use Tailwind utility classes in `class="..."`; `server/build.rs`
 runs [encre-css](https://crates.io/crates/encre-css) at compile time to emit
-only the CSS those classes need. Write each class out in full inside a string
-literal under `server/src/ui`: maud's `.class` shorthand and names built with
-`format!` get no CSS, and nothing reports it.
+only the CSS those classes need. Shared buttons, inputs and cards live in
+`server/src/ui/components.rs`, and they use the semantic colors in
+`server/src/ui/theme.css` (light and dark, following the system setting).
+Write each class out in full inside a string literal under `server/src/ui`:
+maud's `.class` shorthand and names built with `format!` get no CSS. The build
+fails if a `class="..."` literal or a `components.rs` class has no CSS.
 
 Sign-in works over plain HTTP, for example in a homelab, but the password and
 session then cross the network unencrypted. Behind an HTTPS reverse proxy
