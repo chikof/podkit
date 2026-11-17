@@ -109,7 +109,10 @@ async fn main() -> AppResult<()> {
 	let addr = format!("{}:{}", config.host, config.port);
 	let pool = get_db_connection(Some(&config.database_url)).await?;
 	let state = AppState {
-		tokens: Arc::new(TokenService::new(config.jwt_secret.as_bytes())),
+		tokens: Arc::new(
+			TokenService::new(config.jwt_secret.as_bytes())
+				.map_err(|e| crate::error::ServerError::InvalidSecretKey(e.to_string()))?,
+		),
 		pool,
 		users: Arc::new(PgUserRepository(pool)),
 		teams: Arc::new(PgTeamRepository(pool)),

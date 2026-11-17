@@ -1,105 +1,166 @@
-use axum::http::StatusCode;
-use macros::JsonError;
+use axum::{
+	Json,
+	http::StatusCode,
+	response::{IntoResponse, Response},
+};
 use podkit_core::domain::shared::errors::DomainError;
+use serde::Serialize;
 use thiserror::Error as ThisError;
 
-#[derive(ThisError, Debug, JsonError)]
+#[derive(ThisError, Debug)]
 pub enum ServerError {
 	#[error("std io: {0}")]
-	#[status(StatusCode::INTERNAL_SERVER_ERROR)]
 	StdIo(#[from] std::io::Error),
 
 	#[error("axum: {0}")]
-	#[status(StatusCode::INTERNAL_SERVER_ERROR)]
 	Axum(#[from] axum::Error),
 
 	#[error("forgeconf: {0}")]
-	#[status(StatusCode::INTERNAL_SERVER_ERROR)]
 	Forgeconf(#[from] forgeconf::ConfigError),
 
 	#[error("db: {0}")]
-	#[status(StatusCode::INTERNAL_SERVER_ERROR)]
 	Database(#[from] database::DatabaseError),
 
 	#[error("domain: {0}")]
-	#[status(StatusCode::INTERNAL_SERVER_ERROR)]
 	Domain(#[from] DomainError),
 
 	#[error("You forgot the include the token buddy")]
-	#[status(StatusCode::BAD_REQUEST)]
 	MissingToken,
 
 	#[error("Wrong token buddy")]
-	#[status(StatusCode::UNAUTHORIZED)]
 	InvalidToken,
 
 	#[error("Invalid credentials")]
-	#[status(StatusCode::UNAUTHORIZED)]
 	InvalidCredentials,
 
 	#[error("{0}")]
-	#[status(StatusCode::BAD_REQUEST)]
 	Validation(String),
 
 	#[error("an account with this email already exists")]
-	#[status(StatusCode::CONFLICT)]
 	EmailTaken,
 
 	#[error("user is already a member of this team")]
-	#[status(StatusCode::CONFLICT)]
 	AlreadyMember,
 
 	#[error("that role does not belong to this team")]
-	#[status(StatusCode::BAD_REQUEST)]
 	RoleNotAllowed,
 
 	#[error("project not found")]
-	#[status(StatusCode::NOT_FOUND)]
 	ProjectNotFound,
 
 	#[error("server not found")]
-	#[status(StatusCode::NOT_FOUND)]
 	ServerNotFound,
 
 	#[error("application not found")]
-	#[status(StatusCode::NOT_FOUND)]
 	ApplicationNotFound,
 
 	#[error("deployment not found")]
-	#[status(StatusCode::NOT_FOUND)]
 	DeploymentNotFound,
 
 	#[error("env var not found")]
-	#[status(StatusCode::NOT_FOUND)]
 	EnvVarNotFound,
 
 	#[error("domain not found")]
-	#[status(StatusCode::NOT_FOUND)]
 	DomainNotFound,
 
 	#[error("that hostname is already routed to another application")]
-	#[status(StatusCode::CONFLICT)]
 	DomainTaken,
 
 	#[error("that slug is already used by another application on this server")]
-	#[status(StatusCode::CONFLICT)]
 	ApplicationSlugTaken,
 
 	#[error("the local server cannot be deleted")]
-	#[status(StatusCode::BAD_REQUEST)]
 	CannotDeleteLocalServer,
 
 	#[error("invalid AGE_SECRET_KEY: {0}")]
-	#[status(StatusCode::INTERNAL_SERVER_ERROR)]
 	InvalidSecretKey(String),
 
 	#[error("you don't have permission to do that")]
-	#[status(StatusCode::FORBIDDEN)]
 	Forbidden,
 
 	#[error("internal error")]
-	#[status(StatusCode::INTERNAL_SERVER_ERROR)]
 	Internal,
 }
 
+impl ServerError {
+	pub fn status(&self) -> StatusCode {
+		match self {
+			Self::StdIo(_)
+			| Self::Axum(_)
+			| Self::Forgeconf(_)
+			| Self::Database(_)
+			| Self::Domain(_)
+			| Self::InvalidSecretKey(_)
+			| Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+			Self::MissingToken
+			| Self::Validation(_)
+			| Self::RoleNotAllowed
+			| Self::CannotDeleteLocalServer => StatusCode::BAD_REQUEST,
+			Self::InvalidToken | Self::InvalidCredentials => StatusCode::UNAUTHORIZED,
+			Self::EmailTaken
+			| Self::AlreadyMember
+			| Self::DomainTaken
+			| Self::ApplicationSlugTaken => StatusCode::CONFLICT,
+			Self::ProjectNotFound
+			| Self::ServerNotFound
+			| Self::ApplicationNotFound
+			| Self::DeploymentNotFound
+			| Self::EnvVarNotFound
+			| Self::DomainNotFound => StatusCode::NOT_FOUND,
+			Self::Forbidden => StatusCode::FORBIDDEN,
+		}
+	}
+}
+
+#[derive(Serialize)]
+struct ErrorBody<'a> {
+	error: &'a str,
+}
+
+impl IntoResponse for ServerError {
+	fn into_response(self) -> Response {
+		let status = self.status();
+		if status == StatusCode::INTERNAL_SERVER_ERROR {
+			tracing::error!(error = %self, "request failed");
+			return (
+				status,
+				Json(ErrorBody {
+					error: "internal server error",
+				}),
+			)
+				.into_response();
+		}
+		let message = self.to_string();
+		(status, Json(ErrorBody { error: &message })).into_response()
+	}
+}
+
 pub type AppResult<T> = Result<T, ServerError>;
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[tokio::test]
+	async fn internal_errors_do_not_leak_details() {
+		let resp = ServerError::StdIo(std::io::Error::other("secret path /x")).into_response();
+		assert_eq!(resp.status(), StatusCode::INTERNAL_SERVER_ERROR);
+		let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+			.await
+			.unwrap();
+		assert_eq!(&body[..], br#"{"error":"internal server error"}"#);
+	}
+
+	#[tokio::test]
+	async fn client_errors_keep_their_message() {
+		let resp = ServerError::Forbidden.into_response();
+		assert_eq!(resp.status(), StatusCode::FORBIDDEN);
+		let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
+			.await
+			.unwrap();
+		assert_eq!(
+			&body[..],
+			br#"{"error":"you don't have permission to do that"}"#
+		);
+	}
+}

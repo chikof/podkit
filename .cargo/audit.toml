@@ -1,0 +1,9 @@
+[advisories]
+ignore = [
+	# crypto-bigint 0.5.5 via age 0.12.1 -> p256 0.13 (hard dependency, no newer age).
+	# podkit only uses X25519 age identities, so the P-256 code paths never run.
+	"RUSTSEC-2026-0387",
+	# libsqlite3-sys is only in Cargo.lock through sqlx's optional sqlite driver;
+	# the sqlite feature is off, so it is never compiled (`cargo tree -i libsqlite3-sys` is empty).
+	"RUSTSEC-2026-0459",
+]

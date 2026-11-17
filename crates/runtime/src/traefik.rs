@@ -12,7 +12,7 @@ use podkit_core::domain::shared::errors::DomainResult;
 pub const NETWORK: &str = "podkit";
 
 const TRAEFIK_CONTAINER_NAME: &str = "podkit-traefik";
-const TRAEFIK_IMAGE: &str = "docker.io/library/traefik:v3.2";
+const TRAEFIK_IMAGE: &str = "docker.io/library/traefik:v3.7.19";
 
 /// ACME (Let's Encrypt) configuration for issuing real certs on custom
 /// domains. Uses the HTTP-01 challenge, so it needs `https_port` reachable

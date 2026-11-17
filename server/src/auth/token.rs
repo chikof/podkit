@@ -18,11 +18,11 @@ pub struct TokenService {
 }
 
 impl TokenService {
-	pub fn new(secret: &[u8]) -> Self {
-		Self {
-			encoding: EncodingKey::from_secret(secret),
-			decoding: DecodingKey::from_secret(secret),
-		}
+	pub fn new(secret: &[u8]) -> jsonwebtoken::errors::Result<Self> {
+		Ok(Self {
+			encoding: EncodingKey::from_secret(secret)?,
+			decoding: DecodingKey::from_secret(secret)?,
+		})
 	}
 
 	pub fn issue(&self, user_id: i64) -> anyhow::Result<String> {

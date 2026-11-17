@@ -1,11 +1,9 @@
 use std::sync::LazyLock;
 
 use anyhow::{Context, anyhow};
-use argon2::password_hash::SaltString;
-use argon2::password_hash::rand_core::OsRng;
 use argon2::{
-	Algorithm, Argon2, Params, PasswordHash, PasswordHasher, PasswordVerifier, Version,
-	password_hash,
+	Algorithm, Argon2, Params, PasswordHasher, PasswordVerifier, Version, password_hash,
+	password_hash::phc::PasswordHash,
 };
 use tokio::task;
 use zeroize::Zeroizing;
@@ -27,10 +25,9 @@ fn argon2() -> anyhow::Result<Argon2<'static>> {
 /// An invalid PHC string short-circuits `PasswordHash::new` and returns in microseconds
 /// instead of the full ~100 ms argon2 window, this defeats that.
 pub static DUMMY_HASH: LazyLock<String> = LazyLock::new(|| {
-	let salt = SaltString::generate(&mut OsRng);
 	argon2()
 		.expect("valid argon2 params")
-		.hash_password(b"__podkit_timing_sentinel__", &salt)
+		.hash_password(b"__podkit_timing_sentinel__")
 		.expect("failed to compute dummy hash")
 		.to_string()
 });
@@ -46,9 +43,8 @@ pub static DUMMY_HASH: LazyLock<String> = LazyLock::new(|| {
 /// Fails if the Argon2 parameters are invalid or the hashing operation fails.
 pub async fn hash(password: Zeroizing<String>) -> anyhow::Result<String> {
 	task::spawn_blocking(move || {
-		let salt = SaltString::generate(&mut OsRng);
 		Ok(argon2()?
-			.hash_password(password.as_bytes(), &salt)
+			.hash_password(password.as_bytes())
 			.map_err(|e| anyhow!(e).context("failed to hash password"))?
 			.to_string())
 	})
@@ -76,7 +72,7 @@ pub async fn verify(password: Zeroizing<String>, hash: String) -> anyhow::Result
 
 		match argon2()?.verify_password(password.as_bytes(), &hash) {
 			Ok(()) => Ok(true),
-			Err(password_hash::Error::Password) => Ok(false),
+			Err(password_hash::Error::PasswordInvalid) => Ok(false),
 			Err(e) => Err(anyhow!(e).context("failed to verify password")),
 		}
 	})

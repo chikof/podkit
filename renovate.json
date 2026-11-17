@@ -2,5 +2,14 @@
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
 	"extends": [
 		"config:recommended"
+	],
+	"customManagers": [
+		{
+			"customType": "regex",
+			"managerFilePatterns": ["/^agent/src/ingress\\.rs$/"],
+			"matchStrings": ["\"docker\\.io/library/traefik:(?<currentValue>v[0-9.]+)\""],
+			"depNameTemplate": "traefik",
+			"datasourceTemplate": "docker"
+		}
 	]
 }
