@@ -15,7 +15,7 @@ use super::components::{
 };
 use super::extract::TeamCtx;
 use super::layout::{Crumb, app_page, form_error};
-use super::{error, sse};
+use super::{databases, error, sse};
 use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ProjectId, TeamId};
@@ -252,7 +252,7 @@ async fn overview(
 			p class="text-sm text-muted-foreground" { (project.slug) }
 		}
 		(resource_rows("Applications", "No applications yet.", &applications))
-		(resource_rows("Databases", "No databases yet.", &databases))
+		(databases::project_card(&ctx, project.id, &databases))
 	};
 	Ok(app_page(&ctx, &project.name, &crumbs, &body))
 }
@@ -560,7 +560,9 @@ mod tests {
 		assert_contains(&body, "Storefront");
 		assert_contains(&body, "storefront");
 		assert_contains(&body, "orders");
-		assert_contains(&body, "postgres 17");
+		assert_contains(&body, "PostgreSQL 17");
+		assert_contains(&body, "/databases/6001");
+		assert_contains(&body, "Pending");
 
 		let (_, _, body) = get_html(&app, &format!("/teams/{team}/projects"), Some(&cookie)).await;
 		assert_contains(&body, "1 application");

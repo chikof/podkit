@@ -154,7 +154,7 @@ async fn insert(
 	.await
 }
 
-async fn list_for_team(
+pub(crate) async fn list_for_team(
 	db: impl PgExecutor<'_>,
 	team: TeamId,
 ) -> Result<Vec<BackupTarget>, sqlx::Error> {

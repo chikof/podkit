@@ -27,6 +27,7 @@ use crate::error::ServerError;
 use crate::state::AppState;
 
 mod components;
+mod databases;
 mod error;
 mod extract;
 mod layout;
@@ -69,6 +70,7 @@ pub fn router() -> Router<AppState> {
 		.route("/static/app.css", get(app_css))
 		.merge(teams::router())
 		.merge(projects::router())
+		.merge(databases::router())
 		.merge(test_routes())
 		.layer(middleware::from_fn(origin_guard))
 }

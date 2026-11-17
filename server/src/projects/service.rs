@@ -36,7 +36,7 @@ pub struct ResourceRow {
 pub struct ProjectDetail {
 	pub project: Project,
 	pub applications: Vec<ResourceRow>,
-	pub databases: Vec<ResourceRow>,
+	pub databases: Vec<databases::service::Row>,
 }
 
 /// Creates a project; the caller must hold `create project` on the team.
@@ -77,6 +77,13 @@ pub async fn list(db: &PgPool, user: UserId, team: TeamId) -> AppResult<Vec<Proj
 	Ok(super::list_with_counts(db, team).await?)
 }
 
+/// One project; needs `read project`. A project of another team is
+/// `ProjectNotFound`.
+pub async fn find(db: &PgPool, user: UserId, team: TeamId, id: ProjectId) -> AppResult<Project> {
+	authorize(db, user, team, Action::Read, Resource::Project).await?;
+	scope::project(db, team, id).await
+}
+
 /// One project and its applications and databases; needs `read project`.
 /// A project of another team is `ProjectNotFound`.
 pub async fn get(
@@ -99,10 +106,7 @@ pub async fn get(
 	let databases = databases::list_by_project(db, project.id)
 		.await?
 		.into_iter()
-		.map(|d| ResourceRow {
-			name: d.name,
-			detail: format!("{:?} {}", d.engine, d.version).to_lowercase(),
-		})
+		.map(|d| databases::service::Row::from(&d))
 		.collect();
 
 	Ok(ProjectDetail {

@@ -108,6 +108,22 @@ pub async fn latest_for(
 	.await
 }
 
+/// The newest provision, start, stop, remove or purge job of a database.
+pub async fn latest_for_database(
+	db: impl PgExecutor<'_>,
+	database: i64,
+) -> Result<Option<Job>, sqlx::Error> {
+	sqlx::query_as::<_, Job>(
+		"SELECT id, kind, server_id, target_id, lock_key, status, error FROM jobs
+		WHERE kind IN ('database_provision', 'database_start', 'database_stop',
+			'database_remove', 'database_purge') AND target_id = $1
+		ORDER BY id DESC LIMIT 1",
+	)
+	.bind(database)
+	.fetch_optional(db)
+	.await
+}
+
 /// Whether a queued or running job of `kind` exists for `target_id`.
 pub async fn active_exists(
 	db: impl PgExecutor<'_>,
