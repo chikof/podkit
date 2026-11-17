@@ -40,11 +40,17 @@ HTML rendered by the server, made interactive with
 Templates use Tailwind utility classes in `class="..."`; `server/build.rs`
 runs [encre-css](https://crates.io/crates/encre-css) at compile time to emit
 only the CSS those classes need. Shared buttons, inputs and cards live in
-`server/src/ui/components.rs`, and they use the semantic colors in
-`server/src/ui/theme.css` (light and dark, following the system setting).
-Write each class out in full inside a string literal under `server/src/ui`:
-maud's `.class` shorthand and names built with `format!` get no CSS. The build
-fails if a `class="..."` literal or a `components.rs` class has no CSS.
+`server/src/ui/components.rs`. Their colors (`bg-primary`,
+`text-muted-foreground`, ...) are the `--name` variables in
+`server/src/ui/theme.css`, which has light and dark values and follows the
+system setting; adding a variable there makes it usable as a color.
+
+Write each class out in full inside a string literal under `server/src/ui`.
+The build fails when a class in a `class="..."` literal or in `components.rs`
+has no CSS. It never sees maud's `.class` shorthand or class names built at
+runtime with `format!`; those get no CSS and nothing reports it. It also can't
+tell when a class generates the wrong CSS: encre-css 0.21.1's `divide-y` puts
+its border on the wrong side, so use row borders instead.
 
 Sign-in works over plain HTTP, for example in a homelab, but the password and
 session then cross the network unencrypted. Behind an HTTPS reverse proxy

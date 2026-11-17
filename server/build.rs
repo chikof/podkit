@@ -7,20 +7,6 @@ use std::{env, fs};
 
 const UI_DIR: &str = "src/ui";
 
-/// Semantic colors defined as CSS variables in `theme.css`.
-const TOKENS: &[&str] = &[
-	"background",
-	"foreground",
-	"card",
-	"card-foreground",
-	"muted-foreground",
-	"primary",
-	"primary-foreground",
-	"destructive",
-	"border",
-	"ring",
-];
-
 fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
 	for entry in fs::read_dir(dir).expect("read src/ui") {
 		let path = entry.expect("read src/ui entry").path();
@@ -44,8 +30,10 @@ fn main() {
 		.map(|f| fs::read_to_string(f).expect("read template source"))
 		.collect();
 
-	let full = encre_config(encre_css::Preflight::default());
-	let check = encre_config(encre_css::Preflight::None);
+	let theme = fs::read_to_string(Path::new(UI_DIR).join("theme.css")).expect("read theme.css");
+	let tokens = color_tokens(&theme);
+	let full = encre_config(&tokens, encre_css::Preflight::default());
+	let check = encre_config(&tokens, encre_css::Preflight::None);
 
 	let mut unknown: Vec<&str> = files
 		.iter()
@@ -61,17 +49,34 @@ fn main() {
 		"encre-css generates no CSS for these classes in src/ui: {unknown:?}"
 	);
 
-	let theme = fs::read_to_string(Path::new(UI_DIR).join("theme.css")).expect("read theme.css");
 	let utilities = encre_css::generate(sources.iter().map(String::as_str), &full);
 	let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("app.css");
 	fs::write(out, format!("{theme}\n{utilities}")).expect("write app.css");
 }
 
-fn encre_config(preflight: encre_css::Preflight) -> encre_css::Config {
+/// Every `--name:` declared in the first `:root` block of `theme.css`, so a
+/// token added there becomes `bg-name`, `text-name`, ... with no other edit.
+fn color_tokens(theme: &str) -> Vec<&str> {
+	let block = theme
+		.split_once(":root {")
+		.and_then(|(_, rest)| rest.split_once('}'))
+		.expect("theme.css has a :root block")
+		.0;
+	block
+		.lines()
+		.filter_map(|line| line.trim().strip_prefix("--")?.split_once(':'))
+		.map(|(name, _)| name)
+		.collect()
+}
+
+fn encre_config(tokens: &[&str], preflight: encre_css::Preflight) -> encre_css::Config {
 	let mut config = encre_css::Config::default();
 	config.preflight = preflight;
-	for token in TOKENS {
-		config.theme.colors.add(*token, format!("var(--{token})"));
+	for token in tokens {
+		config
+			.theme
+			.colors
+			.add(token.to_string(), format!("var(--{token})"));
 	}
 	config
 }
