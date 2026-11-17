@@ -85,6 +85,7 @@ async fn main() -> AppResult<()> {
 		.await
 		.map_err(|e| ServerError::Sqlx(e.into()))?;
 
+	let shutdown = CancellationToken::new();
 	let state = AppState {
 		db,
 		secrets,
@@ -92,6 +93,7 @@ async fn main() -> AppResult<()> {
 		jobs: Arc::new(Jobs::new()),
 		logs: Arc::new(LogHub::new(log_dir)),
 		http: reqwest::Client::new(),
+		shutdown: shutdown.clone(),
 		config: Arc::new(runtime_config),
 	};
 
@@ -100,7 +102,6 @@ async fn main() -> AppResult<()> {
 		warn!("failed to enqueue agent upgrades: {e}");
 	}
 
-	let shutdown = CancellationToken::new();
 	let dispatcher = tokio::spawn(worker::run_dispatcher(state.clone(), shutdown.clone()));
 	tokio::spawn(servers::sync::run(state.clone(), shutdown.clone()));
 	tokio::spawn(backups::schedule::run(state.clone(), shutdown.clone()));

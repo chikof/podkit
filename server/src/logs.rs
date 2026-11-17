@@ -281,7 +281,22 @@ pub fn job_sse(
 		Some(id) => (Some(state.logs.path(id)), state.logs.subscribe(id)),
 		None => (None, None),
 	};
-	Sse::new(frames(path, rx).map(|frame| Ok(to_event(frame)))).keep_alive(KeepAlive::default())
+	let shutdown = state.shutdown.clone();
+	let events = stream::unfold(Some(Box::pin(frames(path, rx))), move |frames| {
+		let shutdown = shutdown.clone();
+		async move {
+			let mut frames = frames?;
+			let frame = tokio::select! {
+				biased;
+				() = shutdown.cancelled() => {
+					return Some((Ok(to_event(Frame::End)), None));
+				}
+				frame = frames.next() => frame?,
+			};
+			Some((Ok(to_event(frame)), Some(frames)))
+		}
+	});
+	Sse::new(events).keep_alive(KeepAlive::default())
 }
 
 #[cfg(test)]

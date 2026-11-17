@@ -37,4 +37,6 @@ pub struct AppState {
 	pub jobs: Arc<Jobs>,
 	pub logs: Arc<LogHub>,
 	pub http: reqwest::Client,
+	/// Cancelled on SIGINT/SIGTERM; long-lived streams end on it so graceful shutdown can drain.
+	pub shutdown: tokio_util::sync::CancellationToken,
 }

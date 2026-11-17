@@ -474,5 +474,5 @@ async fn logs(
 	);
 	let events = client.stream(Method::GET, &path, None::<&()>).await?;
 
-	Ok(Sse::new(log_events(events)).keep_alive(KeepAlive::default()))
+	Ok(Sse::new(log_events(events, s.shutdown.clone())).keep_alive(KeepAlive::default()))
 }

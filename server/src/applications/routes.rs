@@ -492,36 +492,46 @@ pub async fn logs(
 	);
 	let events = client.stream(Method::GET, &path, None::<&()>).await?;
 
-	Ok(Sse::new(log_events(events)).keep_alive(KeepAlive::default()))
+	Ok(Sse::new(log_events(events, s.shutdown.clone())).keep_alive(KeepAlive::default()))
 }
 
 pub fn log_events(
 	events: BoxStream<'static, Result<proto::Event, ServerError>>,
+	shutdown: tokio_util::sync::CancellationToken,
 ) -> impl Stream<Item = Result<SseEvent, Infallible>> {
-	futures_util::stream::unfold(Some(events), |events| async move {
-		let mut events = events?;
-		loop {
-			match events.next().await {
-				Some(Ok(proto::Event::Log { stream, line })) => {
-					let data = serde_json::json!({ "stream": stream, "line": line }).to_string();
-					return Some((
-						Ok(SseEvent::default().event("log").data(data)),
-						Some(events),
-					));
+	futures_util::stream::unfold(Some(events), move |events| {
+		let shutdown = shutdown.clone();
+		async move {
+			let mut events = events?;
+			loop {
+				let next = tokio::select! {
+					biased;
+					() = shutdown.cancelled() => None,
+					next = events.next() => next,
+				};
+				match next {
+					Some(Ok(proto::Event::Log { stream, line })) => {
+						let data =
+							serde_json::json!({ "stream": stream, "line": line }).to_string();
+						return Some((
+							Ok(SseEvent::default().event("log").data(data)),
+							Some(events),
+						));
+					}
+					Some(Ok(proto::Event::Failed { message })) => {
+						warn!("container log stream failed: {message}");
+						break;
+					}
+					Some(Err(e)) => {
+						warn!("container log stream failed: {e}");
+						break;
+					}
+					Some(Ok(proto::Event::Done)) | None => break,
+					Some(Ok(_)) => {}
 				}
-				Some(Ok(proto::Event::Failed { message })) => {
-					warn!("container log stream failed: {message}");
-					break;
-				}
-				Some(Err(e)) => {
-					warn!("container log stream failed: {e}");
-					break;
-				}
-				Some(Ok(proto::Event::Done)) | None => break,
-				Some(Ok(_)) => {}
 			}
+			Some((Ok(SseEvent::default().event("end")), None))
 		}
-		Some((Ok(SseEvent::default().event("end")), None))
 	})
 }
 
