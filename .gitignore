@@ -20,3 +20,6 @@ config.toml
 
 # pre-commit
 .pre-commit-config.yaml
+
+# Secrets
+secrets/

@@ -4,13 +4,14 @@
 
 ```sh
 devenv up            # postgres + other services, see devenv.nix
-cargo run -p server
+cargo run -p agent -- --data-dir /tmp/pk/agent
+LOCAL_AGENT_SOCKET=/tmp/pk/agent/agent.sock cargo run -p server
 ```
 
-Requires `git`, `ssh`, a reachable Podman socket
-(`systemctl --user enable --now podman.socket` for rootless), and (for
-`nixpacks`-strategy builds) the `nixpacks` CLI on `PATH`. See
-`.env.example` for required environment variables.
+Run the last two commands in separate terminals. Requires `git`, `ssh`, a
+reachable Podman socket (`systemctl --user enable --now podman.socket` for
+rootless), and (for `nixpacks`-strategy builds) the `nixpacks` CLI on the
+agent's `PATH`. See `.env.example` for required environment variables.
 
 For the dashboard:
 
@@ -39,12 +40,12 @@ Pre-commit hooks (rustfmt, nixfmt) run automatically via `devenv`'s
 
 ## Database changes
 
-Migrations live in `crates/database/migrations`. Every `NNNN_name.up.sql`
+Migrations live in `server/migrations`. Every `NNNN_name.up.sql`
 needs a matching `.down.sql`. Add/update the `sqlx` query cache after
-schema changes:
+schema or query changes:
 
 ```sh
-cargo sqlx prepare --workspace
+cargo sqlx prepare --workspace -- --all-targets
 ```
 
 CI runs with `SQLX_OFFLINE=true` against the committed `.sqlx/` cache, so

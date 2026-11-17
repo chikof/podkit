@@ -9,14 +9,15 @@ services:
       - podkit
     secrets:
       - db-password
-      - redis-password
     environment:
       - DATABASE_URL=postgres://postgres@database/podkit
-      - REDIS_URL=redis://:$(cat /run/secrets/redis-password)@redis:6379
+      - LOCAL_AGENT_SOCKET=/run/podkit/agent.sock
+      - DATA_DIR=/var/lib/podkit
+    volumes:
+      - ${HOME}/.podkit/agent.sock:/run/podkit/agent.sock
+      - podkit-data:/var/lib/podkit
     depends_on:
       database:
-        condition: service_healthy
-      redis:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -53,39 +54,13 @@ services:
           cpus: "1.0"
           memory: 512M
 
-  redis:
-    image: docker.dragonflydb.io/dragonflydb/dragonfly
-    restart: always
-    secrets:
-      - redis-password
-    volumes:
-      - podkit-redis:/data
-    entrypoint:
-      - /bin/sh
-      - -c
-      - exec dragonfly --requirepass "$$(cat /run/secrets/redis-password)"
-    networks:
-      - podkit
-    healthcheck:
-      test: ["CMD", "redis-cli", "-a", "$$(cat /run/secrets/redis-password)", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: "0.5"
-          memory: 256M
-
 volumes:
   podkit-db:
-  podkit-redis:
+  podkit-data:
 
 secrets:
   db-password:
     file: secrets/db-password.txt
-  redis-password:
-    file: secrets/redis-password.txt
 
 networks:
   podkit:
