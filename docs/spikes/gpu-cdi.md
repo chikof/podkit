@@ -83,3 +83,13 @@ Not tested. The host has `/dev/kfd` (rw for all) and `/dev/dri/renderD128/129`
 `devices: [{path_on_host: "/dev/kfd"}, {path_on_host: "/dev/dri"}]`
 without CDI. AMD can also use CDI (`amd.com/gpu=all`), but this host has no
 spec for it. Out of scope for this spike.
+
+## In the product
+
+`DeploySpec.gpus` (`proto::GpuRequest`) maps to the working variant above in
+`agent::podman::gpu_devices`: NVIDIA becomes `nvidia.com/gpu=all|<index>|<uuid>`,
+AMD becomes `/dev/kfd` plus `/dev/dri` (or `/dev/dri/<renderNode>`). No
+`group_add` is set for AMD; that is still untested. Before creating the
+container the agent refuses with a `Failed` event when the host has no
+`nvidia.com/gpu` CDI spec (or no `/dev/kfd` for AMD). `servers::gpu_capable`
+reads the stored inventory for the control plane.

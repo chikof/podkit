@@ -112,6 +112,41 @@ pub struct DeploySpec {
 	pub strategy: Strategy,
 	/// Traefik settings for the server.
 	pub ingress: Ingress,
+	/// GPUs to hand to the container; `None` for none. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub gpus: Option<GpuRequest>,
+}
+
+/// GPUs a container asks for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GpuRequest {
+	/// Whose GPUs.
+	pub vendor: GpuVendor,
+	/// Which of them.
+	pub devices: GpuDevices,
+}
+
+/// GPU vendor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GpuVendor {
+	/// NVIDIA, through CDI (`nvidia.com/gpu=...`).
+	Nvidia,
+	/// AMD, through `/dev/kfd` and `/dev/dri`.
+	Amd,
+}
+
+/// Which GPUs of a vendor.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GpuDevices {
+	/// Every GPU.
+	All,
+	/// The first `n` GPUs (NVIDIA only).
+	Count(u32),
+	/// Specific devices: indices or UUIDs for NVIDIA, render node names
+	/// (`renderD128`) for AMD.
+	Ids(Vec<String>),
 }
 
 /// Image source of a deploy.
@@ -433,6 +468,45 @@ pub struct ErrorBody {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	const OLD_DEPLOY: &str = r#"{
+		"service": "app-1", "instance_id": 3,
+		"source": {"type": "image", "reference": "alpine:3", "pull": true},
+		"env": [], "command": null, "container_port": null, "routing": null,
+		"network_aliases": [], "volumes": [], "published_ports": [],
+		"memory_bytes": null, "cpu_cores": null, "strategy": "rolling",
+		"ingress": {"http_port": 80, "https_port": 443, "acme_email": null}
+	}"#;
+
+	#[test]
+	fn deploy_spec_without_gpus_still_deserializes() {
+		let spec: DeploySpec = serde_json::from_str(OLD_DEPLOY).unwrap();
+		assert_eq!(spec.gpus, None);
+		// `None` is not written, so older agents accept new payloads without gpus.
+		assert!(!serde_json::to_string(&spec).unwrap().contains("gpus"));
+	}
+
+	#[test]
+	fn gpu_request_wire_format() {
+		let with = |gpus: &str| {
+			let json = OLD_DEPLOY.replacen('{', &format!("{{\"gpus\": {gpus},"), 1);
+			serde_json::from_str::<DeploySpec>(&json).unwrap().gpus
+		};
+		let want = |vendor, devices| Some(GpuRequest { vendor, devices });
+		assert_eq!(
+			with(r#"{"vendor": "nvidia", "devices": "all"}"#),
+			want(GpuVendor::Nvidia, GpuDevices::All)
+		);
+		assert_eq!(
+			with(r#"{"vendor": "nvidia", "devices": {"count": 2}}"#),
+			want(GpuVendor::Nvidia, GpuDevices::Count(2))
+		);
+		assert_eq!(
+			with(r#"{"vendor": "amd", "devices": {"ids": ["renderD128"]}}"#),
+			want(GpuVendor::Amd, GpuDevices::Ids(vec!["renderD128".into()]))
+		);
+		assert_eq!(with("null"), None);
+	}
 
 	#[test]
 	fn events_use_snake_case_type_tags() {

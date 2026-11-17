@@ -240,6 +240,12 @@ pub fn parse_cdi_kind(text: &str) -> Option<String> {
 	})
 }
 
+/// Spec files (`*.yaml`, `*.yml`, `*.json`) in the standard CDI directories.
+#[must_use]
+pub fn host_cdi() -> Cdi {
+	read_cdi(&CDI_DIRS.map(PathBuf::from))
+}
+
 /// Spec files (`*.yaml`, `*.yml`, `*.json`) in `dirs`. `available` is true
 /// when there is at least one; `devices` lists their distinct kinds.
 #[must_use]

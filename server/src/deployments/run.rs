@@ -233,6 +233,7 @@ async fn build_spec(
 			.map(|mb| i64::from(mb) * 1024 * 1024),
 		cpu_cores: application.cpu_limit.map(f64::from),
 		strategy,
+		gpus: None,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,
