@@ -14,6 +14,7 @@ use crate::state::AppState;
 
 pub mod permission;
 mod routes;
+pub mod service;
 pub mod session;
 
 pub use routes::{Credentials, log_in, log_out, router};
@@ -103,6 +104,49 @@ pub mod users {
 		)
 		.fetch_one(db)
 		.await
+	}
+
+	/// Advisory-lock key serializing "is this the first user?" decisions.
+	const FIRST_USER_LOCK: i64 = 0x706f_646b_6974;
+
+	/// True when at least one account exists.
+	pub async fn any(db: impl PgExecutor<'_>) -> Result<bool, sqlx::Error> {
+		sqlx::query_scalar!(r#"SELECT EXISTS (SELECT 1 FROM users) AS "exists!""#)
+			.fetch_one(db)
+			.await
+	}
+
+	/// Inserts the user only while the table is empty; `None` when it isn't.
+	/// Concurrent callers queue on an advisory lock, so the later ones see the
+	/// first one's row (a bare `INSERT .. WHERE NOT EXISTS` would let two
+	/// transactions both see an empty table under READ COMMITTED).
+	pub async fn insert_if_no_users(
+		db: &sqlx::PgPool,
+		name: &str,
+		email: &str,
+		password_hash: &str,
+	) -> Result<Option<User>, sqlx::Error> {
+		let mut tx = db.begin().await?;
+		sqlx::query!("SELECT pg_advisory_xact_lock($1)", FIRST_USER_LOCK)
+			.execute(&mut *tx)
+			.await?;
+		let user = sqlx::query_as!(
+			User,
+			r#"
+				INSERT INTO users (id, name, email, password_hash)
+				SELECT $1, $2, $3, $4
+				WHERE NOT EXISTS (SELECT 1 FROM users)
+				RETURNING id AS "id: UserId", password_hash
+			"#,
+			UserId::generate().0,
+			name,
+			email,
+			password_hash
+		)
+		.fetch_optional(&mut *tx)
+		.await?;
+		tx.commit().await?;
+		Ok(user)
 	}
 
 	/// The display name shown in the web UI header.
@@ -563,3 +607,9 @@ mod email {
 }
 
 use email::validate_email;
+
+/// An email as stored by registration (domain lowercased) when it is valid,
+/// else the input unchanged, so a lookup finds what sign-up stored.
+pub(crate) fn normalize_email_lenient(raw: &str) -> String {
+	validate_email(raw.trim()).map_or_else(|_| raw.to_owned(), email::ValidatedEmail::normalize)
+}

@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use tower_cookies::{Cookie, Cookies, cookie::SameSite};
 use zeroize::Zeroizing;
 
-use super::{AuthUser, SessionToken, session, users, validate_email};
+use super::{AuthUser, SessionToken, service, session, users};
 use crate::{error::ServerError, state::AppState};
 
 pub fn router() -> Router<AppState> {
@@ -34,31 +34,22 @@ async fn register(
 	State(s): State<AppState>,
 	Json(body): Json<RegisterRequest>,
 ) -> Result<StatusCode, ServerError> {
-	let email = validate_email(&body.email)
-		.map_err(|e| ServerError::Validation(e.to_string()))?
-		.normalize();
-
-	let password_hash = crypto::hash(Zeroizing::new(body.password))
-		.await
-		.map_err(|e| hashing_failed(&e))?;
-
-	users::insert(&s.db, &body.name, &email, &password_hash)
-		.await
-		.map_err(|e| {
-			if crate::db::is_unique_violation(&e, users::EMAIL_UNIQUE) {
-				ServerError::EmailTaken
-			} else {
-				e.into()
-			}
-		})?;
+	service::register(
+		&s.db,
+		s.config.registration,
+		&body.name,
+		&body.email,
+		&body.password,
+	)
+	.await?;
 
 	Ok(StatusCode::CREATED)
 }
 
 #[derive(Deserialize)]
 pub struct Credentials {
-	email: String,
-	password: String,
+	pub email: String,
+	pub password: String,
 }
 
 #[derive(Serialize)]

@@ -52,6 +52,23 @@ runtime with `format!`; those get no CSS and nothing reports it. It also can't
 tell when a class generates the wrong CSS: encre-css 0.21.1's `divide-y` puts
 its border on the wrong side, so use row borders instead.
 
+### Who can sign up
+
+`REGISTRATION` (or `registration` in `config.toml`) decides who may create an
+account, through `/register` and `POST /api/v1/auth/register` alike:
+
+- `first-user` (the default): only while no account exists. On a homelab the
+  first person to register is the admin, and from then on sign-up answers
+  `403 registration is closed`. To bring in teammates, set `open` while they
+  sign up, then switch back and add them from the team's Members page (there
+  are no email invites yet).
+- `open`: anyone may sign up. Set this for a hosted instance.
+- `closed`: nobody may.
+
+An instance reachable from the internet with the default policy lets a
+stranger become the admin if they register before you do, so create your
+account right after the first start.
+
 Sign-in works over plain HTTP, for example in a homelab, but the password and
 session then cross the network unencrypted. Behind an HTTPS reverse proxy
 that sets `X-Forwarded-Proto: https`, the session cookie is also marked

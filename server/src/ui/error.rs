@@ -20,6 +20,13 @@ struct View {
 
 fn view(err: &ServerError) -> View {
 	let status = err.status();
+	if matches!(err, ServerError::RegistrationClosed) {
+		return View {
+			status,
+			title: "Registration is closed",
+			message: err.to_string(),
+		};
+	}
 	match status {
 		StatusCode::NOT_FOUND => View {
 			status,

@@ -44,6 +44,9 @@ pub enum ServerError {
 	#[error("{0}")]
 	Conflict(String),
 
+	#[error("registration is closed")]
+	RegistrationClosed,
+
 	#[error("project not found")]
 	ProjectNotFound,
 
@@ -135,7 +138,7 @@ impl ServerError {
 			| Self::VolumeNotFound
 			| Self::BackupNotFound
 			| Self::BackupTargetNotFound => StatusCode::NOT_FOUND,
-			Self::Forbidden => StatusCode::FORBIDDEN,
+			Self::Forbidden | Self::RegistrationClosed => StatusCode::FORBIDDEN,
 			Self::AgentUnavailable => StatusCode::BAD_GATEWAY,
 		}
 	}
