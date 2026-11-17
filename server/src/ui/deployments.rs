@@ -134,15 +134,9 @@ async fn stop(
 	ctx: TeamCtx,
 	Path((_, project, app)): Path<(TeamId, ProjectId, ApplicationId)>,
 ) -> Response {
-	let result = async {
-		service::stop(&s, ctx.user.id, ctx.team.id, project, app).await?;
-		crate::applications::service::get(&s.db, ctx.user.id, ctx.team.id, project, app).await
-	}
-	.await;
-	match result {
-		Ok(view) => sse::patch(&actions(&ctx, &view))
-			.and(sse::toast("Stopped"))
-			.into_response(),
+	// The header, the history and the status badge all change: start over.
+	match service::stop(&s, ctx.user.id, ctx.team.id, project, app).await {
+		Ok(_) => sse::reload().into_response(),
 		Err(e) => fail(&e),
 	}
 }
