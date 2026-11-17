@@ -33,6 +33,7 @@ const DEFAULT_PREFIX: &str = "podkit-";
 pub fn router(ctx: Arc<Ctx>) -> Router {
 	Router::new()
 		.route("/v1/health", get(health))
+		.route("/v1/hardware", get(hardware))
 		.route("/v1/deploy", post(deploy_route))
 		.route("/v1/containers", get(list_containers))
 		.route("/v1/containers/{id}/start", post(start_container))
@@ -136,6 +137,12 @@ async fn health(State(ctx): State<Arc<Ctx>>) -> Result<Json<Health>, ApiError> {
 		version: env!("CARGO_PKG_VERSION").to_string(),
 		podman_version,
 	}))
+}
+
+/// Never fails: parts the host cannot report are empty.
+async fn hardware(State(ctx): State<Arc<Ctx>>) -> Json<proto::Hardware> {
+	let graph_root = ctx.podman().graph_root().await.ok().flatten();
+	Json(crate::hardware::collect(graph_root.as_deref(), &ctx.data_dir).await)
 }
 
 async fn deploy_route(State(ctx): State<Arc<Ctx>>, Json(spec): Json<DeploySpec>) -> Response {

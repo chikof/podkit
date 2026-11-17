@@ -1,0 +1,2 @@
+ALTER TABLE servers DROP COLUMN IF EXISTS hardware_at;
+ALTER TABLE servers DROP COLUMN IF EXISTS hardware;

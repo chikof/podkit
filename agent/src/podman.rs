@@ -124,6 +124,14 @@ impl Podman {
 		Ok(self.docker.version().await?.version.unwrap_or_default())
 	}
 
+	/// Podman's storage root (images and volumes live below it), when it says.
+	///
+	/// # Errors
+	/// Podman is unreachable.
+	pub async fn graph_root(&self) -> Result<Option<String>, PodmanError> {
+		Ok(self.docker.info().await?.docker_root_dir)
+	}
+
 	/// Creates the network unless it exists.
 	///
 	/// # Errors

@@ -1,6 +1,7 @@
 //! Servers: podman hosts a team can deploy to. The local one is created with the team.
 
 pub mod bootstrap;
+pub mod hardware;
 mod routes;
 pub mod sync;
 
@@ -65,6 +66,10 @@ pub struct Server {
 	pub arch: Option<String>,
 	/// Why the server is not `active`, when known.
 	pub status_message: Option<String>,
+	/// Latest hardware snapshot from the agent.
+	pub hardware: Option<sqlx::types::Json<proto::Hardware>>,
+	/// When `hardware` was taken.
+	pub hardware_at: Option<time::OffsetDateTime>,
 }
 
 impl Server {
@@ -95,6 +100,8 @@ impl Server {
 			agent_version: None,
 			arch: None,
 			status_message: None,
+			hardware: None,
+			hardware_at: None,
 		}
 	}
 }
@@ -171,7 +178,8 @@ pub async fn find(
 			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
 				ssh_user, ssh_private_key, podman_socket_path, is_local,
 				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
-				arch, status_message
+				arch, status_message,
+				hardware AS "hardware?: sqlx::types::Json<proto::Hardware>", hardware_at
 			FROM servers
 			WHERE id = $1
 		"#,
@@ -191,7 +199,8 @@ pub async fn list_by_team(
 			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
 				ssh_user, ssh_private_key, podman_socket_path, is_local,
 				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
-				arch, status_message
+				arch, status_message,
+				hardware AS "hardware?: sqlx::types::Json<proto::Hardware>", hardware_at
 			FROM servers
 			WHERE team_id = $1
 		"#,
@@ -209,7 +218,8 @@ pub async fn list_for_sync(db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Server>,
 			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
 				ssh_user, ssh_private_key, podman_socket_path, is_local,
 				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
-				arch, status_message
+				arch, status_message,
+				hardware AS "hardware?: sqlx::types::Json<proto::Hardware>", hardware_at
 			FROM servers
 			WHERE status = 'active' OR is_local OR (status = 'unreachable' AND agent_version IS NOT NULL)
 		"#

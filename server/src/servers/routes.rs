@@ -67,6 +67,10 @@ struct ServerResponse {
 	agent_version: Option<String>,
 	arch: Option<String>,
 	host_key_fingerprint: Option<String>,
+	/// Latest snapshot from the agent; `None` until the first fetch succeeds.
+	hardware: Option<proto::Hardware>,
+	/// RFC 3339 time of `hardware`.
+	hardware_at: Option<String>,
 }
 
 impl From<&Server> for ServerResponse {
@@ -85,6 +89,11 @@ impl From<&Server> for ServerResponse {
 			agent_version: server.agent_version.clone(),
 			arch: server.arch.clone(),
 			host_key_fingerprint: server.host_key.as_deref().and_then(host_key_fingerprint),
+			hardware: server.hardware.as_ref().map(|h| h.0.clone()),
+			hardware_at: server.hardware_at.and_then(|t| {
+				t.format(&time::format_description::well_known::Rfc3339)
+					.ok()
+			}),
 		}
 	}
 }

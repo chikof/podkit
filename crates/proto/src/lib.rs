@@ -15,6 +15,72 @@ pub struct Health {
 	pub podman_version: String,
 }
 
+/// `GET /v1/hardware` response: a snapshot of what the host offers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Hardware {
+	/// Processor.
+	pub cpu: Cpu,
+	/// RAM.
+	pub memory: Memory,
+	/// The Podman graph root and the agent data dir (one entry each, when they differ).
+	pub disks: Vec<Disk>,
+	/// Detected GPUs, NVIDIA first.
+	pub gpus: Vec<Gpu>,
+	/// CDI specs on the host.
+	pub cdi: Cdi,
+}
+
+/// Processor.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Cpu {
+	/// Model name as the kernel reports it.
+	pub model: String,
+	/// Logical CPUs.
+	pub threads: u32,
+}
+
+/// RAM.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Memory {
+	/// Total, in MB.
+	pub total_mb: u64,
+	/// Available without swapping, in MB.
+	pub available_mb: u64,
+}
+
+/// Space on the filesystem holding `path`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Disk {
+	/// Directory the figures are for.
+	pub path: String,
+	/// Free to unprivileged users, in MB.
+	pub free_mb: u64,
+	/// Total, in MB.
+	pub total_mb: u64,
+}
+
+/// One GPU.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Gpu {
+	/// `nvidia` or `amd`.
+	pub vendor: String,
+	/// Marketing name.
+	pub name: String,
+	/// Total VRAM, in MB.
+	pub vram_mb: u64,
+	/// `None` when the source cannot tell (AMD sysfs without `mem_info_vram_used`).
+	pub vram_used_mb: Option<u64>,
+}
+
+/// Container Device Interface specs found on the host.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Cdi {
+	/// True when `/etc/cdi` or `/var/run/cdi` hold at least one spec file.
+	pub available: bool,
+	/// The spec files' `kind`s, e.g. `nvidia.com/gpu`.
+	pub devices: Vec<String>,
+}
+
 /// `POST /v1/deploy` body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploySpec {
