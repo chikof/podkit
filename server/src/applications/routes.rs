@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 
 use axum::extract::{Path, Query, State};
-use axum::http::{Method, StatusCode};
+use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::routing::{delete, get, post};
@@ -13,11 +13,9 @@ use tracing::warn;
 
 use super::service::{self, AppInput, ApplicationView};
 use crate::auth::AuthUser;
-use crate::auth::permission::{Action, Resource, authorize};
-use crate::deployments::{self, DeploymentResponse, DeploymentStatus};
+use crate::deployments::{self, DeploymentResponse};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ApplicationId, ProjectId, ServerId, TeamId};
-use crate::scope;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -255,28 +253,7 @@ pub async fn stop(
 	user: AuthUser,
 	Path((team, project, id)): Path<(TeamId, ProjectId, ApplicationId)>,
 ) -> AppResult<Json<DeploymentResponse>> {
-	authorize(&s.db, user.id, team, Action::Update, Resource::Deployment).await?;
-	let app = scope::application(&s.db, team, project, id).await?;
-
-	let current = deployments::latest_running(&s.db, app.id)
-		.await?
-		.ok_or_else(|| {
-			ServerError::Validation("application is not currently running".to_string())
-		})?;
-	let Some(container_id) = current.container_id.as_deref() else {
-		return Err(ServerError::Validation(
-			"running deployment has no container recorded".to_string(),
-		));
-	};
-
-	let server = scope::server(&s.db, team, app.server_id).await?;
-	let client = s.agents.client(&s, &server).await?;
-	client
-		.send(Method::POST, &format!("/v1/containers/{container_id}/stop"))
-		.await?;
-
-	let stopped =
-		deployments::set_status(&s.db, current.id, DeploymentStatus::Stopped, None).await?;
+	let stopped = deployments::service::stop(&s, user.id, team, project, id).await?;
 	Ok(Json(DeploymentResponse::from(&stopped)))
 }
 
@@ -287,8 +264,6 @@ pub struct LogsParams {
 	#[serde(default = "default_follow")]
 	follow: bool,
 }
-
-const MAX_TAIL: u32 = 5000;
 
 fn default_tail() -> u32 {
 	200
@@ -308,28 +283,16 @@ pub async fn logs(
 	Path((team, project, id)): Path<(TeamId, ProjectId, ApplicationId)>,
 	Query(params): Query<LogsParams>,
 ) -> AppResult<impl IntoResponse> {
-	authorize(&s.db, user.id, team, Action::Read, Resource::Application).await?;
-	let app = scope::application(&s.db, team, project, id).await?;
-
-	let current = deployments::latest_running(&s.db, app.id)
-		.await?
-		.ok_or_else(|| {
-			ServerError::Validation("application is not currently running".to_string())
-		})?;
-	let Some(container_id) = current.container_id.as_deref() else {
-		return Err(ServerError::Validation(
-			"running deployment has no container recorded".to_string(),
-		));
-	};
-
-	let server = scope::server(&s.db, team, app.server_id).await?;
-	let client = s.agents.client(&s, &server).await?;
-	let path = format!(
-		"/v1/containers/{container_id}/logs?tail={}&follow={}",
-		params.tail.min(MAX_TAIL),
-		params.follow
-	);
-	let events = client.stream(Method::GET, &path, None::<&()>).await?;
+	let events = deployments::service::runtime_log(
+		&s,
+		user.id,
+		team,
+		project,
+		id,
+		params.tail,
+		params.follow,
+	)
+	.await?;
 
 	Ok(Sse::new(log_events(events, s.shutdown.clone())).keep_alive(KeepAlive::default()))
 }
@@ -416,23 +379,7 @@ pub async fn restart(
 	user: AuthUser,
 	Path((team, project, id)): Path<(TeamId, ProjectId, ApplicationId)>,
 ) -> AppResult<(StatusCode, Json<DeploymentResponse>)> {
-	authorize(&s.db, user.id, team, Action::Create, Resource::Deployment).await?;
-	let app = scope::application(&s.db, team, project, id).await?;
-
-	// Newest build with an image, regardless of whether it's currently
-	// Stopped, Failed (a later attempt failed but an earlier one still has a
-	// usable image), or even still Running (restarting a healthy app is a
-	// valid "just in case").
-	let target = deployments::latest_with_image(&s.db, app.id)
-		.await?
-		.ok_or_else(|| {
-			ServerError::Validation(
-				"no previous successful build to restart from, trigger a deploy instead"
-					.to_string(),
-			)
-		})?;
-
-	let deployment = deployments::queue(&s, &app, Some(user.id), Some(&target)).await?;
+	let deployment = deployments::service::restart(&s, user.id, team, project, id).await?;
 
 	Ok((
 		StatusCode::ACCEPTED,

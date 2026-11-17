@@ -91,7 +91,7 @@ fn origin(headers: &HeaderMap) -> String {
 	format!("{proto}://{host}")
 }
 
-fn crumbs<'a>(ctx: &TeamCtx, project: &'a Project, last: &'a str) -> Vec<Crumb<'a>> {
+pub(super) fn crumbs<'a>(ctx: &TeamCtx, project: &'a Project, last: &'a str) -> Vec<Crumb<'a>> {
 	vec![
 		("Projects", Some(format!("/teams/{}/projects", ctx.team.id))),
 		(
@@ -407,8 +407,10 @@ async fn create(
 // --- overview and settings ---------------------------------------------------
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Tab {
+pub(super) enum Tab {
 	Overview,
+	Deployments,
+	Logs,
 	Settings,
 }
 
@@ -431,6 +433,12 @@ fn tabs(ctx: &TeamCtx, app: &ApplicationView, active: Tab) -> Markup {
 	html! {
 		nav class="flex gap-1 border-b border-border" aria-label="Application" {
 			a class=(class(Tab::Overview)) href=(base) { "Overview" }
+			@if ctx.perms.can(Action::Read, Resource::Deployment) {
+				a class=(class(Tab::Deployments)) href={ (base) "/deployments" } { "Deployments" }
+			}
+			@if ctx.perms.can(Action::Read, Resource::Application) {
+				a class=(class(Tab::Logs)) href={ (base) "/logs" } { "Logs" }
+			}
 			@if can_configure {
 				a class=(class(Tab::Settings)) href={ (base) "/settings" } { "Settings" }
 			}
@@ -438,7 +446,7 @@ fn tabs(ctx: &TeamCtx, app: &ApplicationView, active: Tab) -> Markup {
 	}
 }
 
-fn shell(
+pub(super) fn shell(
 	s: &AppState,
 	ctx: &TeamCtx,
 	project: &Project,
@@ -448,17 +456,20 @@ fn shell(
 ) -> Markup {
 	let body = html! {
 		(header_card(s, app))
+		(super::deployments::actions(ctx, app))
 		(tabs(ctx, app, active))
 		(content)
 	};
 	let title = match active {
 		Tab::Overview => app.name.clone(),
+		Tab::Deployments => format!("Deployments · {}", app.name),
+		Tab::Logs => format!("Logs · {}", app.name),
 		Tab::Settings => format!("Settings · {}", app.name),
 	};
 	app_page(ctx, &title, &crumbs(ctx, project, &app.name), &body)
 }
 
-async fn load(
+pub(super) async fn load(
 	s: &AppState,
 	ctx: &TeamCtx,
 	project: ProjectId,

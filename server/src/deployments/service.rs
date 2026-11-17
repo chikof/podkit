@@ -1,0 +1,436 @@
+//! Deployment use cases shared by the JSON API and the web UI: authorize,
+//! then scope, then validate, then touch the database or the agent.
+
+use axum::http::Method;
+use futures_util::stream::BoxStream;
+use sqlx::PgPool;
+use time::OffsetDateTime;
+
+use super::{Deployment, DeploymentStatus};
+use crate::applications::Application;
+use crate::auth::permission::{Action, Resource, authorize};
+use crate::deployments;
+use crate::error::{AppResult, ServerError};
+use crate::ids::{ApplicationId, DeploymentId, JobId, ProjectId, TeamId, UserId};
+use crate::jobs::{self, JobKind};
+use crate::scope;
+use crate::state::AppState;
+
+/// The most container log lines one request may replay.
+pub const MAX_TAIL: u32 = 5000;
+
+/// What started a deployment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Trigger {
+	/// Someone clicked Deploy, Restart or Rollback.
+	User,
+	/// A push to the git provider, which has no acting user.
+	Webhook,
+}
+
+/// A deployment as the UI lists it: its row plus who started it and when.
+#[derive(Debug, Clone)]
+pub struct DeploymentView {
+	pub id: DeploymentId,
+	pub status: DeploymentStatus,
+	pub commit_sha: Option<String>,
+	/// Whether a built image exists, which is what a rollback needs.
+	pub has_image: bool,
+	pub error_message: Option<String>,
+	pub trigger: Trigger,
+	pub created_at: OffsetDateTime,
+	pub started_at: Option<OffsetDateTime>,
+	pub finished_at: Option<OffsetDateTime>,
+}
+
+impl DeploymentView {
+	/// Queued, building or deploying: it can still change and can be cancelled.
+	#[must_use]
+	pub fn in_flight(&self) -> bool {
+		matches!(
+			self.status,
+			DeploymentStatus::Queued | DeploymentStatus::Building | DeploymentStatus::Deploying
+		)
+	}
+
+	/// Cancel is offered while the build has not finished.
+	#[must_use]
+	pub fn can_cancel(&self) -> bool {
+		matches!(
+			self.status,
+			DeploymentStatus::Queued | DeploymentStatus::Building
+		)
+	}
+
+	/// Rolling back to a deployment that built an image and is not what is
+	/// live now (or still on its way).
+	#[must_use]
+	pub fn can_rollback(&self) -> bool {
+		self.has_image && !self.in_flight() && self.status != DeploymentStatus::Running
+	}
+
+	/// How long the build and start took, once it has finished.
+	#[must_use]
+	pub fn duration(&self) -> Option<time::Duration> {
+		Some(self.finished_at? - self.started_at?)
+	}
+}
+
+#[derive(sqlx::FromRow)]
+struct Row {
+	id: DeploymentId,
+	status: DeploymentStatus,
+	commit_sha: Option<String>,
+	image_tag: Option<String>,
+	error_message: Option<String>,
+	triggered_by: Option<i64>,
+	created_at: OffsetDateTime,
+	started_at: Option<OffsetDateTime>,
+	finished_at: Option<OffsetDateTime>,
+}
+
+impl From<Row> for DeploymentView {
+	fn from(r: Row) -> Self {
+		Self {
+			id: r.id,
+			status: r.status,
+			commit_sha: r.commit_sha,
+			has_image: r.image_tag.is_some(),
+			error_message: r.error_message,
+			trigger: if r.triggered_by.is_some() {
+				Trigger::User
+			} else {
+				Trigger::Webhook
+			},
+			created_at: r.created_at,
+			started_at: r.started_at,
+			finished_at: r.finished_at,
+		}
+	}
+}
+
+async fn application(
+	db: &PgPool,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+	action: Action,
+	resource: Resource,
+) -> AppResult<Application> {
+	authorize(db, user, team, action, resource).await?;
+	scope::application(db, team, project, app).await
+}
+
+/// The application's deployments, newest first (the latest 50); needs
+/// `read deployment`.
+pub async fn list(
+	db: &PgPool,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+) -> AppResult<Vec<DeploymentView>> {
+	let app = application(
+		db,
+		user,
+		team,
+		project,
+		app,
+		Action::Read,
+		Resource::Deployment,
+	)
+	.await?;
+	let rows = sqlx::query_as::<_, Row>(
+		"SELECT id, status, commit_sha, image_tag, error_message, triggered_by, created_at, started_at, finished_at FROM deployments WHERE application_id = $1 ORDER BY id DESC LIMIT 50",
+	)
+	.bind(app.id.0)
+	.fetch_all(db)
+	.await?;
+	Ok(rows.into_iter().map(Into::into).collect())
+}
+
+/// One deployment of the application; needs `read deployment`.
+pub async fn get(
+	db: &PgPool,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+	id: DeploymentId,
+) -> AppResult<DeploymentView> {
+	let app = application(
+		db,
+		user,
+		team,
+		project,
+		app,
+		Action::Read,
+		Resource::Deployment,
+	)
+	.await?;
+	sqlx::query_as::<_, Row>(
+		"SELECT id, status, commit_sha, image_tag, error_message, triggered_by, created_at, started_at, finished_at FROM deployments WHERE id = $1 AND application_id = $2",
+	)
+	.bind(id.0)
+	.bind(app.id.0)
+	.fetch_optional(db)
+	.await?
+	.map(Into::into)
+	.ok_or(ServerError::DeploymentNotFound)
+}
+
+/// Queues a deploy of the application's source; needs `create deployment`.
+pub async fn deploy(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+) -> AppResult<Deployment> {
+	let app = application(
+		&s.db,
+		user,
+		team,
+		project,
+		app,
+		Action::Create,
+		Resource::Deployment,
+	)
+	.await?;
+	deployments::queue(s, &app, Some(user), None).await
+}
+
+/// Redeploys `id`'s built image as a new deployment; needs `create deployment`.
+pub async fn rollback(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+	id: DeploymentId,
+) -> AppResult<Deployment> {
+	let app = application(
+		&s.db,
+		user,
+		team,
+		project,
+		app,
+		Action::Create,
+		Resource::Deployment,
+	)
+	.await?;
+	let target = deployments::find(&s.db, app.id, id)
+		.await?
+		.ok_or(ServerError::DeploymentNotFound)?;
+	deployments::queue(s, &app, Some(user), Some(&target)).await
+}
+
+/// Cancels a deployment that is queued, building or deploying; needs
+/// `update deployment`.
+pub async fn cancel(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+	id: DeploymentId,
+) -> AppResult<Deployment> {
+	let app = application(
+		&s.db,
+		user,
+		team,
+		project,
+		app,
+		Action::Update,
+		Resource::Deployment,
+	)
+	.await?;
+	let d = deployments::find(&s.db, app.id, id)
+		.await?
+		.ok_or(ServerError::DeploymentNotFound)?;
+
+	let cancelled = match jobs::latest_for(&s.db, JobKind::Deploy, d.id.0).await? {
+		Some(job) => jobs::worker::cancel(s, job.id).await?,
+		None => false,
+	};
+	if !cancelled {
+		return Err(ServerError::Validation(
+			"deployment is not in progress".to_string(),
+		));
+	}
+	Ok(deployments::find(&s.db, app.id, id).await?.unwrap_or(d))
+}
+
+/// The job whose log is the deployment's build output, if it has one; needs
+/// `read deployment`.
+pub async fn build_log_job(
+	db: &PgPool,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+	id: DeploymentId,
+) -> AppResult<Option<JobId>> {
+	let app = application(
+		db,
+		user,
+		team,
+		project,
+		app,
+		Action::Read,
+		Resource::Deployment,
+	)
+	.await?;
+	let d = deployments::find(db, app.id, id)
+		.await?
+		.ok_or(ServerError::DeploymentNotFound)?;
+	Ok(jobs::latest_for(db, JobKind::Deploy, d.id.0)
+		.await?
+		.map(|j| j.id))
+}
+
+/// Stops the running deployment's container: a manual halt. The agent stops
+/// it before the row moves to `stopped`, so a failed stop can be retried.
+/// Needs `update deployment`.
+pub async fn stop(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+) -> AppResult<Deployment> {
+	let app = application(
+		&s.db,
+		user,
+		team,
+		project,
+		app,
+		Action::Update,
+		Resource::Deployment,
+	)
+	.await?;
+
+	let current = deployments::latest_running(&s.db, app.id)
+		.await?
+		.ok_or_else(|| {
+			ServerError::Validation("application is not currently running".to_string())
+		})?;
+	let Some(container_id) = current.container_id.as_deref() else {
+		return Err(ServerError::Validation(
+			"running deployment has no container recorded".to_string(),
+		));
+	};
+
+	let server = scope::server(&s.db, team, app.server_id).await?;
+	let client = s.agents.client(s, &server).await?;
+	client
+		.send(Method::POST, &format!("/v1/containers/{container_id}/stop"))
+		.await?;
+
+	Ok(deployments::set_status(&s.db, current.id, DeploymentStatus::Stopped, None).await?)
+}
+
+/// Brings the application back by redeploying its newest built image; no
+/// clone or rebuild. Needs `create deployment`, like rollback.
+///
+/// # Errors
+/// [`ServerError::Validation`] if the application never produced a build.
+pub async fn restart(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+) -> AppResult<Deployment> {
+	let app = application(
+		&s.db,
+		user,
+		team,
+		project,
+		app,
+		Action::Create,
+		Resource::Deployment,
+	)
+	.await?;
+
+	// Newest build with an image, whatever its state now: a later attempt
+	// may have failed while an earlier one still has a usable image, and
+	// restarting a healthy app is a valid "just in case".
+	let target = deployments::latest_with_image(&s.db, app.id)
+		.await?
+		.ok_or_else(|| {
+			ServerError::Validation(
+				"no previous successful build to restart from, trigger a deploy instead"
+					.to_string(),
+			)
+		})?;
+	deployments::queue(s, &app, Some(user), Some(&target)).await
+}
+
+/// Whether a deployment of the application is running now; needs
+/// `read application`.
+pub async fn is_running(
+	db: &PgPool,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+) -> AppResult<bool> {
+	let app = application(
+		db,
+		user,
+		team,
+		project,
+		app,
+		Action::Read,
+		Resource::Application,
+	)
+	.await?;
+	Ok(deployments::latest_running(db, app.id).await?.is_some())
+}
+
+/// Opens the running container's log stream on its agent; needs
+/// `read application`. `tail` is capped at [`MAX_TAIL`].
+///
+/// # Errors
+/// [`ServerError::Validation`] if nothing is running.
+pub async fn runtime_log(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+	tail: u32,
+	follow: bool,
+) -> AppResult<BoxStream<'static, Result<proto::Event, ServerError>>> {
+	let app = application(
+		&s.db,
+		user,
+		team,
+		project,
+		app,
+		Action::Read,
+		Resource::Application,
+	)
+	.await?;
+
+	let current = deployments::latest_running(&s.db, app.id)
+		.await?
+		.ok_or_else(|| {
+			ServerError::Validation("application is not currently running".to_string())
+		})?;
+	let Some(container_id) = current.container_id.as_deref() else {
+		return Err(ServerError::Validation(
+			"running deployment has no container recorded".to_string(),
+		));
+	};
+
+	let server = scope::server(&s.db, team, app.server_id).await?;
+	let client = s.agents.client(s, &server).await?;
+	let path = format!(
+		"/v1/containers/{container_id}/logs?tail={}&follow={follow}",
+		tail.min(MAX_TAIL)
+	);
+	client.stream(Method::GET, &path, None::<&()>).await
+}

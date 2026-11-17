@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-SECTIONS=(shell applications)
+SECTIONS=(shell applications deployments)
 
 URL="${PODKIT_URL:-http://127.0.0.1:8080}"
 URL="${URL%/}"
@@ -147,6 +147,59 @@ section_applications() {
 	ui_post "$base/apps/$app/delete" "$(jq -n --arg s "$slug" '{confirm: $s}')"
 	grep -qF "window.location.assign" "$BODY" || fail "delete: no redirect"
 	expect_page "$base/apps/$app" "Not found" 404
+	api DELETE "/api/v1/teams/$TEAM/projects/$project" >/dev/null 2>&1 || true
+}
+
+# Deploys through the UI, then walks the deployment pages. Works without an
+# agent: the deployment is queued, then fails or stays queued, and the pages
+# and refusals are the same either way.
+section_deployments() {
+	local suffix="$RANDOM$RANDOM" project server app base slug form dep
+	slug="smoke-dep-$suffix"
+	project="$(api POST "/api/v1/teams/$TEAM/projects" \
+		"$(jq -n --arg s "smoke-d-$suffix" '{name: "Smoke deploys", slug: $s}')" | jq -er .id)"
+	server="$(api GET "/api/v1/teams/$TEAM/servers" |
+		jq -er '[.[] | select(.is_local and .status == "active")][0].id')" ||
+		fail "no active local server in team $TEAM"
+	base="/teams/$TEAM/projects/$project"
+	form="$(jq -n --arg slug "$slug" --arg server "$server" '{
+		name: "Smoke deploy", slug: $slug, server_id: $server,
+		repo_url: "https://example.invalid/smoke.git", git_ref: "main", deploy_key: "",
+		git_token: "", build_strategy: "dockerfile", dockerfile_path: "Dockerfile",
+		container_port: "3000", memory_limit_mb: "", cpu_limit: ""}')"
+	ui_post "$base/apps" "$form"
+	app="$(api GET "/api/v1/teams/$TEAM/projects/$project/applications" | jq -er --arg s "$slug" '.[] | select(.slug == $s) | .id')"
+	base="$base/apps/$app"
+
+	expect_page "$base/deployments" "Nothing has been deployed yet."
+	expect_page "$base/logs" "isn't running"
+	ui_post "$base/stop" '{}'
+	grep -qF 'not currently running' "$BODY" || fail "stop: no inline refusal: $(head -c 300 "$BODY")"
+	ui_post "$base/restart" '{}'
+	grep -qF 'no previous successful build' "$BODY" || fail "restart: no inline refusal: $(head -c 300 "$BODY")"
+	echo "ok   stop and restart refusals are inline"
+
+	ui_post "$base/deploy" '{}'
+	dep="$(grep -o "/deployments/[0-9]*'" "$BODY" | head -1 | tr -dc '0-9')"
+	[[ -n "$dep" ]] || fail "deploy: no redirect to the deployment page: $(head -c 300 "$BODY")"
+	echo "ok   POST $base/deploy (deployment $dep)"
+	expect_page "$base/deployments/$dep" "Deployment #$dep"
+	expect_page "$base/deployments" "Deployments"
+	expect_page "$base/deployments" "/deployments/$dep"
+	expect_page "$base/deployments/table" "deployments"
+	# The build log is a live stream; read it only until it ends or 3 seconds pass.
+	curl -sS -N --max-time 3 -o "$BODY" -b "$JAR" "$URL$base/deployments/$dep/log" || true
+	echo "ok   GET $base/deployments/$dep/log (stream opened)"
+
+	ui_post "$base/deployments/$dep/cancel" '{}'
+	grep -qE 'Cancelling|not in progress' "$BODY" || fail "cancel: unexpected answer: $(head -c 300 "$BODY")"
+	ui_post "$base/deployments/$dep/rollback" '{}'
+	grep -qE 'never produced an image|live or still in progress' "$BODY" ||
+		fail "rollback: not refused: $(head -c 300 "$BODY")"
+	expect_page "$base/deployments/0" "Not found" 404
+	echo "ok   cancel and rollback answer inline"
+
+	api DELETE "/api/v1/teams/$TEAM/projects/$project/applications/$app" >/dev/null 2>&1 || true
 	api DELETE "/api/v1/teams/$TEAM/projects/$project" >/dev/null 2>&1 || true
 }
 

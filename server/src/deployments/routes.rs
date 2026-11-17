@@ -5,12 +5,11 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use super::{Deployment, DeploymentStatus};
+use super::{Deployment, DeploymentStatus, service};
 use crate::auth::AuthUser;
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ApplicationId, DeploymentId, ProjectId, TeamId};
-use crate::jobs::{self, JobKind};
 use crate::state::AppState;
 use crate::{deployments, logs, scope};
 
@@ -65,10 +64,7 @@ async fn create(
 	user: AuthUser,
 	Path((team, project, app)): Path<(TeamId, ProjectId, ApplicationId)>,
 ) -> AppResult<(StatusCode, Json<DeploymentResponse>)> {
-	authorize(&s.db, user.id, team, Action::Create, Resource::Deployment).await?;
-	let app = scope::application(&s.db, team, project, app).await?;
-
-	let d = deployments::queue(&s, &app, Some(user.id), None).await?;
+	let d = service::deploy(&s, user.id, team, project, app).await?;
 	Ok((StatusCode::ACCEPTED, Json(DeploymentResponse::from(&d))))
 }
 
@@ -115,13 +111,7 @@ async fn rollback(
 	user: AuthUser,
 	Path((team, project, app, id)): Path<(TeamId, ProjectId, ApplicationId, DeploymentId)>,
 ) -> AppResult<(StatusCode, Json<DeploymentResponse>)> {
-	authorize(&s.db, user.id, team, Action::Create, Resource::Deployment).await?;
-	let app = scope::application(&s.db, team, project, app).await?;
-	let target = deployments::find(&s.db, app.id, id)
-		.await?
-		.ok_or(ServerError::DeploymentNotFound)?;
-
-	let d = deployments::queue(&s, &app, Some(user.id), Some(&target)).await?;
+	let d = service::rollback(&s, user.id, team, project, app, id).await?;
 	Ok((StatusCode::ACCEPTED, Json(DeploymentResponse::from(&d))))
 }
 
@@ -132,23 +122,7 @@ async fn cancel(
 	user: AuthUser,
 	Path((team, project, app, id)): Path<(TeamId, ProjectId, ApplicationId, DeploymentId)>,
 ) -> AppResult<(StatusCode, Json<DeploymentResponse>)> {
-	authorize(&s.db, user.id, team, Action::Update, Resource::Deployment).await?;
-	let app = scope::application(&s.db, team, project, app).await?;
-	let d = deployments::find(&s.db, app.id, id)
-		.await?
-		.ok_or(ServerError::DeploymentNotFound)?;
-
-	let cancelled = match jobs::latest_for(&s.db, JobKind::Deploy, d.id.0).await? {
-		Some(job) => jobs::worker::cancel(&s, job.id).await?,
-		None => false,
-	};
-	if !cancelled {
-		return Err(ServerError::Validation(
-			"deployment is not in progress".to_string(),
-		));
-	}
-
-	let d = deployments::find(&s.db, app.id, id).await?.unwrap_or(d);
+	let d = service::cancel(&s, user.id, team, project, app, id).await?;
 	Ok((StatusCode::ACCEPTED, Json(DeploymentResponse::from(&d))))
 }
 
@@ -159,12 +133,6 @@ async fn build_logs(
 	user: AuthUser,
 	Path((team, project, app, id)): Path<(TeamId, ProjectId, ApplicationId, DeploymentId)>,
 ) -> AppResult<impl IntoResponse> {
-	authorize(&s.db, user.id, team, Action::Read, Resource::Deployment).await?;
-	let app = scope::application(&s.db, team, project, app).await?;
-	let d = deployments::find(&s.db, app.id, id)
-		.await?
-		.ok_or(ServerError::DeploymentNotFound)?;
-
-	let job = jobs::latest_for(&s.db, JobKind::Deploy, d.id.0).await?;
-	Ok(logs::job_sse(&s, job.map(|j| j.id)))
+	let job = service::build_log_job(&s.db, user.id, team, project, app, id).await?;
+	Ok(logs::job_sse(&s, job))
 }

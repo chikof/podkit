@@ -4,6 +4,7 @@
 
 mod routes;
 pub mod run;
+pub mod service;
 
 use sqlx::PgExecutor;
 use time::OffsetDateTime;
