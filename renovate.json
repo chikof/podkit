@@ -1,8 +1,6 @@
 {
 	"$schema": "https://docs.renovatebot.com/renovate-schema.json",
-	"extends": [
-		"config:recommended"
-	],
+	"extends": ["config:recommended"],
 	"customManagers": [
 		{
 			"customType": "regex",
@@ -10,6 +8,14 @@
 			"matchStrings": ["\"docker\\.io/library/traefik:(?<currentValue>v[0-9.]+)\""],
 			"depNameTemplate": "traefik",
 			"datasourceTemplate": "docker"
+		}
+	],
+	"packageRules": [
+		{
+			"description": "SvelteKit and svelte-check need the TypeScript 6 JS API; TS 7 runs as the typescript7 alias",
+			"matchManagers": ["bun"],
+			"matchDepNames": ["typescript"],
+			"allowedVersions": "<7"
 		}
 	]
 }
