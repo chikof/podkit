@@ -16,7 +16,7 @@ use crate::logs::LogHub;
 use crate::state::{AppState, Config};
 
 pub async fn app(db: PgPool) -> Router {
-	crate::routes::routes(state(db), "").await.unwrap()
+	crate::routes::routes(state(db)).await.unwrap()
 }
 
 /// A full `AppState` over `db` with a throwaway data dir and no live agent.

@@ -41,6 +41,7 @@ mod scope;
 mod servers;
 mod state;
 mod teams;
+mod ui;
 mod validate;
 mod volumes;
 mod webhooks;
@@ -108,7 +109,7 @@ async fn main() -> AppResult<()> {
 	maintenance::spawn(state.clone());
 	tokio::spawn(signal_shutdown(shutdown.clone()));
 
-	let app = routes(state.clone(), &config.dashboard_origins).await?;
+	let app = routes(state.clone()).await?;
 	let listener = TcpListener::bind(&addr).await?;
 
 	info!("started http server on http://{addr}");

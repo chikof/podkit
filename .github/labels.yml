@@ -52,7 +52,7 @@
   description: crates/runtime, podman, ssh tunnel, nixpacks, traefik
 - name: "area: dashboard"
   color: "1d76db"
-  description: dashboard/ (SvelteKit)
+  description: server/src/ui (server-rendered web UI)
 - name: "area: ci"
   color: "1d76db"
   description: .github/, devenv.nix, build pipeline

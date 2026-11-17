@@ -13,26 +13,12 @@ reachable Podman socket (`systemctl --user enable --now podman.socket` for
 rootless), and (for `nixpacks`-strategy builds) the `nixpacks` CLI on the
 agent's `PATH`. See `.env.example` for required environment variables.
 
-For the dashboard:
-
-```sh
-cd dashboard
-bun install
-bun run dev
-```
-
 ## Before opening a PR
 
 ```sh
 cargo fmt --all
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
-```
-
-```sh
-cd dashboard
-bun run lint
-bun run check
 ```
 
 Pre-commit hooks (rustfmt, nixfmt) run automatically via `devenv`'s

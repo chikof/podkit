@@ -4,7 +4,6 @@
     resterm
     lazysql
     sccache
-    bun
     nixpacks
   ];
 
@@ -55,15 +54,6 @@
       enable = true;
       entry = "env SQLX_OFFLINE=true cargo clippy --workspace --all-targets --all-features -- -D warnings";
       pass_filenames = false;
-    };
-
-    dashboard-lint = {
-      enable = true;
-      name = "dashboard-lint";
-      entry = "bash -c 'cd dashboard && bun run lint'";
-      files = "^dashboard/.*\\.(ts|svelte|js|css|json)$";
-      pass_filenames = false;
-      language = "system";
     };
   };
 }

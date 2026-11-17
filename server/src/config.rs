@@ -51,16 +51,6 @@ pub struct ServerConfig {
 	#[config(env = "ACME_EMAIL")]
 	pub acme_email: Option<String>,
 
-	/// Comma-separated list of origins the dashboard (or any other browser
-	/// client) is served from; reflected as `Access-Control-Allow-Origin`
-	/// on the API's CORS layer. Defaults cover the `SvelteKit` dev/preview
-	/// servers (`vite dev` on 5173, `vite preview` on 4173).
-	#[config(
-		env = "DASHBOARD_ORIGINS",
-		default = "http://localhost:5173,http://localhost:4173"
-	)]
-	pub dashboard_origins: String,
-
 	/// Control-plane state directory; defaults to `dirs::data_dir()/podkit`.
 	#[config(env = "DATA_DIR")]
 	pub data_dir: Option<String>,

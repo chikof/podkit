@@ -9,13 +9,5 @@
 			"depNameTemplate": "traefik",
 			"datasourceTemplate": "docker"
 		}
-	],
-	"packageRules": [
-		{
-			"description": "SvelteKit and svelte-check need the TypeScript 6 JS API; svelte-check runs TS 7 from the @typescript/native alias",
-			"matchManagers": ["bun"],
-			"matchDepNames": ["typescript"],
-			"allowedVersions": "<7"
-		}
 	]
 }

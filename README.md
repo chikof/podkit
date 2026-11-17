@@ -34,6 +34,11 @@ rootless), and (for applications using the `nixpacks` build strategy) the
 `packages` for local dev). Dockerfile-strategy apps don't need it. See
 `.env.example` for required environment variables.
 
+The server also serves the web UI at <http://localhost:8080/>. It is plain
+HTML rendered by the server, made interactive with
+[Datastar](https://data-star.dev), so there is no separate front-end build.
+The session cookie is `Secure`, so sign in over HTTPS or on `localhost`.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Security issues: see

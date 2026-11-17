@@ -51,7 +51,7 @@ async fn register(
 }
 
 #[derive(Deserialize)]
-struct LoginRequest {
+pub struct Credentials {
 	email: String,
 	password: String,
 }
@@ -64,8 +64,19 @@ struct LoginResponse {
 async fn login(
 	State(s): State<AppState>,
 	cookies: Cookies,
-	Json(body): Json<LoginRequest>,
+	Json(body): Json<Credentials>,
 ) -> Result<Json<LoginResponse>, ServerError> {
+	let token = log_in(&s, &cookies, body).await?;
+	Ok(Json(LoginResponse { token }))
+}
+
+/// Verifies credentials, opens a session and sets the `session` cookie.
+/// Returns the session token.
+pub async fn log_in(
+	s: &AppState,
+	cookies: &Cookies,
+	body: Credentials,
+) -> Result<String, ServerError> {
 	let Some(user) = users::find_by_email(&s.db, &body.email).await? else {
 		// Run verify anyway to prevent timing-based user enumeration
 		crypto::verify(Zeroizing::new(body.password), crypto::DUMMY_HASH.clone())
@@ -93,7 +104,7 @@ async fn login(
 			.build(),
 	);
 
-	Ok(Json(LoginResponse { token }))
+	Ok(token)
 }
 
 async fn logout(
@@ -102,10 +113,15 @@ async fn logout(
 	_user: AuthUser,
 	SessionToken(token): SessionToken,
 ) -> Result<StatusCode, ServerError> {
-	session::revoke(&s.db, &token).await?;
+	log_out(&s, &cookies, &token).await?;
+	Ok(StatusCode::NO_CONTENT)
+}
+
+/// Revokes the session and clears the `session` cookie.
+pub async fn log_out(s: &AppState, cookies: &Cookies, token: &str) -> Result<(), ServerError> {
+	session::revoke(&s.db, token).await?;
 
 	// Removal only matches the cookie when the path is the one login set.
 	cookies.remove(Cookie::build(("session", "")).path("/").build());
-
-	Ok(StatusCode::NO_CONTENT)
+	Ok(())
 }

@@ -16,7 +16,7 @@ pub mod permission;
 mod routes;
 pub mod session;
 
-pub use routes::router;
+pub use routes::{Credentials, log_in, log_out, router};
 
 /// The authenticated caller, resolved from a live session.
 pub struct AuthUser {

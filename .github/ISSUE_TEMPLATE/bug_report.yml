@@ -41,8 +41,9 @@ body:
       label: Component
       multiple: true
       options:
-        - server (crates/core, crates/database, crates/runtime, server/)
-        - dashboard (SvelteKit)
+        - server (server/)
+        - agent (agent/)
+        - web UI (server/src/ui)
         - deploy/build pipeline (nixpacks, podman)
         - other/unsure
     validations:

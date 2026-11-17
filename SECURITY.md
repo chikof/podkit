@@ -13,7 +13,7 @@ open a public issue for a suspected vulnerability.
 Include:
 
 - Affected component (`server/`, `agent/`, `crates/proto`,
-  `crates/crypto`, `dashboard/`)
+  `crates/crypto`)
 - Reproduction steps or PoC
 - Impact as you understand it (e.g. auth bypass, secret disclosure, RCE
   via build/deploy path)
