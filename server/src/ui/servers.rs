@@ -266,6 +266,14 @@ async fn create(
 	}
 }
 
+/// The message line of one action. Each action card has its own signal, so a
+/// refusal shows only under the button that caused it.
+fn action_error(signal: &str) -> Markup {
+	html! {
+		p class="text-sm text-destructive" role="alert" "data-show"=(format!("${signal}")) "data-text"=(format!("${signal}")) style="display: none" {}
+	}
+}
+
 fn fact(label: &str, value: &Markup) -> Markup {
 	html! {
 		div class="flex flex-col gap-1 sm:flex-row sm:gap-4" {
@@ -351,7 +359,7 @@ fn delete_card(ctx: &TeamCtx, server: &Server) -> Markup {
 			div class="flex flex-col gap-4" {
 				p class="text-sm" { "Type " strong { (server.name) } " to confirm." }
 				input class=(INPUT) type="text" autocomplete="off" aria-label="Server name" "data-bind:confirm";
-				(form_error())
+				(action_error("_delete_error"))
 				div {
 					button type="button" class=(BUTTON_DANGER) "data-on:click"=(post) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Delete server" }
 				}
@@ -376,7 +384,7 @@ async fn detail(
 	let mut crumbs = crumbs(&ctx);
 	crumbs.push((server.name.as_str(), None));
 	let body = html! {
-		div class="flex flex-col gap-6" data-signals="{confirm: '', _reset: false, _error: ''}" {
+		div class="flex flex-col gap-6" data-signals="{confirm: '', _reset: false, _error: '', _delete_error: ''}" {
 			(card(&html! {
 				div class="flex flex-wrap items-center gap-3 px-6" {
 					h1 class="text-base leading-none font-semibold" { (server.name) }
@@ -475,13 +483,15 @@ async fn remove(
 	.await;
 	match result {
 		Ok(Some(_)) => sse::redirect(&list_url(ctx.team.id))
-			.and(sse::signals(&json!({ "confirm": "", "_error": "" })))
+			.and(sse::signals(&json!({ "confirm": "", "_delete_error": "" })))
 			.into_response(),
-		Ok(None) => {
-			sse::error("The name doesn't match. Type it exactly to confirm.").into_response()
-		}
-		Err(e) => error::action(&e),
+		Ok(None) => delete_error("The name doesn't match. Type it exactly to confirm."),
+		Err(e) => delete_error(&error::message(&e)),
 	}
+}
+
+fn delete_error(message: &str) -> Response {
+	sse::signals(&json!({ "_delete_error": message })).into_response()
 }
 
 #[cfg(test)]
