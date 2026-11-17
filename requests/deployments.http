@@ -1,8 +1,8 @@
 ### Trigger
 # @name Trigger
 # @capture file-secret deployment.id = response.json.id
-# Queues + spawns the build/run pipeline in the background; returns
-# immediately with status "queued". Poll Get below for progress.
+# Queues a Deploy job and returns immediately with status "queued". Poll
+# Get below for progress, or follow BuildLogs.
 POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments
 Authorization: Bearer {{auth.token}}
 
@@ -24,9 +24,19 @@ Authorization: Bearer {{auth.token}}
 POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/rollback
 Authorization: Bearer {{auth.token}}
 
-### Logs
-# @name Logs
-# Buffered snapshot of the deployment's container stdout/stderr (no
-# live-follow yet). Empty array before a container exists (queued/building).
-GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/logs?tail=200
+### Cancel
+# @name Cancel
+# Cancels a deployment that is still queued or in progress. 202 with the
+# deployment; 400 "deployment is not in progress" once it has finished.
+POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/cancel
 Authorization: Bearer {{auth.token}}
+
+### BuildLogs
+# @name BuildLogs
+# Server-sent events with the deployment's clone/build/start output:
+# `event: log` lines (data is {"seq","ts","stream","line"}), replayed from
+# the start and then live, ending with `event: end`. Runtime logs of the
+# running container are GET .../applications/{id}/logs.
+GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/build-logs
+Authorization: Bearer {{auth.token}}
+Accept: text/event-stream

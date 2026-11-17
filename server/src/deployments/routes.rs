@@ -1,8 +1,8 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use runtime::{ContainerId, ContainerRuntime, LogsQuery, ServerConnection};
 use serde::{Deserialize, Serialize};
 
 use super::{Deployment, DeploymentStatus};
@@ -10,8 +10,9 @@ use crate::auth::AuthUser;
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ApplicationId, DeploymentId, ProjectId, TeamId};
+use crate::jobs::{self, JobKind};
 use crate::state::AppState;
-use crate::{deploy_pipeline, deployments, scope};
+use crate::{deployments, logs, scope};
 
 const DEFAULT_PAGE_SIZE: i64 = 50;
 const MAX_PAGE_SIZE: i64 = 200;
@@ -21,7 +22,8 @@ pub fn router() -> Router<AppState> {
 		.route("/", post(create).get(list))
 		.route("/{deployment_id}", get(get_one))
 		.route("/{deployment_id}/rollback", post(rollback))
-		.route("/{deployment_id}/logs", get(logs))
+		.route("/{deployment_id}/cancel", post(cancel))
+		.route("/{deployment_id}/build-logs", get(build_logs))
 }
 
 #[derive(Serialize)]
@@ -55,16 +57,9 @@ struct ListParams {
 	before: Option<DeploymentId>,
 }
 
-#[derive(Deserialize)]
-struct LogsParams {
-	/// `None` returns every buffered line; `Some(n)` returns the last `n`.
-	#[serde(default)]
-	tail: Option<u32>,
-}
-
-/// Triggers a new deployment: queues the row and hands the actual build +
-/// run pipeline to a background task, returning immediately. Poll `GET
-/// .../deployments/{id}` for status.
+/// Triggers a new deployment: queues the row and its Deploy job, returning
+/// immediately. Poll `GET .../deployments/{id}` for status, or follow
+/// `.../build-logs`.
 async fn create(
 	State(s): State<AppState>,
 	user: AuthUser,
@@ -73,7 +68,7 @@ async fn create(
 	authorize(&s.db, user.id, team, Action::Create, Resource::Deployment).await?;
 	let app = scope::application(&s.db, team, project, app).await?;
 
-	let d = deploy_pipeline::queue_and_spawn(&s, app, Some(user.id)).await?;
+	let d = deployments::queue(&s, &app, Some(user.id), None).await?;
 	Ok((StatusCode::ACCEPTED, Json(DeploymentResponse::from(&d))))
 }
 
@@ -126,53 +121,50 @@ async fn rollback(
 		.await?
 		.ok_or(ServerError::DeploymentNotFound)?;
 
-	let d = deploy_pipeline::queue_rollback_and_spawn(&s, app, &target, Some(user.id)).await?;
+	let d = deployments::queue(&s, &app, Some(user.id), Some(&target)).await?;
 	Ok((StatusCode::ACCEPTED, Json(DeploymentResponse::from(&d))))
 }
 
-/// Fetches a buffered snapshot of the deployment's container stdout/stderr
-/// (`ContainerRuntime::logs`; no live-follow). Returns an empty list before
-/// the container exists yet (still `queued`/`building`), rather than
-/// erroring, so callers should poll this the same way as `GET
-/// .../deployments/{id}`.
-async fn logs(
+/// Cancels a deployment that is still queued, building or deploying. The
+/// job worker moves the row to `cancelled` once the agent stream is dropped.
+async fn cancel(
 	State(s): State<AppState>,
 	user: AuthUser,
 	Path((team, project, app, id)): Path<(TeamId, ProjectId, ApplicationId, DeploymentId)>,
-	Query(params): Query<LogsParams>,
-) -> AppResult<Json<Vec<String>>> {
+) -> AppResult<(StatusCode, Json<DeploymentResponse>)> {
+	authorize(&s.db, user.id, team, Action::Update, Resource::Deployment).await?;
+	let app = scope::application(&s.db, team, project, app).await?;
+	let d = deployments::find(&s.db, app.id, id)
+		.await?
+		.ok_or(ServerError::DeploymentNotFound)?;
+
+	let cancelled = match jobs::latest_for(&s.db, JobKind::Deploy, d.id.0).await? {
+		Some(job) => jobs::worker::cancel(&s, job.id).await?,
+		None => false,
+	};
+	if !cancelled {
+		return Err(ServerError::Validation(
+			"deployment is not in progress".to_string(),
+		));
+	}
+
+	let d = deployments::find(&s.db, app.id, id).await?.unwrap_or(d);
+	Ok((StatusCode::ACCEPTED, Json(DeploymentResponse::from(&d))))
+}
+
+/// Streams the deployment's clone/build/start output as server-sent events:
+/// everything logged so far, then live lines until the job ends.
+async fn build_logs(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, project, app, id)): Path<(TeamId, ProjectId, ApplicationId, DeploymentId)>,
+) -> AppResult<impl IntoResponse> {
 	authorize(&s.db, user.id, team, Action::Read, Resource::Deployment).await?;
 	let app = scope::application(&s.db, team, project, app).await?;
 	let d = deployments::find(&s.db, app.id, id)
 		.await?
 		.ok_or(ServerError::DeploymentNotFound)?;
 
-	let Some(container_id) = d.container_id else {
-		return Ok(Json(Vec::new()));
-	};
-
-	let server = scope::server(&s.db, team, app.server_id).await?;
-	let connection = ServerConnection::connect(&server.connect_target(), &s.secrets)
-		.await
-		.map_err(|e| {
-			tracing::warn!(server = %server.id, "failed to connect to server: {e}");
-			ServerError::AgentUnavailable
-		})?;
-
-	let lines = connection
-		.runtime
-		.logs(
-			&ContainerId(container_id),
-			LogsQuery {
-				tail: params.tail,
-				..LogsQuery::default()
-			},
-		)
-		.await
-		.map_err(|e| {
-			tracing::warn!(deployment = %d.id, "failed to read container logs: {e}");
-			ServerError::AgentUnavailable
-		})?;
-
-	Ok(Json(lines))
+	let job = jobs::latest_for(&s.db, JobKind::Deploy, d.id.0).await?;
+	Ok(logs::job_sse(&s, job.map(|j| j.id)))
 }

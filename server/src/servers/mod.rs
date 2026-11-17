@@ -1,11 +1,14 @@
 //! Servers: podman hosts a team can deploy to. The local one is created with the team.
 
+pub mod bootstrap;
 mod routes;
+pub mod sync;
 
 pub use routes::router;
 
-use crypto::age::SecretBox;
-use runtime::{ConnectTarget, ContainerRuntime, ServerConnection};
+use base64::Engine;
+use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD};
+use sha2::{Digest, Sha256};
 
 use crate::ids::{ServerId, TeamId};
 
@@ -14,11 +17,11 @@ use crate::ids::{ServerId, TeamId};
 #[sqlx(type_name = "varchar", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum ServerStatus {
-	/// Remote server registered, connectivity probe not yet confirmed.
+	/// Remote server registered, agent not yet installed.
 	Pending,
-	/// Reachable and ready to run containers.
+	/// Agent reachable and ready to run containers.
 	Active,
-	/// Was active, most recent probe/op failed.
+	/// Was active, most recent health check or bootstrap failed.
 	Unreachable,
 }
 
@@ -52,22 +55,20 @@ pub struct Server {
 	/// True for the podkit host itself; false for SSH-reached hosts.
 	pub is_local: bool,
 	pub status: ServerStatus,
+	/// Pinned `known_hosts` line(s), scanned by the first bootstrap.
+	pub host_key: Option<String>,
+	/// The agent's unix socket on the remote host. `None` until bootstrapped.
+	pub agent_socket_path: Option<String>,
+	/// Version the installed agent reported at the last bootstrap.
+	pub agent_version: Option<String>,
+	/// `uname -m` of the remote host, as found at the last bootstrap.
+	pub arch: Option<String>,
+	/// Why the server is not `active`, when known.
+	pub status_message: Option<String>,
 }
 
 impl Server {
-	/// The connection parameters `runtime` needs to reach this server.
-	pub fn connect_target(&self) -> ConnectTarget<'_> {
-		ConnectTarget {
-			is_local: self.is_local,
-			hostname: &self.hostname,
-			ssh_port: self.ssh_port,
-			ssh_user: self.ssh_user.as_deref(),
-			ssh_private_key: self.ssh_private_key.as_deref(),
-			podman_socket_path: &self.podman_socket_path,
-		}
-	}
-
-	/// Builds a remote server pending its first connectivity probe.
+	/// Builds a remote server pending its first bootstrap.
 	#[allow(clippy::too_many_arguments)]
 	pub fn new_remote(
 		team_id: TeamId,
@@ -89,6 +90,11 @@ impl Server {
 			podman_socket_path,
 			is_local: false,
 			status: ServerStatus::Pending,
+			host_key: None,
+			agent_socket_path: None,
+			agent_version: None,
+			arch: None,
+			status_message: None,
 		}
 	}
 }
@@ -110,12 +116,26 @@ fn getuid() -> u32 {
 	unsafe { getuid() }
 }
 
-/// Probes ssh and podman API reachability of `server`.
-pub async fn probe(server: &Server, secrets: &SecretBox) -> bool {
-	match ServerConnection::connect(&server.connect_target(), secrets).await {
-		Ok(connection) => connection.runtime.ping().await.is_ok(),
-		Err(_) => false,
-	}
+/// `SHA256:<unpadded base64>` of the pinned key blob, as `ssh-keygen -lf` prints
+/// it. Prefers the `ssh-ed25519` line, else the first key line. `None` when no
+/// line holds a decodable key.
+pub fn host_key_fingerprint(host_key: &str) -> Option<String> {
+	let lines = || {
+		host_key
+			.lines()
+			.map(str::trim)
+			.filter(|l| !l.is_empty() && !l.starts_with('#'))
+	};
+	let line = lines()
+		.find(|l| l.split_whitespace().any(|t| t == "ssh-ed25519"))
+		.or_else(|| lines().next())?;
+	let mut tokens = line.split_whitespace();
+	tokens.find(|t| t.starts_with("ssh-") || t.starts_with("ecdsa-") || t.starts_with("sk-"))?;
+	let blob = STANDARD.decode(tokens.next()?).ok()?;
+	Some(format!(
+		"SHA256:{}",
+		STANDARD_NO_PAD.encode(Sha256::digest(blob))
+	))
 }
 
 pub async fn insert(db: impl sqlx::PgExecutor<'_>, server: &Server) -> Result<(), sqlx::Error> {
@@ -141,6 +161,26 @@ pub async fn insert(db: impl sqlx::PgExecutor<'_>, server: &Server) -> Result<()
 	Ok(())
 }
 
+pub async fn find(
+	db: impl sqlx::PgExecutor<'_>,
+	id: ServerId,
+) -> Result<Option<Server>, sqlx::Error> {
+	sqlx::query_as!(
+		Server,
+		r#"
+			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
+				ssh_user, ssh_private_key, podman_socket_path, is_local,
+				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
+				arch, status_message
+			FROM servers
+			WHERE id = $1
+		"#,
+		id as ServerId
+	)
+	.fetch_optional(db)
+	.await
+}
+
 pub async fn list_by_team(
 	db: impl sqlx::PgExecutor<'_>,
 	team: TeamId,
@@ -150,7 +190,8 @@ pub async fn list_by_team(
 		r#"
 			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
 				ssh_user, ssh_private_key, podman_socket_path, is_local,
-				status AS "status: ServerStatus"
+				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
+				arch, status_message
 			FROM servers
 			WHERE team_id = $1
 		"#,
@@ -158,6 +199,103 @@ pub async fn list_by_team(
 	)
 	.fetch_all(db)
 	.await
+}
+
+/// Servers the status sync checks: every active one plus all local ones.
+pub async fn list_for_sync(db: impl sqlx::PgExecutor<'_>) -> Result<Vec<Server>, sqlx::Error> {
+	sqlx::query_as!(
+		Server,
+		r#"
+			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
+				ssh_user, ssh_private_key, podman_socket_path, is_local,
+				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
+				arch, status_message
+			FROM servers
+			WHERE status = 'active' OR is_local OR (status = 'unreachable' AND agent_version IS NOT NULL)
+		"#
+	)
+	.fetch_all(db)
+	.await
+}
+
+pub async fn set_host_key(
+	db: impl sqlx::PgExecutor<'_>,
+	id: ServerId,
+	host_key: Option<&str>,
+) -> Result<(), sqlx::Error> {
+	sqlx::query!(
+		"UPDATE servers SET host_key = $2 WHERE id = $1",
+		id as ServerId,
+		host_key
+	)
+	.execute(db)
+	.await?;
+	Ok(())
+}
+
+pub async fn set_agent_socket_path(
+	db: impl sqlx::PgExecutor<'_>,
+	id: ServerId,
+	path: &str,
+) -> Result<(), sqlx::Error> {
+	sqlx::query!(
+		"UPDATE servers SET agent_socket_path = $2 WHERE id = $1",
+		id as ServerId,
+		path
+	)
+	.execute(db)
+	.await?;
+	Ok(())
+}
+
+/// Records a finished bootstrap: the agent answered with the expected version.
+pub async fn mark_bootstrapped(
+	db: impl sqlx::PgExecutor<'_>,
+	id: ServerId,
+	agent_version: &str,
+	arch: &str,
+) -> Result<(), sqlx::Error> {
+	sqlx::query!(
+		"UPDATE servers SET status = 'active', agent_version = $2, arch = $3, status_message = NULL WHERE id = $1",
+		id as ServerId,
+		agent_version,
+		arch
+	)
+	.execute(db)
+	.await?;
+	Ok(())
+}
+
+/// Writes only when something changes, so the 30 s sync does not churn rows.
+pub async fn mark_unreachable(
+	db: impl sqlx::PgExecutor<'_>,
+	id: ServerId,
+	message: &str,
+) -> Result<(), sqlx::Error> {
+	sqlx::query!(
+		r#"
+			UPDATE servers SET status = 'unreachable', status_message = $2
+			WHERE id = $1 AND (status <> 'unreachable' OR status_message IS DISTINCT FROM $2)
+		"#,
+		id as ServerId,
+		message
+	)
+	.execute(db)
+	.await?;
+	Ok(())
+}
+
+pub async fn mark_active(db: impl sqlx::PgExecutor<'_>, id: ServerId) -> Result<(), sqlx::Error> {
+	sqlx::query!(
+		r#"
+			UPDATE servers SET status = 'active', status_message = NULL
+			WHERE id = $1 AND (status <> 'active' OR status_message IS NOT NULL)
+		"#,
+		id as ServerId
+	)
+	.execute(db)
+	.await?;
+	Ok(())
 }
 
 pub async fn delete(
@@ -173,4 +311,41 @@ pub async fn delete(
 	.execute(db)
 	.await?;
 	Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	const ED25519: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIJchJVs7z1tmicd4SpMN5UdQGOeEF7c+3zkUwGLv44BI";
+	const ED25519_FP: &str = "SHA256:ywBw9jYLna1cd5Li260999IYfpxB/BrS/G6GhT1Xkwg";
+	const ECDSA: &str = "AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBC0zD4CZuHNU8aoHB/3WyovTEJm6iAtrq5ekzPOGCImXBltH3T+gigNYNhKvdeuC4OKk0eY2ttw9/S86rp3vSbg=";
+	const ECDSA_FP: &str = "SHA256:FqUVfbXpKVRSXQGtouPKGojmEQVz6t/VNKnlHfvejQ0";
+
+	#[test]
+	fn fingerprint_matches_ssh_keygen() {
+		let line = format!("10.0.0.5 ssh-ed25519 {ED25519}");
+		assert_eq!(host_key_fingerprint(&line).as_deref(), Some(ED25519_FP));
+	}
+
+	#[test]
+	fn fingerprint_prefers_ed25519_over_earlier_lines() {
+		let keys = format!(
+			"# 10.0.0.5:22 SSH-2.0-OpenSSH_9.6\n10.0.0.5 ecdsa-sha2-nistp256 {ECDSA}\n10.0.0.5 ssh-ed25519 {ED25519}"
+		);
+		assert_eq!(host_key_fingerprint(&keys).as_deref(), Some(ED25519_FP));
+	}
+
+	#[test]
+	fn fingerprint_falls_back_to_first_key_line() {
+		let keys = format!("# banner\n[10.0.0.5]:2222 ecdsa-sha2-nistp256 {ECDSA}");
+		assert_eq!(host_key_fingerprint(&keys).as_deref(), Some(ECDSA_FP));
+	}
+
+	#[test]
+	fn fingerprint_rejects_garbage() {
+		assert_eq!(host_key_fingerprint(""), None);
+		assert_eq!(host_key_fingerprint("host ssh-ed25519 !!!notbase64"), None);
+		assert_eq!(host_key_fingerprint("host"), None);
+	}
 }

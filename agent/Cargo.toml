@@ -1,0 +1,39 @@
+[package]
+name = "agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "agent"
+path = "src/lib.rs"
+
+[[bin]]
+name = "podkit-agent"
+path = "src/main.rs"
+
+[dependencies]
+proto.workspace = true
+tokio.workspace = true
+axum.workspace = true
+bollard.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+better-tracing.workspace = true
+tempfile.workspace = true
+tar.workspace = true
+futures-util.workspace = true
+tokio-util = { workspace = true, features = ["io"] }
+bytes.workspace = true
+sha2.workspace = true
+base64.workspace = true
+flate2.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

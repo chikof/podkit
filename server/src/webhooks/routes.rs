@@ -11,7 +11,7 @@ use super::{header, is_authorized};
 use crate::error::{AppResult, ServerError};
 use crate::ids::ApplicationId;
 use crate::state::AppState;
-use crate::{applications, deploy_pipeline};
+use crate::{applications, deployments};
 
 pub fn router() -> Router<AppState> {
 	Router::new().route("/deploy/{application_id}", post(deploy))
@@ -61,6 +61,6 @@ async fn deploy(
 		return Ok(Json(Ignored { ignored: true }).into_response());
 	}
 
-	deploy_pipeline::queue_and_spawn(&s, application, None).await?;
+	deployments::queue(&s, &application, None, None).await?;
 	Ok(StatusCode::ACCEPTED.into_response())
 }

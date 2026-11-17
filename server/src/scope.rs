@@ -59,7 +59,8 @@ pub async fn server(db: &PgPool, team: TeamId, id: ServerId) -> AppResult<Server
 		r#"
 			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
 				ssh_user, ssh_private_key, podman_socket_path, is_local,
-				status AS "status: ServerStatus"
+				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
+				arch, status_message
 			FROM servers
 			WHERE id = $2 AND team_id = $1
 		"#,

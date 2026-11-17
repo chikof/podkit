@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE deployments SET status = 'crashed', error_message = $2, finished_at = NOW() WHERE id = $1 AND status = 'running'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d1078e04b62f6f995a4e82c97ee23a1f9ea2975edc7a5673e0e409e2daf25c45"
+}

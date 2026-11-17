@@ -1,13 +1,15 @@
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
 use axum::routing::{delete, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use super::{Server, ServerStatus, probe};
+use super::{Server, ServerStatus, host_key_fingerprint};
 use crate::auth::AuthUser;
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ServerId, TeamId};
+use crate::jobs::{self, JobKind};
 use crate::state::AppState;
 use crate::{scope, validate};
 
@@ -15,14 +17,19 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.route("/", post(create).get(list))
 		.route("/{server_id}", delete(remove))
+		.route("/{server_id}/bootstrap", post(bootstrap))
 }
 
 fn default_ssh_port() -> i32 {
 	22
 }
 
+// `%t` is a systemd specifier: `/run` in system units (root), `$XDG_RUNTIME_DIR` in user
+// units. One default so the rendered unit points at the right podman socket in both modes.
+const DEFAULT_PODMAN_SOCKET_PATH: &str = "%t/podman/podman.sock";
+
 fn default_podman_socket_path() -> String {
-	"/run/podman/podman.sock".to_string()
+	DEFAULT_PODMAN_SOCKET_PATH.to_string()
 }
 
 #[derive(Deserialize)]
@@ -38,6 +45,13 @@ struct CreateServerRequest {
 	podman_socket_path: String,
 }
 
+#[derive(Deserialize)]
+struct BootstrapQuery {
+	/// Forget the pinned host key and scan it again (the host was reinstalled).
+	#[serde(default)]
+	reset_host_key: bool,
+}
+
 #[derive(Serialize)]
 struct ServerResponse {
 	id: ServerId,
@@ -49,6 +63,10 @@ struct ServerResponse {
 	podman_socket_path: String,
 	is_local: bool,
 	status: ServerStatus,
+	status_message: Option<String>,
+	agent_version: Option<String>,
+	arch: Option<String>,
+	host_key_fingerprint: Option<String>,
 }
 
 impl From<&Server> for ServerResponse {
@@ -63,6 +81,10 @@ impl From<&Server> for ServerResponse {
 			podman_socket_path: server.podman_socket_path.clone(),
 			is_local: server.is_local,
 			status: server.status,
+			status_message: server.status_message.clone(),
+			agent_version: server.agent_version.clone(),
+			arch: server.arch.clone(),
+			host_key_fingerprint: server.host_key.as_deref().and_then(host_key_fingerprint),
 		}
 	}
 }
@@ -72,19 +94,29 @@ struct DeleteServerResponse {
 	id: ServerId,
 }
 
+async fn enqueue_bootstrap(s: &AppState, server: &Server) -> AppResult<()> {
+	jobs::enqueue(
+		s,
+		JobKind::ServerBootstrap,
+		server.id,
+		server.id.0,
+		format!("server:{}", server.id),
+	)
+	.await?;
+	Ok(())
+}
+
 /// Registers a remote server for a team. The team's local server is
 /// provisioned automatically on team creation and cannot be created here.
 ///
-/// Probes connectivity over ssh and the podman API immediately: on
-/// success the server is marked `active`, otherwise it's persisted
-/// `pending` so the caller can fix access and retry later rather than
-/// losing the registration outright.
+/// The server is stored `pending` and a bootstrap job installs the agent in
+/// the background; poll the server list for the outcome.
 async fn create(
 	State(s): State<AppState>,
 	user: AuthUser,
 	Path(team): Path<TeamId>,
 	Json(body): Json<CreateServerRequest>,
-) -> AppResult<Json<ServerResponse>> {
+) -> AppResult<(StatusCode, Json<ServerResponse>)> {
 	authorize(&s.db, user.id, team, Action::Create, Resource::Server).await?;
 
 	if !validate::server_host(&body.hostname) {
@@ -93,7 +125,9 @@ async fn create(
 	if !validate::ssh_user(&body.ssh_user) {
 		return Err(ServerError::Validation("invalid ssh_user".to_string()));
 	}
-	if !validate::abs_path(&body.podman_socket_path) {
+	if !(validate::abs_path(&body.podman_socket_path)
+		|| body.podman_socket_path == DEFAULT_PODMAN_SOCKET_PATH)
+	{
 		return Err(ServerError::Validation(
 			"invalid podman_socket_path".to_string(),
 		));
@@ -104,7 +138,7 @@ async fn create(
 		.encrypt(&body.ssh_private_key)
 		.map_err(|e| ServerError::Validation(format!("failed to encrypt ssh key: {e}")))?;
 
-	let mut server = Server::new_remote(
+	let server = Server::new_remote(
 		team,
 		body.name,
 		body.hostname,
@@ -114,15 +148,10 @@ async fn create(
 		body.podman_socket_path,
 	);
 
-	if probe(&server, &s.secrets).await {
-		server.status = ServerStatus::Active;
-	} else {
-		tracing::warn!(server = %server.name, "server registered but connectivity probe failed, leaving pending");
-	}
-
 	super::insert(&s.db, &server).await?;
+	enqueue_bootstrap(&s, &server).await?;
 
-	Ok(Json(ServerResponse::from(&server)))
+	Ok((StatusCode::ACCEPTED, Json(ServerResponse::from(&server))))
 }
 
 /// Lists servers under a team; caller must hold `read server` on that team.
@@ -135,6 +164,32 @@ async fn list(
 
 	let servers = super::list_by_team(&s.db, team).await?;
 	Ok(Json(servers.iter().map(ServerResponse::from).collect()))
+}
+
+/// Re-runs the bootstrap job: reinstalls the agent and refreshes the unit
+/// file. The local server's agent is run by the operator, never by podkit.
+async fn bootstrap(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, id)): Path<(TeamId, ServerId)>,
+	Query(query): Query<BootstrapQuery>,
+) -> AppResult<(StatusCode, Json<ServerResponse>)> {
+	authorize(&s.db, user.id, team, Action::Update, Resource::Server).await?;
+	let mut server = scope::server(&s.db, team, id).await?;
+
+	if server.is_local {
+		return Err(ServerError::Validation(
+			"local server agent is managed by the operator".to_string(),
+		));
+	}
+
+	if query.reset_host_key {
+		super::set_host_key(&s.db, server.id, None).await?;
+		server.host_key = None;
+	}
+	enqueue_bootstrap(&s, &server).await?;
+
+	Ok((StatusCode::ACCEPTED, Json(ServerResponse::from(&server))))
 }
 
 /// Deletes a remote server. The team's local server (`is_local`) cannot be
@@ -152,6 +207,7 @@ async fn remove(
 	}
 
 	super::delete(&s.db, team, server.id).await?;
+	s.agents.forget(server.id);
 
 	Ok(Json(DeleteServerResponse { id: server.id }))
 }

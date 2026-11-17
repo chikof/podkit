@@ -7,6 +7,8 @@ Authorization: Bearer {{auth.token}}
 
 ### Create remote
 # @name Create
+# note: returns 202 with status `pending`; a bootstrap job installs the agent.
+# Poll List until status is `active` (read status_message on failure).
 # @capture file-secret server.id = response.json.id
 POST {{base.url}}/teams/{{team.id}}/servers
 Authorization: Bearer {{auth.token}}
@@ -18,6 +20,13 @@ Content-Type: application/json
   "ssh_user": "deploy",
   "ssh_private_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nfakefakefake\n-----END OPENSSH PRIVATE KEY-----"
 }
+
+### Bootstrap (reinstall / upgrade the agent)
+# @name Bootstrap
+# note: add ?reset_host_key=true after reinstalling the host to re-pin its ssh
+# host key; compare host_key_fingerprint with `ssh-keygen -lf` first.
+POST {{base.url}}/teams/{{team.id}}/servers/{{server.id}}/bootstrap
+Authorization: Bearer {{auth.token}}
 
 ### Delete
 # @name Delete

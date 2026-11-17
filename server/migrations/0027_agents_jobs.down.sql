@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS jobs;
+ALTER TABLE servers DROP COLUMN IF EXISTS status_message;
+ALTER TABLE servers DROP COLUMN IF EXISTS arch;
+ALTER TABLE servers DROP COLUMN IF EXISTS agent_version;
+ALTER TABLE servers DROP COLUMN IF EXISTS agent_socket_path;
+ALTER TABLE servers DROP COLUMN IF EXISTS host_key;

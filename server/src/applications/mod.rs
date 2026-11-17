@@ -37,15 +37,6 @@ impl BuildStrategy {
 	}
 }
 
-impl From<BuildStrategy> for runtime::BuildStrategy {
-	fn from(b: BuildStrategy) -> Self {
-		match b {
-			BuildStrategy::Dockerfile => Self::Dockerfile,
-			BuildStrategy::Nixpacks => Self::Nixpacks,
-		}
-	}
-}
-
 /// Row from the `applications` table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Application {
@@ -190,7 +181,7 @@ pub async fn update(
 }
 
 /// Lookup by id alone, with no team check. Only for callers without a team
-/// context (webhooks, deploy pipeline); handlers use `scope::application`.
+/// context (webhooks, the deploy job); handlers use `scope::application`.
 pub async fn find_by_id(
 	db: impl sqlx::PgExecutor<'_>,
 	id: ApplicationId,

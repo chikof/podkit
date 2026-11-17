@@ -4,6 +4,8 @@
 # @capture file-secret application.webhook_secret = response.json.webhook_secret
 # note: server.id comes from servers.http Create, or use the team's
 # auto-provisioned `local` server — GET servers List and pick is_local=true.
+# deploy_key is for ssh:// repo URLs, git_token (e.g. a GitHub PAT) for
+# https:// ones of private repos; leave both empty for public repos.
 POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications
 Authorization: Bearer {{auth.token}}
 Content-Type: application/json
@@ -15,7 +17,8 @@ Content-Type: application/json
   "repo_url": "https://github.com/example/repo.git",
   "git_ref": "main",
   "container_port": 3000,
-  "deploy_key": ""
+  "deploy_key": "",
+  "git_token": ""
 }
 
 ### List
@@ -27,7 +30,7 @@ Authorization: Bearer {{auth.token}}
 # @name Update
 # Everything except server_id is editable (moving servers isn't a config
 # edit). Applies on the next deploy — a running container isn't touched.
-# deploy_key omitted/empty leaves the stored key untouched.
+# deploy_key / git_token omitted/empty leave the stored credential untouched.
 PATCH {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}
 Authorization: Bearer {{auth.token}}
 Content-Type: application/json
@@ -42,9 +45,9 @@ Content-Type: application/json
 
 ### Stop
 # @name Stop
-# Halts the currently running deployment (stops + removes its container).
-# 400s if the application isn't currently running. Use Restart to bring it
-# back — this does not delete anything, deployment history is untouched.
+# Halts the currently running deployment (stops its container; the agent
+# won't restart it). 400s if the application isn't currently running. Use
+# Restart to bring it back — this does not delete anything, deployment history is untouched.
 POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/stop
 Authorization: Bearer {{auth.token}}
 
@@ -55,6 +58,16 @@ Authorization: Bearer {{auth.token}}
 # application has never produced a build.
 POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/restart
 Authorization: Bearer {{auth.token}}
+
+### Logs
+# @name Logs
+# Server-sent events with the running container's stdout/stderr, proxied
+# from the server agent: `event: log` (data is {"stream","line"}) and a
+# final `event: end`. tail is capped at 5000; follow=false ends after the
+# tail. 400s if the application isn't currently running.
+GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/logs?tail=200&follow=true
+Authorization: Bearer {{auth.token}}
+Accept: text/event-stream
 
 ### Delete
 # @name Delete

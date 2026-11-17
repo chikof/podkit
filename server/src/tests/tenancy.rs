@@ -70,6 +70,26 @@ async fn other_team_cannot_reach_resources(db: PgPool) {
 	.await;
 	assert_eq!(s, StatusCode::NOT_FOUND, "cross-team deployment GET");
 
+	let (s, _) = call(
+		&app,
+		"GET",
+		&format!("{app_path}/deployments/{a_dep}/build-logs"),
+		Some(b_token.as_str()),
+		None,
+	)
+	.await;
+	assert_eq!(s, StatusCode::NOT_FOUND, "cross-team build-logs SSE");
+
+	let (s, _) = call(
+		&app,
+		"GET",
+		&format!("{app_path}/logs"),
+		Some(b_token.as_str()),
+		None,
+	)
+	.await;
+	assert_eq!(s, StatusCode::NOT_FOUND, "cross-team application logs SSE");
+
 	let (s, _) = call(&app, "DELETE", &app_path, Some(b_token.as_str()), None).await;
 	assert_eq!(s, StatusCode::NOT_FOUND, "cross-team application DELETE");
 

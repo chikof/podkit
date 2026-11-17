@@ -60,6 +60,20 @@ pub struct ServerConfig {
 		default = "http://localhost:5173,http://localhost:4173"
 	)]
 	pub dashboard_origins: String,
+
+	/// Control-plane state directory; defaults to `dirs::data_dir()/podkit`.
+	#[config(env = "DATA_DIR")]
+	pub data_dir: Option<String>,
+
+	/// Unix socket of the local server's agent; defaults to
+	/// `$HOME/.podkit/agent.sock`.
+	#[config(env = "LOCAL_AGENT_SOCKET")]
+	pub local_agent_socket: Option<String>,
+
+	/// Directory with `podkit-agent[-{arch}]` binaries uploaded during server
+	/// bootstrap; defaults to the directory of the running executable.
+	#[config(env = "AGENT_BINARIES_DIR")]
+	pub agent_binaries_dir: Option<String>,
 }
 
 impl ServerConfig {

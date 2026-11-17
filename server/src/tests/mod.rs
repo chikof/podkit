@@ -10,16 +10,31 @@ use serde_json::Value;
 use sqlx::PgPool;
 use tower::ServiceExt;
 
+use crate::agents::AgentPool;
+use crate::jobs::worker::Jobs;
+use crate::logs::LogHub;
 use crate::state::{AppState, Config};
 
 pub async fn app(db: PgPool) -> Router {
+	let _ = rustls::crypto::ring::default_provider().install_default();
+	let data_dir = tempfile::tempdir().unwrap().keep();
+	let log_dir = data_dir.join("logs").join("jobs");
+	std::fs::create_dir_all(&log_dir).unwrap();
+	let local_agent_socket = data_dir.join("agent.sock");
 	let state = AppState {
 		db,
 		secrets: Arc::new(SecretBox::from_identity_str(&generate_identity()).unwrap()),
+		agents: Arc::new(AgentPool::new(local_agent_socket.clone())),
+		jobs: Arc::new(Jobs::new()),
+		logs: Arc::new(LogHub::new(log_dir)),
+		http: reqwest::Client::new(),
 		config: Arc::new(Config {
 			ingress_port: 8088,
 			https_port: 8443,
 			acme_email: None,
+			agent_binaries_dir: data_dir.clone(),
+			local_agent_socket,
+			data_dir,
 		}),
 	};
 	crate::routes::routes(state, "").await.unwrap()

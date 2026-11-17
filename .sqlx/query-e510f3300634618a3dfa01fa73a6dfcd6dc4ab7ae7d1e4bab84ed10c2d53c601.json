@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE deployments SET status = 'stopped', finished_at = NOW()\n\t\tWHERE application_id = $1 AND id <> $2 AND status IN ('running', 'crashed')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e510f3300634618a3dfa01fa73a6dfcd6dc4ab7ae7d1e4bab84ed10c2d53c601"
+}

@@ -1,11 +1,15 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::convert::Infallible;
 
-use axum::extract::{Path, State};
-use axum::http::StatusCode;
-use axum::routing::{delete, post};
+use axum::extract::{Path, Query, State};
+use axum::http::{Method, StatusCode};
+use axum::response::IntoResponse;
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
+use axum::routing::{delete, get, post};
 use axum::{Json, Router};
-use runtime::{ContainerId, ContainerRuntime, ServerConnection};
+use futures_util::StreamExt;
+use futures_util::stream::{BoxStream, Stream};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
@@ -19,7 +23,7 @@ use crate::error::{AppResult, ServerError};
 use crate::ids::{ApplicationId, ProjectId, ServerId, TeamId};
 use crate::servers::Server;
 use crate::state::AppState;
-use crate::{db, deploy_pipeline, scope, validate};
+use crate::{db, scope, validate};
 
 pub fn router() -> Router<AppState> {
 	Router::new()
@@ -27,6 +31,7 @@ pub fn router() -> Router<AppState> {
 		.route("/{application_id}", delete(remove).patch(update))
 		.route("/{application_id}/stop", post(stop))
 		.route("/{application_id}/restart", post(restart))
+		.route("/{application_id}/logs", get(logs))
 }
 
 fn default_git_ref() -> String {
@@ -330,6 +335,8 @@ pub async fn update(
 
 /// Deletes an application; caller must hold `delete application` on the
 /// team. The application must belong to the project named in the path.
+/// Containers and images on the server are removed best-effort first: the
+/// row is the source of truth, so a failure there never blocks the delete.
 pub async fn remove(
 	State(s): State<AppState>,
 	user: AuthUser,
@@ -337,23 +344,51 @@ pub async fn remove(
 ) -> AppResult<Json<DeleteApplicationResponse>> {
 	authorize(&s.db, user.id, team, Action::Delete, Resource::Application).await?;
 	let app = scope::application(&s.db, team, project, id).await?;
+	remove_service(&s, team, &app).await;
 	super::delete(&s.db, app.id).await?;
 	Ok(Json(DeleteApplicationResponse { id: app.id }))
 }
 
+async fn remove_service(s: &AppState, team: TeamId, app: &Application) {
+	let server = match scope::server(&s.db, team, app.server_id).await {
+		Ok(server) => server,
+		Err(e) => {
+			warn!(
+				application = app.id.0,
+				"cannot load server to remove containers: {e}"
+			);
+			return;
+		}
+	};
+	let client = match s.agents.client(s, &server).await {
+		Ok(client) => client,
+		Err(e) => {
+			warn!(
+				application = app.id.0,
+				"cannot reach server agent to remove containers: {e}"
+			);
+			return;
+		}
+	};
+	if let Err(e) = client
+		.send(Method::DELETE, &format!("/v1/services/app-{}", app.id))
+		.await
+	{
+		warn!(
+			application = app.id.0,
+			"failed to remove application containers: {e}"
+		);
+	}
+}
+
 /// Stops the application's currently running deployment: a manual halt,
 /// distinct from the automatic `Running -> Stopped` that happens when a
-/// redeploy swaps it out (that's the one other place a running deployment
-/// gets stopped this way). To bring the app back use
+/// redeploy swaps it out. To bring the app back use
 /// `POST .../applications/{aid}/restart`, which redeploys the same image.
 ///
-/// The DB transition is persisted *before* the container is actually
-/// stopped, not after: `health_monitor` only "heals" (restarts) deployments
-/// still marked `Running`, so flipping the status first is what keeps it
-/// from racing in and undoing this on its next 15s sweep. Once persisted,
-/// the container stop/remove is best-effort, matching how
-/// `deploy_pipeline::retire_previous_container` already treats infra
-/// cleanup as secondary to the authoritative DB state.
+/// The agent stops the container and takes it off its restart list before
+/// the row moves to `stopped`, so a failed stop leaves the deployment
+/// `running` and the call can be retried.
 ///
 /// Caller must hold `update deployment` on the team.
 pub async fn stop(
@@ -369,41 +404,105 @@ pub async fn stop(
 		.ok_or_else(|| {
 			ServerError::Validation("application is not currently running".to_string())
 		})?;
-	let Some(container_id) = current.container_id.clone() else {
+	let Some(container_id) = current.container_id.as_deref() else {
 		return Err(ServerError::Validation(
 			"running deployment has no container recorded".to_string(),
 		));
 	};
 
+	let server = scope::server(&s.db, team, app.server_id).await?;
+	let client = s.agents.client(&s, &server).await?;
+	client
+		.send(Method::POST, &format!("/v1/containers/{container_id}/stop"))
+		.await?;
+
 	let stopped =
 		deployments::set_status(&s.db, current.id, DeploymentStatus::Stopped, None).await?;
-
-	if let Ok(server) = scope::server(&s.db, team, app.server_id).await {
-		match ServerConnection::connect(&server.connect_target(), &s.secrets).await {
-			Ok(connection) => {
-				let cid = ContainerId(container_id);
-				if let Err(e) = connection.runtime.stop_container(&cid).await {
-					warn!(deployment = stopped.id.0, "failed to stop container: {e}");
-				} else if let Err(e) = connection.runtime.remove_container(&cid, true).await {
-					warn!(
-						deployment = stopped.id.0,
-						"failed to remove stopped container: {e}"
-					);
-				}
-			}
-			Err(e) => warn!(
-				deployment = stopped.id.0,
-				"failed to connect to server to stop container: {e}"
-			),
-		}
-	} else {
-		warn!(
-			deployment = stopped.id.0,
-			"target server no longer exists, deployment marked stopped, container left as-is"
-		);
-	}
-
 	Ok(Json(DeploymentResponse::from(&stopped)))
+}
+
+#[derive(Deserialize)]
+pub struct LogsParams {
+	#[serde(default = "default_tail")]
+	tail: u32,
+	#[serde(default = "default_follow")]
+	follow: bool,
+}
+
+const MAX_TAIL: u32 = 5000;
+
+fn default_tail() -> u32 {
+	200
+}
+
+fn default_follow() -> bool {
+	true
+}
+
+/// Streams the running container's stdout/stderr as server-sent events
+/// (`event: log`, data `{"stream","line"}`), proxied from the server agent
+/// until the container exits or the client disconnects (`event: end`).
+/// `?tail=` is capped at 5000 lines. Caller must hold `read application`.
+pub async fn logs(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, project, id)): Path<(TeamId, ProjectId, ApplicationId)>,
+	Query(params): Query<LogsParams>,
+) -> AppResult<impl IntoResponse> {
+	authorize(&s.db, user.id, team, Action::Read, Resource::Application).await?;
+	let app = scope::application(&s.db, team, project, id).await?;
+
+	let current = deployments::latest_running(&s.db, app.id)
+		.await?
+		.ok_or_else(|| {
+			ServerError::Validation("application is not currently running".to_string())
+		})?;
+	let Some(container_id) = current.container_id.as_deref() else {
+		return Err(ServerError::Validation(
+			"running deployment has no container recorded".to_string(),
+		));
+	};
+
+	let server = scope::server(&s.db, team, app.server_id).await?;
+	let client = s.agents.client(&s, &server).await?;
+	let path = format!(
+		"/v1/containers/{container_id}/logs?tail={}&follow={}",
+		params.tail.min(MAX_TAIL),
+		params.follow
+	);
+	let events = client.stream(Method::GET, &path, None::<&()>).await?;
+
+	Ok(Sse::new(log_events(events)).keep_alive(KeepAlive::default()))
+}
+
+fn log_events(
+	events: BoxStream<'static, Result<proto::Event, ServerError>>,
+) -> impl Stream<Item = Result<SseEvent, Infallible>> {
+	futures_util::stream::unfold(Some(events), |events| async move {
+		let mut events = events?;
+		loop {
+			match events.next().await {
+				Some(Ok(proto::Event::Log { stream, line })) => {
+					let data = serde_json::json!({ "stream": stream, "line": line }).to_string();
+					return Some((
+						Ok(SseEvent::default().event("log").data(data)),
+						Some(events),
+					));
+				}
+				Some(Ok(proto::Event::Failed { message })) => {
+					warn!("container log stream failed: {message}");
+					break;
+				}
+				Some(Err(e)) => {
+					warn!("container log stream failed: {e}");
+					break;
+				}
+				Some(Ok(proto::Event::Done)) | None => break,
+				Some(Ok(_)) => {}
+			}
+		}
+		Some((Ok(SseEvent::default().event("end")), None))
+	})
 }
 
 /// Brings a stopped (or crash-looped-out) application back up by
@@ -440,8 +539,7 @@ pub async fn restart(
 			)
 		})?;
 
-	let deployment =
-		deploy_pipeline::queue_rollback_and_spawn(&s, app, &target, Some(user.id)).await?;
+	let deployment = deployments::queue(&s, &app, Some(user.id), Some(&target)).await?;
 
 	Ok((
 		StatusCode::ACCEPTED,

@@ -3,11 +3,16 @@
 //! `deployments` table.
 
 mod routes;
+pub mod run;
 
 use sqlx::PgExecutor;
 use time::OffsetDateTime;
 
+use crate::applications::Application;
+use crate::error::ServerError;
 use crate::ids::{ApplicationId, DeploymentId, UserId};
+use crate::jobs::{self, JobKind};
+use crate::state::AppState;
 
 pub use routes::{DeploymentResponse, router};
 
@@ -26,8 +31,12 @@ pub enum DeploymentStatus {
 	Running,
 	/// Build or deploy failed. Terminal.
 	Failed,
-	/// Was running and was manually stopped. Terminal.
+	/// Was running and was manually stopped, or replaced by a newer deploy. Terminal.
 	Stopped,
+	/// Was running until the container exited and the agent gave up restarting it.
+	Crashed,
+	/// Cancelled while queued or in progress. Terminal.
+	Cancelled,
 }
 
 impl DeploymentStatus {
@@ -41,23 +50,28 @@ impl DeploymentStatus {
 			Self::Running => "running",
 			Self::Failed => "failed",
 			Self::Stopped => "stopped",
+			Self::Crashed => "crashed",
+			Self::Cancelled => "cancelled",
 		}
 	}
 
-	/// Allowed transitions: `queued -> building -> deploying ->
-	/// {running|failed}` (`building` may also fail), plus `running ->
-	/// stopped` for a manual stop. Anything else (skip, backward, or out of
-	/// a terminal state) is rejected.
+	/// Allowed transitions: `queued -> building -> deploying -> running`;
+	/// `queued`, `building` and `deploying` may also fail or be cancelled;
+	/// `running -> {stopped|crashed}`; `crashed -> stopped`. Anything else
+	/// (skip, backward, or out of a terminal state) is rejected.
 	#[must_use]
 	pub fn can_transition_to(self, next: Self) -> bool {
-		use DeploymentStatus::{Building, Deploying, Failed, Queued, Running, Stopped};
+		use DeploymentStatus::{
+			Building, Cancelled, Crashed, Deploying, Failed, Queued, Running, Stopped,
+		};
 
 		matches!(
 			(self, next),
-			(Queued, Building)
-				| (Building, Deploying | Failed)
-				| (Deploying, Running | Failed)
-				| (Running, Stopped)
+			(Queued, Building | Failed | Cancelled)
+				| (Building, Deploying | Failed | Cancelled)
+				| (Deploying, Running | Failed | Cancelled)
+				| (Running, Stopped | Crashed)
+				| (Crashed, Stopped)
 		)
 	}
 }
@@ -106,7 +120,9 @@ impl Deployment {
 	/// # Errors
 	/// Returns [`InvalidTransition`] if the transition isn't allowed.
 	pub fn transition(&mut self, next: DeploymentStatus) -> Result<(), InvalidTransition> {
-		use DeploymentStatus::{Building, Deploying, Failed, Queued, Running, Stopped};
+		use DeploymentStatus::{
+			Building, Cancelled, Crashed, Deploying, Failed, Queued, Running, Stopped,
+		};
 
 		if !self.status.can_transition_to(next) {
 			return Err(InvalidTransition {
@@ -118,7 +134,9 @@ impl Deployment {
 		self.status = next;
 		match next {
 			Building => self.started_at = Some(OffsetDateTime::now_utc()),
-			Running | Failed | Stopped => self.finished_at = Some(OffsetDateTime::now_utc()),
+			Running | Failed | Stopped | Crashed | Cancelled => {
+				self.finished_at = Some(OffsetDateTime::now_utc());
+			}
 			Queued | Deploying => {}
 		}
 
@@ -126,19 +144,21 @@ impl Deployment {
 	}
 }
 
-/// Inserts a new deployment row in the `queued` state. `commit_sha` is
-/// pre-filled only for rollbacks, which reuse an already-built commit.
+/// Inserts a new deployment row in the `queued` state. `commit_sha` and
+/// `image_tag` are pre-filled only for restarts and rollbacks, which reuse
+/// an already-built image instead of building from source.
 pub async fn insert(
 	db: impl PgExecutor<'_>,
 	application_id: ApplicationId,
 	triggered_by: Option<UserId>,
 	commit_sha: Option<&str>,
+	image_tag: Option<&str>,
 ) -> Result<Deployment, sqlx::Error> {
 	sqlx::query_as!(
 		Deployment,
 		r#"
-			INSERT INTO deployments (id, application_id, triggered_by, commit_sha)
-			VALUES ($1, $2, $3, $4)
+			INSERT INTO deployments (id, application_id, triggered_by, commit_sha, image_tag)
+			VALUES ($1, $2, $3, $4, $5)
 			RETURNING
 				id AS "id!: DeploymentId",
 				application_id AS "application_id!: ApplicationId",
@@ -150,9 +170,63 @@ pub async fn insert(
 		application_id.0,
 		triggered_by.map(|u| u.0),
 		commit_sha,
+		image_tag,
 	)
 	.fetch_one(db)
 	.await
+}
+
+/// Inserts a queued deployment for `app` and enqueues its Deploy job, which
+/// is the single entry point for deploy, restart, rollback and webhook.
+/// With `reuse`, the new row carries that deployment's image and commit so
+/// the job redeploys it without cloning or building.
+///
+/// # Errors
+/// [`ServerError::Validation`] when `reuse` never produced an image, or a
+/// database error.
+pub async fn queue(
+	state: &AppState,
+	app: &Application,
+	triggered_by: Option<UserId>,
+	reuse: Option<&Deployment>,
+) -> Result<Deployment, ServerError> {
+	let image_tag = reuse
+		.map(|t| {
+			t.image_tag.as_deref().ok_or_else(|| {
+				ServerError::Validation(
+					"target deployment never produced an image to redeploy".to_string(),
+				)
+			})
+		})
+		.transpose()?;
+	let commit_sha = reuse.and_then(|t| t.commit_sha.as_deref());
+
+	let deployment = insert(&state.db, app.id, triggered_by, commit_sha, image_tag).await?;
+	if let Err(e) = jobs::enqueue(
+		state,
+		JobKind::Deploy,
+		app.server_id,
+		deployment.id.0,
+		format!("app:{}", app.id),
+	)
+	.await
+	{
+		if let Err(mark) = set_status(
+			&state.db,
+			deployment.id,
+			DeploymentStatus::Failed,
+			Some("failed to queue deploy job"),
+		)
+		.await
+		{
+			tracing::warn!(
+				deployment = deployment.id.0,
+				"failed to mark unqueued deployment failed: {mark}"
+			);
+		}
+		return Err(e.into());
+	}
+	Ok(deployment)
 }
 
 /// Persists the mutable fields of `d` (status plus what changes alongside
@@ -202,7 +276,7 @@ pub async fn set_status(
 				error_message = COALESCE($3, error_message),
 				started_at = CASE WHEN $2::varchar = 'building' THEN NOW() ELSE started_at END,
 				finished_at = CASE
-					WHEN $2::varchar IN ('running', 'failed', 'stopped') THEN NOW()
+					WHEN $2::varchar IN ('running', 'failed', 'stopped', 'crashed', 'cancelled') THEN NOW()
 					ELSE finished_at
 				END
 			WHERE id = $1
@@ -218,6 +292,30 @@ pub async fn set_status(
 		error_message,
 	)
 	.fetch_one(db)
+	.await
+}
+
+/// Looks up a deployment by id alone, with no application or team check.
+/// Only for the job runner, which gets the id from a job row it created.
+pub async fn find_by_id(
+	db: impl PgExecutor<'_>,
+	id: DeploymentId,
+) -> Result<Option<Deployment>, sqlx::Error> {
+	sqlx::query_as!(
+		Deployment,
+		r#"
+			SELECT
+				id AS "id!: DeploymentId",
+				application_id AS "application_id!: ApplicationId",
+				status AS "status!: DeploymentStatus",
+				commit_sha, image_tag, container_id, error_message,
+				started_at, finished_at
+			FROM deployments
+			WHERE id = $1
+		"#,
+		id.0,
+	)
+	.fetch_optional(db)
 	.await
 }
 
@@ -327,53 +425,22 @@ pub async fn latest_running(
 	.await
 }
 
-/// The application's newest `running` deployment other than `current`: the
-/// one a fresh deploy has to retire.
-pub async fn previous_running(
+/// Marks every other `running` or `crashed` deployment of the application
+/// `stopped`: the one that just went live replaced them.
+pub async fn retire_others(
 	db: impl PgExecutor<'_>,
 	application_id: ApplicationId,
 	current: DeploymentId,
-) -> Result<Option<Deployment>, sqlx::Error> {
-	sqlx::query_as!(
-		Deployment,
-		r#"
-			SELECT
-				id AS "id!: DeploymentId",
-				application_id AS "application_id!: ApplicationId",
-				status AS "status!: DeploymentStatus",
-				commit_sha, image_tag, container_id, error_message,
-				started_at, finished_at
-			FROM deployments
-			WHERE application_id = $1 AND status = 'running' AND id <> $2
-			ORDER BY id DESC
-			LIMIT 1
-		"#,
+) -> Result<(), sqlx::Error> {
+	sqlx::query!(
+		"UPDATE deployments SET status = 'stopped', finished_at = NOW()
+		WHERE application_id = $1 AND id <> $2 AND status IN ('running', 'crashed')",
 		application_id.0,
 		current.0,
 	)
-	.fetch_optional(db)
-	.await
-}
-
-/// System-wide, every application. Used by the health monitor to find
-/// containers it needs to watch. Small enough to list wholesale at
-/// podkit's expected scale; revisit if that stops being true.
-pub async fn list_running(db: impl PgExecutor<'_>) -> Result<Vec<Deployment>, sqlx::Error> {
-	sqlx::query_as!(
-		Deployment,
-		r#"
-			SELECT
-				id AS "id!: DeploymentId",
-				application_id AS "application_id!: ApplicationId",
-				status AS "status!: DeploymentStatus",
-				commit_sha, image_tag, container_id, error_message,
-				started_at, finished_at
-			FROM deployments
-			WHERE status = 'running'
-		"#,
-	)
-	.fetch_all(db)
-	.await
+	.execute(db)
+	.await?;
+	Ok(())
 }
 
 #[cfg(test)]
@@ -447,5 +514,56 @@ mod tests {
 		d.transition(DeploymentStatus::Deploying).unwrap();
 		d.transition(DeploymentStatus::Running).unwrap();
 		assert!(d.transition(DeploymentStatus::Stopped).is_ok());
+	}
+
+	#[test]
+	fn in_progress_states_can_be_cancelled() {
+		for steps in [
+			&[][..],
+			&[DeploymentStatus::Building][..],
+			&[DeploymentStatus::Building, DeploymentStatus::Deploying][..],
+		] {
+			let mut d = new_deployment();
+			for s in steps {
+				d.transition(*s).unwrap();
+			}
+			assert!(d.transition(DeploymentStatus::Cancelled).is_ok());
+			assert!(d.finished_at.is_some());
+		}
+	}
+
+	#[test]
+	fn queued_can_fail_without_building() {
+		let mut d = new_deployment();
+		assert!(d.transition(DeploymentStatus::Failed).is_ok());
+	}
+
+	#[test]
+	fn running_can_crash_and_a_crash_can_be_stopped() {
+		let mut d = new_deployment();
+		d.transition(DeploymentStatus::Building).unwrap();
+		d.transition(DeploymentStatus::Deploying).unwrap();
+		d.transition(DeploymentStatus::Running).unwrap();
+		assert!(d.transition(DeploymentStatus::Crashed).is_ok());
+		assert!(d.transition(DeploymentStatus::Running).is_err());
+		assert!(d.transition(DeploymentStatus::Stopped).is_ok());
+	}
+
+	#[test]
+	fn terminal_states_have_no_exits() {
+		use DeploymentStatus::{
+			Building, Cancelled, Crashed, Deploying, Failed, Queued, Running, Stopped,
+		};
+		let all = [
+			Queued, Building, Deploying, Running, Failed, Stopped, Crashed, Cancelled,
+		];
+		for from in [Failed, Stopped, Cancelled] {
+			for to in all {
+				assert!(!from.can_transition_to(to), "{from:?} -> {to:?}");
+			}
+		}
+		assert!(!Running.can_transition_to(Failed));
+		assert!(!Running.can_transition_to(Cancelled));
+		assert!(!Crashed.can_transition_to(Failed));
 	}
 }
