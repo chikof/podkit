@@ -8,7 +8,7 @@
 #[must_use]
 pub fn generate_token(bytes: usize) -> String {
 	let mut buf = vec![0u8; bytes];
-	getrandom::getrandom(&mut buf).expect("OS RNG unavailable");
+	getrandom::fill(&mut buf).expect("OS RNG unavailable");
 	buf.iter()
 		.fold(String::with_capacity(bytes * 2), |mut s, b| {
 			use std::fmt::Write;
