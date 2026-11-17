@@ -181,7 +181,7 @@ fn now_ms() -> i64 {
 
 /// One step of a followed log.
 #[derive(Debug, PartialEq, Eq)]
-enum Frame {
+pub(crate) enum Frame {
 	Line(LogLine),
 	Lagged(u64),
 	End,
@@ -197,7 +197,9 @@ struct Follow {
 }
 
 impl Follow {
-	async fn next(&mut self) -> Option<Frame> {
+	/// The next frame and whether it came from the stored file (a replay)
+	/// rather than the live channel.
+	async fn next(&mut self) -> Option<(Frame, bool)> {
 		if self.done {
 			return None;
 		}
@@ -214,7 +216,7 @@ impl Follow {
 					// channel delivers it in full.
 					if let Ok(line) = serde_json::from_str::<LogLine>(&raw) {
 						self.max = self.max.max(line.seq);
-						return Some(Frame::Line(line));
+						return Some((Frame::Line(line), true));
 					}
 				}
 				Ok(None) | Err(_) => self.lines = None,
@@ -222,19 +224,21 @@ impl Follow {
 		}
 		let Some(rx) = &mut self.rx else {
 			self.done = true;
-			return Some(Frame::End);
+			return Some((Frame::End, false));
 		};
 		loop {
 			match rx.recv().await {
 				Ok(line) if line.seq > self.max => {
 					self.max = line.seq;
-					return Some(Frame::Line(line));
+					return Some((Frame::Line(line), false));
 				}
 				Ok(_) => {}
-				Err(broadcast::error::RecvError::Lagged(n)) => return Some(Frame::Lagged(n)),
+				Err(broadcast::error::RecvError::Lagged(n)) => {
+					return Some((Frame::Lagged(n), false));
+				}
 				Err(broadcast::error::RecvError::Closed) => {
 					self.done = true;
-					return Some(Frame::End);
+					return Some((Frame::End, false));
 				}
 			}
 		}
@@ -243,10 +247,18 @@ impl Follow {
 
 /// Replays `path`, then follows `rx`, yielding every line once in seq order.
 /// `rx` must have been subscribed before the file is read.
-fn frames(
+pub(crate) fn frames(
 	path: Option<PathBuf>,
 	rx: Option<broadcast::Receiver<LogLine>>,
 ) -> impl Stream<Item = Frame> + Send + 'static {
+	tagged_frames(path, rx).map(|(frame, _)| frame)
+}
+
+/// [`frames`], each paired with whether it was replayed from the stored file.
+pub(crate) fn tagged_frames(
+	path: Option<PathBuf>,
+	rx: Option<broadcast::Receiver<LogLine>>,
+) -> impl Stream<Item = (Frame, bool)> + Send + 'static {
 	let state = Follow {
 		path,
 		lines: None,

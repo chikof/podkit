@@ -30,8 +30,13 @@ mod components;
 mod error;
 mod extract;
 mod layout;
+// Used by the pages of cards 05-09; until then only tests call them.
+#[allow(dead_code)]
+mod live;
 mod projects;
 mod sse;
+#[allow(dead_code)]
+mod status;
 mod teams;
 #[cfg(test)]
 mod testing;
@@ -64,7 +69,18 @@ pub fn router() -> Router<AppState> {
 		.route("/static/app.css", get(app_css))
 		.merge(teams::router())
 		.merge(projects::router())
+		.merge(test_routes())
 		.layer(middleware::from_fn(origin_guard))
+}
+
+#[cfg(test)]
+fn test_routes() -> Router<AppState> {
+	live::test_router()
+}
+
+#[cfg(not(test))]
+fn test_routes() -> Router<AppState> {
+	Router::new()
 }
 
 /// Refuses a state-changing request whose `Origin` is not this site. The
