@@ -39,7 +39,10 @@ HTML rendered by the server, made interactive with
 [Datastar](https://data-star.dev), so there is no separate front-end build.
 Templates use Tailwind utility classes in `class="..."`; `server/build.rs`
 runs [encre-css](https://crates.io/crates/encre-css) at compile time to emit
-only the CSS those classes need.
+only the CSS those classes need. Write each class out in full inside a string
+literal under `server/src/ui`: maud's `.class` shorthand and names built with
+`format!` get no CSS, and nothing reports it.
+
 Sign-in works over plain HTTP, for example in a homelab, but the password and
 session then cross the network unencrypted. Behind an HTTPS reverse proxy
 that sets `X-Forwarded-Proto: https`, the session cookie is also marked
