@@ -2,6 +2,7 @@
 
 mod backup;
 pub mod deploy;
+pub mod hardware;
 pub mod ingress;
 pub mod nixpacks;
 pub mod podman;
