@@ -37,6 +37,9 @@ rootless), and (for applications using the `nixpacks` build strategy) the
 The server also serves the web UI at <http://localhost:8080/>. It is plain
 HTML rendered by the server, made interactive with
 [Datastar](https://data-star.dev), so there is no separate front-end build.
+Templates use Tailwind utility classes in `class="..."`; `server/build.rs`
+runs [encre-css](https://crates.io/crates/encre-css) at compile time to emit
+only the CSS those classes need.
 Sign-in works over plain HTTP, for example in a homelab, but the password and
 session then cross the network unencrypted. Behind an HTTPS reverse proxy
 that sets `X-Forwarded-Proto: https`, the session cookie is also marked

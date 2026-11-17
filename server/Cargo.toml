@@ -49,5 +49,8 @@ dotenvy = "0.15.7"
 [lints]
 workspace = true
 
+[build-dependencies]
+encre-css.workspace = true
+
 [dev-dependencies]
 tower.workspace = true
