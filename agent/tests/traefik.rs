@@ -18,6 +18,9 @@ use proto::Ingress;
 
 const TEST_INGRESS_PORT: u16 = 18080;
 
+/// All tests share the single `podkit-traefik` container and its host ports, so they must not run concurrently.
+static TRAEFIK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 fn connect() -> Podman {
 	// reqwest is built with `rustls-no-provider`.
 	let _ = rustls::crypto::ring::default_provider().install_default();
@@ -56,6 +59,7 @@ async fn get_body(port: u16, host: &str) -> Option<String> {
 #[tokio::test]
 #[ignore = "requires a live podman.sock and binds a local test port"]
 async fn traefik_routes_to_app_container_via_docker_labels() {
+	let _guard = TRAEFIK.lock().await;
 	let podman = connect();
 	let socket_path = local_socket_path();
 	let data = tempfile::tempdir().unwrap();
@@ -125,6 +129,7 @@ async fn traefik_routes_to_app_container_via_docker_labels() {
 #[tokio::test]
 #[ignore = "requires a live podman.sock and binds local test ports"]
 async fn traefik_starts_cleanly_with_acme_configured() {
+	let _guard = TRAEFIK.lock().await;
 	let podman = connect();
 	let socket_path = local_socket_path();
 	let data = tempfile::tempdir().unwrap();
@@ -196,6 +201,7 @@ async fn traefik_starts_cleanly_with_acme_configured() {
 #[tokio::test]
 #[ignore = "requires a live podman.sock and binds local test ports"]
 async fn traefik_is_recreated_when_config_changes() {
+	let _guard = TRAEFIK.lock().await;
 	let podman = connect();
 	let socket_path = local_socket_path();
 	let data = tempfile::tempdir().unwrap();
