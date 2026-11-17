@@ -233,6 +233,11 @@ pub enum Event {
 		/// The phase entered.
 		phase: Phase,
 	},
+	/// Bytes of a model download written so far; not terminal.
+	Progress {
+		/// Size of the download volume's contents.
+		bytes: u64,
+	},
 	/// Terminal: deploy succeeded.
 	Deployed {
 		/// New container id.
@@ -422,6 +427,42 @@ pub struct RestoreRequest {
 	/// Presigned GET url of the gzip dump.
 	pub url: String,
 }
+
+/// `POST /v1/model-downloads` body. Streams [`Event::Log`] and
+/// [`Event::Progress`], then [`Event::Done`] or [`Event::Failed`].
+///
+/// Running it again for the same `volume` resumes: the volume keeps the files
+/// and the partial downloads.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct ModelDownloadRequest {
+	/// Podman volume that receives the files; created when missing.
+	pub volume: String,
+	/// Hugging Face repo id, `owner/name`.
+	pub repo: String,
+	/// Branch, tag or commit.
+	pub revision: String,
+	/// `hf download --include` patterns; empty downloads the whole repo.
+	pub include: Vec<String>,
+	/// Hugging Face token for gated repos. Passed to the container in its
+	/// environment; the agent never logs it.
+	pub token: Option<String>,
+}
+
+impl std::fmt::Debug for ModelDownloadRequest {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("ModelDownloadRequest")
+			.field("volume", &self.volume)
+			.field("repo", &self.repo)
+			.field("revision", &self.revision)
+			.field("include", &self.include)
+			.field("token", &self.token.as_ref().map(|_| "<redacted>"))
+			.finish()
+	}
+}
+
+/// Shown when Hugging Face answers a download or listing with 401 or 403.
+pub const GATED_MODEL_MESSAGE: &str =
+	"gated model: accept the license on huggingface.co and add an HF token";
 
 /// Body of every non-2xx agent response.
 #[derive(Debug, Clone, Serialize, Deserialize)]

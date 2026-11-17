@@ -44,6 +44,7 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/backups/dump", post(backup_dump))
 		.route("/v1/backups/upload", post(backup_upload))
 		.route("/v1/backups/restore", post(backup_restore))
+		.route("/v1/model-downloads", post(model_download_route))
 		.with_state(ctx)
 }
 
@@ -362,6 +363,13 @@ async fn delete_volume(
 			&e,
 		)),
 	}
+}
+
+async fn model_download_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::ModelDownloadRequest>,
+) -> Response {
+	ndjson(move |tx| crate::model_download::run(ctx, req, tx))
 }
 
 async fn backup_dump(State(ctx): State<Arc<Ctx>>, Json(req): Json<DumpRequest>) -> Response {

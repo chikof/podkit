@@ -25,6 +25,8 @@ pub struct Config {
 	pub local_agent_socket: PathBuf,
 	/// Directory holding `podkit-agent[-{arch}]` binaries for bootstrap.
 	pub agent_binaries_dir: PathBuf,
+	/// Base URL of the Hugging Face hub; tests point it at a local stub.
+	pub hf_endpoint: String,
 }
 
 #[derive(Clone)]

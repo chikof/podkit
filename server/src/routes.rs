@@ -5,8 +5,8 @@ use tower_cookies::CookieManagerLayer;
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
-	applications, auth, backups, databases, deployments, domains, env_vars, members, projects,
-	servers, teams, ui, volumes, webhooks,
+	applications, auth, backups, databases, deployments, domains, env_vars, members, model_files,
+	projects, servers, teams, ui, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -41,6 +41,11 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			backups::targets::router(),
 		)
 		.nest(DB, databases::router())
+		.nest("/teams/{team_id}/model-files", model_files::router())
+		.nest(
+			"/teams/{team_id}/huggingface-token",
+			model_files::token::router(),
+		)
 		.nest(&format!("{DB}/{{database_id}}/backups"), backups::router())
 		.nest("/webhooks", webhooks::router());
 	Ok(Router::new()

@@ -39,6 +39,7 @@ pub fn state(db: PgPool) -> AppState {
 			https_port: 8443,
 			acme_email: None,
 			agent_binaries_dir: data_dir.clone(),
+			hf_endpoint: "http://127.0.0.1:1".to_owned(),
 			local_agent_socket,
 			data_dir,
 		}),

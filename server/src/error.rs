@@ -74,6 +74,12 @@ pub enum ServerError {
 	#[error("backup target not found")]
 	BackupTargetNotFound,
 
+	#[error("model file not found")]
+	ModelFileNotFound,
+
+	#[error("could not reach Hugging Face")]
+	HuggingFaceUnavailable,
+
 	#[error("that hostname is already routed to another application")]
 	DomainTaken,
 
@@ -128,9 +134,10 @@ impl ServerError {
 			| Self::DatabaseNotFound
 			| Self::VolumeNotFound
 			| Self::BackupNotFound
-			| Self::BackupTargetNotFound => StatusCode::NOT_FOUND,
+			| Self::BackupTargetNotFound
+			| Self::ModelFileNotFound => StatusCode::NOT_FOUND,
 			Self::Forbidden => StatusCode::FORBIDDEN,
-			Self::AgentUnavailable => StatusCode::BAD_GATEWAY,
+			Self::AgentUnavailable | Self::HuggingFaceUnavailable => StatusCode::BAD_GATEWAY,
 		}
 	}
 }

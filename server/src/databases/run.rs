@@ -127,7 +127,12 @@ async fn provision(
 				return Ok(());
 			}
 			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),
-			Some(Ok(Event::Phase { .. } | Event::DumpWritten { .. } | Event::Done)) => {}
+			Some(Ok(
+				Event::Phase { .. }
+				| Event::Progress { .. }
+				| Event::DumpWritten { .. }
+				| Event::Done,
+			)) => {}
 			Some(Err(e)) => {
 				warn!(
 					database = database.id.0,

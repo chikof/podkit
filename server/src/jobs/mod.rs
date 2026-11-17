@@ -32,6 +32,8 @@ pub enum JobKind {
 	Backup,
 	/// `target_id` is a backup id, not a database id.
 	Restore,
+	/// `target_id` is a model file id.
+	ModelDownload,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -127,6 +129,7 @@ pub async fn active_exists(
 /// Reflects a failed or cancelled job onto the row it was acting on. A
 /// missing row is ignored; database errors are logged, not returned, because
 /// callers are already on a failure path.
+#[allow(clippy::too_many_lines, reason = "one arm per job kind")]
 pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failure: &JobFailure) {
 	let result = match kind {
 		JobKind::Deploy => {
@@ -204,6 +207,21 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 			sqlx::query(
 				"UPDATE databases SET status_message = $2, updated_at = NOW()
 				WHERE id = (SELECT database_id FROM backups WHERE id = $1)",
+			)
+			.bind(target_id)
+			.bind(message)
+			.execute(&state.db)
+			.await
+		}
+		// The volume keeps what was downloaded, so a retry resumes.
+		JobKind::ModelDownload => {
+			let message = match failure {
+				JobFailure::Cancelled => "cancelled",
+				JobFailure::Failed(m) => m.as_str(),
+			};
+			sqlx::query(
+				"UPDATE model_files SET status = 'failed', error = $2, updated_at = NOW()
+				WHERE id = $1 AND status IN ('queued', 'downloading')",
 			)
 			.bind(target_id)
 			.bind(message)

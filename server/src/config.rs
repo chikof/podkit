@@ -64,6 +64,11 @@ pub struct ServerConfig {
 	/// bootstrap; defaults to the directory of the running executable.
 	#[config(env = "AGENT_BINARIES_DIR")]
 	pub agent_binaries_dir: Option<String>,
+
+	/// Base URL of the Hugging Face hub used to size model downloads;
+	/// defaults to `https://huggingface.co`.
+	#[config(env = "HF_ENDPOINT")]
+	pub hf_endpoint: Option<String>,
 }
 
 impl ServerConfig {

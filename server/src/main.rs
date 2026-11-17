@@ -35,6 +35,7 @@ mod jobs;
 mod logs;
 mod maintenance;
 mod members;
+mod model_files;
 mod projects;
 mod routes;
 mod scope;
@@ -159,6 +160,11 @@ fn resolve_config(config: &ServerConfig) -> AppResult<Config> {
 		data_dir,
 		local_agent_socket,
 		agent_binaries_dir,
+		hf_endpoint: config
+			.hf_endpoint
+			.as_deref()
+			.map_or("https://huggingface.co", |e| e.trim_end_matches('/'))
+			.to_owned(),
 	})
 }
 
