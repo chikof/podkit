@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM volumes WHERE id = $2 AND application_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f9cb62fd8a9a67ff163db2e13226086747dc4c69ad151fc194cdf77a16651998"
+}

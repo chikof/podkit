@@ -1,5 +1,5 @@
 //! Periodic status sync: agent health per server, then crash detection for the
-//! deployments the agent is supposed to be running.
+//! deployments and databases the agent is supposed to be running.
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -12,7 +12,7 @@ use tokio_util::sync::CancellationToken;
 use super::Server;
 use crate::agents::AgentClient;
 use crate::error::ServerError;
-use crate::ids::{ApplicationId, DeploymentId, ServerId};
+use crate::ids::{ApplicationId, DatabaseId, DeploymentId, ServerId};
 use crate::state::AppState;
 
 const INTERVAL: Duration = Duration::from_secs(30);
@@ -22,6 +22,11 @@ const CONTAINER_PREFIX: &str = "podkit-";
 struct RunningDeployment {
 	id: DeploymentId,
 	application_id: ApplicationId,
+	container_id: String,
+}
+
+struct RunningDatabase {
+	id: DatabaseId,
 	container_id: String,
 }
 
@@ -63,7 +68,7 @@ async fn check(state: &AppState, server: &Server) {
 		tracing::warn!(server = %server.id, error = %e, "status sync could not mark server active");
 	}
 
-	if let Err(e) = mark_crashed_deployments(state, server.id, &client).await {
+	if let Err(e) = mark_crashed(state, server.id, &client).await {
 		tracing::warn!(server = %server.id, error = %e, "status sync could not check containers");
 	}
 }
@@ -74,7 +79,9 @@ async fn mark_unreachable(state: &AppState, server: &Server, message: &str) {
 	}
 }
 
-async fn mark_crashed_deployments(
+/// Marks deployments `crashed` and databases `failed` when the container the
+/// row says is running is gone or dead.
+async fn mark_crashed(
 	state: &AppState,
 	server: ServerId,
 	client: &AgentClient,
@@ -92,7 +99,18 @@ async fn mark_crashed_deployments(
 	)
 	.fetch_all(&state.db)
 	.await?;
-	if running.is_empty() {
+	let databases = sqlx::query_as!(
+		RunningDatabase,
+		r#"
+			SELECT id AS "id: DatabaseId", container_id AS "container_id!"
+			FROM databases
+			WHERE server_id = $1 AND status = 'running' AND container_id IS NOT NULL
+		"#,
+		server as ServerId
+	)
+	.fetch_all(&state.db)
+	.await?;
+	if running.is_empty() && databases.is_empty() {
 		return Ok(());
 	}
 
@@ -107,7 +125,10 @@ async fn mark_crashed_deployments(
 		containers.iter().map(|c| (c.id.as_str(), c)).collect();
 
 	for deployment in &running {
-		let Some(message) = crash_message(deployment, &by_id) else {
+		let Some(message) = crash_message(&deployment.container_id, &by_id, || {
+			// Agent container names are `podkit-{service}-{instance_id}`.
+			format!("podkit-app-{}-{}", deployment.application_id, deployment.id)
+		}) else {
 			continue;
 		};
 		tracing::warn!(deployment = %deployment.id, "{message}");
@@ -119,21 +140,36 @@ async fn mark_crashed_deployments(
 		.execute(&state.db)
 		.await?;
 	}
+
+	for database in &databases {
+		// The instance id (a job id) is not stored, so a vanished container is named by its service.
+		let Some(message) = crash_message(&database.container_id, &by_id, || {
+			format!("podkit-db-{}", database.id)
+		}) else {
+			continue;
+		};
+		tracing::warn!(database = %database.id, "{message}");
+		sqlx::query!(
+			"UPDATE databases SET status = 'failed', status_message = $2, updated_at = NOW() WHERE id = $1 AND status = 'running'",
+			database.id as DatabaseId,
+			message
+		)
+		.execute(&state.db)
+		.await?;
+	}
 	Ok(())
 }
 
-/// A running deployment is crashed when its container is gone, or exited/dead
-/// with the agent's supervisor having stopped restarting it.
+/// A running row is crashed when its container is gone, or exited/dead with
+/// the agent's supervisor having stopped restarting it. `missing_name` names
+/// the container when it no longer exists.
 fn crash_message(
-	deployment: &RunningDeployment,
+	container_id: &str,
 	containers: &HashMap<&str, &ContainerInfo>,
+	missing_name: impl FnOnce() -> String,
 ) -> Option<String> {
-	let Some(container) = containers.get(deployment.container_id.as_str()) else {
-		// Agent container names are `podkit-{service}-{instance_id}`.
-		return Some(format!(
-			"container podkit-app-{}-{} no longer exists",
-			deployment.application_id, deployment.id
-		));
+	let Some(container) = containers.get(container_id) else {
+		return Some(format!("container {} no longer exists", missing_name()));
 	};
 	let state = match container.state {
 		ContainerState::Exited => "exited",
@@ -156,14 +192,6 @@ fn crash_message(
 mod tests {
 	use super::*;
 
-	fn deployment() -> RunningDeployment {
-		RunningDeployment {
-			id: DeploymentId(7),
-			application_id: ApplicationId(3),
-			container_id: "abc".to_string(),
-		}
-	}
-
 	fn container(state: ContainerState, exit_code: Option<i64>, gave_up: bool) -> ContainerInfo {
 		ContainerInfo {
 			id: "abc".to_string(),
@@ -176,7 +204,7 @@ mod tests {
 
 	fn message(containers: &[ContainerInfo]) -> Option<String> {
 		let by_id = containers.iter().map(|c| (c.id.as_str(), c)).collect();
-		crash_message(&deployment(), &by_id)
+		crash_message("abc", &by_id, || "podkit-app-3-7".to_string())
 	}
 
 	#[test]

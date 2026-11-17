@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT id AS \"id!: DatabaseId\", server_id AS \"server_id!: ServerId\",\n\t\t\t\tbackup_target_id AS \"target_id!: BackupTargetId\", backup_schedule AS \"schedule!\"\n\t\t\tFROM databases\n\t\t\tWHERE backup_schedule IS NOT NULL AND backup_target_id IS NOT NULL\n\t\t\t\tAND status = 'running' AND backup_next_run_at <= NOW()\n\t\t\tORDER BY backup_next_run_at\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: DatabaseId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "server_id!: ServerId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "server_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "target_id!: BackupTargetId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "backup_target_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "schedule!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "backup_schedule"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "3974cc7ebdfad111e0425234776448fbc8bb5027c4a14a027bd5383573b51a63"
+}

@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT id AS \"id: VolumeId\", application_id AS \"application_id: ApplicationId\",\n\t\t\t\tname, mount_path\n\t\t\tFROM volumes WHERE application_id = $1 ORDER BY mount_path\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: VolumeId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "volumes",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "application_id: ApplicationId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "volumes",
+            "name": "application_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "volumes",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "mount_path",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "volumes",
+            "name": "mount_path"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "68c53751eae7934e363223c1072861e8f743b7fdbffbef174bba87d5f4fbcd50"
+}

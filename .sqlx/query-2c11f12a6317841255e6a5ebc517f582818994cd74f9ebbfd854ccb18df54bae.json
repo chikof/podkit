@@ -1,0 +1,148 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT id AS \"id: BackupTargetId\", team_id AS \"team_id: TeamId\", name, endpoint,\n\t\t\t\tregion, bucket, path_style, prefix, access_key_id, secret_access_key, created_at\n\t\t\tFROM backup_targets WHERE id = $1\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: BackupTargetId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "backup_targets",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "team_id: TeamId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "backup_targets",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "backup_targets",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "endpoint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "backup_targets",
+            "name": "endpoint"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "region",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "backup_targets",
+            "name": "region"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "bucket",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "backup_targets",
+            "name": "bucket"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "path_style",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "backup_targets",
+            "name": "path_style"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "prefix",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "backup_targets",
+            "name": "prefix"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "access_key_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "backup_targets",
+            "name": "access_key_id"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "secret_access_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "backup_targets",
+            "name": "secret_access_key"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "backup_targets",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2c11f12a6317841255e6a5ebc517f582818994cd74f9ebbfd854ccb18df54bae"
+}

@@ -1,0 +1,89 @@
+### Create
+# @name Create
+# @capture file-secret database.id = response.json.id
+# note: server.id comes from servers.http List (the team's `local` server) or
+# Create. Returns 202 with status `pending`; a provision job pulls the image
+# and starts the container. Poll Get until status is `running` (read
+# status_message on `failed`).
+# engine: postgres (18, 17), mysql (9.7), mongodb (9.0, 8.0) or redis (8).
+# version is optional (the first one listed is the default). public_port
+# (1024-65535, not the ingress ports) publishes the database on the host.
+POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+{
+  "name": "main-db",
+  "engine": "postgres",
+  "version": "18",
+  "server_id": {{server.id}},
+  "public_port": 15432,
+  "memory_limit_mb": 512,
+  "cpu_limit": 1.0
+}
+
+### List
+# @name List
+# Never includes credentials.
+GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases
+Authorization: Bearer {{auth.token}}
+
+### Get
+# @name Get
+# `connection` (internal_url, public_url, username, password, database) is
+# only present for roles that can also update databases.
+GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}
+Authorization: Bearer {{auth.token}}
+
+### Settings
+# @name Settings
+# Full replacement: omitted fields become null (backup_keep defaults to 7,
+# allowed 1-365). A changed public_port or limit reprovisions the container
+# (202); otherwise 200. backup_schedule is a 5-field UTC cron expression and
+# backup_target_id comes from backups.http CreateTarget.
+PUT {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/settings
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+{
+  "public_port": 15432,
+  "memory_limit_mb": 512,
+  "cpu_limit": 1.0,
+  "backup_target_id": {{backup_target.id}},
+  "backup_schedule": "0 3 * * *",
+  "backup_keep": 7
+}
+
+### Start
+# @name Start
+# 202. The job fails with "database has no container; use restart" if the
+# database was never provisioned successfully.
+POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/start
+Authorization: Bearer {{auth.token}}
+
+### Stop
+# @name Stop
+POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/stop
+Authorization: Bearer {{auth.token}}
+
+### Restart
+# @name Restart
+# Recreates the container from the stored settings; data is kept.
+POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/restart
+Authorization: Bearer {{auth.token}}
+
+### Logs
+# @name Logs
+# Server-sent events with the container's stdout/stderr: `event: log` (data
+# is {"stream","line"}) and a final `event: end`. tail is capped at 5000;
+# follow=false ends after the tail. 400s if the database has no container.
+GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/logs?tail=200&follow=true
+Authorization: Bearer {{auth.token}}
+Accept: text/event-stream
+
+### Delete
+# @name Delete
+# 202; the row is removed once the job has removed the containers. The data
+# volume is kept unless purge_data=true.
+DELETE {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}?purge_data=false
+Authorization: Bearer {{auth.token}}

@@ -7,10 +7,12 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
-	applications, auth, deployments, domains, env_vars, members, projects, servers, teams, webhooks,
+	applications, auth, backups, databases, deployments, domains, env_vars, members, projects,
+	servers, teams, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
+const DB: &str = "/teams/{team_id}/projects/{project_id}/databases";
 
 async fn health() -> &'static str {
 	"ok"
@@ -53,6 +55,13 @@ pub async fn routes(state: AppState, dashboard_origins: &str) -> AppResult<Route
 		.nest(&format!("{APP}/deployments"), deployments::router())
 		.nest(&format!("{APP}/env-vars"), env_vars::router())
 		.nest(&format!("{APP}/domains"), domains::router())
+		.nest(&format!("{APP}/volumes"), volumes::router())
+		.nest(
+			"/teams/{team_id}/backup-targets",
+			backups::targets::router(),
+		)
+		.nest(DB, databases::router())
+		.nest(&format!("{DB}/{{database_id}}/backups"), backups::router())
 		.nest("/webhooks", webhooks::router())
 		.layer(CookieManagerLayer::new())
 		.layer(cors)

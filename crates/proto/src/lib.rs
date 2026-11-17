@@ -291,7 +291,7 @@ impl Engine {
 				Some(r#"pg_dump --clean --if-exists --no-owner -U "$POSTGRES_USER" "$POSTGRES_DB""#)
 			}
 			Self::Mysql => Some(
-				r#"mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines --triggers --databases "$MYSQL_DATABASE""#,
+				r#"mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction --set-gtid-purged=OFF --routines --triggers --databases "$MYSQL_DATABASE""#,
 			),
 			Self::Mongodb => Some(
 				r#"mongodump --archive -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin"#,

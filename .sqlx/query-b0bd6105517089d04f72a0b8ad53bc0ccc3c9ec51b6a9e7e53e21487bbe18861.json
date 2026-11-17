@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE databases SET status = 'failed', status_message = $2, updated_at = NOW() WHERE id = $1 AND status = 'running'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b0bd6105517089d04f72a0b8ad53bc0ccc3c9ec51b6a9e7e53e21487bbe18861"
+}

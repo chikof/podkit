@@ -148,6 +148,13 @@ async fn dispatch(
 ) -> Result<(), JobFailure> {
 	match job.kind {
 		JobKind::Deploy => crate::deployments::run::run(state, job, token, log).await,
+		JobKind::DatabaseProvision
+		| JobKind::DatabaseStart
+		| JobKind::DatabaseStop
+		| JobKind::DatabaseRemove
+		| JobKind::DatabasePurge => crate::databases::run::run(state, job, token, log).await,
+		JobKind::Backup => crate::backups::run_backup(state, job, token, log).await,
+		JobKind::Restore => crate::backups::run_restore(state, job, token, log).await,
 		JobKind::ServerBootstrap => crate::servers::bootstrap::run(state, job, token, log).await,
 	}
 }

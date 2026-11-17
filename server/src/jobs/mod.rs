@@ -18,6 +18,20 @@ pub enum JobKind {
 	Deploy,
 	/// `target_id` is a server id.
 	ServerBootstrap,
+	/// `target_id` is a database id.
+	DatabaseProvision,
+	/// `target_id` is a database id.
+	DatabaseStart,
+	/// `target_id` is a database id.
+	DatabaseStop,
+	/// `target_id` is a database id.
+	DatabaseRemove,
+	/// `target_id` is a database id.
+	DatabasePurge,
+	/// `target_id` is a backup id.
+	Backup,
+	/// `target_id` is a backup id, not a database id.
+	Restore,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -145,12 +159,170 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 			.execute(&state.db)
 			.await
 		}
+		JobKind::DatabaseProvision | JobKind::DatabaseStart | JobKind::DatabaseStop => {
+			let message = match failure {
+				JobFailure::Cancelled => "cancelled",
+				JobFailure::Failed(m) => m.as_str(),
+			};
+			sqlx::query(
+				"UPDATE databases SET status = 'failed', status_message = $2, updated_at = NOW()
+				WHERE id = $1",
+			)
+			.bind(target_id)
+			.bind(message)
+			.execute(&state.db)
+			.await
+		}
+		JobKind::DatabaseRemove | JobKind::DatabasePurge => {
+			sqlx::query("UPDATE databases SET status = 'failed', updated_at = NOW() WHERE id = $1")
+				.bind(target_id)
+				.execute(&state.db)
+				.await
+		}
+		JobKind::Backup => {
+			let message = match failure {
+				JobFailure::Cancelled => "cancelled",
+				JobFailure::Failed(m) => m.as_str(),
+			};
+			// The status guard keeps a finished backup from being rewritten.
+			sqlx::query(
+				"UPDATE backups SET status = 'failed', error = $2, finished_at = NOW()
+				WHERE id = $1 AND status IN ('queued', 'running')",
+			)
+			.bind(target_id)
+			.bind(message)
+			.execute(&state.db)
+			.await
+		}
+		// A failed restore leaves the dump intact and restorable, so it is
+		// reported on the database instead of the backup.
+		JobKind::Restore => {
+			let message = match failure {
+				JobFailure::Cancelled => "restore cancelled".to_owned(),
+				JobFailure::Failed(m) => format!("restore failed: {m}"),
+			};
+			sqlx::query(
+				"UPDATE databases SET status_message = $2, updated_at = NOW()
+				WHERE id = (SELECT database_id FROM backups WHERE id = $1)",
+			)
+			.bind(target_id)
+			.bind(message)
+			.execute(&state.db)
+			.await
+		}
 	};
 	if let Err(e) = result {
 		tracing::warn!(
 			?kind,
 			target_id,
 			"failed to record job failure on its target: {e}"
+		);
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use sqlx::PgPool;
+
+	use super::*;
+	use crate::tests::state;
+
+	/// Inserts a database with a succeeded backup; returns (database id, backup id).
+	async fn seed_backup(db: &PgPool) -> (i64, i64) {
+		let (team, user, project, server, database, backup): (i64, i64, i64, i64, i64, i64) =
+			(1, 2, 3, 4, 5, 6);
+		for (sql, binds) in [
+			("INSERT INTO teams (id, name, slug, logo) VALUES ($1, 't', 't', '')", vec![team]),
+			(
+				"INSERT INTO users (id, name, email, password_hash) VALUES ($1, 'U', 'u@test.dev', 'x')",
+				vec![user],
+			),
+			(
+				"INSERT INTO projects (id, team_id, name, slug) VALUES ($1, $2, 'p', 'p')",
+				vec![project, team],
+			),
+			(
+				"INSERT INTO servers (id, team_id, name, hostname, podman_socket_path, is_local)
+				VALUES ($1, $2, 'local', 'localhost', '/run/podman.sock', TRUE)",
+				vec![server, team],
+			),
+			(
+				"INSERT INTO databases (id, project_id, server_id, name, engine, version, credentials)
+				VALUES ($1, $2, $3, 'db', 'postgres', '16', '\\x00')",
+				vec![database, project, server],
+			),
+			(
+				"INSERT INTO backups (id, database_id, status, triggered_by)
+				VALUES ($1, $2, 'succeeded', $3)",
+				vec![backup, database, user],
+			),
+		] {
+			let mut query = sqlx::query(sql);
+			for bind in binds {
+				query = query.bind(bind);
+			}
+			query.execute(db).await.unwrap();
+		}
+		(database, backup)
+	}
+
+	#[sqlx::test]
+	async fn failed_backup_job_marks_backup_failed(db: PgPool) {
+		let (_, backup) = seed_backup(&db).await;
+		sqlx::query("UPDATE backups SET status = 'running' WHERE id = $1")
+			.bind(backup)
+			.execute(&db)
+			.await
+			.unwrap();
+
+		fail_target(
+			&state(db.clone()),
+			JobKind::Backup,
+			backup,
+			&JobFailure::Failed("dump exited with 1".into()),
+		)
+		.await;
+
+		let (status, error, finished): (String, Option<String>, bool) = sqlx::query_as(
+			"SELECT status, error, finished_at IS NOT NULL FROM backups WHERE id = $1",
+		)
+		.bind(backup)
+		.fetch_one(&db)
+		.await
+		.unwrap();
+		assert_eq!(status, "failed");
+		assert_eq!(error.as_deref(), Some("dump exited with 1"));
+		assert!(finished);
+	}
+
+	#[sqlx::test]
+	async fn failed_restore_job_keeps_backup_and_flags_database(db: PgPool) {
+		let (database, backup) = seed_backup(&db).await;
+
+		fail_target(
+			&state(db.clone()),
+			JobKind::Restore,
+			backup,
+			&JobFailure::Failed("psql exited with 2".into()),
+		)
+		.await;
+
+		let status: String = sqlx::query_scalar("SELECT status FROM backups WHERE id = $1")
+			.bind(backup)
+			.fetch_one(&db)
+			.await
+			.unwrap();
+		assert_eq!(status, "succeeded");
+		let (db_status, message): (String, Option<String>) =
+			sqlx::query_as("SELECT status, status_message FROM databases WHERE id = $1")
+				.bind(database)
+				.fetch_one(&db)
+				.await
+				.unwrap();
+		assert_eq!(db_status, "pending");
+		assert_eq!(
+			message.as_deref(),
+			Some("restore failed: psql exited with 2")
 		);
 	}
 }

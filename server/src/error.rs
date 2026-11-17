@@ -42,7 +42,6 @@ pub enum ServerError {
 	RoleNotAllowed,
 
 	#[error("{0}")]
-	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
 	Conflict(String),
 
 	#[error("project not found")]
@@ -64,19 +63,15 @@ pub enum ServerError {
 	DomainNotFound,
 
 	#[error("database not found")]
-	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
 	DatabaseNotFound,
 
 	#[error("volume not found")]
-	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
 	VolumeNotFound,
 
 	#[error("backup not found")]
-	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
 	BackupNotFound,
 
 	#[error("backup target not found")]
-	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
 	BackupTargetNotFound,
 
 	#[error("that hostname is already routed to another application")]
@@ -101,7 +96,6 @@ pub enum ServerError {
 	AgentUnavailable,
 
 	#[error("server agent is not installed yet; bootstrap the server first")]
-	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
 	ServerNotReady,
 }
 

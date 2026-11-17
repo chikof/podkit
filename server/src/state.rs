@@ -36,6 +36,5 @@ pub struct AppState {
 	pub agents: Arc<AgentPool>,
 	pub jobs: Arc<Jobs>,
 	pub logs: Arc<LogHub>,
-	#[allow(dead_code, reason = "S3 deletes in the backups slice")]
 	pub http: reqwest::Client,
 }

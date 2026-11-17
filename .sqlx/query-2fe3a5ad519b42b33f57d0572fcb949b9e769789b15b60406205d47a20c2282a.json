@@ -1,0 +1,67 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO volumes (id, application_id, name, mount_path)\n\t\t\tVALUES ($1, $2, $3, $4)\n\t\t\tRETURNING id AS \"id: VolumeId\", application_id AS \"application_id: ApplicationId\",\n\t\t\t\tname, mount_path\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: VolumeId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "volumes",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "application_id: ApplicationId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "volumes",
+            "name": "application_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "volumes",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "mount_path",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "volumes",
+            "name": "mount_path"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Varchar",
+        "Varchar"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2fe3a5ad519b42b33f57d0572fcb949b9e769789b15b60406205d47a20c2282a"
+}

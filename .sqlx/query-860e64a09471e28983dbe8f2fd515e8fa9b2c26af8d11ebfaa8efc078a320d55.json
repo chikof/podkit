@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE backups SET status = 'running' WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "860e64a09471e28983dbe8f2fd515e8fa9b2c26af8d11ebfaa8efc078a320d55"
+}

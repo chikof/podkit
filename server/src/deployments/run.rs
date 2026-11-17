@@ -5,7 +5,9 @@
 
 use axum::http::Method;
 use futures_util::StreamExt;
-use proto::{Build, DeploySpec, Event, GitAuth, Ingress, Phase, Routing, Source, Strategy};
+use proto::{
+	Build, DeploySpec, Event, GitAuth, Ingress, Phase, Routing, Source, Strategy, VolumeMount,
+};
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
@@ -17,7 +19,7 @@ use crate::jobs::{Job, JobFailure};
 use crate::logs::JobLog;
 use crate::servers::Server;
 use crate::state::AppState;
-use crate::{deployments, domains, env_vars, scope};
+use crate::{deployments, domains, env_vars, scope, volumes};
 
 const LOST_CONNECTION: &str = "lost connection to server agent";
 
@@ -193,6 +195,24 @@ async fn build_spec(
 		}
 		Vec::new()
 	};
+	let volumes = volumes::list(&state.db, application.id)
+		.await
+		.map_err(|e| {
+			tracing::error!("failed to load volumes: {e}");
+			failed("failed to load volumes")
+		})?
+		.into_iter()
+		.map(|v| VolumeMount {
+			name: v.name,
+			path: v.mount_path,
+		})
+		.collect::<Vec<_>>();
+	// A volume can only be mounted by one container at a time.
+	let strategy = if volumes.is_empty() {
+		Strategy::Rolling
+	} else {
+		Strategy::Recreate
+	};
 
 	Ok(DeploySpec {
 		service: format!("app-{}", application.id),
@@ -206,13 +226,13 @@ async fn build_spec(
 			https_hosts,
 		}),
 		network_aliases: Vec::new(),
-		volumes: Vec::new(),
+		volumes,
 		published_ports: Vec::new(),
 		memory_bytes: application
 			.memory_limit_mb
 			.map(|mb| i64::from(mb) * 1024 * 1024),
 		cpu_cores: application.cpu_limit.map(f64::from),
-		strategy: Strategy::Rolling,
+		strategy,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,

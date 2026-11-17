@@ -1,0 +1,149 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id!: BackupId\", database_id AS \"database_id!: DatabaseId\",\n\t\t\t\ttarget_id AS \"target_id: BackupTargetId\", status AS \"status!: BackupStatus\",\n\t\t\t\tobject_key, size_bytes, sha256, error,\n\t\t\t\ttriggered_by AS \"triggered_by: UserId\", created_at, finished_at\n\t\t\tFROM backups\n\t\t\tWHERE database_id = $1 AND status = 'succeeded'\n\t\t\tORDER BY id DESC\n\t\t\tOFFSET $2\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: BackupId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "backups",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "database_id!: DatabaseId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "backups",
+            "name": "database_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "target_id: BackupTargetId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "backups",
+            "name": "target_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "status!: BackupStatus",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "backups",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "object_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "backups",
+            "name": "object_key"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "size_bytes",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "backups",
+            "name": "size_bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "sha256",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "backups",
+            "name": "sha256"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "backups",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "triggered_by: UserId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "backups",
+            "name": "triggered_by"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "backups",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "finished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "backups",
+            "name": "finished_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "9393599aeb9e4c6a58d9e02598b04f71f3f5ceb85eea3ff637e5dde9f895b3b9"
+}

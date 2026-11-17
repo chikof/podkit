@@ -5,8 +5,10 @@
 use sqlx::PgPool;
 
 use crate::applications::{Application, BuildStrategy};
+use crate::backups::BackupTarget;
+use crate::databases::{Database, DatabaseStatus, EngineKind};
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, ProjectId, ServerId, TeamId};
+use crate::ids::{ApplicationId, BackupTargetId, DatabaseId, ProjectId, ServerId, TeamId};
 use crate::projects::Project;
 use crate::servers::{Server, ServerStatus};
 
@@ -70,4 +72,53 @@ pub async fn server(db: &PgPool, team: TeamId, id: ServerId) -> AppResult<Server
 	.fetch_optional(db)
 	.await?
 	.ok_or(ServerError::ServerNotFound)
+}
+
+pub async fn database(
+	db: &PgPool,
+	team: TeamId,
+	project: ProjectId,
+	id: DatabaseId,
+) -> AppResult<Database> {
+	sqlx::query_as!(
+		Database,
+		r#"
+			SELECT d.id AS "id: DatabaseId", d.project_id AS "project_id: ProjectId",
+				d.server_id AS "server_id: ServerId", d.name, d.engine AS "engine: EngineKind",
+				d.version, d.credentials, d.public_port, d.memory_limit_mb, d.cpu_limit,
+				d.status AS "status: DatabaseStatus", d.status_message, d.container_id,
+				d.backup_target_id AS "backup_target_id: BackupTargetId", d.backup_schedule,
+				d.backup_keep, d.backup_next_run_at
+			FROM databases d
+			JOIN projects p ON p.id = d.project_id
+			WHERE d.id = $3 AND d.project_id = $2 AND p.team_id = $1
+		"#,
+		team as TeamId,
+		project as ProjectId,
+		id as DatabaseId
+	)
+	.fetch_optional(db)
+	.await?
+	.ok_or(ServerError::DatabaseNotFound)
+}
+
+pub async fn backup_target(
+	db: &PgPool,
+	team: TeamId,
+	id: BackupTargetId,
+) -> AppResult<BackupTarget> {
+	sqlx::query_as!(
+		BackupTarget,
+		r#"
+			SELECT id AS "id: BackupTargetId", team_id AS "team_id: TeamId", name, endpoint,
+				region, bucket, path_style, prefix, access_key_id, secret_access_key, created_at
+			FROM backup_targets
+			WHERE id = $2 AND team_id = $1
+		"#,
+		team as TeamId,
+		id as BackupTargetId
+	)
+	.fetch_optional(db)
+	.await?
+	.ok_or(ServerError::BackupTargetNotFound)
 }

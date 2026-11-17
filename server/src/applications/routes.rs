@@ -23,7 +23,7 @@ use crate::error::{AppResult, ServerError};
 use crate::ids::{ApplicationId, ProjectId, ServerId, TeamId};
 use crate::servers::Server;
 use crate::state::AppState;
-use crate::{db, scope, validate};
+use crate::{db, scope, validate, volumes};
 
 pub fn router() -> Router<AppState> {
 	Router::new()
@@ -335,7 +335,7 @@ pub async fn update(
 
 /// Deletes an application; caller must hold `delete application` on the
 /// team. The application must belong to the project named in the path.
-/// Containers and images on the server are removed best-effort first: the
+/// Containers, volumes and images on the server are removed best-effort first: the
 /// row is the source of truth, so a failure there never blocks the delete.
 pub async fn remove(
 	State(s): State<AppState>,
@@ -378,6 +378,26 @@ async fn remove_service(s: &AppState, team: TeamId, app: &Application) {
 			application = app.id.0,
 			"failed to remove application containers: {e}"
 		);
+	}
+
+	let volumes = match volumes::list(&s.db, app.id).await {
+		Ok(volumes) => volumes,
+		Err(e) => {
+			warn!(application = app.id.0, "cannot list volumes to remove: {e}");
+			return;
+		}
+	};
+	for volume in volumes {
+		if let Err(e) = client
+			.send(Method::DELETE, &format!("/v1/volumes/{}", volume.name))
+			.await
+		{
+			warn!(
+				application = app.id.0,
+				volume = volume.id.0,
+				"failed to remove volume: {e}"
+			);
+		}
 	}
 }
 
@@ -475,7 +495,7 @@ pub async fn logs(
 	Ok(Sse::new(log_events(events)).keep_alive(KeepAlive::default()))
 }
 
-fn log_events(
+pub fn log_events(
 	events: BoxStream<'static, Result<proto::Event, ServerError>>,
 ) -> impl Stream<Item = Result<SseEvent, Infallible>> {
 	futures_util::stream::unfold(Some(events), |events| async move {

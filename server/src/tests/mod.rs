@@ -16,12 +16,17 @@ use crate::logs::LogHub;
 use crate::state::{AppState, Config};
 
 pub async fn app(db: PgPool) -> Router {
+	crate::routes::routes(state(db), "").await.unwrap()
+}
+
+/// A full `AppState` over `db` with a throwaway data dir and no live agent.
+pub fn state(db: PgPool) -> AppState {
 	let _ = rustls::crypto::ring::default_provider().install_default();
 	let data_dir = tempfile::tempdir().unwrap().keep();
 	let log_dir = data_dir.join("logs").join("jobs");
 	std::fs::create_dir_all(&log_dir).unwrap();
 	let local_agent_socket = data_dir.join("agent.sock");
-	let state = AppState {
+	AppState {
 		db,
 		secrets: Arc::new(SecretBox::from_identity_str(&generate_identity()).unwrap()),
 		agents: Arc::new(AgentPool::new(local_agent_socket.clone())),
@@ -36,8 +41,7 @@ pub async fn app(db: PgPool) -> Router {
 			local_agent_socket,
 			data_dir,
 		}),
-	};
-	crate::routes::routes(state, "").await.unwrap()
+	}
 }
 
 pub async fn call(

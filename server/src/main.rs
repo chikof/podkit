@@ -22,7 +22,9 @@ use crate::state::{AppState, Config};
 mod agents;
 mod applications;
 mod auth;
+mod backups;
 mod config;
+mod databases;
 mod db;
 mod deployments;
 mod domains;
@@ -40,6 +42,7 @@ mod servers;
 mod state;
 mod teams;
 mod validate;
+mod volumes;
 mod webhooks;
 
 #[cfg(test)]
@@ -100,6 +103,7 @@ async fn main() -> AppResult<()> {
 	let shutdown = CancellationToken::new();
 	let dispatcher = tokio::spawn(worker::run_dispatcher(state.clone(), shutdown.clone()));
 	tokio::spawn(servers::sync::run(state.clone(), shutdown.clone()));
+	tokio::spawn(backups::schedule::run(state.clone(), shutdown.clone()));
 	maintenance::spawn(state.clone());
 	tokio::spawn(signal_shutdown(shutdown.clone()));
 

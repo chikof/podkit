@@ -34,11 +34,8 @@ pub enum Resource {
 	Deployment,
 	EnvVar,
 	Domain,
-	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
 	Database,
-	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
 	Volume,
-	#[allow(dead_code, reason = "consumed by the agent and data-service slices")]
 	Backup,
 }
 

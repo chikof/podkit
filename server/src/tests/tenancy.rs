@@ -100,4 +100,33 @@ async fn other_team_cannot_reach_resources(db: PgPool) {
 			.await
 			.unwrap();
 	assert!(still_there, "application row survived cross-team DELETE");
+
+	let a_db = crypto::generate_id();
+	sqlx::query(
+		"INSERT INTO databases (id, project_id, server_id, name, engine, version, credentials)
+		VALUES ($1, $2, $3, 'main', 'postgres', '18', ''::bytea)",
+	)
+	.bind(a_db)
+	.bind(a_project)
+	.bind(a_server)
+	.execute(&db)
+	.await
+	.unwrap();
+	let db_path = format!("/teams/{b_team}/projects/{a_project}/databases/{a_db}");
+
+	let (s, _) = call(&app, "GET", &db_path, Some(b_token.as_str()), None).await;
+	assert_eq!(s, StatusCode::NOT_FOUND, "cross-team database GET");
+
+	let (s, _) = call(&app, "DELETE", &db_path, Some(b_token.as_str()), None).await;
+	assert_eq!(s, StatusCode::NOT_FOUND, "cross-team database DELETE");
+
+	let status: String = sqlx::query_scalar("SELECT status FROM databases WHERE id = $1")
+		.bind(a_db)
+		.fetch_one(&db)
+		.await
+		.unwrap();
+	assert_eq!(
+		status, "pending",
+		"database row untouched by cross-team DELETE"
+	);
 }

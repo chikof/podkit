@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS backups;
+DROP TABLE IF EXISTS databases;
+DROP TABLE IF EXISTS backup_targets;
+DROP TABLE IF EXISTS volumes;
+DELETE FROM role_permissions WHERE permission_id BETWEEN 37 AND 48;
+DELETE FROM permissions WHERE id BETWEEN 37 AND 48;
