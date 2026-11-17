@@ -40,6 +40,8 @@ pub fn state(db: PgPool) -> AppState {
 			acme_email: None,
 			agent_binaries_dir: data_dir.clone(),
 			hf_endpoint: "http://127.0.0.1:1".to_owned(),
+			model_ready_timeout: None,
+			model_ready_interval: std::time::Duration::from_millis(20),
 			local_agent_socket,
 			data_dir,
 		}),

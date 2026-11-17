@@ -115,6 +115,15 @@ pub struct DeploySpec {
 	/// GPUs to hand to the container; `None` for none. Absent in older payloads.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub gpus: Option<GpuRequest>,
+	/// Replaces the image entrypoint. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub entrypoint: Option<Vec<String>>,
+	/// Size of `/dev/shm` in bytes; `None` keeps the runtime default.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub shm_bytes: Option<i64>,
+	/// Seconds between SIGTERM and SIGKILL when the container is stopped.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub stop_timeout_s: Option<u32>,
 }
 
 /// GPUs a container asks for.
@@ -220,6 +229,9 @@ pub struct VolumeMount {
 	pub name: String,
 	/// Absolute mount path in the container.
 	pub path: String,
+	/// Mount read-only. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub read_only: bool,
 }
 
 /// A host port mapping.
@@ -493,6 +505,39 @@ impl std::fmt::Debug for ModelDownloadRequest {
 			.field("token", &self.token.as_ref().map(|_| "<redacted>"))
 			.finish()
 	}
+}
+
+/// `POST /v1/probes` body: one HTTP request to a container's port, made from
+/// a throwaway container on the `podkit` network so it works with rootless
+/// Podman, where the host cannot reach container addresses.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProbeRequest {
+	/// Container to check; the request goes to it.
+	pub container_id: String,
+	/// DNS name on the `podkit` network (one of the container's aliases).
+	pub host: String,
+	/// Port inside the container.
+	pub port: u16,
+	/// `GET` or `POST`.
+	pub method: String,
+	/// Path and query, starting with `/`.
+	pub path: String,
+	/// Request body, sent as JSON for `POST`.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub body: Option<String>,
+	/// Seconds before the request is given up on.
+	pub timeout_s: u32,
+}
+
+/// `POST /v1/probes` response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProbeResponse {
+	/// False when the container has exited; no request was made then.
+	pub running: bool,
+	/// HTTP status, or `None` when nothing answered (connection refused, timeout).
+	pub status: Option<u16>,
+	/// Start of the response body or the transport error.
+	pub detail: String,
 }
 
 /// Shown when Hugging Face answers a download or listing with 401 or 403.

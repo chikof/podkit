@@ -205,6 +205,7 @@ async fn build_spec(
 		.map(|v| VolumeMount {
 			name: v.name,
 			path: v.mount_path,
+			read_only: false,
 		})
 		.collect::<Vec<_>>();
 	// A volume can only be mounted by one container at a time.
@@ -234,6 +235,9 @@ async fn build_spec(
 		cpu_cores: application.cpu_limit.map(f64::from),
 		strategy,
 		gpus: None,
+		entrypoint: None,
+		shm_bytes: None,
+		stop_timeout_s: None,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,

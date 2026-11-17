@@ -45,6 +45,7 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/backups/upload", post(backup_upload))
 		.route("/v1/backups/restore", post(backup_restore))
 		.route("/v1/model-downloads", post(model_download_route))
+		.route("/v1/probes", post(probe_route))
 		.with_state(ctx)
 }
 
@@ -363,6 +364,18 @@ async fn delete_volume(
 			&e,
 		)),
 	}
+}
+
+async fn probe_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::ProbeRequest>,
+) -> Result<Json<proto::ProbeResponse>, ApiError> {
+	check_ref(&req.container_id)?;
+	crate::probe::validate(&req).map_err(|m| ApiError::new(StatusCode::BAD_REQUEST, m))?;
+	crate::probe::run(&ctx.podman(), &req)
+		.await
+		.map(Json)
+		.map_err(|m| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, m))
 }
 
 async fn model_download_route(

@@ -157,6 +157,9 @@ async fn dispatch(
 		JobKind::Restore => crate::backups::run_restore(state, job, token, log).await,
 		JobKind::ServerBootstrap => crate::servers::bootstrap::run(state, job, token, log).await,
 		JobKind::ModelDownload => crate::model_files::run::run(state, job, token, log).await,
+		JobKind::ModelStart | JobKind::ModelStop | JobKind::ModelRemove => {
+			crate::models::run::run(state, job, token, log).await
+		}
 	}
 }
 

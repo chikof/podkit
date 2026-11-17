@@ -174,6 +174,9 @@ async fn deploy_route_passes_the_gpu_through() {
 			vendor: GpuVendor::Nvidia,
 			devices: GpuDevices::All,
 		}),
+		entrypoint: None,
+		shm_bytes: None,
+		stop_timeout_s: None,
 	};
 	let body = reqwest::Client::new()
 		.post(format!("http://{addr}/v1/deploy"))

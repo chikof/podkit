@@ -291,11 +291,17 @@ fn container_spec(spec: &DeploySpec, image: &str, name: &str) -> ContainerSpec {
 		binds: spec
 			.volumes
 			.iter()
-			.map(|v| format!("{}:{}", v.name, v.path))
+			.map(|v| {
+				let mode = if v.read_only { ":ro" } else { "" };
+				format!("{}:{}{mode}", v.name, v.path)
+			})
 			.collect(),
 		memory_bytes: spec.memory_bytes,
 		cpu_cores: spec.cpu_cores,
 		gpus: spec.gpus.clone(),
+		entrypoint: spec.entrypoint.clone(),
+		shm_bytes: spec.shm_bytes,
+		stop_timeout_s: spec.stop_timeout_s,
 	}
 }
 
@@ -497,6 +503,9 @@ mod tests {
 				acme_email: None,
 			},
 			gpus: None,
+			entrypoint: None,
+			shm_bytes: None,
+			stop_timeout_s: None,
 		}
 	}
 
@@ -565,6 +574,7 @@ mod tests {
 		bad.volumes = vec![proto::VolumeMount {
 			name: "data".to_string(),
 			path: "/data:ro".to_string(),
+			read_only: false,
 		}];
 		assert!(validate(&bad).is_err());
 	}
@@ -575,6 +585,7 @@ mod tests {
 		s.volumes = vec![proto::VolumeMount {
 			name: "data".to_string(),
 			path: "/var/lib/data".to_string(),
+			read_only: false,
 		}];
 		let c = container_spec(&s, "alpine:3", "podkit-app-1-9");
 		assert_eq!(c.binds, ["data:/var/lib/data"]);

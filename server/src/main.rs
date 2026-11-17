@@ -36,6 +36,7 @@ mod logs;
 mod maintenance;
 mod members;
 mod model_files;
+mod models;
 mod projects;
 mod routes;
 mod scope;
@@ -165,6 +166,8 @@ fn resolve_config(config: &ServerConfig) -> AppResult<Config> {
 			.as_deref()
 			.map_or("https://huggingface.co", |e| e.trim_end_matches('/'))
 			.to_owned(),
+		model_ready_timeout: None,
+		model_ready_interval: Duration::from_secs(3),
 	})
 }
 

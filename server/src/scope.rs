@@ -123,3 +123,14 @@ pub async fn backup_target(
 	.await?
 	.ok_or(ServerError::BackupTargetNotFound)
 }
+
+pub async fn model(
+	db: &PgPool,
+	team: TeamId,
+	project: ProjectId,
+	id: crate::ids::ModelId,
+) -> AppResult<crate::models::Model> {
+	crate::models::find_scoped(db, team, project, id)
+		.await?
+		.ok_or(ServerError::ModelNotFound)
+}

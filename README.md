@@ -20,7 +20,11 @@ named volumes, one-click Postgres/MySQL/MongoDB/Redis, and scheduled S3
 backups with restore. Model weights from Hugging Face download into their own
 volumes (`/api/v1/teams/{t}/model-files`): the size is checked against the
 server's free disk before anything is queued, gated repos use a write-only
-team token, and an interrupted download resumes.
+team token, and an interrupted download resumes. A downloaded model runs as a
+one-click inference service (`/api/v1/teams/{t}/projects/{p}/models`) on
+llama.cpp, Ollama, vLLM, colibri or any image that serves `/v1`; it is
+reachable only as `model-<slug>` on the server's internal network and the
+create call refuses a format, GPU or memory size the server cannot take.
 
 ## Running it (dev)
 

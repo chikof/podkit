@@ -75,23 +75,71 @@ pub struct Server {
 /// AMD GPUs below this are integrated parts that cannot run an engine.
 const MIN_AMD_GPU_VRAM_MB: u64 = 2048;
 
-/// Whether the server's latest inventory shows a GPU a container can use:
-/// an NVIDIA GPU with a `nvidia.com/gpu` CDI spec (`docs/spikes/gpu-cdi.md`),
-/// or a discrete AMD GPU. `false` before the first snapshot.
-// Nothing calls it yet; AI 04 (engine placement) does.
-#[allow(dead_code)]
+/// The GPU vendors a container on this server can use, NVIDIA first: NVIDIA
+/// needs a GPU and a `nvidia.com/gpu` CDI spec (`docs/spikes/gpu-cdi.md`), AMD
+/// a discrete card. Empty before the first snapshot.
 #[must_use]
-pub fn gpu_capable(server: &Server) -> bool {
+pub fn gpu_vendors(server: &Server) -> Vec<proto::GpuVendor> {
 	let Some(hardware) = server.hardware.as_ref().map(|h| &h.0) else {
-		return false;
+		return Vec::new();
 	};
-	let nvidia = hardware.gpus.iter().any(|g| g.vendor == "nvidia")
-		&& hardware.cdi.devices.iter().any(|k| k == "nvidia.com/gpu");
-	let amd = hardware
+	let mut vendors = Vec::new();
+	if hardware.gpus.iter().any(|g| g.vendor == "nvidia")
+		&& hardware.cdi.devices.iter().any(|k| k == "nvidia.com/gpu")
+	{
+		vendors.push(proto::GpuVendor::Nvidia);
+	}
+	if hardware
 		.gpus
 		.iter()
-		.any(|g| g.vendor == "amd" && g.vram_mb >= MIN_AMD_GPU_VRAM_MB);
-	nvidia || amd
+		.any(|g| g.vendor == "amd" && g.vram_mb >= MIN_AMD_GPU_VRAM_MB)
+	{
+		vendors.push(proto::GpuVendor::Amd);
+	}
+	vendors
+}
+
+/// Total VRAM, in MB, of the usable GPUs of `vendor`.
+#[must_use]
+pub fn vram_mb(server: &Server, vendor: proto::GpuVendor) -> u64 {
+	let name = match vendor {
+		proto::GpuVendor::Nvidia => "nvidia",
+		proto::GpuVendor::Amd => "amd",
+	};
+	server.hardware.as_ref().map_or(0, |h| {
+		h.gpus
+			.iter()
+			.filter(|g| {
+				g.vendor == name
+					&& (vendor == proto::GpuVendor::Nvidia || g.vram_mb >= MIN_AMD_GPU_VRAM_MB)
+			})
+			.map(|g| g.vram_mb)
+			.sum()
+	})
+}
+
+/// Why `vendor` cannot be used on this server, for an error message.
+#[must_use]
+pub fn gpu_problem(server: &Server, vendor: proto::GpuVendor) -> String {
+	let Some(hardware) = server.hardware.as_ref().map(|h| &h.0) else {
+		return format!("{} has not reported its hardware yet", server.name);
+	};
+	match vendor {
+		proto::GpuVendor::Nvidia if hardware.gpus.iter().any(|g| g.vendor == "nvidia") => format!(
+			"{} has an NVIDIA GPU but no CDI spec for it (install nvidia-container-toolkit and \
+			generate one, see docs/spikes/gpu-cdi.md)",
+			server.name
+		),
+		proto::GpuVendor::Nvidia => format!("{} has no NVIDIA GPU", server.name),
+		proto::GpuVendor::Amd => format!("{} has no discrete AMD GPU", server.name),
+	}
+}
+
+/// Whether the server's latest inventory shows a GPU a container can use.
+/// `false` before the first snapshot.
+#[must_use]
+pub fn gpu_capable(server: &Server) -> bool {
+	!gpu_vendors(server).is_empty()
 }
 
 impl Server {

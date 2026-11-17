@@ -281,6 +281,11 @@ async fn remove(
 			"the download is still running; cancel it first".to_owned(),
 		));
 	}
+	if let Some(model) = crate::models::name_using_file(&s.db, file.id).await? {
+		return Err(ServerError::Conflict(format!(
+			"the model {model} serves these files; remove it first"
+		)));
+	}
 	let server = scope::server(&s.db, team, file.server_id).await?;
 	s.agents
 		.client(&s, &server)

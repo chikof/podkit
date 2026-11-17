@@ -41,5 +41,6 @@ id!(
 	BackupTargetId,
 	BackupId,
 	ModelFileId,
+	ModelId,
 	JobId,
 );

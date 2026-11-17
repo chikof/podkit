@@ -85,6 +85,12 @@ pub struct ContainerSpec {
 	pub cpu_cores: Option<f64>,
 	/// GPUs to pass through.
 	pub gpus: Option<GpuRequest>,
+	/// Replaces the image entrypoint.
+	pub entrypoint: Option<Vec<String>>,
+	/// `/dev/shm` size in bytes.
+	pub shm_bytes: Option<i64>,
+	/// Seconds between SIGTERM and SIGKILL on stop.
+	pub stop_timeout_s: Option<u32>,
 }
 
 /// Device mappings for a GPU request: the CDI-name variant for NVIDIA
@@ -414,6 +420,8 @@ impl Podman {
 				ContainerCreateBody {
 					image: Some(spec.image),
 					cmd: spec.command,
+					entrypoint: spec.entrypoint,
+					stop_timeout: spec.stop_timeout_s.map(i64::from),
 					env: (!spec.env.is_empty())
 						.then(|| spec.env.iter().map(|(k, v)| format!("{k}={v}")).collect()),
 					exposed_ports,
@@ -421,6 +429,7 @@ impl Podman {
 					networking_config,
 					host_config: Some(HostConfig {
 						devices,
+						shm_size: spec.shm_bytes,
 						port_bindings,
 						binds: (!spec.binds.is_empty()).then_some(spec.binds),
 						memory: spec.memory_bytes,

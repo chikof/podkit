@@ -34,6 +34,12 @@ pub enum JobKind {
 	Restore,
 	/// `target_id` is a model file id.
 	ModelDownload,
+	/// `target_id` is a model id. Deploys the engine container and waits until it answers.
+	ModelStart,
+	/// `target_id` is a model id.
+	ModelStop,
+	/// `target_id` is a model id.
+	ModelRemove,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -225,6 +231,23 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 			)
 			.bind(target_id)
 			.bind(message)
+			.execute(&state.db)
+			.await
+		}
+		// A failed removal leaves the row so it can be retried. A start or stop that
+		// fails after a removal was requested must not hide the removal.
+		JobKind::ModelStart | JobKind::ModelStop | JobKind::ModelRemove => {
+			let message = match failure {
+				JobFailure::Cancelled => "cancelled",
+				JobFailure::Failed(m) => m.as_str(),
+			};
+			sqlx::query(
+				"UPDATE models SET status = 'failed', error = $2, updated_at = NOW()
+				WHERE id = $1 AND ($3 OR status <> 'removing')",
+			)
+			.bind(target_id)
+			.bind(message)
+			.bind(kind == JobKind::ModelRemove)
 			.execute(&state.db)
 			.await
 		}

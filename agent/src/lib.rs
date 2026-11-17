@@ -7,6 +7,7 @@ pub mod ingress;
 pub mod model_download;
 pub mod nixpacks;
 pub mod podman;
+pub mod probe;
 pub mod routes;
 pub mod source;
 pub mod supervisor;

@@ -77,6 +77,9 @@ pub enum ServerError {
 	#[error("model file not found")]
 	ModelFileNotFound,
 
+	#[error("model not found")]
+	ModelNotFound,
+
 	#[error("could not reach Hugging Face")]
 	HuggingFaceUnavailable,
 
@@ -135,7 +138,8 @@ impl ServerError {
 			| Self::VolumeNotFound
 			| Self::BackupNotFound
 			| Self::BackupTargetNotFound
-			| Self::ModelFileNotFound => StatusCode::NOT_FOUND,
+			| Self::ModelFileNotFound
+			| Self::ModelNotFound => StatusCode::NOT_FOUND,
 			Self::Forbidden => StatusCode::FORBIDDEN,
 			Self::AgentUnavailable | Self::HuggingFaceUnavailable => StatusCode::BAD_GATEWAY,
 		}

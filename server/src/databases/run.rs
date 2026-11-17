@@ -184,6 +184,7 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 		volumes: vec![VolumeMount {
 			name: data_volume(database.id),
 			path: engine.data_path(&database.version).to_owned(),
+			read_only: false,
 		}],
 		published_ports,
 		memory_bytes: database
@@ -192,6 +193,9 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 		cpu_cores: database.cpu_limit.map(f64::from),
 		strategy: Strategy::Recreate,
 		gpus: None,
+		entrypoint: None,
+		shm_bytes: None,
+		stop_timeout_s: None,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,
