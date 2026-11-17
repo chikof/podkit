@@ -125,7 +125,12 @@ async fn login_page() -> Markup {
 						input type="password" autocomplete="current-password" required "data-bind:password";
 					}
 					p.error role="alert" "data-show"="$_error" "data-text"="$_error" {}
-					button type="submit" "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Sign in" }
+					// Browsers drop the `Secure` session cookie outside a secure context,
+					// which would bounce a "successful" sign-in back to this page.
+					p.error role="alert" "data-show"="!window.isSecureContext" style="display: none" {
+						"Sign-in needs HTTPS. Open podkit over https:// or on localhost."
+					}
+					button type="submit" "data-indicator:_busy" "data-attr:disabled"="$_busy || !window.isSecureContext" { "Sign in" }
 				}
 			}
 		},
