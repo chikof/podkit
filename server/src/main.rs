@@ -23,6 +23,7 @@ mod agents;
 mod applications;
 mod auth;
 mod backups;
+mod catalog;
 mod config;
 mod databases;
 mod db;
