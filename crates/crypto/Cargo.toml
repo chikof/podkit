@@ -9,7 +9,7 @@ rust-version.workspace = true
 [dependencies]
 age.workspace = true
 argon2.workspace = true
-getrandom = "0.2"
+getrandom = "0.4"
 thiserror.workspace = true
 tokio.workspace = true
 zeroize.workspace = true
