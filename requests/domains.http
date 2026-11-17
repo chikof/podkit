@@ -5,7 +5,7 @@
 # it here — podkit doesn't verify DNS, it's self-evident when it's wrong.
 # With ACME_EMAIL configured server-side, this domain gets an HTTPS router
 # on the next deploy.
-POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/domains
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/domains
 Authorization: Bearer {{auth.token}}
 Content-Type: application/json
 
@@ -15,10 +15,10 @@ Content-Type: application/json
 
 ### List
 # @name List
-GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/domains
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/domains
 Authorization: Bearer {{auth.token}}
 
 ### Delete
 # @name Delete
-DELETE {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/domains/{{domain.id}}
+DELETE {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/domains/{{domain.id}}
 Authorization: Bearer {{auth.token}}

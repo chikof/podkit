@@ -1,5 +1,5 @@
 //! Backup targets: the S3-compatible buckets of a team. Routes live under
-//! `/teams/{team}/backup-targets`.
+//! `/api/v1/teams/{team}/backup-targets`.
 
 use std::net::{Ipv4Addr, Ipv6Addr};
 

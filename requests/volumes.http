@@ -4,7 +4,7 @@
 # Volumes are mounted from the next deploy on (the app is recreated rather
 # than rolled, since a volume has one writer). mount_path must be absolute,
 # not "/", and unique per application (409 otherwise).
-POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/volumes
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/volumes
 Authorization: Bearer {{auth.token}}
 Content-Type: application/json
 
@@ -14,12 +14,12 @@ Content-Type: application/json
 
 ### List
 # @name List
-GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/volumes
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/volumes
 Authorization: Bearer {{auth.token}}
 
 ### Delete
 # @name Delete
 # Removes the volume and its data. 409 "volume is in use; stop the
 # application first" while a container still mounts it.
-DELETE {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/volumes/{{volume.id}}
+DELETE {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/volumes/{{volume.id}}
 Authorization: Bearer {{auth.token}}

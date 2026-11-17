@@ -77,15 +77,22 @@ pub async fn user_with_team(app: &Router, name: &str) -> (String, i64) {
 	let email = format!("{name}@example.com");
 	let creds =
 		serde_json::json!({ "name": name, "email": email, "password": "correct horse battery" });
-	let (s, _) = call(app, "POST", "/auth/register", None, Some(creds.clone())).await;
+	let (s, _) = call(
+		app,
+		"POST",
+		"/api/v1/auth/register",
+		None,
+		Some(creds.clone()),
+	)
+	.await;
 	assert!(s.is_success(), "register {name}: {s}");
-	let (s, login) = call(app, "POST", "/auth/login", None, Some(creds)).await;
+	let (s, login) = call(app, "POST", "/api/v1/auth/login", None, Some(creds)).await;
 	assert_eq!(s, StatusCode::OK, "login {name}");
 	let token = login["token"].as_str().unwrap().to_owned();
 	let (s, team) = call(
 		app,
 		"POST",
-		"/teams",
+		"/api/v1/teams",
 		Some(token.as_str()),
 		Some(serde_json::json!({ "name": name, "slug": name })),
 	)

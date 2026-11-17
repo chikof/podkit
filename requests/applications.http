@@ -6,7 +6,7 @@
 # auto-provisioned `local` server — GET servers List and pick is_local=true.
 # deploy_key is for ssh:// repo URLs, git_token (e.g. a GitHub PAT) for
 # https:// ones of private repos; leave both empty for public repos.
-POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications
 Authorization: Bearer {{auth.token}}
 Content-Type: application/json
 
@@ -23,7 +23,7 @@ Content-Type: application/json
 
 ### List
 # @name List
-GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications
 Authorization: Bearer {{auth.token}}
 
 ### Update
@@ -31,7 +31,7 @@ Authorization: Bearer {{auth.token}}
 # Everything except server_id is editable (moving servers isn't a config
 # edit). Applies on the next deploy — a running container isn't touched.
 # deploy_key / git_token omitted/empty leave the stored credential untouched.
-PATCH {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}
+PATCH {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}
 Authorization: Bearer {{auth.token}}
 Content-Type: application/json
 
@@ -48,7 +48,7 @@ Content-Type: application/json
 # Halts the currently running deployment (stops its container; the agent
 # won't restart it). 400s if the application isn't currently running. Use
 # Restart to bring it back — this does not delete anything, deployment history is untouched.
-POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/stop
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/stop
 Authorization: Bearer {{auth.token}}
 
 ### Restart
@@ -56,7 +56,7 @@ Authorization: Bearer {{auth.token}}
 # Redeploys the most recent successfully-built image — no git clone or
 # rebuild, same zero-downtime swap as any other deploy. 400s if the
 # application has never produced a build.
-POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/restart
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/restart
 Authorization: Bearer {{auth.token}}
 
 ### Logs
@@ -65,11 +65,11 @@ Authorization: Bearer {{auth.token}}
 # from the server agent: `event: log` (data is {"stream","line"}) and a
 # final `event: end`. tail is capped at 5000; follow=false ends after the
 # tail. 400s if the application isn't currently running.
-GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/logs?tail=200&follow=true
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/logs?tail=200&follow=true
 Authorization: Bearer {{auth.token}}
 Accept: text/event-stream
 
 ### Delete
 # @name Delete
-DELETE {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}
+DELETE {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}
 Authorization: Bearer {{auth.token}}

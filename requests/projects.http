@@ -1,7 +1,7 @@
 ### Create
 # @name Create
 # @capture file-secret project.id = response.json.id
-POST {{base.url}}/teams/{{team.id}}/projects
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects
 Authorization: Bearer {{auth.token}}
 Content-Type: application/json
 
@@ -12,10 +12,10 @@ Content-Type: application/json
 
 ### List
 # @name List
-GET {{base.url}}/teams/{{team.id}}/projects
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects
 Authorization: Bearer {{auth.token}}
 
 ### Delete
 # @name Delete
-DELETE {{base.url}}/teams/{{team.id}}/projects/{{project.id}}
+DELETE {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}
 Authorization: Bearer {{auth.token}}
