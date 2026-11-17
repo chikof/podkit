@@ -509,3 +509,12 @@ async fn gateway_usage_is_kept_per_key_model_and_hour() {
 		"taking resets the counters"
 	);
 }
+
+#[test]
+fn gateway_key_hash_is_hex_sha256() {
+	// SHA-256 of "abc"; the server's test checks the same vector.
+	assert_eq!(
+		hash_key("abc"),
+		"ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+	);
+}

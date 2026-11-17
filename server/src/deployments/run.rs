@@ -19,7 +19,7 @@ use crate::jobs::{Job, JobFailure};
 use crate::logs::JobLog;
 use crate::servers::Server;
 use crate::state::AppState;
-use crate::{deployments, domains, env_vars, scope, volumes};
+use crate::{deployments, domains, env_vars, links, scope, volumes};
 
 const LOST_CONNECTION: &str = "lost connection to server agent";
 
@@ -294,6 +294,16 @@ async fn load_env(
 		})?;
 		env.push((row.key, value));
 	}
+	// The gateway's variables are podkit's to set: they win over a user's of the same name.
+	let gateway = links::env(state, application.id).await.map_err(|e| {
+		tracing::error!(
+			application = application.id.0,
+			"failed to load gateway env: {e}"
+		);
+		failed("failed to load the application's model links")
+	})?;
+	env.retain(|(key, _)| !gateway.iter().any(|(g, _)| g == key));
+	env.extend(gateway);
 	Ok(env)
 }
 

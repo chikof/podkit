@@ -546,6 +546,11 @@ pub async fn remove(
 			"the model is already being removed".to_owned(),
 		));
 	}
+	if crate::links::count_for_model(&s.db, model.id).await? > 0 {
+		return Err(ServerError::Conflict(
+			"applications are linked to the model; unlink them first".to_owned(),
+		));
+	}
 	models::set_status(&s.db, model.id, ModelStatus::Removing, None).await?;
 	model.status = ModelStatus::Removing;
 	model.error = None;

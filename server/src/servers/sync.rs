@@ -70,6 +70,8 @@ async fn check(state: &AppState, server: &Server) {
 	// Best effort: a failure here says nothing about reachability.
 	super::hardware::refresh(&state.db, server.id, &client).await;
 
+	crate::links::sync(state, server.id, &client).await;
+
 	if let Err(e) = mark_crashed(state, server.id, &client).await {
 		tracing::warn!(server = %server.id, error = %e, "status sync could not check containers");
 	}

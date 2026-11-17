@@ -127,15 +127,25 @@ fn current_exe() -> Result<(PathBuf, String), String> {
 	Ok((exe, label))
 }
 
+/// Whether the binary's ELF interpreter lives in the Nix store (it is among the first bytes).
+fn needs_nix_store(exe: &Path) -> bool {
+	use std::io::Read;
+	let mut head = [0u8; 2048];
+	let Ok(mut file) = std::fs::File::open(exe) else {
+		return false;
+	};
+	let n = file.read(&mut head).unwrap_or(0);
+	head[..n].windows(11).any(|w| w == b"/nix/store/")
+}
+
 /// The sidecar's container spec for the agent binary at `exe`.
 #[must_use]
 pub fn container_spec(exe: &Path, label: &str, dir: &Path) -> ContainerSpec {
 	let mut binds = vec![format!("{}:{MOUNT}", dir.display())];
-	if exe.starts_with("/nix/store") {
-		// A dev build links against the Nix store; the production binary is static.
+	binds.push(format!("{0}:{0}:ro", exe.display()));
+	if needs_nix_store(exe) {
+		// A dev build is linked against the Nix store; the production binary is static.
 		binds.push("/nix/store:/nix/store:ro".to_owned());
-	} else {
-		binds.push(format!("{0}:{0}:ro", exe.display()));
 	}
 	ContainerSpec {
 		name: CONTAINER.to_owned(),
@@ -408,11 +418,20 @@ mod tests {
 			spec.binds[1],
 			"/opt/podkit/podkit-agent:/opt/podkit/podkit-agent:ro"
 		);
-		let nix = container_spec(
-			Path::new("/nix/store/a-agent/bin/podkit-agent"),
-			"x",
-			Path::new("/d"),
+		assert_eq!(
+			spec.binds.len(),
+			2,
+			"a binary that does not exist needs nothing else"
 		);
-		assert_eq!(nix.binds[1], "/nix/store:/nix/store:ro");
+
+		let dir = tempfile::tempdir().unwrap();
+		let dynamic = dir.path().join("agent");
+		std::fs::write(
+			&dynamic,
+			b"\x7fELF....\0/nix/store/x-glibc/lib/ld-linux.so\0",
+		)
+		.unwrap();
+		let nix = container_spec(&dynamic, "x", Path::new("/d"));
+		assert_eq!(nix.binds[2], "/nix/store:/nix/store:ro");
 	}
 }

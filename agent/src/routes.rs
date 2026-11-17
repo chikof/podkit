@@ -402,10 +402,10 @@ async fn backup_restore(State(ctx): State<Arc<Ctx>>, Json(req): Json<RestoreRequ
 async fn gateway_config(
 	State(ctx): State<Arc<Ctx>>,
 	Json(config): Json<proto::GatewayConfig>,
-) -> Result<StatusCode, ApiError> {
+) -> Result<Json<serde_json::Value>, ApiError> {
 	crate::gateway::sidecar::apply(&ctx.podman(), &ctx.supervisor, &ctx.data_dir, &config)
 		.await
-		.map(|()| StatusCode::NO_CONTENT)
+		.map(|()| Json(serde_json::json!({})))
 		.map_err(|m| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, m))
 }
 

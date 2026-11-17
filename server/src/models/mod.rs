@@ -193,6 +193,27 @@ pub async fn find_scoped(
 	.await
 }
 
+/// A model of any project of `team`; another team's id is a miss.
+pub async fn find_in_team(
+	db: impl PgExecutor<'_>,
+	team: crate::ids::TeamId,
+	id: ModelId,
+) -> Result<Option<Model>, sqlx::Error> {
+	sqlx::query_as(sqlx::AssertSqlSafe(format!(
+		"SELECT {} FROM models m JOIN projects p ON p.id = m.project_id
+		WHERE m.id = $2 AND p.team_id = $1",
+		COLUMNS
+			.split(", ")
+			.map(|c| format!("m.{c}"))
+			.collect::<Vec<_>>()
+			.join(", ")
+	)))
+	.bind(team)
+	.bind(id)
+	.fetch_optional(db)
+	.await
+}
+
 pub async fn list_by_project(
 	db: impl PgExecutor<'_>,
 	project: ProjectId,
