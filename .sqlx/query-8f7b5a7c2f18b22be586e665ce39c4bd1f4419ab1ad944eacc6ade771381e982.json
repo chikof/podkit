@@ -1,0 +1,41 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT p.action AS \"action?\", p.resource AS \"resource?\"\n\t\t\tFROM team_members tm\n\t\t\tLEFT JOIN role_permissions rp ON rp.role_id = tm.role_id\n\t\t\tLEFT JOIN permissions p ON p.id = rp.permission_id\n\t\t\tWHERE tm.team_id = $1 AND tm.user_id = $2\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "action?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "permissions",
+            "name": "action"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "resource?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "permissions",
+            "name": "resource"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "8f7b5a7c2f18b22be586e665ce39c4bd1f4419ab1ad944eacc6ade771381e982"
+}

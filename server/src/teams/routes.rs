@@ -2,7 +2,7 @@ use axum::routing::post;
 use axum::{Json, Router, extract::State};
 use serde::{Deserialize, Serialize};
 
-use super::{Team, create_with_owner, list_for_user};
+use super::{Team, list_for_user, service};
 use crate::auth::AuthUser;
 use crate::error::AppResult;
 use crate::ids::TeamId;
@@ -45,7 +45,7 @@ async fn create(
 	user: AuthUser,
 	Json(body): Json<CreateTeamRequest>,
 ) -> AppResult<Json<TeamResponse>> {
-	let team = create_with_owner(&s.db, &body.name, &body.slug, &body.logo, user.id).await?;
+	let team = service::create(&s.db, user.id, &body.name, &body.slug, &body.logo).await?;
 	Ok(Json(TeamResponse::from(&team)))
 }
 

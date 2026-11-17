@@ -3,12 +3,10 @@ use axum::routing::{delete, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use super::Project;
+use super::{Project, service};
 use crate::auth::AuthUser;
-use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::AppResult;
 use crate::ids::{ProjectId, TeamId};
-use crate::scope;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -54,9 +52,7 @@ async fn create(
 	Path(team): Path<TeamId>,
 	Json(body): Json<CreateProjectRequest>,
 ) -> AppResult<Json<ProjectResponse>> {
-	authorize(&s.db, user.id, team, Action::Create, Resource::Project).await?;
-
-	let project = super::insert(&s.db, team, &body.name, &body.slug).await?;
+	let project = service::create(&s.db, user.id, team, &body.name, &body.slug).await?;
 	Ok(Json(ProjectResponse::from(&project)))
 }
 
@@ -66,10 +62,13 @@ async fn list(
 	user: AuthUser,
 	Path(team): Path<TeamId>,
 ) -> AppResult<Json<Vec<ProjectResponse>>> {
-	authorize(&s.db, user.id, team, Action::Read, Resource::Project).await?;
-
-	let projects = super::list_by_team(&s.db, team).await?;
-	Ok(Json(projects.iter().map(ProjectResponse::from).collect()))
+	let projects = service::list(&s.db, user.id, team).await?;
+	Ok(Json(
+		projects
+			.iter()
+			.map(|p| ProjectResponse::from(&p.project))
+			.collect(),
+	))
 }
 
 /// Deletes a project; caller must hold `delete project` on the owning team.
@@ -79,10 +78,6 @@ async fn remove(
 	user: AuthUser,
 	Path((team, id)): Path<(TeamId, ProjectId)>,
 ) -> AppResult<Json<DeleteProjectResponse>> {
-	authorize(&s.db, user.id, team, Action::Delete, Resource::Project).await?;
-	let project = scope::project(&s.db, team, id).await?;
-
-	super::delete(&s.db, team, project.id).await?;
-
+	let project = service::remove(&s.db, user.id, team, id).await?;
 	Ok(Json(DeleteProjectResponse { id: project.id }))
 }

@@ -105,6 +105,16 @@ pub mod users {
 		.await
 	}
 
+	/// The display name shown in the web UI header.
+	pub async fn name_of(
+		db: impl PgExecutor<'_>,
+		id: UserId,
+	) -> Result<Option<String>, sqlx::Error> {
+		sqlx::query_scalar!("SELECT name FROM users WHERE id = $1", id as UserId)
+			.fetch_optional(db)
+			.await
+	}
+
 	pub async fn find_by_email(
 		db: impl PgExecutor<'_>,
 		email: &str,

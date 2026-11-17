@@ -47,6 +47,11 @@ pub enum ServerError {
 	#[error("project not found")]
 	ProjectNotFound,
 
+	/// A page or resource that is not there or not visible to the caller;
+	/// used by the web UI for paths that name no specific resource.
+	#[error("not found")]
+	NotFound,
+
 	#[error("server not found")]
 	ServerNotFound,
 
@@ -120,6 +125,7 @@ impl ServerError {
 			| Self::Conflict(_)
 			| Self::ServerNotReady => StatusCode::CONFLICT,
 			Self::ProjectNotFound
+			| Self::NotFound
 			| Self::ServerNotFound
 			| Self::ApplicationNotFound
 			| Self::DeploymentNotFound

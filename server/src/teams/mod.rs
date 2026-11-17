@@ -1,6 +1,7 @@
 //! Teams: the tenancy root. Every other resource belongs to one.
 
 mod routes;
+pub mod service;
 
 pub use routes::router;
 
@@ -29,6 +30,7 @@ pub async fn list_for_user(
 			FROM teams
 			JOIN team_members ON teams.id = team_members.team_id
 			WHERE team_members.user_id = $1
+			ORDER BY teams.id
 		"#,
 		user as UserId
 	)
