@@ -540,6 +540,64 @@ pub struct ProbeResponse {
 	pub detail: String,
 }
 
+/// The sidecar gateway's container name on the `podkit` network, and the DNS
+/// name containers reach it by.
+pub const GATEWAY_HOST: &str = "llm.podkit.internal";
+/// Port the gateway listens on inside its container.
+pub const GATEWAY_PORT: u16 = 8088;
+
+/// One model a gateway key may use.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatewayModel {
+	/// Server-side model id; usage is reported against it.
+	pub model_id: i64,
+	/// The `model` clients send.
+	pub name: String,
+	/// DNS name of the engine container on the `podkit` network.
+	pub host: String,
+	/// Port the engine listens on.
+	pub port: u16,
+	/// Whether OpenAI-style streaming requests may get `stream_options.include_usage` added.
+	pub stream_usage: bool,
+}
+
+/// One gateway key and the models it may use.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatewayKey {
+	/// Hex SHA-256 of the key; the key itself never reaches the agent.
+	pub key_hash: String,
+	/// Models the key may use.
+	pub models: Vec<GatewayModel>,
+}
+
+/// `PUT /v1/gateway/config` body: every key of the server and what it routes to.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatewayConfig {
+	/// All keys. An empty list stops serving everyone.
+	pub keys: Vec<GatewayKey>,
+	/// Models that exist on the server but belong to no key above, by name.
+	/// Only used to tell "not allowed" (403) from "unknown" (404).
+	#[serde(default)]
+	pub other_models: Vec<String>,
+}
+
+/// Token counters of one key and model during one hour.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatewayUsage {
+	/// Hex SHA-256 of the key.
+	pub key_hash: String,
+	/// Server-side model id.
+	pub model_id: i64,
+	/// Start of the hour, unix seconds.
+	pub hour: i64,
+	/// Requests served.
+	pub requests: u64,
+	/// Prompt tokens, as far as the engine reported them.
+	pub input_tokens: u64,
+	/// Generated tokens, as far as the engine reported them.
+	pub output_tokens: u64,
+}
+
 /// Shown when Hugging Face answers a download or listing with 401 or 403.
 pub const GATED_MODEL_MESSAGE: &str =
 	"gated model: accept the license on huggingface.co and add an HF token";
