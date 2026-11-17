@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::convert::Infallible;
 
 use axum::extract::{Path, Query, State};
@@ -13,17 +11,14 @@ use futures_util::stream::{BoxStream, Stream};
 use serde::{Deserialize, Serialize};
 use tracing::warn;
 
-use super::{
-	Application, ApplicationUpdate, BuildStrategy, NewApplication, SLUG_CONSTRAINT, public_hostname,
-};
+use super::service::{self, AppInput, ApplicationView};
 use crate::auth::AuthUser;
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::deployments::{self, DeploymentResponse, DeploymentStatus};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ApplicationId, ProjectId, ServerId, TeamId};
-use crate::servers::Server;
+use crate::scope;
 use crate::state::AppState;
-use crate::{db, scope, validate, volumes};
 
 pub fn router() -> Router<AppState> {
 	Router::new()
@@ -127,10 +122,13 @@ pub struct ApplicationResponse {
 	pub webhook_secret: Option<String>,
 }
 
-impl ApplicationResponse {
-	/// `url` is derived from the server the app runs on, so the response
-	/// needs it alongside the row.
-	fn new(app: &Application, server: &Server) -> Self {
+#[derive(Serialize)]
+pub struct DeleteApplicationResponse {
+	pub id: ApplicationId,
+}
+
+impl From<&ApplicationView> for ApplicationResponse {
+	fn from(app: &ApplicationView) -> Self {
 		Self {
 			id: app.id,
 			project_id: app.project_id,
@@ -144,67 +142,9 @@ impl ApplicationResponse {
 			container_port: app.container_port,
 			memory_limit_mb: app.memory_limit_mb,
 			cpu_limit: app.cpu_limit.map(f64::from),
-			url: public_hostname(&app.slug, server),
+			url: app.url.clone(),
 			webhook_secret: None,
 		}
-	}
-}
-
-#[derive(Serialize)]
-pub struct DeleteApplicationResponse {
-	pub id: ApplicationId,
-}
-
-/// Checks the repo URL, Dockerfile path, and that each credential matches
-/// the URL scheme: deploy keys are SSH-only, tokens are HTTPS-only.
-fn validate_source(
-	repo_url: &str,
-	dockerfile_path: &str,
-	deploy_key: Option<&str>,
-	git_token: Option<&str>,
-) -> AppResult<()> {
-	if !validate::repo_url(repo_url) {
-		return Err(ServerError::Validation("invalid repo_url".to_string()));
-	}
-	if !validate::rel_path(dockerfile_path) {
-		return Err(ServerError::Validation(
-			"invalid dockerfile_path".to_string(),
-		));
-	}
-	let https = repo_url.starts_with("https://");
-	if deploy_key.is_some_and(|k| !k.is_empty()) && https {
-		return Err(ServerError::Validation(
-			"deploy_key requires an ssh:// or scp-form repo_url, use git_token for https://"
-				.to_string(),
-		));
-	}
-	if git_token.is_some_and(|t| !t.is_empty()) && !https {
-		return Err(ServerError::Validation(
-			"git_token requires an https:// repo_url, use deploy_key for ssh".to_string(),
-		));
-	}
-	Ok(())
-}
-
-/// Encrypts a write-only credential; `None` and empty both mean "not provided".
-fn seal(state: &AppState, value: Option<&str>, what: &str) -> AppResult<Option<Vec<u8>>> {
-	value
-		.filter(|v| !v.is_empty())
-		.map(|v| state.secrets.encrypt(v))
-		.transpose()
-		.map_err(|e| ServerError::Validation(format!("failed to encrypt {what}: {e}")))
-}
-
-#[allow(clippy::cast_possible_truncation)]
-fn cpu_to_f32(cpu: Option<f64>) -> Option<f32> {
-	cpu.map(|c| c as f32)
-}
-
-fn slug_conflict(e: sqlx::Error) -> ServerError {
-	if db::is_unique_violation(&e, SLUG_CONSTRAINT) {
-		ServerError::ApplicationSlugTaken
-	} else {
-		e.into()
 	}
 }
 
@@ -217,50 +157,29 @@ pub async fn create(
 	Path((team, project)): Path<(TeamId, ProjectId)>,
 	Json(body): Json<CreateApplicationRequest>,
 ) -> AppResult<Json<ApplicationResponse>> {
-	authorize(&s.db, user.id, team, Action::Create, Resource::Application).await?;
-	scope::project(&s.db, team, project).await?;
-	let server = scope::server(&s.db, team, body.server_id).await?;
-
-	validate_source(
-		&body.repo_url,
-		&body.dockerfile_path,
-		body.deploy_key.as_deref(),
-		body.git_token.as_deref(),
-	)?;
-	let deploy_key = seal(&s, body.deploy_key.as_deref(), "deploy key")?;
-	let git_token = seal(&s, body.git_token.as_deref(), "git token")?;
-
-	let webhook_secret_plain = crypto::generate_token(24);
-	let webhook_secret = s
-		.secrets
-		.encrypt(&webhook_secret_plain)
-		.map_err(|e| ServerError::Validation(format!("failed to encrypt webhook secret: {e}")))?;
-
-	let app = super::insert(
-		&s.db,
-		NewApplication {
-			id: ApplicationId::generate(),
-			project_id: project,
-			server_id: server.id,
+	let created = service::create(
+		&s,
+		user.id,
+		team,
+		project,
+		body.server_id,
+		AppInput {
 			name: body.name,
 			slug: body.slug,
 			repo_url: body.repo_url,
 			git_ref: body.git_ref,
-			deploy_key,
-			git_token,
-			build_strategy: BuildStrategy::parse(&body.build_strategy),
+			deploy_key: body.deploy_key,
+			git_token: body.git_token,
+			build_strategy: body.build_strategy,
 			dockerfile_path: body.dockerfile_path,
 			container_port: body.container_port,
-			webhook_secret: Some(webhook_secret),
 			memory_limit_mb: body.memory_limit_mb,
-			cpu_limit: cpu_to_f32(body.cpu_limit),
+			cpu_limit: body.cpu_limit,
 		},
 	)
-	.await
-	.map_err(slug_conflict)?;
-
-	let mut response = ApplicationResponse::new(&app, &server);
-	response.webhook_secret = Some(webhook_secret_plain);
+	.await?;
+	let mut response = ApplicationResponse::from(&created.app);
+	response.webhook_secret = Some(created.webhook_secret);
 	Ok(Json(response))
 }
 
@@ -271,19 +190,8 @@ pub async fn list(
 	user: AuthUser,
 	Path((team, project)): Path<(TeamId, ProjectId)>,
 ) -> AppResult<Json<Vec<ApplicationResponse>>> {
-	authorize(&s.db, user.id, team, Action::Read, Resource::Application).await?;
-	scope::project(&s.db, team, project).await?;
-
-	let apps = super::list_by_project(&s.db, project).await?;
-	let mut servers: HashMap<ServerId, Server> = HashMap::new();
-	let mut out = Vec::with_capacity(apps.len());
-	for app in &apps {
-		if let Entry::Vacant(slot) = servers.entry(app.server_id) {
-			slot.insert(scope::server(&s.db, team, app.server_id).await?);
-		}
-		out.push(ApplicationResponse::new(app, &servers[&app.server_id]));
-	}
-	Ok(Json(out))
+	let apps = service::list(&s.db, user.id, team, project).await?;
+	Ok(Json(apps.iter().map(ApplicationResponse::from).collect()))
 }
 
 /// Updates an application's configuration (everything set at creation
@@ -297,108 +205,39 @@ pub async fn update(
 	Path((team, project, id)): Path<(TeamId, ProjectId, ApplicationId)>,
 	Json(body): Json<UpdateApplicationRequest>,
 ) -> AppResult<Json<ApplicationResponse>> {
-	authorize(&s.db, user.id, team, Action::Update, Resource::Application).await?;
-	let app = scope::application(&s.db, team, project, id).await?;
-	let server = scope::server(&s.db, team, app.server_id).await?;
-
-	validate_source(
-		&body.repo_url,
-		&body.dockerfile_path,
-		body.deploy_key.as_deref(),
-		body.git_token.as_deref(),
-	)?;
-	let deploy_key = seal(&s, body.deploy_key.as_deref(), "deploy key")?;
-	let git_token = seal(&s, body.git_token.as_deref(), "git token")?;
-
-	let updated = super::update(
-		&s.db,
-		app.id,
-		ApplicationUpdate {
+	let updated = service::update(
+		&s,
+		user.id,
+		team,
+		project,
+		id,
+		AppInput {
 			name: body.name,
 			slug: body.slug,
 			repo_url: body.repo_url,
 			git_ref: body.git_ref,
-			deploy_key,
-			git_token,
-			build_strategy: BuildStrategy::parse(&body.build_strategy),
+			deploy_key: body.deploy_key,
+			git_token: body.git_token,
+			build_strategy: body.build_strategy,
 			dockerfile_path: body.dockerfile_path,
 			container_port: body.container_port,
 			memory_limit_mb: body.memory_limit_mb,
-			cpu_limit: cpu_to_f32(body.cpu_limit),
+			cpu_limit: body.cpu_limit,
 		},
 	)
-	.await
-	.map_err(slug_conflict)?;
-
-	Ok(Json(ApplicationResponse::new(&updated, &server)))
+	.await?;
+	Ok(Json(ApplicationResponse::from(&updated)))
 }
 
 /// Deletes an application; caller must hold `delete application` on the
 /// team. The application must belong to the project named in the path.
-/// Containers, volumes and images on the server are removed best-effort first: the
-/// row is the source of truth, so a failure there never blocks the delete.
 pub async fn remove(
 	State(s): State<AppState>,
 	user: AuthUser,
 	Path((team, project, id)): Path<(TeamId, ProjectId, ApplicationId)>,
 ) -> AppResult<Json<DeleteApplicationResponse>> {
-	authorize(&s.db, user.id, team, Action::Delete, Resource::Application).await?;
-	let app = scope::application(&s.db, team, project, id).await?;
-	remove_service(&s, team, &app).await;
-	super::delete(&s.db, app.id).await?;
-	Ok(Json(DeleteApplicationResponse { id: app.id }))
-}
-
-async fn remove_service(s: &AppState, team: TeamId, app: &Application) {
-	let server = match scope::server(&s.db, team, app.server_id).await {
-		Ok(server) => server,
-		Err(e) => {
-			warn!(
-				application = app.id.0,
-				"cannot load server to remove containers: {e}"
-			);
-			return;
-		}
-	};
-	let client = match s.agents.client(s, &server).await {
-		Ok(client) => client,
-		Err(e) => {
-			warn!(
-				application = app.id.0,
-				"cannot reach server agent to remove containers: {e}"
-			);
-			return;
-		}
-	};
-	if let Err(e) = client
-		.send(Method::DELETE, &format!("/v1/services/app-{}", app.id))
-		.await
-	{
-		warn!(
-			application = app.id.0,
-			"failed to remove application containers: {e}"
-		);
-	}
-
-	let volumes = match volumes::list(&s.db, app.id).await {
-		Ok(volumes) => volumes,
-		Err(e) => {
-			warn!(application = app.id.0, "cannot list volumes to remove: {e}");
-			return;
-		}
-	};
-	for volume in volumes {
-		if let Err(e) = client
-			.send(Method::DELETE, &format!("/v1/volumes/{}", volume.name))
-			.await
-		{
-			warn!(
-				application = app.id.0,
-				volume = volume.id.0,
-				"failed to remove volume: {e}"
-			);
-		}
-	}
+	let id = service::remove(&s, user.id, team, project, id).await?;
+	Ok(Json(DeleteApplicationResponse { id }))
 }
 
 /// Stops the application's currently running deployment: a manual halt,

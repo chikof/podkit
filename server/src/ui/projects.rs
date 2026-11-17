@@ -15,11 +15,13 @@ use super::components::{
 };
 use super::extract::TeamCtx;
 use super::layout::{Crumb, app_page, form_error};
-use super::{error, sse};
+use super::status::status_badge;
+use super::{apps, error, sse};
 use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ProjectId, TeamId};
-use crate::projects::service::{self, ProjectDetail, ProjectSummary};
+use crate::projects::Project;
+use crate::projects::service::{self, AppRow, ProjectDetail, ProjectSummary};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -231,6 +233,38 @@ fn resource_rows(title: &str, empty: &str, rows: &[service::ResourceRow]) -> Mar
 	})
 }
 
+fn application_rows(ctx: &TeamCtx, s: &AppState, project: &Project, rows: &[AppRow]) -> Markup {
+	let can_create = ctx.perms.can(Action::Create, Resource::Application);
+	card(&html! {
+		(card_header("Applications", None))
+		(card_content(&html! {
+			div class="flex flex-col gap-4" {
+				@if rows.is_empty() {
+					p class="text-sm text-muted-foreground" { "No applications yet." }
+				} @else {
+					ul {
+						@for row in rows {
+							li class="flex flex-wrap items-center justify-between gap-3 border-t border-border py-3 text-sm first:border-t-0" {
+								div class="flex min-w-0 flex-col gap-1" {
+									a class="font-medium hover:underline" href=(apps::app_url(ctx.team.id, project.id, row.id)) { (row.name) }
+									span class="text-muted-foreground break-all" { (apps::public_link(s, &row.url)) }
+								}
+								@if let Some(status) = row.latest { (status_badge(status)) }
+								@else { span class="text-muted-foreground" { "Not deployed" } }
+							}
+						}
+					}
+				}
+				@if can_create {
+					div {
+						a class=(BUTTON) href={ "/teams/" (ctx.team.id.0) "/projects/" (project.id.0) "/apps/new" } { "New application" }
+					}
+				}
+			}
+		}))
+	})
+}
+
 async fn overview(
 	State(s): State<AppState>,
 	ctx: TeamCtx,
@@ -251,7 +285,7 @@ async fn overview(
 			h1 class="text-xl font-semibold" { (project.name) }
 			p class="text-sm text-muted-foreground" { (project.slug) }
 		}
-		(resource_rows("Applications", "No applications yet.", &applications))
+		(application_rows(&ctx, &s, &project, &applications))
 		(resource_rows("Databases", "No databases yet.", &databases))
 	};
 	Ok(app_page(&ctx, &project.name, &crumbs, &body))

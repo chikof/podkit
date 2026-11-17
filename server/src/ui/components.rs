@@ -39,6 +39,14 @@ pub const INPUT: &str = "h-9 w-full min-w-0 rounded-lg border border-border bg-t
 /// A `<label>` wrapping its text and control, stacked.
 pub const LABEL: &str = "flex flex-col gap-2 text-sm leading-none font-medium";
 
+/// A multi-line field for pasted text such as a private key.
+pub const TEXTAREA: &str = "min-h-24 w-full rounded-lg border border-border bg-transparent px-3 py-2 font-mono text-sm font-normal transition-colors outline-hidden placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50";
+
+/// A tab link of a page, and the one for the page being shown.
+pub const TAB: &str = "-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground";
+pub const TAB_ACTIVE: &str =
+	"-mb-px border-b-2 border-foreground px-3 py-2 text-sm font-medium text-foreground";
+
 pub fn card(content: &Markup) -> Markup {
 	html! {
 		div class="flex flex-col gap-5 rounded-xl border border-border bg-card py-6 text-card-foreground" {

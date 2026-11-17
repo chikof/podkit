@@ -146,3 +146,57 @@ pub async fn seed_app_and_database(db: &PgPool, team: i64, project: i64) {
 	.await
 	.unwrap();
 }
+
+/// The id of `team`'s local server.
+pub async fn local_server_id(db: &PgPool, team: i64) -> i64 {
+	sqlx::query_scalar("SELECT id FROM servers WHERE team_id = $1")
+		.bind(team)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// Adds a server of `team` that is not active, to check it can't be picked.
+pub async fn add_pending_server(db: &PgPool, team: i64) -> i64 {
+	sqlx::query_scalar(
+		"INSERT INTO servers (id, team_id, name, hostname, ssh_user, ssh_private_key, podman_socket_path, is_local, status)
+		 VALUES (7001, $1, 'builder', '203.0.113.9', 'root', decode('00', 'hex'), '/x', FALSE, 'pending') RETURNING id",
+	)
+	.bind(team)
+	.fetch_one(db)
+	.await
+	.unwrap()
+}
+
+/// Whether the application with `slug` has a stored deploy key, git token
+/// and webhook secret. The values themselves never leave the database.
+pub async fn stored_secrets(db: &PgPool, slug: &str) -> (bool, bool, bool) {
+	sqlx::query_as(
+		"SELECT deploy_key IS NOT NULL, git_token IS NOT NULL, webhook_secret IS NOT NULL
+		 FROM applications WHERE slug = $1",
+	)
+	.bind(slug)
+	.fetch_one(db)
+	.await
+	.unwrap()
+}
+
+/// The id of the application with `slug`.
+pub async fn application_id(db: &PgPool, slug: &str) -> i64 {
+	sqlx::query_scalar("SELECT id FROM applications WHERE slug = $1")
+		.bind(slug)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// A deployment of `application` in `status`.
+pub async fn seed_deployment(db: &PgPool, application: i64, status: &str) {
+	sqlx::query("INSERT INTO deployments (id, application_id, status) VALUES ($1, $2, $3)")
+		.bind(application + 1)
+		.bind(application)
+		.bind(status)
+		.execute(db)
+		.await
+		.unwrap();
+}

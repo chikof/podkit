@@ -5,6 +5,7 @@ use crate::ids::{ApplicationId, ProjectId, ServerId};
 use crate::servers::Server;
 
 pub mod routes;
+pub mod service;
 
 pub use routes::router;
 
