@@ -127,10 +127,23 @@ pub mod users {
 		password_hash: &str,
 	) -> Result<Option<User>, sqlx::Error> {
 		let mut tx = db.begin().await?;
+		let user = insert_if_no_users_in(&mut tx, name, email, password_hash).await?;
+		tx.commit().await?;
+		Ok(user)
+	}
+
+	/// The body of [`insert_if_no_users`], inside the caller's transaction:
+	/// takes the lock, which the transaction holds until it ends.
+	pub async fn insert_if_no_users_in(
+		tx: &mut sqlx::PgConnection,
+		name: &str,
+		email: &str,
+		password_hash: &str,
+	) -> Result<Option<User>, sqlx::Error> {
 		sqlx::query!("SELECT pg_advisory_xact_lock($1)", FIRST_USER_LOCK)
 			.execute(&mut *tx)
 			.await?;
-		let user = sqlx::query_as!(
+		sqlx::query_as!(
 			User,
 			r#"
 				INSERT INTO users (id, name, email, password_hash)
@@ -144,9 +157,7 @@ pub mod users {
 			password_hash
 		)
 		.fetch_optional(&mut *tx)
-		.await?;
-		tx.commit().await?;
-		Ok(user)
+		.await
 	}
 
 	/// The display name shown in the web UI header.

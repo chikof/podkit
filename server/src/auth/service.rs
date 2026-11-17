@@ -85,9 +85,37 @@ pub async fn register(
 #[cfg(test)]
 mod tests {
 	use super::register;
+	use crate::auth::users;
 	use crate::error::ServerError;
 	use crate::state::Registration;
 	use crate::tests::{PgPool, count, db_test};
+
+	/// A transaction that has taken the first-user slot but not committed
+	/// yet must make a second registration wait for it, then be refused.
+	/// Without the lock, the second one doesn't see the uncommitted row.
+	#[db_test]
+	async fn registration_waits_for_an_uncommitted_first_user(db: PgPool) {
+		let mut first = db.begin().await.unwrap();
+		let got = users::insert_if_no_users_in(&mut first, "a", "a@example.com", "x")
+			.await
+			.unwrap();
+		assert!(got.is_some());
+
+		// Straight to the insert: `register` also spends time hashing, which
+		// would hide a missing lock.
+		let second = {
+			let db = db.clone();
+			tokio::spawn(
+				async move { users::insert_if_no_users(&db, "b", "b@example.com", "x").await },
+			)
+		};
+		tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+		assert!(!second.is_finished(), "the second sign-up must wait");
+
+		first.commit().await.unwrap();
+		assert!(second.await.unwrap().unwrap().is_none());
+		assert_eq!(count(&db, "users").await, 1);
+	}
 
 	#[db_test]
 	async fn registration_concurrent_first_users_yield_exactly_one_account(db: PgPool) {
