@@ -5,8 +5,8 @@ use tower_cookies::CookieManagerLayer;
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
-	applications, auth, backups, catalog, databases, deployments, domains, env_vars, members,
-	model_files, models, projects, servers, teams, ui, volumes, webhooks,
+	applications, auth, backups, catalog, databases, deployments, domains, env_vars, links,
+	members, model_files, models, projects, servers, teams, ui, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -37,6 +37,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest(&format!("{APP}/env-vars"), env_vars::router())
 		.nest(&format!("{APP}/domains"), domains::router())
 		.nest(&format!("{APP}/volumes"), volumes::router())
+		.nest(&format!("{APP}/models"), links::router())
 		.nest(
 			"/teams/{team_id}/backup-targets",
 			backups::targets::router(),

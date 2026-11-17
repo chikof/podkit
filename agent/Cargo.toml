@@ -35,5 +35,8 @@ reqwest.workspace = true
 rustls.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+reqwest = { workspace = true, features = ["json"] }
+
 [lints]
 workspace = true

@@ -8,7 +8,7 @@ use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use bollard::container::LogOutput;
 use bollard::models::ContainerSummaryStateEnum;
@@ -46,6 +46,8 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/backups/restore", post(backup_restore))
 		.route("/v1/model-downloads", post(model_download_route))
 		.route("/v1/probes", post(probe_route))
+		.route("/v1/gateway/config", put(gateway_config))
+		.route("/v1/gateway/usage/drain", post(gateway_drain))
 		.with_state(ctx)
 }
 
@@ -395,4 +397,18 @@ async fn backup_upload(State(ctx): State<Arc<Ctx>>, Json(req): Json<UploadReques
 
 async fn backup_restore(State(ctx): State<Arc<Ctx>>, Json(req): Json<RestoreRequest>) -> Response {
 	ndjson(move |tx| backup::restore(ctx, req, tx))
+}
+
+async fn gateway_config(
+	State(ctx): State<Arc<Ctx>>,
+	Json(config): Json<proto::GatewayConfig>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+	crate::gateway::sidecar::apply(&ctx.podman(), &ctx.supervisor, &ctx.data_dir, &config)
+		.await
+		.map(|()| Json(serde_json::json!({})))
+		.map_err(|m| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, m))
+}
+
+async fn gateway_drain(State(ctx): State<Arc<Ctx>>) -> Json<Vec<proto::GatewayUsage>> {
+	Json(crate::gateway::sidecar::drain_usage(&crate::gateway::sidecar::dir(&ctx.data_dir)).await)
 }

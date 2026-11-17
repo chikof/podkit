@@ -13,8 +13,7 @@ use agent::{Ctx, routes};
 use tracing::{info, warn};
 
 const BACKUP_MAX_AGE: Duration = Duration::from_hours(24);
-const USAGE: &str =
-	"usage: podkit-agent [--data-dir <dir>] [--podman-socket <path>] [--socket <path>] [--version]";
+const USAGE: &str = "usage: podkit-agent [--data-dir <dir>] [--podman-socket <path>] [--socket <path>] [--version]\n       podkit-agent --gateway [--gateway-dir <dir>] [--listen <addr>]";
 
 struct Args {
 	data_dir: PathBuf,
@@ -110,7 +109,47 @@ async fn shutdown_signal() {
 	}
 }
 
+/// `--gateway [--gateway-dir <dir>] [--listen <addr>]`: the LLM gateway sidecar,
+/// which is this same binary run in a container. `None` for a normal start.
+fn gateway_args() -> Option<Result<(PathBuf, String), String>> {
+	let mut args = std::env::args().skip(1).peekable();
+	args.peek()?;
+	let all: Vec<String> = args.collect();
+	if !all.iter().any(|a| a == "--gateway") {
+		return None;
+	}
+	let (mut dir, mut listen) = (None, None);
+	let mut rest = all.into_iter();
+	while let Some(arg) = rest.next() {
+		let (flag, inline) = match arg.split_once('=') {
+			Some((flag, value)) => (flag.to_owned(), Some(value.to_owned())),
+			None => (arg, None),
+		};
+		let slot = match flag.as_str() {
+			"--gateway" => continue,
+			"--gateway-dir" => &mut dir,
+			"--listen" => &mut listen,
+			_ => return Some(Err(format!("unknown argument {flag}\n{USAGE}"))),
+		};
+		match inline.or_else(|| rest.next()) {
+			Some(value) => *slot = Some(value),
+			None => return Some(Err(format!("{flag} needs a value\n{USAGE}"))),
+		}
+	}
+	Some(Ok((
+		dir.map_or_else(|| PathBuf::from("/gw"), PathBuf::from),
+		listen.unwrap_or_else(|| format!("0.0.0.0:{}", proto::GATEWAY_PORT)),
+	)))
+}
+
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
+	if let Some(gateway) = gateway_args() {
+		let (dir, listen) = gateway?;
+		better_tracing::fmt().init();
+		// The gateway never speaks TLS, but its HTTP client needs a provider to be built.
+		let _ = rustls::crypto::ring::default_provider().install_default();
+		return agent::gateway::sidecar::serve(dir, &listen).await;
+	}
 	let Some(args) = parse_args()? else {
 		return Ok(());
 	};
@@ -124,13 +163,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	}
 
 	create_private_dir(&args.data_dir)?;
-	for sub in ["work", "backups", "traefik-acme"] {
+	for sub in ["work", "backups", "traefik-acme", "gateway"] {
 		create_private_dir(&args.data_dir.join(sub))?;
 	}
 	sweep_backups(&args.data_dir.join("backups"));
 
 	let podman = Podman::connect(&args.podman_socket)?;
 	let supervisor = Supervisor::start(podman.clone(), &args.data_dir).await;
+	let gateway_dir = agent::gateway::sidecar::dir(&args.data_dir);
 	let ctx = Arc::new(Ctx {
 		docker: podman.docker().clone(),
 		data_dir: args.data_dir,
@@ -140,6 +180,17 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 			.connect_timeout(Duration::from_secs(30))
 			.build()?,
 	});
+
+	// A sidecar from before a restart or an upgrade is replaced by one of this binary.
+	if agent::gateway::sidecar::read_config(&gateway_dir)
+		.await
+		.is_some_and(|c| !c.keys.is_empty())
+		&& let Err(e) =
+			agent::gateway::sidecar::ensure_running(&ctx.podman(), &ctx.supervisor, &ctx.data_dir)
+				.await
+	{
+		warn!(error = %e, "starting the gateway sidecar failed");
+	}
 
 	match std::fs::remove_file(&args.socket) {
 		Ok(()) => {}
