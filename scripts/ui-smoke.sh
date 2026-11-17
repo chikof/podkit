@@ -114,7 +114,8 @@ section_databases() {
 	! grep -qF -- "$password" "$BODY" || fail "GET $base/$db: the password is in the page"
 	echo "ok   GET $base/$db has no password"
 	ui_post "$base/$db/reveal" '{}'
-	expect_body "$password" "POST $base/$db/reveal"
+	grep -qF -- "$password" "$BODY" || fail "POST $base/$db/reveal: no password in the reply"
+	echo "ok   POST $base/$db/reveal (has the password; not printed)"
 	expect_page "$base/$db/logs" "Container log"
 	expect_page "$base/$db/settings" "Backup schedule"
 	expect_page "/teams/$TEAM/projects/$project" "$name"
