@@ -72,6 +72,28 @@ pub struct Server {
 	pub hardware_at: Option<time::OffsetDateTime>,
 }
 
+/// AMD GPUs below this are integrated parts that cannot run an engine.
+const MIN_AMD_GPU_VRAM_MB: u64 = 2048;
+
+/// Whether the server's latest inventory shows a GPU a container can use:
+/// an NVIDIA GPU with a `nvidia.com/gpu` CDI spec (`docs/spikes/gpu-cdi.md`),
+/// or a discrete AMD GPU. `false` before the first snapshot.
+// Nothing calls it yet; AI 04 (engine placement) does.
+#[allow(dead_code)]
+#[must_use]
+pub fn gpu_capable(server: &Server) -> bool {
+	let Some(hardware) = server.hardware.as_ref().map(|h| &h.0) else {
+		return false;
+	};
+	let nvidia = hardware.gpus.iter().any(|g| g.vendor == "nvidia")
+		&& hardware.cdi.devices.iter().any(|k| k == "nvidia.com/gpu");
+	let amd = hardware
+		.gpus
+		.iter()
+		.any(|g| g.vendor == "amd" && g.vram_mb >= MIN_AMD_GPU_VRAM_MB);
+	nvidia || amd
+}
+
 impl Server {
 	/// Builds a remote server pending its first bootstrap.
 	#[allow(clippy::too_many_arguments)]
@@ -326,6 +348,63 @@ pub async fn delete(
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::ids::TeamId;
+	use proto::{Cdi, Cpu, Gpu, Hardware, Memory};
+
+	fn server_with(gpus: &[(&str, u64)], cdi: &[&str]) -> Server {
+		let mut server = Server::new_remote(
+			TeamId(1),
+			"s".to_string(),
+			"h".to_string(),
+			22,
+			"root".to_string(),
+			vec![1],
+			"/run/podman.sock".to_string(),
+		);
+		server.hardware = Some(sqlx::types::Json(Hardware {
+			cpu: Cpu {
+				model: "c".to_string(),
+				threads: 1,
+			},
+			memory: Memory {
+				total_mb: 1,
+				available_mb: 1,
+			},
+			disks: vec![],
+			gpus: gpus
+				.iter()
+				.map(|(vendor, vram_mb)| Gpu {
+					vendor: (*vendor).to_string(),
+					name: "g".to_string(),
+					vram_mb: *vram_mb,
+					vram_used_mb: None,
+				})
+				.collect(),
+			cdi: Cdi {
+				available: !cdi.is_empty(),
+				devices: cdi.iter().map(|k| (*k).to_string()).collect(),
+			},
+		}));
+		server
+	}
+
+	#[test]
+	fn gpu_capable_follows_the_inventory() {
+		let mut none = server_with(&[], &[]);
+		none.hardware = None;
+		assert!(!gpu_capable(&none));
+		assert!(gpu_capable(&server_with(
+			&[("nvidia", 12288)],
+			&["nvidia.com/gpu"]
+		)));
+		// The GPU is there but the toolkit's CDI spec is not.
+		assert!(!gpu_capable(&server_with(&[("nvidia", 12288)], &[])));
+		// A spec without a GPU.
+		assert!(!gpu_capable(&server_with(&[], &["nvidia.com/gpu"])));
+		// Integrated AMD graphics do not count; a discrete card does.
+		assert!(!gpu_capable(&server_with(&[("amd", 512)], &[])));
+		assert!(gpu_capable(&server_with(&[("amd", 16384)], &[])));
+	}
 
 	const ED25519: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIJchJVs7z1tmicd4SpMN5UdQGOeEF7c+3zkUwGLv44BI";
 	const ED25519_FP: &str = "SHA256:ywBw9jYLna1cd5Li260999IYfpxB/BrS/G6GhT1Xkwg";

@@ -11,13 +11,13 @@ use std::time::Duration;
 
 use bollard::models::ImageSummary;
 use futures_util::StreamExt;
-use proto::{DeploySpec, Event, Phase, Source, Strategy, Stream};
+use proto::{Cdi, DeploySpec, Event, GpuRequest, GpuVendor, Phase, Source, Strategy, Stream};
 use tokio::sync::mpsc;
 use tracing::warn;
 
 use crate::Ctx;
 use crate::ingress::{self, NETWORK};
-use crate::podman::{ContainerSpec, Podman};
+use crate::podman::{self, ContainerSpec, Podman};
 use crate::source;
 use crate::supervisor::Supervisor;
 
@@ -125,6 +125,10 @@ async fn execute(
 	cleanup: &mut Cleanup,
 ) -> Result<Event, String> {
 	validate(spec)?;
+	if let Some(gpus) = &spec.gpus {
+		let kfd = std::path::Path::new("/dev/kfd").exists();
+		check_gpu_support(gpus, &crate::hardware::host_cdi(), kfd)?;
+	}
 	let podman = ctx.podman();
 
 	let (image, commit_sha) = match &spec.source {
@@ -236,7 +240,26 @@ fn validate(spec: &DeploySpec) -> Result<(), String> {
 			return Err(format!("invalid volume path {:?}", volume.path));
 		}
 	}
+	if let Some(gpus) = &spec.gpus {
+		podman::gpu_devices(gpus)?;
+	}
 	Ok(())
+}
+
+const NO_GPU_SUPPORT: &str = "see docs/spikes/gpu-cdi.md";
+
+/// Whether this server can hand `request` to a container: NVIDIA needs a CDI
+/// spec of kind `nvidia.com/gpu`, AMD needs `/dev/kfd`.
+fn check_gpu_support(request: &GpuRequest, cdi: &Cdi, kfd_present: bool) -> Result<(), String> {
+	match request.vendor {
+		GpuVendor::Nvidia if !cdi.devices.iter().any(|k| k == "nvidia.com/gpu") => {
+			Err(format!("no CDI GPU spec on this server, {NO_GPU_SUPPORT}"))
+		}
+		GpuVendor::Amd if !kfd_present => Err(format!(
+			"no /dev/kfd on this server, cannot pass AMD GPUs through, {NO_GPU_SUPPORT}"
+		)),
+		_ => Ok(()),
+	}
 }
 
 fn container_spec(spec: &DeploySpec, image: &str, name: &str) -> ContainerSpec {
@@ -272,6 +295,7 @@ fn container_spec(spec: &DeploySpec, image: &str, name: &str) -> ContainerSpec {
 			.collect(),
 		memory_bytes: spec.memory_bytes,
 		cpu_cores: spec.cpu_cores,
+		gpus: spec.gpus.clone(),
 	}
 }
 
@@ -472,7 +496,57 @@ mod tests {
 				https_port: 443,
 				acme_email: None,
 			},
+			gpus: None,
 		}
+	}
+
+	fn nvidia_cdi() -> Cdi {
+		Cdi {
+			available: true,
+			devices: vec!["nvidia.com/gpu".to_string()],
+		}
+	}
+
+	#[test]
+	fn gpu_support_checks() {
+		let nvidia = GpuRequest {
+			vendor: GpuVendor::Nvidia,
+			devices: proto::GpuDevices::All,
+		};
+		let amd = GpuRequest {
+			vendor: GpuVendor::Amd,
+			devices: proto::GpuDevices::All,
+		};
+		assert!(check_gpu_support(&nvidia, &nvidia_cdi(), false).is_ok());
+		let err = check_gpu_support(&nvidia, &Cdi::default(), true).unwrap_err();
+		assert!(err.contains("no CDI GPU spec on this server"), "{err}");
+		assert!(err.contains("docs/spikes/gpu-cdi.md"));
+		// An AMD CDI spec does not help NVIDIA.
+		let amd_cdi = Cdi {
+			available: true,
+			devices: vec!["amd.com/gpu".to_string()],
+		};
+		assert!(check_gpu_support(&nvidia, &amd_cdi, true).is_err());
+		assert!(check_gpu_support(&amd, &Cdi::default(), true).is_ok());
+		assert!(check_gpu_support(&amd, &nvidia_cdi(), false).is_err());
+	}
+
+	#[test]
+	fn gpu_request_reaches_the_container_spec_and_is_validated() {
+		let mut with_gpu = spec();
+		with_gpu.gpus = Some(GpuRequest {
+			vendor: GpuVendor::Nvidia,
+			devices: proto::GpuDevices::Count(2),
+		});
+		assert!(validate(&with_gpu).is_ok());
+		assert_eq!(container_spec(&with_gpu, "img", "c").gpus, with_gpu.gpus,);
+		assert!(container_spec(&spec(), "img", "c").gpus.is_none());
+
+		with_gpu.gpus = Some(GpuRequest {
+			vendor: GpuVendor::Nvidia,
+			devices: proto::GpuDevices::Count(0),
+		});
+		assert!(validate(&with_gpu).is_err());
 	}
 
 	#[test]

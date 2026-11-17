@@ -191,6 +191,7 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 			.map(|mb| i64::from(mb) * 1024 * 1024),
 		cpu_cores: database.cpu_limit.map(f64::from),
 		strategy: Strategy::Recreate,
+		gpus: None,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,
