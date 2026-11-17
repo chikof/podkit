@@ -73,15 +73,15 @@ mod tests {
 	async fn old_api_paths_are_not_json(db: PgPool) {
 		let app = app(db).await;
 		let (token, team) = user_with_team(&app, "alice").await;
-		for path in [
-			"/teams".to_owned(),
-			format!("/teams/{team}/projects"),
-			"/auth/login".to_owned(),
-		] {
+		for path in ["/teams".to_owned(), "/auth/login".to_owned()] {
 			let (s, body) = call(&app, "GET", &path, Some(&token), None).await;
 			assert_eq!(s, StatusCode::NOT_FOUND, "{path}");
 			assert!(body.is_null(), "{path} returned JSON: {body}");
 		}
+		// The web UI owns this path now: it answers with a page, never JSON.
+		let path = format!("/teams/{team}/projects");
+		let (_, body) = call(&app, "GET", &path, Some(&token), None).await;
+		assert!(body.is_null(), "{path} returned JSON: {body}");
 	}
 
 	#[sqlx::test]

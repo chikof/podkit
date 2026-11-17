@@ -7,7 +7,8 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use crypto::age::{SecretBox, generate_identity};
 use serde_json::Value;
-use sqlx::PgPool;
+pub use sqlx::PgPool;
+pub use sqlx::test as db_test;
 use tower::ServiceExt;
 
 use crate::agents::AgentPool;
@@ -99,4 +100,49 @@ pub async fn user_with_team(app: &Router, name: &str) -> (String, i64) {
 	.await;
 	assert!(s.is_success(), "create team {name}: {s}");
 	(token, team["id"].as_i64().unwrap())
+}
+
+/// Rows in `table`. For asserting that a refused request changed nothing.
+pub async fn count(db: &PgPool, table: &str) -> i64 {
+	sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COUNT(*) FROM {table}")))
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// The id of the project with `slug`.
+pub async fn project_id(db: &PgPool, slug: &str) -> i64 {
+	sqlx::query_scalar("SELECT id FROM projects WHERE slug = $1")
+		.bind(slug)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// Puts an application and a database straight into `project`, on its team's
+/// local server, so pages that list them have something to show.
+pub async fn seed_app_and_database(db: &PgPool, team: i64, project: i64) {
+	let server: i64 = sqlx::query_scalar("SELECT id FROM servers WHERE team_id = $1")
+		.bind(team)
+		.fetch_one(db)
+		.await
+		.unwrap();
+	sqlx::query(
+		"INSERT INTO applications (id, project_id, server_id, name, slug, repo_url, container_port)
+		 VALUES (5001, $1, $2, 'Storefront', 'storefront', 'https://example.com/r.git', 3000)",
+	)
+	.bind(project)
+	.bind(server)
+	.execute(db)
+	.await
+	.unwrap();
+	sqlx::query(
+		"INSERT INTO databases (id, project_id, server_id, name, engine, version, credentials)
+		 VALUES (6001, $1, $2, 'orders', 'postgres', '17', 'x')",
+	)
+	.bind(project)
+	.bind(server)
+	.execute(db)
+	.await
+	.unwrap();
 }

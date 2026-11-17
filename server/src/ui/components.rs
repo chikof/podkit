@@ -28,6 +28,12 @@ pub const BUTTON_OUTLINE: &str = concat!(
 	"border-border text-foreground hover:bg-foreground/5 active:bg-foreground/10"
 );
 
+/// A destructive action, drawn as a bordered button in the error color.
+pub const BUTTON_DANGER: &str = concat!(
+	button_base!(),
+	"border-border text-destructive hover:bg-destructive/10 active:bg-destructive/20"
+);
+
 pub const INPUT: &str = "h-9 w-full min-w-0 rounded-lg border border-border bg-transparent px-3 text-sm font-normal transition-colors outline-hidden placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50";
 
 /// A `<label>` wrapping its text and control, stacked.
