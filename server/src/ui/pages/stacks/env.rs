@@ -89,11 +89,11 @@ pub(super) async fn page(
 								label class=(LABEL) {
 									"Name"
 									input class={ (INPUT) " font-mono" } type="text" required maxlength="128" autocomplete="off" spellcheck="false"
-										placeholder="DATABASE_URL" "data-bind:envKey";
+										placeholder="DATABASE_URL" "data-bind"="envKey";
 								}
 								label class=(LABEL) {
 									"Value"
-									input id="env-value" class=(INPUT) type="password" autocomplete="off" "data-bind:envValue";
+									input id="env-value" class=(INPUT) type="password" autocomplete="off" "data-bind"="envValue";
 								}
 							}
 							(form_error())

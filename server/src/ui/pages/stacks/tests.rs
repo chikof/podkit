@@ -139,7 +139,7 @@ async fn the_create_page_takes_a_compose_file_and_offers_to_check_it_first(db: P
 		"docker-compose.yml",
 		"data-bind:compose",
 		"data-bind:server",
-		"data-bind:envText",
+		"data-bind=\"envText\"",
 		"Check file",
 		"Create stack",
 		"id=\"compose-check\"",

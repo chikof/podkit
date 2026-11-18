@@ -346,13 +346,13 @@ fn create_env_dialog(team: TeamId, project: ProjectId) -> Markup {
 				label class=(LABEL) {
 					"Name"
 					input class=(INPUT) type="text" required maxlength="60" autocomplete="off" autofocus
-						placeholder="e.g. Staging" "data-bind:newName"
+						placeholder="e.g. Staging" "data-bind"="newName"
 						"data-on:input"="$newSlug = $newName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)";
 				}
 				label class=(LABEL) {
 					"Slug"
 					input class={ (INPUT) " font-mono" } type="text" required maxlength="60" autocomplete="off"
-						placeholder="e.g. staging" "data-bind:newSlug";
+						placeholder="e.g. staging" "data-bind"="newSlug";
 				}
 				(form_error())
 			}
@@ -379,7 +379,7 @@ fn rename_env_dialog(team: TeamId, project: ProjectId) -> Markup {
 			form id="environment-rename-form" class="flex flex-col gap-4" "data-on:submit"=(post) {
 				label class=(LABEL) {
 					"Name"
-					input class=(INPUT) type="text" required maxlength="60" autocomplete="off" autofocus "data-bind:envName";
+					input class=(INPUT) type="text" required maxlength="60" autocomplete="off" autofocus "data-bind"="envName";
 				}
 				(form_error())
 			}

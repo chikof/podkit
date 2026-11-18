@@ -27,7 +27,7 @@ fn closed_page() -> Markup {
 	layout::document(
 		"Registration is closed",
 		&html! {
-			main class="mx-auto mt-16 max-w-sm px-6" {
+			main class="mx-auto max-w-sm px-6 pt-16" {
 				(card(&html! {
 					(card_header("Registration is closed", Some("This podkit instance doesn't accept new sign-ups. Ask an administrator to add you.")))
 					(card_content(&html! {
@@ -48,7 +48,7 @@ async fn page(State(s): State<AppState>) -> Response {
 	layout::document(
 		"Create an account",
 		&html! {
-			main class="mx-auto mt-16 max-w-sm px-6" data-signals="{name: '', email: '', password: '', confirm: '', _error: ''}" {
+			main class="mx-auto max-w-sm px-6 pt-16" data-signals="{name: '', email: '', password: '', confirm: '', _error: ''}" {
 				(card(&html! {
 					(card_header("Create your account", Some("On a new install the first account becomes the administrator.")))
 					(card_content(&html! {

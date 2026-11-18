@@ -206,7 +206,7 @@ async fn login_page(State(s): State<AppState>, Query(query): Query<LoginQuery>) 
 	layout::document(
 		"Sign in",
 		&html! {
-			main class="mx-auto mt-16 max-w-sm px-6" data-signals=(signals) {
+			main class="mx-auto max-w-sm px-6 pt-16" data-signals=(signals) {
 				(card(&html! {
 					(card_header("Sign in to podkit", Some("Use the email and password of your podkit account.")))
 					(card_content(&html! {
@@ -352,6 +352,68 @@ mod tests {
 		let resp = app.oneshot(req).await.unwrap();
 		let set_cookie = resp.headers()[header::SET_COOKIE].to_str().unwrap();
 		assert!(set_cookie.contains("Secure"), "{set_cookie}");
+	}
+
+	/// The browser lower-cases attribute names, so a `data-bind` key with capitals reaches Datastar as the
+	/// signal `newname` and never matches `$newName` or the `newName` the server reads. A
+	/// camelCase signal is bound with the value form instead: `data-bind="newName"`.
+	#[test]
+	fn no_template_names_a_signal_in_the_attribute_key_with_capitals() {
+		fn walk(dir: &std::path::Path, found: &mut Vec<String>) {
+			for entry in std::fs::read_dir(dir).unwrap() {
+				let path = entry.unwrap().path();
+				if path.is_dir() {
+					walk(&path, found);
+				} else if path.extension().is_some_and(|e| e == "rs") {
+					let src = std::fs::read_to_string(&path).unwrap();
+					for (n, line) in src.lines().enumerate() {
+						for kind in ["bind", "signals", "computed", "ref", "indicator"] {
+							let needle = format!("data-{kind}:");
+							let mut rest = line;
+							while let Some(at) = rest.find(&needle) {
+								let after = &rest[at + needle.len()..];
+								let key: String = after
+									.chars()
+									.take_while(|c| {
+										c.is_ascii_alphanumeric() || matches!(c, '_' | '-')
+									})
+									.collect();
+								if key.chars().any(|c| c.is_ascii_uppercase()) {
+									found.push(format!("{}:{}: {line}", path.display(), n + 1));
+								}
+								rest = after;
+							}
+						}
+					}
+				}
+			}
+		}
+		let mut found = Vec::new();
+		walk(
+			&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui"),
+			&mut found,
+		);
+		assert!(
+			found.is_empty(),
+			"capitals in an attribute key:\n{}",
+			found.join("\n")
+		);
+	}
+
+	#[db_test]
+	async fn the_sign_in_and_sign_up_pages_do_not_overflow_the_viewport(db: PgPool) {
+		// A top margin on the page's `main` collapses through the full-height body and makes the
+		// page scroll by that much; the space has to be padding.
+		let app = app(db).await;
+		for path in ["/login", "/register"] {
+			let (s, _, page) = get_html(&app, path, None).await;
+			assert_eq!(s, StatusCode::OK, "{path}");
+			assert_contains(&page, "px-6 pt-16");
+			assert!(
+				!page.contains("mt-16"),
+				"{path}: margin collapses out of the body"
+			);
+		}
 	}
 
 	#[db_test]

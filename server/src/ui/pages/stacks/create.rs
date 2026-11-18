@@ -102,7 +102,7 @@ pub(super) async fn new_page(
 						label class=(LABEL) {
 							span { "Variables " span class="font-normal text-muted-foreground" { "(optional)" } }
 							textarea class=(TEXTAREA) spellcheck="false" autocomplete="off" wrap="off"
-								placeholder="DB_PASSWORD=change-me" "data-bind:envText" {}
+								placeholder="DB_PASSWORD=change-me" "data-bind"="envText" {}
 							span class="text-sm leading-normal font-normal text-muted-foreground" {
 								"One NAME=value per line, for the " code class="font-mono" { "${NAME}" } " the file uses. Values are encrypted and never shown again."
 							}

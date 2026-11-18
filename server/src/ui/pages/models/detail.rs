@@ -343,13 +343,13 @@ fn links_card(ctx: &TeamCtx, model: &Model, links: &ModelLinks) -> Markup {
 							form class="flex flex-col gap-3 border-t border-border pt-5" "data-on:submit"=(post) {
 								label class=(LABEL) {
 									"Link an application"
-									select class=(SELECT) required "data-bind:linkApp" "data-on:change"=(preview) {
+									select class=(SELECT) required "data-bind"="linkApp" "data-on:change"=(preview) {
 										option value="" { "Choose…" }
 										@for (id, name) in &links.linkable { option value=(id.0) { (name) } }
 									}
 								}
 								label class="flex items-center gap-2 text-sm" {
-									input type="checkbox" "data-bind:linkDefault";
+									input type="checkbox" "data-bind"="linkDefault";
 									"Make it the model PODKIT_MODEL names"
 								}
 								(preview_table(&[]))
