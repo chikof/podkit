@@ -1,0 +1,54 @@
+### List
+# @name List
+# Display order; the first one is the default for resource create and list.
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/environments
+Authorization: Bearer {{token}}
+
+### Create
+# @name Create
+# @capture file environment.id = response.json.id
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/environments
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Staging",
+  "slug": "staging"
+}
+
+### Get
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/environments/{{environment.id}}
+Authorization: Bearer {{token}}
+
+### Rename
+# slug is optional; omitted keeps it.
+PATCH {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/environments/{{environment.id}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "Staging (EU)"
+}
+
+### Reorder
+# Every environment of the project exactly once; the first becomes the default.
+PUT {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/environments/order
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "ids": [{{environment.id}}]
+}
+
+### Delete
+# 409 while the environment still holds resources (the message names them),
+# and for the project's last environment.
+DELETE {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/environments/{{environment.id}}
+Authorization: Bearer {{token}}
+
+### Create an application in an environment
+# environment_id is optional on applications, databases and models (project's
+# first environment when omitted). The same list endpoints take
+# ?environment_id=. Another project's environment is a 404.
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications?environment_id={{environment.id}}
+Authorization: Bearer {{token}}

@@ -14,10 +14,10 @@ use super::{
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::deployments::{self, DeploymentStatus};
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, ProjectId, ServerId, TeamId, UserId};
+use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId, TeamId, UserId};
 use crate::servers::Server;
 use crate::state::AppState;
-use crate::{db, scope, servers, validate, volumes};
+use crate::{db, environments, scope, servers, validate, volumes};
 
 const MAX_NAME_LEN: usize = 60;
 
@@ -26,6 +26,7 @@ const MAX_NAME_LEN: usize = 60;
 pub struct ApplicationView {
 	pub id: ApplicationId,
 	pub project_id: ProjectId,
+	pub environment_id: EnvironmentId,
 	pub server_id: ServerId,
 	pub server_name: String,
 	pub name: String,
@@ -54,6 +55,7 @@ impl ApplicationView {
 		Self {
 			id: app.id,
 			project_id: app.project_id,
+			environment_id: app.environment_id,
 			server_id: app.server_id,
 			server_name: server.name.clone(),
 			name: app.name.clone(),
@@ -88,6 +90,9 @@ pub struct AppInput {
 	pub container_port: i32,
 	pub memory_limit_mb: Option<i32>,
 	pub cpu_limit: Option<f64>,
+	/// Create only: the environment to put the application in. The project's first
+	/// environment when `None`; ignored by update.
+	pub environment_id: Option<EnvironmentId>,
 }
 
 /// A freshly created application and the only copy of its webhook secret.
@@ -200,6 +205,8 @@ pub async fn create(
 ) -> AppResult<Created> {
 	authorize(&s.db, user, team, Action::Create, Resource::Application).await?;
 	scope::project(&s.db, team, project).await?;
+	let environment =
+		environments::service::resolve(&s.db, team, project, body.environment_id).await?;
 	let server = scope::server(&s.db, team, server_id).await?;
 
 	validate_basics(&body)?;
@@ -223,6 +230,7 @@ pub async fn create(
 		NewApplication {
 			id: ApplicationId::generate(),
 			project_id: project,
+			environment_id: environment,
 			server_id: server.id,
 			name: body.name.trim().to_owned(),
 			slug: body.slug,
@@ -247,18 +255,21 @@ pub async fn create(
 	})
 }
 
-/// Lists applications under a project; needs `read application`. The
-/// project must belong to the team. `latest` is not filled in.
+/// Lists applications of one environment of a project, the project's first
+/// when `environment` is `None`; needs `read application`. The project (and
+/// the environment, if given) must belong to the team. `latest` is not filled in.
 pub async fn list(
 	db: &PgPool,
 	user: UserId,
 	team: TeamId,
 	project: ProjectId,
+	environment: Option<EnvironmentId>,
 ) -> AppResult<Vec<ApplicationView>> {
 	authorize(db, user, team, Action::Read, Resource::Application).await?;
 	scope::project(db, team, project).await?;
+	let environment = environments::service::resolve(db, team, project, environment).await?;
 
-	let apps = super::list_by_project(db, project).await?;
+	let apps = super::list_by_environment(db, environment).await?;
 	let servers = servers::list_by_team(db, team).await?;
 	apps.iter()
 		.map(|app| {

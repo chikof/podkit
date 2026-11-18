@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT kind AS \"kind!\", name AS \"name!\" FROM (\n\t\t\t\tSELECT 'application' AS kind, name, 0 AS ord, id FROM applications\n\t\t\t\t\tWHERE environment_id = $1\n\t\t\t\tUNION ALL\n\t\t\t\tSELECT 'database', name, 1, id FROM databases WHERE environment_id = $1\n\t\t\t\tUNION ALL\n\t\t\t\tSELECT 'model', name, 2, id FROM models WHERE environment_id = $1\n\t\t\t) r\n\t\t\tORDER BY ord, id\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "name!",
+        "type_info": "Varchar",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "b536eefe9152926c48d2dd8f9b8a9422fdeb4965c1bbcd7aa93cb672ff3c8afa"
+}

@@ -14,8 +14,9 @@ use super::service::{self, CreateModel};
 use super::{Model, ModelStatus};
 use crate::applications::routes::log_events;
 use crate::auth::AuthUser;
+use crate::environments::EnvironmentFilter;
 use crate::error::AppResult;
-use crate::ids::{ModelFileId, ModelId, ProjectId, ServerId, TeamId};
+use crate::ids::{EnvironmentId, ModelFileId, ModelId, ProjectId, ServerId, TeamId};
 use crate::state::AppState;
 use proto::GpuVendor;
 
@@ -52,12 +53,16 @@ struct CreateRequest {
 	/// Only for the `custom` engine; 8000 when absent.
 	port: Option<u16>,
 	memory_limit_mb: Option<i32>,
+	/// The project's first environment when omitted.
+	#[serde(default)]
+	environment_id: Option<EnvironmentId>,
 }
 
 #[derive(Serialize)]
 struct ModelResponse {
 	id: ModelId,
 	project_id: ProjectId,
+	environment_id: EnvironmentId,
 	server_id: ServerId,
 	model_files_id: ModelFileId,
 	name: String,
@@ -87,6 +92,7 @@ impl From<Model> for ModelResponse {
 			internal_url: m.internal_url(),
 			id: m.id,
 			project_id: m.project_id,
+			environment_id: m.environment_id,
 			server_id: m.server_id,
 			model_files_id: m.model_files_id,
 			name: m.name,
@@ -189,6 +195,7 @@ async fn create(
 			image: body.image,
 			port: body.port,
 			memory_limit_mb: body.memory_limit_mb,
+			environment_id: body.environment_id,
 		},
 	)
 	.await?;
@@ -200,8 +207,9 @@ async fn list(
 	State(s): State<AppState>,
 	user: AuthUser,
 	Path((team, project)): Path<(TeamId, ProjectId)>,
+	Query(filter): Query<EnvironmentFilter>,
 ) -> AppResult<Json<Vec<ModelResponse>>> {
-	let rows = service::list(&s, user.id, team, project).await?;
+	let rows = service::list(&s, user.id, team, project, filter.environment_id).await?;
 	Ok(Json(rows.into_iter().map(Into::into).collect()))
 }
 

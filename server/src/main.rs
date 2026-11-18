@@ -30,6 +30,7 @@ mod db;
 mod deployments;
 mod domains;
 mod env_vars;
+mod environments;
 mod error;
 mod ids;
 mod jobs;

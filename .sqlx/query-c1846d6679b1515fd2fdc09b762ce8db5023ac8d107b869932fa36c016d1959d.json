@@ -1,0 +1,232 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id: DatabaseId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, engine AS \"engine: EngineKind\", version,\n\t\t\t\tcredentials, public_port, memory_limit_mb, cpu_limit,\n\t\t\t\tstatus AS \"status: DatabaseStatus\", status_message, container_id,\n\t\t\t\tbackup_target_id AS \"backup_target_id: BackupTargetId\", backup_schedule,\n\t\t\t\tbackup_keep, backup_next_run_at\n\t\t\tFROM databases WHERE project_id = $1 ORDER BY id\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: DatabaseId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id: ProjectId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "environment_id: EnvironmentId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "environment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "server_id: ServerId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "server_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "engine: EngineKind",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "engine"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "version",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "credentials",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "credentials"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "public_port",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "public_port"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "memory_limit_mb",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "memory_limit_mb"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "cpu_limit",
+        "type_info": "Float4",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "cpu_limit"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "status: DatabaseStatus",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "status_message",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "status_message"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "container_id",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "container_id"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "backup_target_id: BackupTargetId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "backup_target_id"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "backup_schedule",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "backup_schedule"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "backup_keep",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "backup_keep"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "backup_next_run_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "backup_next_run_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "c1846d6679b1515fd2fdc09b762ce8db5023ac8d107b869932fa36c016d1959d"
+}

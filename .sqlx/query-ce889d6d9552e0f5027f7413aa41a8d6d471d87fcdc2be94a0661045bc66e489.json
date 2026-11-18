@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tINSERT INTO applications\n\t\t\t\t(id, project_id, server_id, name, slug, repo_url, git_ref, deploy_key, git_token,\n\t\t\t\t build_strategy, dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit)\n\t\t\tVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)\n\t\t\tRETURNING\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tdeploy_key, git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t",
+  "query": "\n\t\t\tSELECT a.id AS \"id: ApplicationId\", a.project_id AS \"project_id: ProjectId\", a.environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\ta.server_id AS \"server_id: ServerId\", a.name, a.slug, a.repo_url, a.git_ref,\n\t\t\t\ta.deploy_key, a.git_token, a.build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\ta.dockerfile_path, a.container_port, a.webhook_secret, a.memory_limit_mb,\n\t\t\t\ta.cpu_limit\n\t\t\tFROM applications a\n\t\t\tJOIN projects p ON p.id = a.project_id\n\t\t\tWHERE a.id = $3 AND a.project_id = $2 AND p.team_id = $1\n\t\t",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "environment_id: EnvironmentId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "environment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "server_id: ServerId",
         "type_info": "Int8",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "name",
         "type_info": "Varchar",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "slug",
         "type_info": "Varchar",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "repo_url",
         "type_info": "Text",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "git_ref",
         "type_info": "Varchar",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "deploy_key",
         "type_info": "Bytea",
         "origin": {
@@ -92,7 +103,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "git_token",
         "type_info": "Bytea",
         "origin": {
@@ -103,7 +114,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "build_strategy: BuildStrategy",
         "type_info": "Varchar",
         "origin": {
@@ -114,7 +125,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "dockerfile_path",
         "type_info": "Varchar",
         "origin": {
@@ -125,7 +136,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "container_port",
         "type_info": "Int4",
         "origin": {
@@ -136,7 +147,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "webhook_secret",
         "type_info": "Bytea",
         "origin": {
@@ -147,7 +158,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "memory_limit_mb",
         "type_info": "Int4",
         "origin": {
@@ -158,7 +169,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "cpu_limit",
         "type_info": "Float4",
         "origin": {
@@ -173,22 +184,11 @@
       "Left": [
         "Int8",
         "Int8",
-        "Int8",
-        "Varchar",
-        "Varchar",
-        "Text",
-        "Varchar",
-        "Bytea",
-        "Bytea",
-        "Varchar",
-        "Varchar",
-        "Int4",
-        "Bytea",
-        "Int4",
-        "Float4"
+        "Int8"
       ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -206,5 +206,5 @@
       true
     ]
   },
-  "hash": "d2ff68e3b10cf1bee8863a629be44836e8e0f5a1fbb9d21f47eec7d5b03b25ad"
+  "hash": "ce889d6d9552e0f5027f7413aa41a8d6d471d87fcdc2be94a0661045bc66e489"
 }

@@ -31,6 +31,7 @@ id!(
 	TeamMemberId,
 	RoleId,
 	ProjectId,
+	EnvironmentId,
 	ServerId,
 	ApplicationId,
 	DeploymentId,

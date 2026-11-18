@@ -18,7 +18,7 @@ use sqlx::types::Json;
 use time::OffsetDateTime;
 
 use crate::error::ServerError;
-use crate::ids::{ModelFileId, ModelId, ProjectId, ServerId};
+use crate::ids::{EnvironmentId, ModelFileId, ModelId, ProjectId, ServerId};
 use crate::jobs::{self, JobKind};
 use crate::state::AppState;
 
@@ -55,6 +55,7 @@ pub enum ModelStatus {
 pub struct Model {
 	pub id: ModelId,
 	pub project_id: ProjectId,
+	pub environment_id: EnvironmentId,
 	pub server_id: ServerId,
 	pub model_files_id: ModelFileId,
 	pub name: String,
@@ -106,7 +107,7 @@ pub fn alias(slug: &str) -> String {
 	format!("model-{slug}")
 }
 
-const COLUMNS: &str = "id, project_id, server_id, model_files_id, name, slug, engine, image, port, \
+const COLUMNS: &str = "id, project_id, environment_id, server_id, model_files_id, name, slug, engine, image, port, \
 	model_path, served_name, context_size, gpu, extra_args, memory_limit_mb, status, error, \
 	container_id, created_at, updated_at";
 
@@ -114,6 +115,8 @@ const COLUMNS: &str = "id, project_id, server_id, model_files_id, name, slug, en
 pub struct NewModel {
 	pub id: ModelId,
 	pub project_id: ProjectId,
+	/// Must belong to `project_id`; the composite foreign key enforces it.
+	pub environment_id: EnvironmentId,
 	pub server_id: ServerId,
 	pub model_files_id: ModelFileId,
 	pub name: String,
@@ -132,9 +135,9 @@ pub struct NewModel {
 pub async fn insert(db: impl PgExecutor<'_>, new: NewModel) -> Result<Model, sqlx::Error> {
 	sqlx::query_as(sqlx::AssertSqlSafe(format!(
 		"INSERT INTO models
-			(id, project_id, server_id, model_files_id, name, slug, engine, image, port,
+			(id, project_id, environment_id, server_id, model_files_id, name, slug, engine, image, port,
 			 model_path, served_name, context_size, gpu, extra_args, memory_limit_mb)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		VALUES ($1, $2, $16, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		RETURNING {COLUMNS}"
 	)))
 	.bind(new.id)
@@ -152,6 +155,7 @@ pub async fn insert(db: impl PgExecutor<'_>, new: NewModel) -> Result<Model, sql
 	.bind(new.gpu)
 	.bind(Json(new.extra_args))
 	.bind(new.memory_limit_mb)
+	.bind(new.environment_id)
 	.fetch_one(db)
 	.await
 }
@@ -222,6 +226,18 @@ pub async fn list_by_project(
 		"SELECT {COLUMNS} FROM models WHERE project_id = $1 ORDER BY id"
 	)))
 	.bind(project)
+	.fetch_all(db)
+	.await
+}
+
+pub async fn list_by_environment(
+	db: impl PgExecutor<'_>,
+	environment: EnvironmentId,
+) -> Result<Vec<Model>, sqlx::Error> {
+	sqlx::query_as(sqlx::AssertSqlSafe(format!(
+		"SELECT {COLUMNS} FROM models WHERE environment_id = $1 ORDER BY id"
+	)))
+	.bind(environment)
 	.fetch_all(db)
 	.await
 }
