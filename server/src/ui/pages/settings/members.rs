@@ -162,6 +162,7 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 	);
 	let body = html! {
 		div class="flex flex-col gap-6" data-signals=(signals) {
+			(crate::ui::pages::settings::settings_tabs(&ctx))
 			(card(&html! {
 				(card_header("Members", Some("Everyone who can work in this team.")))
 				(card_content(&html! {

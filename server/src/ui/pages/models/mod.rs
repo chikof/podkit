@@ -48,7 +48,7 @@ fn download_url(team: TeamId, file: ModelFileId) -> String {
 	format!("/teams/{team}/models/downloads/{file}")
 }
 
-fn model_url(team: TeamId, project: ProjectId, model: ModelId) -> String {
+pub(in crate::ui) fn model_url(team: TeamId, project: ProjectId, model: ModelId) -> String {
 	format!("/teams/{team}/projects/{project}/models/{model}")
 }
 

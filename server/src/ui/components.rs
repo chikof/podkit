@@ -58,5 +58,5 @@ pub use skeleton::skeleton;
 pub use table::table;
 pub use tabs::{TAB, TAB_ACTIVE, TabItem, tabs};
 pub use theme_toggle::theme_toggle;
-pub use toast::{toast, toast_region};
+pub use toast::{toast, toast_region, toast_region_with};
 pub use tooltip::tooltip;

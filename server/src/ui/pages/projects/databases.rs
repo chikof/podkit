@@ -1045,7 +1045,7 @@ mod tests {
 	};
 	use crate::tests::{PgPool, app, call, count, db_test, user_with_team};
 	use crate::ui::testing::{
-		assert_contains, assert_not_contains, get_html, post_signals, ui_login,
+		assert_contains, assert_not_contains, get_html, page_main, post_signals, ui_login,
 	};
 
 	struct Fixture {
@@ -1308,7 +1308,7 @@ mod tests {
 		assert_eq!(s, StatusCode::OK);
 		assert_contains(&page, "orders");
 		for hidden in ["Reveal password", "Connection", "Restart", "Settings"] {
-			assert_not_contains(&page, hidden);
+			assert_not_contains(page_main(&page), hidden);
 		}
 		let (s, _, page) = get_html(&f.app, &format!("{}/logs", f.url(id)), Some(&carol)).await;
 		assert_eq!(s, StatusCode::OK);

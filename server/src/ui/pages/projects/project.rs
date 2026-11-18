@@ -325,7 +325,7 @@ mod tests {
 		assert_contains(&body, "No projects yet.");
 		assert_contains(&body, "New project");
 		assert_contains(&body, "<title>Projects");
-		assert_contains(&body, "Backup targets");
+		assert_contains(&body, "S3 Destinations");
 
 		let (s, _, body) = post_signals(
 			&app,

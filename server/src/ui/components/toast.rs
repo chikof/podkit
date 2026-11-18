@@ -13,8 +13,14 @@ use super::icon::icon_with;
 
 /// The live region all toasts go into. Present on every page, empty until one arrives.
 pub fn toast_region() -> Markup {
+	toast_region_with(&html! {})
+}
+
+/// The region with toasts already in it: the message an action left for this page (see
+/// `ui::shell::flash`).
+pub fn toast_region_with(initial: &Markup) -> Markup {
 	html! {
-		section id="toasts" aria-label="Notifications" aria-live="polite" class="pointer-events-none fixed inset-x-4 bottom-4 z-50 ml-auto flex max-w-sm flex-col gap-2" {}
+		section id="toasts" aria-label="Notifications" aria-live="polite" class="pointer-events-none fixed inset-x-4 bottom-4 z-50 ml-auto flex max-w-sm flex-col gap-2" { (initial) }
 	}
 }
 

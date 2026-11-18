@@ -43,6 +43,7 @@ mod models;
 mod projects;
 mod routes;
 mod scope;
+mod search;
 mod servers;
 mod state;
 mod teams;

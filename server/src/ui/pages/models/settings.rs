@@ -70,6 +70,7 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Response, Respo
 	let body = html! {
 		div class="flex flex-col gap-6" data-signals="{_error: ''}" {
 			h1 class="text-xl font-semibold" { "Model settings" }
+			(crate::ui::pages::settings::settings_tabs(&ctx))
 			(card(&html! {
 				(card_header("Hugging Face token", Some("Needed for gated models and to avoid rate limits. It is stored encrypted, sent only to the downloader, and can't be read back.")))
 				(card_content(&status_region(&ctx, configured)))

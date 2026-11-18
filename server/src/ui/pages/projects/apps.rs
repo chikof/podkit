@@ -690,7 +690,8 @@ mod tests {
 		project_id, seed_deployment, stored_secrets, user_with_team,
 	};
 	use crate::ui::testing::{
-		assert_contains, assert_not_contains, get_html, post_signals, ui_login, ui_session,
+		assert_contains, assert_not_contains, get_html, page_main, post_signals, ui_login,
+		ui_session,
 	};
 
 	const KEY: &str =
@@ -1197,7 +1198,7 @@ mod tests {
 		let (s, _, page) = get_html(&f.app, &format!("{}/{id}", f.base()), Some(&carol)).await;
 		assert_eq!(s, StatusCode::OK);
 		assert_contains(&page, "Shared");
-		assert_not_contains(&page, "Settings");
+		assert_not_contains(page_main(&page), "Settings");
 		let (s, _, page) = get_html(
 			&f.app,
 			&format!("/teams/{}/projects/{}", f.team, f.project),

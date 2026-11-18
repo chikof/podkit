@@ -43,6 +43,7 @@ mod layout;
 #[allow(dead_code)]
 mod live;
 mod pages;
+mod shell;
 mod sse;
 #[allow(dead_code)]
 mod status;
@@ -89,6 +90,7 @@ pub fn router() -> Router<AppState> {
 		.merge(test_routes())
 		.layer(middleware::from_fn(origin_guard))
 		.layer(middleware::from_fn(theme::scope))
+		.layer(middleware::from_fn(shell::scope))
 }
 
 #[cfg(test)]

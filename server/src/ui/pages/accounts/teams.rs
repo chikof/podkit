@@ -13,7 +13,7 @@ use crate::teams::service;
 use crate::ui::components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
 use crate::ui::extract::UiUser;
 use crate::ui::layout::{self, form_error};
-use crate::ui::{error, sse};
+use crate::ui::{error, shell, sse};
 
 pub fn router() -> Router<AppState> {
 	Router::new().route("/teams/new", get(new_page).post(create))
@@ -61,10 +61,18 @@ struct CreateSignals {
 async fn create(
 	State(s): State<AppState>,
 	user: UiUser,
+	cookies: tower_cookies::Cookies,
 	ReadSignals(sig): ReadSignals<CreateSignals>,
 ) -> Response {
 	match service::create(&s.db, user.id, &sig.name, &sig.slug, "").await {
-		Ok(team) => sse::redirect(&format!("/teams/{}/projects", team.id)).into_response(),
+		Ok(team) => {
+			shell::flash(
+				&cookies,
+				crate::ui::components::Tone::Success,
+				&format!("Team {} created.", team.name),
+			);
+			sse::redirect(&format!("/teams/{}/projects", team.id)).into_response()
+		}
 		Err(e) => error::action(&e),
 	}
 }

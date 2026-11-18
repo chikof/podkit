@@ -93,6 +93,18 @@ pub async fn post_signals(
 	.await
 }
 
+/// The page's own content: what is inside `<main id="main">`, without the sidebar,
+/// header and palette every team page carries. Use it to assert that a control is absent
+/// from a page, since "Settings" or "Members" also name sidebar links.
+#[track_caller]
+pub fn page_main(body: &str) -> &str {
+	let start = body
+		.find("<main id=\"main\"")
+		.unwrap_or_else(|| panic!("no <main id=\"main\"> in:\n{body}"));
+	let rest = &body[start..];
+	rest.find("</main>").map_or(rest, |end| &rest[..end])
+}
+
 #[track_caller]
 pub fn assert_contains(body: &str, needle: &str) {
 	assert!(body.contains(needle), "expected {needle:?} in:\n{body}");

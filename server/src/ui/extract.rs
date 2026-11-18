@@ -11,8 +11,10 @@ use axum::response::{IntoResponse, Redirect, Response};
 use super::{error, sse};
 use crate::auth::permission::{self, Permissions};
 use crate::auth::{SessionToken, session, users};
+use crate::environments::{self, Environment};
 use crate::error::ServerError;
-use crate::ids::{TeamId, UserId};
+use crate::ids::{EnvironmentId, ProjectId, TeamId, UserId};
+use crate::projects::{self, Project};
 use crate::state::AppState;
 use crate::teams::{self, Team};
 
@@ -87,6 +89,68 @@ pub struct TeamCtx {
 	pub perms: Permissions,
 	/// Every team the user belongs to, for the switcher.
 	pub teams: Vec<Team>,
+	/// The request path, so the sidebar can mark the current page.
+	pub path: String,
+	/// The project (and environment) the page is about, when its path names one the
+	/// user may read; the header's switchers are built from it.
+	pub scope: Option<ProjectScope>,
+}
+
+/// A project page's place in the hierarchy: the project, its siblings, and the
+/// environment in view (`?environment=<id>`, else the project's first).
+#[derive(Debug, Clone)]
+pub struct ProjectScope {
+	pub project: Project,
+	pub projects: Vec<Project>,
+	pub environments: Vec<Environment>,
+	pub environment: Environment,
+}
+
+impl ProjectScope {
+	/// Best effort: a failure leaves the header without switchers, and the page's own
+	/// handler reports the real error. Only navigations pay for it.
+	async fn load(
+		parts: &Parts,
+		state: &AppState,
+		user: UserId,
+		team: TeamId,
+		project: Option<ProjectId>,
+	) -> Option<Self> {
+		// Datastar fragments (polls, previews) never render the header.
+		if !is_navigation(&parts.method) || parts.headers.contains_key("datastar-request") {
+			return None;
+		}
+		let project_id = project?;
+		let wanted = parts.uri.query().and_then(|q| {
+			url::form_urlencoded::parse(q.as_bytes())
+				.find(|(k, _)| k == "environment")
+				.and_then(|(_, v)| v.parse::<i64>().ok())
+				.map(EnvironmentId)
+		});
+		let project = projects::service::find(&state.db, user, team, project_id)
+			.await
+			.ok()?;
+		let projects = projects::service::list(&state.db, user, team)
+			.await
+			.ok()?
+			.into_iter()
+			.map(|s| s.project)
+			.collect();
+		let environments = environments::service::list(&state.db, user, team, project_id)
+			.await
+			.ok()?;
+		let environment = environments
+			.iter()
+			.find(|e| Some(e.id) == wanted)
+			.or_else(|| environments.first())?
+			.clone();
+		Some(Self {
+			project,
+			projects,
+			environments,
+			environment,
+		})
+	}
 }
 
 impl FromRequestParts<AppState> for TeamCtx {
@@ -101,12 +165,17 @@ impl FromRequestParts<AppState> for TeamCtx {
 			error::respond(&parts.method, Some(user), &e)
 		};
 
-		let team_id = match RawPathParams::from_request_parts(parts, state).await {
-			Ok(params) => params
-				.iter()
-				.find(|(k, _)| *k == "team_id")
-				.and_then(|(_, v)| v.parse::<i64>().ok()),
-			Err(_) => None,
+		let (team_id, project_id) = match RawPathParams::from_request_parts(parts, state).await {
+			Ok(params) => {
+				let id = |name: &str| {
+					params
+						.iter()
+						.find(|(k, _)| *k == name)
+						.and_then(|(_, v)| v.parse::<i64>().ok())
+				};
+				(id("team_id"), id("project_id").map(ProjectId))
+			}
+			Err(_) => (None, None),
 		};
 		let Some(team_id) = team_id.map(TeamId) else {
 			return Err(fail(parts, &user, ServerError::NotFound));
@@ -125,11 +194,16 @@ impl FromRequestParts<AppState> for TeamCtx {
 			return Err(fail(parts, &user, ServerError::NotFound));
 		};
 
+		let path = parts.uri.path().to_owned();
+		let scope = ProjectScope::load(parts, state, user.id, team_id, project_id).await;
+
 		Ok(Self {
 			user,
 			team,
 			perms,
 			teams,
+			path,
+			scope,
 		})
 	}
 }

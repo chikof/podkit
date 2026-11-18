@@ -1,19 +1,22 @@
-//! The page frame: the bare HTML document, and the signed-in shell with a
-//! header (team switcher, user, sign out) and a sidebar.
+//! The page frame: the bare HTML document, and the signed-in shell (see `ui::shell`).
 
 use maud::{DOCTYPE, Markup, html};
 
 use super::assets::{FONT_SANS_HREF, PODKIT_JS_HREF};
-use super::components::{BUTTON_OUTLINE, theme_toggle, toast_region};
+use super::components::{BUTTON_OUTLINE, theme_toggle, toast, toast_region, toast_region_with};
 use super::extract::TeamCtx;
-use super::{APP_CSS_HREF, DATASTAR_PATH, theme};
-use crate::auth::permission::{Action, Resource};
+use super::{APP_CSS_HREF, DATASTAR_PATH, shell, theme};
 
 /// One breadcrumb: a label and, for every crumb but the last, where it links.
 pub type Crumb<'a> = (&'a str, Option<String>);
 
 /// A complete HTML document with no chrome (login page, error fallback).
 pub fn document(title: &str, body: &Markup) -> Markup {
+	document_with_head(title, &html! {}, body)
+}
+
+/// A document with extra elements in `<head>`.
+pub fn document_with_head(title: &str, head: &Markup, body: &Markup) -> Markup {
 	let theme = theme::current();
 	html! {
 		(DOCTYPE)
@@ -25,15 +28,32 @@ pub fn document(title: &str, body: &Markup) -> Markup {
 				title { (title) " · podkit" }
 				link rel="preload" href=(FONT_SANS_HREF) "as"="font" type="font/woff2" crossorigin;
 				link rel="stylesheet" href=(*APP_CSS_HREF);
+				(head)
 				script type="module" src=(DATASTAR_PATH) {}
 				script type="module" src=(*PODKIT_JS_HREF) {}
 			}
 			body class="min-h-screen font-sans" {
 				(body)
-				(toast_region())
+				@if let Some(flash) = flash_toast() {
+					(toast_region_with(&flash))
+				} @else {
+					(toast_region())
+				}
 			}
 		}
 	}
+}
+
+/// The message an action left for this page, as a toast. It goes away by itself, except an
+/// error, which stays until dismissed.
+fn flash_toast() -> Option<Markup> {
+	let flash = shell::pending_flash()?;
+	let keep = flash.tone == super::components::Tone::Danger;
+	Some(html! {
+		div class="contents" data-flash "data-init"=(if keep { "" } else { "setTimeout(() => el.remove(), 6000)" }) {
+			(toast(flash.tone, &flash.message, None))
+		}
+	})
 }
 
 /// Shows the `_error` signal that action handlers patch on failure.
@@ -71,87 +91,8 @@ pub fn bare_page(user: Option<&str>, title: &str, body: &Markup) -> Markup {
 	)
 }
 
-const LINK: &str = "block rounded-lg px-3 py-2 text-sm font-medium hover:bg-foreground/5";
-
-/// Sidebar entries the caller may use. Pages for the later ones may not exist
-/// yet and answer 404.
-fn nav_links(ctx: &TeamCtx) -> Markup {
-	let base = format!("/teams/{}", ctx.team.id);
-	let perms = &ctx.perms;
-	html! {
-		@if perms.can(Action::Read, Resource::Project) {
-			a class=(LINK) href={ (base) "/projects" } { "Projects" }
-		}
-		@if perms.can(Action::Read, Resource::Model) {
-			a class=(LINK) href={ (base) "/models" } { "Models" }
-		}
-		@if perms.can(Action::Read, Resource::Server) {
-			a class=(LINK) href={ (base) "/servers" } { "Servers" }
-		}
-		@if perms.can(Action::Read, Resource::Backup) {
-			a class=(LINK) href={ (base) "/backup-targets" } { "Backup targets" }
-		}
-		@if perms.can(Action::Read, Resource::Membership) {
-			a class=(LINK) href={ (base) "/members" } { "Members" }
-		}
-	}
-}
-
-fn team_switcher(ctx: &TeamCtx) -> Markup {
-	html! {
-		details class="relative" {
-			summary class="flex h-9 cursor-pointer list-none items-center gap-2 rounded-lg border border-border px-3 text-sm font-medium select-none" {
-				(ctx.team.name)
-			}
-			div class="absolute left-0 z-40 mt-2 flex min-w-48 flex-col rounded-lg border border-border bg-card p-1 text-card-foreground" {
-				@for team in &ctx.teams {
-					a class=(LINK) href={ "/teams/" (team.id.0) "/projects" } { (team.name) }
-				}
-				a class=(LINK) href="/teams/new" { "New team" }
-			}
-		}
-	}
-}
-
-/// The signed-in shell around `body`. `breadcrumbs` run from the section down
-/// to the current page.
+/// A signed-in team page: the shell (sidebar, header, palette) around `body`.
+/// `breadcrumbs` run from the section down to the current page.
 pub fn app_page(ctx: &TeamCtx, title: &str, breadcrumbs: &[Crumb<'_>], body: &Markup) -> Markup {
-	document(
-		title,
-		&html! {
-			header class="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3 md:px-6" {
-				div class="flex items-center gap-4" {
-					a href="/" class="font-semibold" { "podkit" }
-					(team_switcher(ctx))
-				}
-				div class="flex items-center gap-3" {
-					span class="hidden text-sm text-muted-foreground md:inline" { (ctx.user.name) }
-					(theme_toggle())
-					(sign_out())
-				}
-			}
-			div class="md:flex md:min-h-[calc(100vh-61px)]" {
-				details class="border-b border-border bg-card px-4 py-2 md:hidden" {
-					summary class="cursor-pointer text-sm font-medium select-none" { "Menu" }
-					nav class="flex flex-col pt-2" { (nav_links(ctx)) }
-				}
-				aside class="hidden w-56 shrink-0 border-r border-border bg-card p-3 md:block" {
-					nav class="flex flex-col gap-1" { (nav_links(ctx)) }
-				}
-				main class="min-w-0 flex-1 px-4 py-6 md:px-8" {
-					nav class="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" aria-label="Breadcrumb" {
-						@for (i, (label, href)) in breadcrumbs.iter().enumerate() {
-							@if i > 0 { span { "/" } }
-							@if let Some(href) = href {
-								a class="hover:underline" href=(href) { (label) }
-							} @else {
-								span class="text-foreground" { (label) }
-							}
-						}
-					}
-					div class="mx-auto flex max-w-4xl flex-col gap-6" { (body) }
-				}
-			}
-		},
-	)
+	shell::app_page(ctx, title, breadcrumbs, body)
 }

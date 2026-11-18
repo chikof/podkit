@@ -7,6 +7,7 @@ use crate::state::AppState;
 
 mod app_config;
 mod apps;
+pub(in crate::ui) use apps::app_url;
 // The backup pages build on the database page frame.
 pub(in crate::ui) mod databases;
 mod deployments;
