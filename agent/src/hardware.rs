@@ -52,7 +52,7 @@ const NVIDIA_ARGS: [&str; 2] = [
 
 /// `$PATH` first, then where NixOS and distro packages put it (the agent's
 /// service environment often has a minimal `$PATH`).
-const NVIDIA_SMI: [&str; 3] = [
+pub(crate) const NVIDIA_SMI: [&str; 3] = [
 	"nvidia-smi",
 	"/run/current-system/sw/bin/nvidia-smi",
 	"/usr/bin/nvidia-smi",
@@ -68,7 +68,7 @@ async fn nvidia_smi() -> Vec<Gpu> {
 }
 
 /// Stdout of a successful command; `None` when it is missing, fails or hangs.
-async fn run(program: &str, args: &[&str]) -> Option<String> {
+pub(crate) async fn run(program: &str, args: &[&str]) -> Option<String> {
 	let output = tokio::time::timeout(
 		TOOL_TIMEOUT,
 		Command::new(program).args(args).kill_on_drop(true).output(),

@@ -91,6 +91,18 @@ pub enum ServerError {
 	#[error("model not found")]
 	ModelNotFound,
 
+	#[error("stack not found")]
+	StackNotFound,
+
+	/// The request is well-formed but names something podkit does not run,
+	/// e.g. a compose key outside the supported subset. `issues` is shown to
+	/// the caller next to the message.
+	#[error("{message}")]
+	Unprocessable {
+		message: String,
+		issues: serde_json::Value,
+	},
+
 	#[error("could not reach Hugging Face")]
 	HuggingFaceUnavailable,
 
@@ -152,7 +164,9 @@ impl ServerError {
 			| Self::BackupNotFound
 			| Self::BackupTargetNotFound
 			| Self::ModelFileNotFound
+			| Self::StackNotFound
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,
+			Self::Unprocessable { .. } => StatusCode::UNPROCESSABLE_ENTITY,
 			Self::Forbidden | Self::RegistrationClosed => StatusCode::FORBIDDEN,
 			Self::AgentUnavailable | Self::HuggingFaceUnavailable => StatusCode::BAD_GATEWAY,
 		}
@@ -162,6 +176,12 @@ impl ServerError {
 #[derive(Serialize)]
 struct ErrorBody<'a> {
 	error: &'a str,
+}
+
+#[derive(Serialize)]
+struct IssuesBody<'a> {
+	error: &'a str,
+	issues: &'a serde_json::Value,
 }
 
 impl IntoResponse for ServerError {
@@ -178,6 +198,16 @@ impl IntoResponse for ServerError {
 				.into_response();
 		}
 		let message = self.to_string();
+		if let Self::Unprocessable { issues, .. } = &self {
+			return (
+				status,
+				Json(IssuesBody {
+					error: &message,
+					issues,
+				}),
+			)
+				.into_response();
+		}
 		(status, Json(ErrorBody { error: &message })).into_response()
 	}
 }

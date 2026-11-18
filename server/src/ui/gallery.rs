@@ -243,6 +243,7 @@ fn body(user: &str) -> Markup {
 				])
 			}))
 			(section("table", "Table", "Sticky header, row header, keyboard-scrollable. Stacks below 36rem of its own width.", table_demo))
+			(section("chart", "Chart", "Server-rendered SVG: a line with a gap, two lines, the empty state. Hover a column for its value; the toggle shows each chart's table.", super::charts::demo))
 			(section("dialog", "Dialog", "A native modal. Esc closes it; focus is trapped and returned.", dialog_demo))
 			(section("dropdown-menu", "Dropdown menu", "A popover on an invoker button; arrow keys, Esc and outside click close it.", menu_demo))
 			(section("tooltip", "Tooltip", "On hover and keyboard focus; Esc hides it.", |p| {

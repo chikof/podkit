@@ -179,6 +179,28 @@ its own width every row becomes a block and each cell shows its column name. Tru
 cells with `truncate` and a `title`, never wrap them into narrow columns. Do: right-align
 nothing but numbers; put row actions in a last-column menu.
 
+### Chart and metrics section (`ui/charts.rs`, `components/metrics.rs`)
+
+Charts are inline SVG drawn on the server, with no library and no script. `line_chart(&Chart)`
+is a pure function (same data, same markup; every label escaped): a `<figure>` with the
+title and each series' latest value, an `<svg role="img">` with five y ticks and five x ticks
+(UTC), one path per run of readings (a missing reading, or a hole longer than three usual
+steps, breaks the line rather than being bridged), and a hover `<title>` per reading. It is
+described by `aria-describedby` to a visually hidden sentence (count, latest, average, min,
+max) and has a table of the readings (at most 30 rows) behind the `_tables` signal. Series
+colors are `chart-1` … `chart-5`, in that order; a percentage of a whole fixes its axis at
+100, a byte count takes the capacity (or ticks at powers of two). `sparkline` is a card's
+decoration: no axes, `aria-hidden`, the number sits beside it in text.
+
+`metrics_section(&MetricsSection, &metrics_body(..))` is the frame a resource page embeds:
+range links (`?range=1h|24h|7d`, `aria-current`), a "Data tables" toggle, and a Datastar
+refresh of `#metrics-body` every 30 seconds written as `document.hidden || @get(...)`, so a
+hidden tab sends nothing, plus one request when the tab is visible again. `resource_charts`
+gives CPU and memory for an application, database, model or stack; the page's refresh route
+answers with `sse::patch(&resource_charts(..))` from `metrics::service`. Do: pass the window
+(`from`, `to`) so an empty hour still shows an hour. Don't: bridge a gap, draw a chart for no
+readings (say so instead), or put a figure in a chart that is not in its table.
+
 ### Dialog (`dialog.rs`)
 
 A native modal `<dialog>`. `dialog_open_button(id, class, label)` renders the invoker

@@ -223,6 +223,8 @@ async fn build_spec(
 		entrypoint: None,
 		shm_bytes: None,
 		stop_timeout_s: None,
+		networks: Vec::new(),
+		options: proto::ContainerOptions::default(),
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,

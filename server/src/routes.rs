@@ -6,12 +6,14 @@ use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
 	applications, auth, backups, catalog, databases, deployments, domains, env_vars, environments,
-	links, members, model_files, models, projects, servers, teams, ui, volumes, webhooks,
+	links, members, metrics, model_files, models, projects, servers, stacks, teams, ui, volumes,
+	webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
 const DB: &str = "/teams/{team_id}/projects/{project_id}/databases";
 const MODELS: &str = "/teams/{team_id}/projects/{project_id}/models";
+const STACKS: &str = "/teams/{team_id}/projects/{project_id}/stacks";
 
 async fn health() -> &'static str {
 	"ok"
@@ -34,6 +36,23 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		)
 		.nest("/teams/{team_id}/servers", servers::router())
 		.nest(
+			"/teams/{team_id}/servers/{server_id}/metrics",
+			metrics::router(),
+		)
+		.nest(&format!("{APP}/metrics"), metrics::application_router())
+		.nest(
+			&format!("{DB}/{{database_id}}/metrics"),
+			metrics::database_router(),
+		)
+		.nest(
+			&format!("{MODELS}/{{model_id}}/metrics"),
+			metrics::model_router(),
+		)
+		.nest(
+			&format!("{STACKS}/{{stack_id}}/metrics"),
+			metrics::stack_router(),
+		)
+		.nest(
 			"/teams/{team_id}/projects/{project_id}/applications",
 			applications::router(),
 		)
@@ -48,6 +67,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		)
 		.nest(DB, databases::router())
 		.nest(MODELS, models::router())
+		.nest(STACKS, stacks::router())
 		.nest("/catalog", catalog::router())
 		.nest("/huggingface", catalog::hf_router())
 		.nest("/teams/{team_id}/model-files", model_files::router())

@@ -245,6 +245,8 @@ fn build_spec(
 		entrypoint: launch.entrypoint,
 		shm_bytes: engine.shm_bytes,
 		stop_timeout_s: Some(engine.stop_grace_s),
+		networks: Vec::new(),
+		options: proto::ContainerOptions::default(),
 	}
 }
 

@@ -81,6 +81,73 @@ pub struct Cdi {
 	pub devices: Vec<String>,
 }
 
+/// `GET /v1/stats` response: one live sample of the host and its containers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Stats {
+	/// The host as a whole.
+	pub host: HostStats,
+	/// Running containers that belong to a podkit resource.
+	pub containers: Vec<ContainerStats>,
+}
+
+/// Host-wide figures. Sizes are bytes; `net_*` are counters since boot.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HostStats {
+	/// CPU busy share since the previous sample, 0 to 100.
+	pub cpu_percent: Option<f64>,
+	/// Memory in use (total minus available).
+	pub mem_used: u64,
+	/// Physical memory.
+	pub mem_total: u64,
+	/// The filesystems holding the Podman storage and the agent data dir.
+	pub disks: Vec<DiskStats>,
+	/// Bytes received on the physical interfaces since boot.
+	pub net_rx: u64,
+	/// Bytes sent on the physical interfaces since boot.
+	pub net_tx: u64,
+	/// Utilisation of the busiest NVIDIA GPU, 0 to 100. `None` without `nvidia-smi`.
+	pub gpu_util: Option<f64>,
+	/// VRAM in use over all NVIDIA GPUs. `None` without `nvidia-smi`.
+	pub vram_used: Option<u64>,
+}
+
+/// Space on the filesystem holding `path`, in bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiskStats {
+	/// Directory the figures are for.
+	pub path: String,
+	/// Bytes in use.
+	pub used: u64,
+	/// Bytes free to unprivileged users.
+	pub free: u64,
+	/// Size of the filesystem.
+	pub total: u64,
+}
+
+/// One container's resource use.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ContainerStats {
+	/// Container name.
+	pub name: String,
+	/// What the container is part of.
+	pub resource: ResourceRef,
+	/// Share of the whole host's CPU, 0 to 100. `None` until a second sample exists.
+	pub cpu_percent: Option<f64>,
+	/// Memory without page cache, in bytes.
+	pub mem_used: u64,
+}
+
+/// The podkit resource a container belongs to, from its `podkit.service` label.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceRef {
+	/// `application`, `database`, `model` or `stack`.
+	pub kind: String,
+	/// The resource's id.
+	pub id: i64,
+	/// The compose service, for a stack.
+	pub service: Option<String>,
+}
+
 /// `POST /v1/deploy` body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploySpec {
@@ -124,6 +191,164 @@ pub struct DeploySpec {
 	/// Seconds between SIGTERM and SIGKILL when the container is stopped.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub stop_timeout_s: Option<u32>,
+	/// Extra networks to join, created when missing: the per-stack networks of
+	/// compose stacks. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub networks: Vec<String>,
+	/// Container settings only compose stacks use. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "ContainerOptions::is_default")]
+	pub options: ContainerOptions,
+}
+
+/// What the agent does when a supervised container exits.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Restart {
+	/// Restart it with backoff (the default for everything podkit runs).
+	#[default]
+	Always,
+	/// Leave it stopped after it exits.
+	Never,
+}
+
+/// Transport of a published port.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Protocol {
+	/// TCP.
+	#[default]
+	Tcp,
+	/// UDP.
+	Udp,
+}
+
+impl Protocol {
+	/// Serde's `skip_serializing_if` hands over a reference.
+	#[allow(clippy::trivially_copy_pass_by_ref)]
+	fn is_tcp(&self) -> bool {
+		*self == Self::Tcp
+	}
+
+	/// `tcp` or `udp`, as Podman spells it in port keys.
+	#[must_use]
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Tcp => "tcp",
+			Self::Udp => "udp",
+		}
+	}
+}
+
+/// A container health check, in Docker's `Test` form.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Healthcheck {
+	/// `["CMD", arg...]`, `["CMD-SHELL", "cmd"]` or `["NONE"]`.
+	pub test: Vec<String>,
+	/// Time between checks, in milliseconds.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub interval_ms: Option<u64>,
+	/// Time a check may take, in milliseconds.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub timeout_ms: Option<u64>,
+	/// Consecutive failures that make the container unhealthy.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub retries: Option<u32>,
+	/// Time after start during which failures do not count, in milliseconds.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub start_period_ms: Option<u64>,
+}
+
+/// `ulimit` of a container.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Ulimit {
+	/// Limit name, e.g. `nofile`.
+	pub name: String,
+	/// Soft limit.
+	pub soft: i64,
+	/// Hard limit.
+	pub hard: i64,
+}
+
+/// A file the agent writes on the host and mounts read-only.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileMount {
+	/// Absolute path in the container.
+	pub path: String,
+	/// File content.
+	pub content: String,
+}
+
+/// Container settings beyond what apps, databases and models need. Every
+/// field is optional on the wire.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContainerOptions {
+	/// Restart behaviour.
+	#[serde(default, skip_serializing_if = "is_default")]
+	pub restart: Restart,
+	/// Skip the shared `podkit` network and live only on `networks`.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub isolated: bool,
+	/// DNS aliases on each of `networks` (`network_aliases` are for `podkit`).
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub net_aliases: Vec<String>,
+	/// Health check run by Podman.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub healthcheck: Option<Healthcheck>,
+	/// `user[:group]` to run as.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub user: Option<String>,
+	/// Working directory.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub working_dir: Option<String>,
+	/// Container hostname.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub hostname: Option<String>,
+	/// Read-only root filesystem.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub read_only: bool,
+	/// Run an init process as PID 1.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub init: bool,
+	/// tmpfs mount paths.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub tmpfs: Vec<String>,
+	/// `host:ip` entries for `/etc/hosts`.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub extra_hosts: Vec<String>,
+	/// Resource limits.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub ulimits: Vec<Ulimit>,
+	/// Capabilities to add.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub cap_add: Vec<String>,
+	/// Capabilities to drop.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub cap_drop: Vec<String>,
+	/// Namespaced kernel parameters.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub sysctls: Vec<(String, String)>,
+	/// DNS servers.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub dns: Vec<String>,
+	/// Extra groups of the container user.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub group_add: Vec<String>,
+	/// Extra container labels (never `traefik.*`).
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub labels: Vec<(String, String)>,
+	/// Files written on the host and mounted read-only.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub files: Vec<FileMount>,
+}
+
+fn is_default<T: Default + PartialEq>(value: &T) -> bool {
+	*value == T::default()
+}
+
+impl ContainerOptions {
+	fn is_default(&self) -> bool {
+		*self == Self::default()
+	}
 }
 
 /// GPUs a container asks for.
@@ -261,12 +486,31 @@ pub struct VolumeMount {
 }
 
 /// A host port mapping.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PublishedPort {
 	/// Host port.
 	pub host: u16,
 	/// Container port.
 	pub container: u16,
+	/// TCP unless said otherwise. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Protocol::is_tcp")]
+	pub protocol: Protocol,
+	/// Host address to bind; all addresses when absent.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub host_ip: Option<String>,
+}
+
+impl PublishedPort {
+	/// A TCP port on every host address.
+	#[must_use]
+	pub fn tcp(host: u16, container: u16) -> Self {
+		Self {
+			host,
+			container,
+			protocol: Protocol::Tcp,
+			host_ip: None,
+		}
+	}
 }
 
 /// Replacement strategy.
@@ -410,6 +654,35 @@ pub enum ContainerState {
 	Dead,
 	/// Anything else Podman reports.
 	Unknown,
+}
+
+/// Podman's verdict of a container's health check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HealthStatus {
+	/// The check has not passed yet.
+	Starting,
+	/// The check passes.
+	Healthy,
+	/// The check failed `retries` times in a row.
+	Unhealthy,
+}
+
+/// `GET /v1/containers/{id}/health` response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContainerHealth {
+	/// Container id.
+	pub id: String,
+	/// Container name.
+	pub name: String,
+	/// Current state.
+	pub state: ContainerState,
+	/// Exit code once exited.
+	pub exit_code: Option<i64>,
+	/// `None` when the container has no health check (or it is `NONE`).
+	pub health: Option<HealthStatus>,
+	/// The supervisor stopped restarting it.
+	pub gave_up: bool,
 }
 
 /// Database engines.
@@ -676,6 +949,51 @@ mod tests {
 			serde_json::from_str(&serde_json::to_string(&spec).unwrap()).unwrap();
 		assert!(matches!(again.source, Source::Image { auth: Some(a), .. } if a == want));
 		assert!(!format!("{spec:?}").contains("hunter2"));
+	}
+
+	#[test]
+	fn deploy_spec_without_stack_fields_still_deserializes() {
+		let spec: DeploySpec = serde_json::from_str(OLD_DEPLOY).unwrap();
+		assert!(spec.networks.is_empty());
+		assert_eq!(spec.options, ContainerOptions::default());
+		// Defaults are not written, so older agents accept apps' payloads.
+		let json = serde_json::to_string(&spec).unwrap();
+		assert!(
+			!json.contains("networks") && !json.contains("options"),
+			"{json}"
+		);
+	}
+
+	#[test]
+	fn stack_options_round_trip() {
+		let mut spec: DeploySpec = serde_json::from_str(OLD_DEPLOY).unwrap();
+		spec.networks = vec!["podkit-stack-1".into()];
+		spec.options.isolated = true;
+		spec.options.restart = Restart::Never;
+		spec.options.healthcheck = Some(Healthcheck {
+			test: vec!["CMD-SHELL".into(), "true".into()],
+			interval_ms: Some(2000),
+			timeout_ms: None,
+			retries: Some(3),
+			start_period_ms: None,
+		});
+		let back: DeploySpec =
+			serde_json::from_str(&serde_json::to_string(&spec).unwrap()).unwrap();
+		assert_eq!(back.networks, spec.networks);
+		assert_eq!(back.options, spec.options);
+	}
+
+	#[test]
+	fn published_port_protocol_defaults_to_tcp() {
+		let port: PublishedPort =
+			serde_json::from_str(r#"{"host": 80, "container": 8080}"#).unwrap();
+		assert_eq!(port.protocol, Protocol::Tcp);
+		let udp = PublishedPort {
+			protocol: Protocol::Udp,
+			..port.clone()
+		};
+		assert!(serde_json::to_string(&udp).unwrap().contains("udp"));
+		assert!(!serde_json::to_string(&port).unwrap().contains("protocol"));
 	}
 
 	#[test]

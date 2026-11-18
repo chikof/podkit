@@ -27,6 +27,7 @@ mod kbd;
 mod log_viewer;
 mod logo;
 mod menu;
+mod metrics;
 mod skeleton;
 mod table;
 mod tabs;
@@ -56,6 +57,13 @@ pub use kbd::{kbd, kbd_combo};
 pub use log_viewer::log_viewer;
 pub use logo::{LogoSize, logo};
 pub use menu::{MENU_ITEM, MENU_ITEM_DANGER, dropdown_menu, menu_label, menu_link, menu_separator};
+// `REFRESH_SECONDS` and `resource_charts` are for the application, database, model and stack
+// pages (cards F4, F5, F7, F8); until they embed the section only the tests call them.
+#[allow(unused_imports)]
+pub use metrics::{
+	MetricsSection, REFRESH_SECONDS, metrics_body, metrics_section, range_phrase, range_value,
+	resource_charts,
+};
 pub use skeleton::skeleton;
 pub use table::table;
 pub use tabs::{TabItem, tabs};
