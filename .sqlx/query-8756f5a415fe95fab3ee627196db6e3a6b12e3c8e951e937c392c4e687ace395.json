@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO server_metrics\n\t\t\t\t(server_id, at, rollup, cpu, mem_used, mem_total, disk_used, disk_total, net_rx,\n\t\t\t\t net_tx, gpu_util, vram_used)\n\t\t\tSELECT server_id, date_bin('5 minutes', at, TIMESTAMPTZ '2000-01-01'), TRUE,\n\t\t\t\tAVG(cpu), AVG(mem_used)::BIGINT, MAX(mem_total), AVG(disk_used)::BIGINT,\n\t\t\t\tMAX(disk_total), MAX(net_rx), MAX(net_tx), AVG(gpu_util), AVG(vram_used)::BIGINT\n\t\t\tFROM server_metrics\n\t\t\tWHERE NOT rollup AND at < date_bin('5 minutes', $1::timestamptz, TIMESTAMPTZ '2000-01-01')\n\t\t\tGROUP BY server_id, date_bin('5 minutes', at, TIMESTAMPTZ '2000-01-01')\n\t\t\tON CONFLICT DO NOTHING\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8756f5a415fe95fab3ee627196db6e3a6b12e3c8e951e937c392c4e687ace395"
+}

@@ -38,6 +38,7 @@ mod links;
 mod logs;
 mod maintenance;
 mod members;
+mod metrics;
 mod model_files;
 mod models;
 mod projects;
@@ -45,6 +46,7 @@ mod routes;
 mod scope;
 mod search;
 mod servers;
+mod stacks;
 mod state;
 mod teams;
 mod ui;
@@ -111,6 +113,13 @@ async fn main() -> AppResult<()> {
 
 	let dispatcher = tokio::spawn(worker::run_dispatcher(state.clone(), shutdown.clone()));
 	tokio::spawn(servers::sync::run(state.clone(), shutdown.clone()));
+	tokio::spawn(metrics::sampler::run(
+		state.clone(),
+		std::time::Duration::from_secs(
+			u64::try_from(config.metrics_interval_secs.max(5)).unwrap_or(30),
+		),
+		shutdown.clone(),
+	));
 	tokio::spawn(backups::schedule::run(state.clone(), shutdown.clone()));
 	maintenance::spawn(state.clone());
 	tokio::spawn(signal_shutdown(shutdown.clone()));

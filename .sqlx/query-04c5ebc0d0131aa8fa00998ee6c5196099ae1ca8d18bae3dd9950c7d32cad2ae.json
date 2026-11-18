@@ -1,0 +1,51 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT EXTRACT(EPOCH FROM at)::BIGINT AS \"at!\", cpu, mem\n\t\t\tFROM resource_metrics\n\t\t\tWHERE kind = $1 AND resource_id = $2 AND at >= $3 AND at <= $4\n\t\t\t\tAND (\n\t\t\t\t\t(rollup AND NOT $5)\n\t\t\t\t\tOR (NOT rollup AND ($5 OR at >= COALESCE(\n\t\t\t\t\t\t(SELECT MAX(at) + INTERVAL '5 minutes' FROM resource_metrics\n\t\t\t\t\t\t WHERE kind = $1 AND resource_id = $2 AND rollup), $3)))\n\t\t\t\t)\n\t\t\tORDER BY at\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "at!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "cpu",
+        "type_info": "Float8",
+        "origin": {
+          "Table": {
+            "table": "resource_metrics",
+            "name": "cpu"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "mem",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "resource_metrics",
+            "name": "mem"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Timestamptz",
+        "Timestamptz",
+        "Bool"
+      ]
+    },
+    "nullable": [
+      null,
+      true,
+      false
+    ]
+  },
+  "hash": "04c5ebc0d0131aa8fa00998ee6c5196099ae1ca8d18bae3dd9950c7d32cad2ae"
+}

@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO resource_metrics (kind, resource_id, at, rollup, cpu, mem)\n\t\t\tSELECT kind, resource_id, date_bin('5 minutes', at, TIMESTAMPTZ '2000-01-01'), TRUE,\n\t\t\t\tAVG(cpu), AVG(mem)::BIGINT\n\t\t\tFROM resource_metrics\n\t\t\tWHERE NOT rollup AND at < date_bin('5 minutes', $1::timestamptz, TIMESTAMPTZ '2000-01-01')\n\t\t\tGROUP BY kind, resource_id, date_bin('5 minutes', at, TIMESTAMPTZ '2000-01-01')\n\t\t\tON CONFLICT DO NOTHING\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "60fa94c51dfe52c9b93de2b1bbd11f6177b4bf86a2c20711c3684ea61d8217c2"
+}

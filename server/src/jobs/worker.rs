@@ -160,6 +160,11 @@ async fn dispatch(
 		JobKind::ModelStart | JobKind::ModelStop | JobKind::ModelRemove => {
 			crate::models::run::run(state, job, token, log).await
 		}
+		JobKind::StackDeploy
+		| JobKind::StackStop
+		| JobKind::StackRemove
+		| JobKind::StackPurge
+		| JobKind::StackRestartService => crate::stacks::run::run(state, job, token, log).await,
 	}
 }
 

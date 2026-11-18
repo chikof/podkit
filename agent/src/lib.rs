@@ -11,6 +11,7 @@ pub mod podman;
 pub mod probe;
 pub mod routes;
 pub mod source;
+pub mod stats;
 pub mod supervisor;
 
 use std::path::PathBuf;

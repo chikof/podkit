@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO server_metrics\n\t\t\t\t(server_id, at, cpu, mem_used, mem_total, disk_used, disk_total, net_rx, net_tx,\n\t\t\t\t gpu_util, vram_used)\n\t\t\tVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n\t\t\tON CONFLICT DO NOTHING\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Timestamptz",
+        "Float8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Float8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a1d3a50943f1548d8a2dfd3a41451aa0ed1b5bd92a6d5b1bd30400bee42f5b28"
+}

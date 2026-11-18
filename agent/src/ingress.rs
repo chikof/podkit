@@ -4,7 +4,7 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use futures_util::StreamExt;
-use proto::Ingress;
+use proto::{Ingress, PublishedPort};
 use sha2::{Digest, Sha256};
 
 use crate::podman::{ContainerSpec, Podman, PodmanError};
@@ -68,7 +68,7 @@ pub async fn ensure_traefik(
 		format!("--providers.docker.network={NETWORK}"),
 		"--entrypoints.web.address=:80".to_string(),
 	];
-	let mut published_ports = vec![(ingress.http_port, 80)];
+	let mut published_ports = vec![PublishedPort::tcp(ingress.http_port, 80)];
 	let mut binds = vec![format!("{podman_socket}:/var/run/docker.sock")];
 
 	if let Some(email) = &ingress.acme_email {
@@ -79,7 +79,7 @@ pub async fn ensure_traefik(
 		command.push("--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json".to_string());
 		command.push("--certificatesresolvers.le.acme.httpchallenge=true".to_string());
 		command.push("--certificatesresolvers.le.acme.httpchallenge.entrypoint=web".to_string());
-		published_ports.push((ingress.https_port, 443));
+		published_ports.push(PublishedPort::tcp(ingress.https_port, 443));
 		binds.push(format!("{}:/letsencrypt", acme_dir.display()));
 	}
 
