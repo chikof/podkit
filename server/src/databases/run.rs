@@ -174,6 +174,7 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 			reference: engine.image(&database.version),
 			// Picks up patch releases of the major tag.
 			pull: true,
+			auth: None,
 		},
 		env: engine.env(&credentials),
 		command: engine

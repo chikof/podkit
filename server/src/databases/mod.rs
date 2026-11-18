@@ -12,7 +12,7 @@ use sqlx::PgExecutor;
 use time::OffsetDateTime;
 
 use crate::error::ServerError;
-use crate::ids::{BackupTargetId, DatabaseId, ProjectId, ServerId};
+use crate::ids::{BackupTargetId, DatabaseId, EnvironmentId, ProjectId, ServerId};
 use crate::jobs::{self, JobKind};
 use crate::state::AppState;
 
@@ -65,6 +65,7 @@ pub enum DatabaseStatus {
 pub struct Database {
 	pub id: DatabaseId,
 	pub project_id: ProjectId,
+	pub environment_id: EnvironmentId,
 	pub server_id: ServerId,
 	pub name: String,
 	pub engine: EngineKind,
@@ -134,6 +135,8 @@ pub fn decrypt_credentials(
 pub struct NewDatabase {
 	pub id: DatabaseId,
 	pub project_id: ProjectId,
+	/// Must belong to `project_id`; the composite foreign key enforces it.
+	pub environment_id: EnvironmentId,
 	pub server_id: ServerId,
 	pub name: String,
 	pub engine: EngineKind,
@@ -160,11 +163,11 @@ pub async fn insert(db: impl PgExecutor<'_>, new: NewDatabase) -> Result<Databas
 		Database,
 		r#"
 			INSERT INTO databases
-				(id, project_id, server_id, name, engine, version, credentials, public_port,
-				 memory_limit_mb, cpu_limit)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+				(id, project_id, environment_id, server_id, name, engine, version, credentials,
+				 public_port, memory_limit_mb, cpu_limit)
+			VALUES ($1, $2, $11, $3, $4, $5, $6, $7, $8, $9, $10)
 			RETURNING
-				id AS "id: DatabaseId", project_id AS "project_id: ProjectId",
+				id AS "id: DatabaseId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, engine AS "engine: EngineKind", version,
 				credentials, public_port, memory_limit_mb, cpu_limit,
 				status AS "status: DatabaseStatus", status_message, container_id,
@@ -181,6 +184,7 @@ pub async fn insert(db: impl PgExecutor<'_>, new: NewDatabase) -> Result<Databas
 		new.public_port,
 		new.memory_limit_mb,
 		new.cpu_limit,
+		new.environment_id as EnvironmentId,
 	)
 	.fetch_one(db)
 	.await
@@ -196,7 +200,7 @@ pub async fn find_by_id(
 		Database,
 		r#"
 			SELECT
-				id AS "id: DatabaseId", project_id AS "project_id: ProjectId",
+				id AS "id: DatabaseId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, engine AS "engine: EngineKind", version,
 				credentials, public_port, memory_limit_mb, cpu_limit,
 				status AS "status: DatabaseStatus", status_message, container_id,
@@ -210,23 +214,23 @@ pub async fn find_by_id(
 	.await
 }
 
-pub async fn list_by_project(
+pub async fn list_by_environment(
 	db: impl PgExecutor<'_>,
-	project: ProjectId,
+	environment: EnvironmentId,
 ) -> Result<Vec<Database>, sqlx::Error> {
 	sqlx::query_as!(
 		Database,
 		r#"
 			SELECT
-				id AS "id: DatabaseId", project_id AS "project_id: ProjectId",
+				id AS "id: DatabaseId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, engine AS "engine: EngineKind", version,
 				credentials, public_port, memory_limit_mb, cpu_limit,
 				status AS "status: DatabaseStatus", status_message, container_id,
 				backup_target_id AS "backup_target_id: BackupTargetId", backup_schedule,
 				backup_keep, backup_next_run_at
-			FROM databases WHERE project_id = $1 ORDER BY id
+			FROM databases WHERE environment_id = $1 ORDER BY id
 		"#,
-		project as ProjectId,
+		environment as EnvironmentId,
 	)
 	.fetch_all(db)
 	.await
@@ -246,7 +250,7 @@ pub async fn update_settings(
 				backup_schedule = $6, backup_keep = $7, backup_next_run_at = $8, updated_at = NOW()
 			WHERE id = $1
 			RETURNING
-				id AS "id: DatabaseId", project_id AS "project_id: ProjectId",
+				id AS "id: DatabaseId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, engine AS "engine: EngineKind", version,
 				credentials, public_port, memory_limit_mb, cpu_limit,
 				status AS "status: DatabaseStatus", status_message, container_id,

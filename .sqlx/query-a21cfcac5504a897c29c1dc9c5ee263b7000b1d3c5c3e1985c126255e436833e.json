@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT id AS \"id: EnvironmentId\" FROM environments\n\t\t\tWHERE project_id = $1\n\t\t\tORDER BY position, id\n\t\t\tLIMIT 1\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: EnvironmentId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "environments",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a21cfcac5504a897c29c1dc9c5ee263b7000b1d3c5c3e1985c126255e436833e"
+}

@@ -1,7 +1,15 @@
-//! Generates the web UI stylesheet: encre-css scans the templates under
-//! `src/ui` for Tailwind-compatible utility classes and emits only the CSS
-//! they use, into `$OUT_DIR/app.css`, after the tokens in `src/ui/theme.css`.
+//! Generates the web UI stylesheet into `$OUT_DIR/app.css`, in three parts:
+//!
+//! 1. `src/ui/theme.css`: the design tokens and fonts;
+//! 2. `src/ui/components.css`: hand-written rules for what utilities cannot express
+//!    (top layer, anchor positioning, `@starting-style`, view transitions, ...);
+//! 3. the utilities: encre-css scans the templates under `src/ui` for
+//!    Tailwind-compatible classes and emits only the CSS they use.
+//!
+//! A class in a template must be a utility encre-css knows or a `.class` defined in
+//! `components.css`; anything else fails the build instead of silently styling nothing.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 
@@ -31,6 +39,9 @@ fn main() {
 		.collect();
 
 	let theme = fs::read_to_string(Path::new(UI_DIR).join("theme.css")).expect("read theme.css");
+	let components =
+		fs::read_to_string(Path::new(UI_DIR).join("components.css")).expect("read components.css");
+	let own_classes = css_classes(&components);
 	let tokens = color_tokens(&theme);
 	let full = encre_config(&tokens, encre_css::Preflight::default());
 	let check = encre_config(&tokens, encre_css::Preflight::None);
@@ -40,18 +51,19 @@ fn main() {
 		.zip(&sources)
 		.flat_map(|(path, src)| class_lists(path, src))
 		.flat_map(str::split_whitespace)
+		.filter(|class| !own_classes.contains(*class))
 		.filter(|class| encre_css::generate([*class], &check).trim().is_empty())
 		.collect();
 	unknown.sort_unstable();
 	unknown.dedup();
 	assert!(
 		unknown.is_empty(),
-		"encre-css generates no CSS for these classes in src/ui: {unknown:?}"
+		"neither encre-css nor components.css generates CSS for these classes in src/ui: {unknown:?}"
 	);
 
 	let utilities = encre_css::generate(sources.iter().map(String::as_str), &full);
 	let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("app.css");
-	fs::write(out, format!("{theme}\n{utilities}")).expect("write app.css");
+	fs::write(out, format!("{theme}\n{components}\n{utilities}")).expect("write app.css");
 }
 
 /// Every `--name:` declared in the first `:root` block of `theme.css`, so a
@@ -69,6 +81,26 @@ fn color_tokens(theme: &str) -> Vec<&str> {
 		.collect()
 }
 
+/// Class names that `css` defines as selectors (`.ui-dialog`). A dot after a digit
+/// is a decimal point, not a class.
+fn css_classes(css: &str) -> BTreeSet<&str> {
+	let bytes = css.as_bytes();
+	let mut classes = BTreeSet::new();
+	for (i, _) in css.match_indices('.') {
+		if i > 0 && bytes[i - 1].is_ascii_digit() {
+			continue;
+		}
+		let rest = &css[i + 1..];
+		let end = rest
+			.find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+			.unwrap_or(rest.len());
+		if end > 0 {
+			classes.insert(&rest[..end]);
+		}
+	}
+	classes
+}
+
 fn encre_config(tokens: &[&str], preflight: encre_css::Preflight) -> encre_css::Config {
 	let mut config = encre_css::Config::default();
 	config.preflight = preflight;
@@ -81,16 +113,42 @@ fn encre_config(tokens: &[&str], preflight: encre_css::Preflight) -> encre_css::
 	config
 }
 
-/// Class lists that must all produce CSS: `class="..."` attributes in every
-/// template, and every string literal in `components.rs` (its constants and
-/// `concat!` parts are all class lists).
+/// Class lists that must all produce CSS:
+///
+/// - `class="..."` attributes in every template;
+/// - in `components.rs` and `components/*.rs`, every string literal of a
+///   `const NAME: &str = ...;` item (including `concat!` parts). Constants in those
+///   files are class lists by convention, so anything else (paths, ids) lives
+///   outside them.
 fn class_lists<'a>(path: &Path, src: &'a str) -> Vec<&'a str> {
-	if path.file_name().is_some_and(|f| f == "components.rs") {
-		src.split('"').skip(1).step_by(2).collect()
-	} else {
-		src.split("class=\"")
-			.skip(1)
-			.filter_map(|rest| rest.split('"').next())
-			.collect()
+	let mut lists: Vec<&str> = src
+		.split("class=\"")
+		.skip(1)
+		.filter_map(|rest| rest.split('"').next())
+		.collect();
+	let in_components = path.file_name().is_some_and(|f| f == "components.rs")
+		|| path
+			.parent()
+			.and_then(Path::file_name)
+			.is_some_and(|d| d == "components");
+	if in_components {
+		for (i, _) in src.match_indices("const ") {
+			let item = &src[i..];
+			let Some(end) = item.find(';') else { continue };
+			let item = &item[..end];
+			// `const X: &str = ...` only; skip `const fn`, arrays and the like.
+			if !item
+				.split('=')
+				.next()
+				.is_some_and(|head| head.contains(": &str"))
+			{
+				continue;
+			}
+			let Some((_, value)) = item.split_once('=') else {
+				continue;
+			};
+			lists.extend(value.split('"').skip(1).step_by(2));
+		}
 	}
+	lists
 }

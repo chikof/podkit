@@ -149,6 +149,7 @@ async fn deploy_route_passes_the_gpu_through() {
 		source: Source::Image {
 			reference: IMAGE.to_string(),
 			pull: false,
+			auth: None,
 		},
 		env: vec![],
 		// The health check wants a container that stays up.

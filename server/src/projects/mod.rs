@@ -1,5 +1,6 @@
 //! Projects: group a team's applications.
 
+pub mod overview;
 mod routes;
 pub mod service;
 
@@ -16,15 +17,13 @@ pub struct Project {
 	pub slug: String,
 }
 
-pub async fn list_with_counts(
+pub async fn list_by_team(
 	db: impl sqlx::PgExecutor<'_>,
 	team: TeamId,
 ) -> Result<Vec<service::ProjectSummary>, sqlx::Error> {
 	let rows = sqlx::query!(
 		r#"
-			SELECT p.id AS "id: ProjectId", p.team_id AS "team_id: TeamId", p.name, p.slug,
-				(SELECT COUNT(*) FROM applications a WHERE a.project_id = p.id) AS "applications!",
-				(SELECT COUNT(*) FROM databases d WHERE d.project_id = p.id) AS "databases!"
+			SELECT p.id AS "id: ProjectId", p.team_id AS "team_id: TeamId", p.name, p.slug
 			FROM projects p
 			WHERE p.team_id = $1
 			ORDER BY p.name, p.id
@@ -42,8 +41,6 @@ pub async fn list_with_counts(
 				name: r.name,
 				slug: r.slug,
 			},
-			applications: r.applications,
-			databases: r.databases,
 		})
 		.collect())
 }
@@ -83,4 +80,22 @@ pub async fn delete(
 	.execute(db)
 	.await?;
 	Ok(())
+}
+
+pub async fn update_name(
+	db: impl sqlx::PgExecutor<'_>,
+	id: ProjectId,
+	name: &str,
+) -> Result<Project, sqlx::Error> {
+	sqlx::query_as!(
+		Project,
+		r#"
+			UPDATE projects SET name = $2 WHERE id = $1
+			RETURNING id AS "id: ProjectId", team_id AS "team_id: TeamId", name, slug
+		"#,
+		id as ProjectId,
+		name
+	)
+	.fetch_one(db)
+	.await
 }

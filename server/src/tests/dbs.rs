@@ -198,3 +198,12 @@ pub async fn clear_backup_target(db: &PgPool, database: i64) {
 		.await
 		.unwrap();
 }
+
+/// The environment `database` lives in.
+pub async fn database_environment(db: &PgPool, database: i64) -> i64 {
+	sqlx::query_scalar("SELECT environment_id FROM databases WHERE id = $1")
+		.bind(database)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}

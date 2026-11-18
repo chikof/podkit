@@ -1,11 +1,14 @@
 //! Applications: a git repo built and run as a container on one of the
 //! team's servers.
 
-use crate::ids::{ApplicationId, ProjectId, ServerId};
+use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId};
 use crate::servers::Server;
 
 pub mod routes;
 pub mod service;
+
+#[cfg(test)]
+mod image_tests;
 
 pub use routes::router;
 
@@ -38,19 +41,53 @@ impl BuildStrategy {
 	}
 }
 
+/// Where an application's image comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "text", rename_all = "lowercase")]
+pub enum SourceKind {
+	/// Cloned from `repo_url` and built on the server.
+	Git,
+	/// Pulled from a registry as `image`.
+	Image,
+}
+
+impl SourceKind {
+	/// The lowercase string form used for storage and display.
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Git => "git",
+			Self::Image => "image",
+		}
+	}
+}
+
+/// What `applications.registry_auth` holds once decrypted.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(crate) struct StoredRegistryAuth {
+	pub username: String,
+	pub password: String,
+}
+
 /// Row from the `applications` table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Application {
 	pub id: ApplicationId,
 	pub project_id: ProjectId,
+	pub environment_id: EnvironmentId,
 	pub server_id: ServerId,
 	pub name: String,
 	/// Unique per server, not just per project; the generated subdomain is
 	/// derived from `(slug, server)`.
 	pub slug: String,
-	pub repo_url: String,
+	/// `Some` exactly when `source_kind` is [`SourceKind::Git`].
+	pub repo_url: Option<String>,
 	/// Git branch, tag, or ref to deploy.
 	pub git_ref: String,
+	pub source_kind: SourceKind,
+	/// Registry reference; `Some` exactly when `source_kind` is [`SourceKind::Image`].
+	pub image: Option<String>,
+	/// age-encrypted JSON `{"username", "password"}` for a private registry.
+	pub registry_auth: Option<Vec<u8>>,
 	/// age-encrypted SSH private key (PEM) for `ssh://`/scp-form repo URLs.
 	pub deploy_key: Option<Vec<u8>>,
 	/// age-encrypted access token for `https://` repo URLs.
@@ -72,11 +109,16 @@ pub struct Application {
 pub struct NewApplication {
 	pub id: ApplicationId,
 	pub project_id: ProjectId,
+	/// Must belong to `project_id`; the composite foreign key enforces it.
+	pub environment_id: EnvironmentId,
 	pub server_id: ServerId,
 	pub name: String,
 	pub slug: String,
-	pub repo_url: String,
+	pub repo_url: Option<String>,
 	pub git_ref: String,
+	pub source_kind: SourceKind,
+	pub image: Option<String>,
+	pub registry_auth: Option<Vec<u8>>,
 	pub deploy_key: Option<Vec<u8>>,
 	pub git_token: Option<Vec<u8>>,
 	pub build_strategy: BuildStrategy,
@@ -87,13 +129,15 @@ pub struct NewApplication {
 	pub cpu_limit: Option<f32>,
 }
 
-/// Editable fields. `deploy_key`/`git_token` of `None` leave the stored
-/// value untouched.
+/// Editable fields. `deploy_key`/`git_token`/`registry_auth` of `None`
+/// leave the stored value untouched. The source kind cannot change.
 pub struct ApplicationUpdate {
 	pub name: String,
 	pub slug: String,
-	pub repo_url: String,
+	pub repo_url: Option<String>,
 	pub git_ref: String,
+	pub image: Option<String>,
+	pub registry_auth: Option<Vec<u8>>,
 	pub deploy_key: Option<Vec<u8>>,
 	pub git_token: Option<Vec<u8>>,
 	pub build_strategy: BuildStrategy,
@@ -114,12 +158,14 @@ pub async fn insert(
 		Application,
 		r#"
 			INSERT INTO applications
-				(id, project_id, server_id, name, slug, repo_url, git_ref, deploy_key, git_token,
-				 build_strategy, dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+				(id, project_id, environment_id, server_id, name, slug, repo_url, git_ref, deploy_key, git_token,
+				 build_strategy, dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,
+				 source_kind, image, registry_auth)
+			VALUES ($1, $2, $19, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 			RETURNING
-				id AS "id: ApplicationId", project_id AS "project_id: ProjectId",
+				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
+				source_kind AS "source_kind: SourceKind", image, registry_auth,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 		"#,
@@ -138,6 +184,10 @@ pub async fn insert(
 		new.webhook_secret,
 		new.memory_limit_mb,
 		new.cpu_limit,
+		new.source_kind as SourceKind,
+		new.image,
+		new.registry_auth,
+		new.environment_id as EnvironmentId,
 	)
 	.fetch_one(db)
 	.await
@@ -156,11 +206,13 @@ pub async fn update(
 			SET name = $2, slug = $3, repo_url = $4, git_ref = $5,
 				deploy_key = COALESCE($6, deploy_key), git_token = COALESCE($7, git_token),
 				build_strategy = $8, dockerfile_path = $9, container_port = $10,
-				memory_limit_mb = $11, cpu_limit = $12, updated_at = NOW()
+				memory_limit_mb = $11, cpu_limit = $12, image = $13,
+				registry_auth = COALESCE($14, registry_auth), updated_at = NOW()
 			WHERE id = $1
 			RETURNING
-				id AS "id: ApplicationId", project_id AS "project_id: ProjectId",
+				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
+				source_kind AS "source_kind: SourceKind", image, registry_auth,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 		"#,
@@ -176,6 +228,8 @@ pub async fn update(
 		u.container_port,
 		u.memory_limit_mb,
 		u.cpu_limit,
+		u.image,
+		u.registry_auth,
 	)
 	.fetch_one(db)
 	.await
@@ -191,8 +245,9 @@ pub async fn find_by_id(
 		Application,
 		r#"
 			SELECT
-				id AS "id: ApplicationId", project_id AS "project_id: ProjectId",
+				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
+				source_kind AS "source_kind: SourceKind", image, registry_auth,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 			FROM applications WHERE id = $1
@@ -203,21 +258,22 @@ pub async fn find_by_id(
 	.await
 }
 
-pub async fn list_by_project(
+pub async fn list_by_environment(
 	db: impl sqlx::PgExecutor<'_>,
-	project_id: ProjectId,
+	environment: EnvironmentId,
 ) -> Result<Vec<Application>, sqlx::Error> {
 	sqlx::query_as!(
 		Application,
 		r#"
 			SELECT
-				id AS "id: ApplicationId", project_id AS "project_id: ProjectId",
+				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
+				source_kind AS "source_kind: SourceKind", image, registry_auth,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
-			FROM applications WHERE project_id = $1 ORDER BY id
+			FROM applications WHERE environment_id = $1 ORDER BY id
 		"#,
-		project_id as ProjectId,
+		environment as EnvironmentId,
 	)
 	.fetch_all(db)
 	.await
@@ -227,6 +283,22 @@ pub async fn delete(db: impl sqlx::PgExecutor<'_>, id: ApplicationId) -> Result<
 	sqlx::query!(
 		"DELETE FROM applications WHERE id = $1",
 		id as ApplicationId
+	)
+	.execute(db)
+	.await?;
+	Ok(())
+}
+
+/// Stores a new (already encrypted) webhook secret.
+pub async fn set_webhook_secret(
+	db: impl sqlx::PgExecutor<'_>,
+	id: ApplicationId,
+	sealed: &[u8],
+) -> Result<(), sqlx::Error> {
+	sqlx::query!(
+		"UPDATE applications SET webhook_secret = $2 WHERE id = $1",
+		id as ApplicationId,
+		sealed
 	)
 	.execute(db)
 	.await?;

@@ -1,108 +1,64 @@
-//! Reusable UI pieces, adapted from Topcoat UI's shadcn-style components
-//! (MIT, <https://github.com/tokio-rs/topcoat>). They use the semantic colors in
-//! `theme.css`.
+//! The design system's components: maud functions, plus class constants for the
+//! elements that carry Datastar attributes (maud cannot forward arbitrary attributes
+//! through a function). One file per component; the spec and the do's and don'ts are in
+//! `docs/design/README.md`, and `/_ui` shows every one of them in every state.
 //!
-//! Class lists must stay whole string literals: `build.rs` finds them by
-//! scanning this source, so a class assembled at runtime gets no CSS. Elements
-//! that carry Datastar attributes (buttons, inputs) take these as `class=`
-//! constants, because maud can't forward arbitrary attributes through a
-//! function.
+//! Rules for the files below, enforced by `build.rs`:
+//!
+//! - Class lists are whole string literals, in a `class` attribute or in a
+//!   `const NAME: &str = ...;` item. Every class must be a utility encre-css knows or a
+//!   `.ui-*` rule in `components.css`, or the build fails.
+//! - So a `&str` const in this module tree is always a class list. Anything else (an
+//!   asset path, an id prefix) is a `static`, or lives outside `components/`.
+//! - No user data reaches `PreEscaped`; maud escapes every text and attribute value.
+//!
+//! Later cards add NEW files under `components/` instead of editing these.
 
-use maud::{Markup, html};
+mod avatar;
+mod badge;
+mod breadcrumb;
+mod button;
+mod card;
+mod dialog;
+mod empty_state;
+mod field;
+mod icon;
+mod kbd;
+mod log_viewer;
+mod logo;
+mod menu;
+mod skeleton;
+mod table;
+mod tabs;
+mod theme_toggle;
+mod toast;
+mod tooltip;
 
-macro_rules! button_base {
-	() => {
-		"inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-lg border px-4 text-sm font-medium whitespace-nowrap transition-colors outline-hidden select-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 "
-	};
-}
-
-/// The main action on a page.
-pub const BUTTON: &str = concat!(
-	button_base!(),
-	"border-transparent bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80"
-);
-
-/// A secondary action, drawn as a bordered button.
-pub const BUTTON_OUTLINE: &str = concat!(
-	button_base!(),
-	"border-border text-foreground hover:bg-foreground/5 active:bg-foreground/10"
-);
-
-/// A destructive action, drawn as a bordered button in the error color.
-pub const BUTTON_DANGER: &str = concat!(
-	button_base!(),
-	"border-border text-destructive hover:bg-destructive/10 active:bg-destructive/20"
-);
-
-pub const INPUT: &str = "h-9 w-full min-w-0 rounded-lg border border-border bg-transparent px-3 text-sm font-normal transition-colors outline-hidden placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50";
-
-/// A `<label>` wrapping its text and control, stacked.
-pub const LABEL: &str = "flex flex-col gap-2 text-sm leading-none font-medium";
-
-/// A multi-line field for pasted text such as a private key.
-pub const TEXTAREA: &str = "min-h-24 w-full rounded-lg border border-border bg-transparent px-3 py-2 font-mono text-sm font-normal transition-colors outline-hidden placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50";
-
-/// A tab link of a page, and the one for the page being shown.
-pub const TAB: &str = "-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-medium text-muted-foreground hover:text-foreground";
-pub const TAB_ACTIVE: &str =
-	"-mb-px border-b-2 border-foreground px-3 py-2 text-sm font-medium text-foreground";
-
-pub fn card(content: &Markup) -> Markup {
-	html! {
-		div class="flex flex-col gap-5 rounded-xl border border-border bg-card py-6 text-card-foreground" {
-			(content)
-		}
-	}
-}
-
-pub fn card_header(title: &str, description: Option<&str>) -> Markup {
-	html! {
-		div class="flex flex-col gap-1.5 px-6" {
-			h1 class="text-base leading-none font-semibold" { (title) }
-			@if let Some(description) = description {
-				p class="text-sm text-muted-foreground" { (description) }
-			}
-		}
-	}
-}
-
-pub fn card_content(content: &Markup) -> Markup {
-	html! { div class="px-6" { (content) } }
-}
-
-/// How a status reads at a glance. One color per tone, from `theme.css`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Tone {
-	/// Idle or finished without a verdict: queued, stopped, cancelled.
-	Neutral,
-	/// Work in progress.
-	Progress,
-	/// Healthy or completed.
-	Success,
-	/// Needs attention but is not broken.
-	Warning,
-	/// Failed.
-	Danger,
-}
-
-impl Tone {
-	pub const fn badge_class(self) -> &'static str {
-		match self {
-			Self::Neutral => {
-				"inline-flex items-center rounded-full border border-border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-muted-foreground"
-			}
-			Self::Progress => {
-				"inline-flex items-center rounded-full border border-info/30 bg-info/15 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-info"
-			}
-			Self::Success => {
-				"inline-flex items-center rounded-full border border-success/30 bg-success/15 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-success"
-			}
-			Self::Warning => {
-				"inline-flex items-center rounded-full border border-warning/30 bg-warning/15 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-warning"
-			}
-			Self::Danger => {
-				"inline-flex items-center rounded-full border border-destructive/30 bg-destructive/15 px-2.5 py-0.5 text-xs font-medium whitespace-nowrap text-destructive"
-			}
-		}
-	}
-}
+pub use avatar::avatar;
+pub use badge::{Status, Tone, badge, status_badge, status_dot};
+pub use breadcrumb::breadcrumb;
+pub use button::{
+	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, Size, Variant, button, button_class, icon_button,
+	link_button,
+};
+pub use card::{
+	card, card_content, card_description, card_footer, card_header, card_section, card_title,
+	link_card,
+};
+pub use dialog::{Dismiss, dialog, dialog_cancel, dialog_open_button};
+pub use empty_state::empty_state;
+pub use field::{
+	CHECKBOX, INPUT, LABEL, SELECT, SWITCH, TEXTAREA, checkbox_field, error_text, help_text,
+	select_field, switch_field, text_field, textarea_field,
+};
+pub use icon::{icon, icon_with};
+pub use kbd::{kbd, kbd_combo};
+pub use log_viewer::log_viewer;
+pub use logo::{LogoSize, logo};
+pub use menu::{MENU_ITEM, MENU_ITEM_DANGER, dropdown_menu, menu_label, menu_link, menu_separator};
+pub use skeleton::skeleton;
+pub use table::table;
+pub use tabs::{TabItem, tabs};
+pub use theme_toggle::theme_toggle;
+pub use toast::{toast, toast_region, toast_region_with};
+pub use tooltip::tooltip;

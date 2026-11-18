@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\t\tSELECT id AS \"id: ProjectId\", name\n\t\t\t\tFROM projects\n\t\t\t\tWHERE team_id = $1 AND (name ILIKE $2 OR slug ILIKE $2)\n\t\t\t\tORDER BY name, id\n\t\t\t\tLIMIT $3\n\t\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: ProjectId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "759eaaca6e96aeb04cbf99dde353508f5dea4e3f3eab32a4b7def9d263b546ac"
+}

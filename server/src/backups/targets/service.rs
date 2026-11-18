@@ -74,6 +74,23 @@ fn prefix(value: &str) -> Result<(), ServerError> {
 	if ok { Ok(()) } else { Err(invalid("prefix")) }
 }
 
+/// The checks a target passes before it is stored or tried.
+fn validate_input(body: &mut CreateInput) -> Result<(), ServerError> {
+	body.endpoint = body.endpoint.trim().to_owned();
+	text(&body.name, "name", 60)?;
+	text(&body.region, "region", 60)?;
+	text(&body.bucket, "bucket", 255)?;
+	text(&body.access_key_id, "access_key_id", 255)?;
+	if body.secret_access_key.is_empty() {
+		return Err(invalid("secret_access_key"));
+	}
+	prefix(&body.prefix)?;
+	let endpoint = parse_endpoint(&body.endpoint)?;
+	s3::bucket(endpoint, body.path_style, &body.bucket, &body.region)
+		.map_err(|e| ServerError::Validation(e.to_string()))?;
+	Ok(())
+}
+
 async fn insert(
 	db: impl PgExecutor<'_>,
 	team: TeamId,
@@ -124,6 +141,48 @@ pub(crate) async fn list_for_team(
 	.await
 }
 
+/// Tries a target before it is saved: the same checks as [`create`], then one signed read
+/// against the bucket. Nothing is stored, and the secret is not part of any message.
+/// Caller must hold `create backup` on the team.
+pub async fn test(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	mut body: CreateInput,
+) -> AppResult<()> {
+	authorize(&s.db, user, team, Action::Create, Resource::Backup).await?;
+	validate_input(&mut body)?;
+	let target = BackupTarget {
+		id: BackupTargetId(0),
+		team_id: team,
+		name: body.name.clone(),
+		endpoint: body.endpoint.clone(),
+		region: body.region.clone(),
+		bucket: body.bucket.clone(),
+		path_style: body.path_style,
+		prefix: body.prefix.clone(),
+		access_key_id: body.access_key_id.clone(),
+		secret_access_key: Vec::new(),
+		created_at: time::OffsetDateTime::now_utc(),
+	};
+	s3::probe(&s.http, &target, &body.secret_access_key)
+		.await
+		.map_err(|e| match e {
+			s3::S3Error::Status(status) if status == reqwest::StatusCode::FORBIDDEN => {
+				ServerError::Validation(
+					"the storage refused the access key or secret key".to_owned(),
+				)
+			}
+			s3::S3Error::Bucket(_) => {
+				ServerError::Validation("the bucket does not exist".to_owned())
+			}
+			s3::S3Error::Request(_) => ServerError::Validation(
+				"podkit could not reach the storage. Check the endpoint and try again.".to_owned(),
+			),
+			other => ServerError::Validation(other.to_string()),
+		})
+}
+
 /// Registers a bucket for the team. The secret is encrypted at rest and never
 /// returned. Caller must hold `create backup` on the team.
 pub async fn create(
@@ -133,19 +192,7 @@ pub async fn create(
 	mut body: CreateInput,
 ) -> AppResult<BackupTarget> {
 	authorize(&s.db, user, team, Action::Create, Resource::Backup).await?;
-
-	body.endpoint = body.endpoint.trim().to_owned();
-	text(&body.name, "name", 60)?;
-	text(&body.region, "region", 60)?;
-	text(&body.bucket, "bucket", 255)?;
-	text(&body.access_key_id, "access_key_id", 255)?;
-	if body.secret_access_key.is_empty() {
-		return Err(invalid("secret_access_key"));
-	}
-	prefix(&body.prefix)?;
-	let endpoint = parse_endpoint(&body.endpoint)?;
-	s3::bucket(endpoint, body.path_style, &body.bucket, &body.region)
-		.map_err(|e| ServerError::Validation(e.to_string()))?;
+	validate_input(&mut body)?;
 
 	let secret = s.secrets.encrypt(&body.secret_access_key).map_err(|e| {
 		tracing::error!("failed to encrypt backup target secret: {e}");
@@ -196,13 +243,13 @@ mod tests {
 	fn endpoint_scheme_and_host_table() {
 		let cases = [
 			("https://s3.eu-west-1.amazonaws.com", true),
-			("https://minio.example.com:9000", true),
+			("https://s3.example.com:9000", true),
 			("https://127.0.0.1:9000", true),
 			("http://localhost:9000", true),
 			("http://LOCALHOST", true),
 			("http://127.0.0.1:9000", true),
 			("http://[::1]:9000", true),
-			("http://minio.example.com", false),
+			("http://s3.example.com", false),
 			("http://10.0.0.5:9000", false),
 			("http://127.0.0.2:9000", false),
 			("http://localhost.example.com", false),

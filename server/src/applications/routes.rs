@@ -14,8 +14,9 @@ use tracing::warn;
 use super::service::{self, AppInput, ApplicationView};
 use crate::auth::AuthUser;
 use crate::deployments::{self, DeploymentResponse};
+use crate::environments::EnvironmentFilter;
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, ProjectId, ServerId, TeamId};
+use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId, TeamId};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -44,7 +45,17 @@ pub struct CreateApplicationRequest {
 	pub name: String,
 	pub slug: String,
 	pub server_id: ServerId,
+	/// Git source; mutually exclusive with `image`.
+	#[serde(default)]
 	pub repo_url: String,
+	/// Registry image source (`traefik/whoami:v1`); mutually exclusive with `repo_url`.
+	#[serde(default)]
+	pub image: Option<String>,
+	/// Write-only registry credentials for a private `image`.
+	#[serde(default)]
+	pub registry_username: Option<String>,
+	#[serde(default)]
+	pub registry_password: Option<String>,
 	#[serde(default = "default_git_ref")]
 	pub git_ref: String,
 	/// SSH private key (PEM) for `ssh://`/scp-form repo URLs. Plaintext on the
@@ -64,6 +75,9 @@ pub struct CreateApplicationRequest {
 	pub memory_limit_mb: Option<i32>,
 	#[serde(default)]
 	pub cpu_limit: Option<f64>,
+	/// The project's first environment when omitted.
+	#[serde(default)]
+	pub environment_id: Option<EnvironmentId>,
 }
 
 /// Same shape as `CreateApplicationRequest` minus `server_id` (moving an
@@ -74,7 +88,15 @@ pub struct CreateApplicationRequest {
 pub struct UpdateApplicationRequest {
 	pub name: String,
 	pub slug: String,
+	#[serde(default)]
 	pub repo_url: String,
+	#[serde(default)]
+	pub image: Option<String>,
+	/// Omitted or empty keeps the stored registry credentials.
+	#[serde(default)]
+	pub registry_username: Option<String>,
+	#[serde(default)]
+	pub registry_password: Option<String>,
 	#[serde(default = "default_git_ref")]
 	pub git_ref: String,
 	/// Omitted or empty leaves the stored deploy key untouched (it's
@@ -97,15 +119,21 @@ pub struct UpdateApplicationRequest {
 	pub cpu_limit: Option<f64>,
 }
 
-/// Never carries `deploy_key` or `git_token`.
+/// Never carries `deploy_key`, `git_token` or registry credentials.
 #[derive(Serialize)]
 pub struct ApplicationResponse {
 	pub id: ApplicationId,
 	pub project_id: ProjectId,
+	pub environment_id: EnvironmentId,
 	pub server_id: ServerId,
 	pub name: String,
 	pub slug: String,
-	pub repo_url: String,
+	/// `git` or `image`.
+	pub source_kind: String,
+	pub repo_url: Option<String>,
+	pub image: Option<String>,
+	/// Whether registry credentials are stored; they never leave the server.
+	pub has_registry_auth: bool,
 	pub git_ref: String,
 	pub build_strategy: String,
 	pub dockerfile_path: String,
@@ -130,10 +158,14 @@ impl From<&ApplicationView> for ApplicationResponse {
 		Self {
 			id: app.id,
 			project_id: app.project_id,
+			environment_id: app.environment_id,
 			server_id: app.server_id,
 			name: app.name.clone(),
 			slug: app.slug.clone(),
+			source_kind: app.source_kind.as_str().to_string(),
 			repo_url: app.repo_url.clone(),
+			image: app.image.clone(),
+			has_registry_auth: app.has_registry_auth,
 			git_ref: app.git_ref.clone(),
 			build_strategy: app.build_strategy.as_str().to_string(),
 			dockerfile_path: app.dockerfile_path.clone(),
@@ -165,6 +197,9 @@ pub async fn create(
 			name: body.name,
 			slug: body.slug,
 			repo_url: body.repo_url,
+			image: body.image,
+			registry_username: body.registry_username,
+			registry_password: body.registry_password,
 			git_ref: body.git_ref,
 			deploy_key: body.deploy_key,
 			git_token: body.git_token,
@@ -173,6 +208,7 @@ pub async fn create(
 			container_port: body.container_port,
 			memory_limit_mb: body.memory_limit_mb,
 			cpu_limit: body.cpu_limit,
+			environment_id: body.environment_id,
 		},
 	)
 	.await?;
@@ -187,8 +223,9 @@ pub async fn list(
 	State(s): State<AppState>,
 	user: AuthUser,
 	Path((team, project)): Path<(TeamId, ProjectId)>,
+	Query(filter): Query<EnvironmentFilter>,
 ) -> AppResult<Json<Vec<ApplicationResponse>>> {
-	let apps = service::list(&s.db, user.id, team, project).await?;
+	let apps = service::list(&s.db, user.id, team, project, filter.environment_id).await?;
 	Ok(Json(apps.iter().map(ApplicationResponse::from).collect()))
 }
 
@@ -213,6 +250,9 @@ pub async fn update(
 			name: body.name,
 			slug: body.slug,
 			repo_url: body.repo_url,
+			image: body.image,
+			registry_username: body.registry_username,
+			registry_password: body.registry_password,
 			git_ref: body.git_ref,
 			deploy_key: body.deploy_key,
 			git_token: body.git_token,
@@ -221,6 +261,7 @@ pub async fn update(
 			container_port: body.container_port,
 			memory_limit_mb: body.memory_limit_mb,
 			cpu_limit: body.cpu_limit,
+			environment_id: None,
 		},
 	)
 	.await?;

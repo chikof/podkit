@@ -1,0 +1,106 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT p.id AS \"id: ProjectId\", p.team_id AS \"team_id: TeamId\", p.name, p.slug,\n\t\t\t\t(SELECT e.slug FROM environments e WHERE e.project_id = p.id\n\t\t\t\t\tORDER BY e.position, e.id LIMIT 1) AS default_environment,\n\t\t\t\t(SELECT COUNT(*) FROM environments e WHERE e.project_id = p.id) AS \"environments!\",\n\t\t\t\t(SELECT COUNT(*) FROM applications a WHERE a.project_id = p.id) AS \"applications!\",\n\t\t\t\t(SELECT COUNT(*) FROM databases d WHERE d.project_id = p.id) AS \"databases!\",\n\t\t\t\t(SELECT COUNT(*) FROM models m WHERE m.project_id = p.id) AS \"models!\",\n\t\t\t\t(SELECT MAX(COALESCE(d.finished_at, d.started_at))\n\t\t\t\t\tFROM deployments d JOIN applications a ON a.id = d.application_id\n\t\t\t\t\tWHERE a.project_id = p.id) AS last_deploy\n\t\t\tFROM projects p\n\t\t\tWHERE p.team_id = $1\n\t\t\tORDER BY p.name, p.id\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: ProjectId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "team_id: TeamId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "slug",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "default_environment",
+        "type_info": "Varchar",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "environments!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "applications!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "databases!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "models!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "last_deploy",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "8196a5a875c7b0f09ed0d9d3005e94f8816273ce458dbf6b070d8118eda291a0"
+}

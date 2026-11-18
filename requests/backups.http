@@ -3,7 +3,7 @@
 # @capture file-secret backup_target.id = response.json.id
 # note: any S3-compatible bucket. endpoint must be https (http is only
 # accepted for localhost, 127.0.0.1 and ::1) and carry no credentials.
-# path_style true addresses the bucket as endpoint/bucket (MinIO, Garage);
+# path_style true addresses the bucket as endpoint/bucket (S3-compatible, e.g. Garage);
 # false uses bucket.endpoint, which cannot work on an IP address. prefix is
 # optional; objects are stored as
 # {prefix}/{team id}/databases/{database id}/{backup id}.{sql.gz|archive.gz}.
@@ -14,7 +14,7 @@ Authorization: Bearer {{auth.token}}
 Content-Type: application/json
 
 {
-  "name": "minio",
+  "name": "garage",
   "endpoint": "http://localhost:9000",
   "region": "us-east-1",
   "bucket": "podkit-backups",

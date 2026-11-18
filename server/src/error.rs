@@ -47,6 +47,9 @@ pub enum ServerError {
 	#[error("registration is closed")]
 	RegistrationClosed,
 
+	#[error("environment not found")]
+	EnvironmentNotFound,
+
 	#[error("project not found")]
 	ProjectNotFound,
 
@@ -137,6 +140,7 @@ impl ServerError {
 			| Self::Conflict(_)
 			| Self::ServerNotReady => StatusCode::CONFLICT,
 			Self::ProjectNotFound
+			| Self::EnvironmentNotFound
 			| Self::NotFound
 			| Self::ServerNotFound
 			| Self::ApplicationNotFound

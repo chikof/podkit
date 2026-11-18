@@ -1,50 +1,124 @@
-/* Design tokens for the web UI. Components use only these semantic colors
-   (`bg-primary`, `text-muted-foreground`, `border-border`, ...), so restyling
-   means editing the values below. `build.rs` registers each token with
-   encre-css and puts this file ahead of the generated utilities.
+/* Design tokens for the web UI. The spec lives in docs/design/README.md.
 
-   Values come from Topcoat UI's "neutral" theme (MIT,
-   https://github.com/tokio-rs/topcoat). Dark mode follows the system setting. */
+   Components use only these semantic colors (`bg-primary`, `text-muted-foreground`,
+   `border-border`, ...), so restyling means editing the values below. `build.rs`
+   registers every `--name` of the FIRST root block with encre-css, so a token added
+   there becomes `bg-name`, `text-name`, ... with no other edit. Keep that block
+   free of anything but color tokens, one per line.
 
-:root {
-	--background: oklch(0.9875 0.003 260);
-	--foreground: oklch(0.24 0.012 260);
-	--card: oklch(0.995 0.003 260);
-	--card-foreground: oklch(0.24 0.012 260);
-	--muted-foreground: oklch(0.51 0.014 260);
-	--primary: oklch(0.21 0.02 260);
-	--primary-foreground: oklch(0.985 0.003 260);
-	--destructive: oklch(0.55 0.2 27);
-	--success: oklch(0.52 0.13 150);
-	--warning: oklch(0.58 0.14 70);
-	--info: oklch(0.52 0.15 250);
-	--border: oklch(0.9 0.008 260);
-	--ring: oklch(0.32 0.02 260);
-	color-scheme: light dark;
+   The palette is shadcn/ui's "neutral" base (MIT), in oklch. Each color is written once
+   as `light-dark(<light>, <dark>)` and follows the used color scheme:
+
+     - no class on <html>: the system setting (dark when the system has no preference),
+     - class="dark" or class="light": the user's choice. The server writes the class from
+       the `theme` cookie, so the first paint is already right. */
+
+@font-face {
+	font-family: "Geist";
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url("/static/fonts/Geist-Variable.woff2?v=1.9.2") format("woff2");
 }
 
-@media (prefers-color-scheme: dark) {
-	:root {
-		--background: oklch(0.17 0.012 260);
-		--foreground: oklch(0.93 0.006 260);
-		--card: oklch(0.22 0.012 260);
-		--card-foreground: oklch(0.93 0.006 260);
-		--muted-foreground: oklch(0.68 0.012 260);
-		--primary: oklch(0.92 0.008 260);
-		--primary-foreground: oklch(0.21 0.015 260);
-		--destructive: oklch(0.66 0.18 25);
-		--success: oklch(0.74 0.15 150);
-		--warning: oklch(0.8 0.14 80);
-		--info: oklch(0.74 0.12 250);
-		--border: oklch(0.3 0.012 260);
-		--ring: oklch(0.6 0.02 260);
+@font-face {
+	font-family: "Geist Mono";
+	font-style: normal;
+	font-weight: 100 900;
+	font-display: swap;
+	src: url("/static/fonts/GeistMono-Variable.woff2?v=1.9.2") format("woff2");
+}
+
+:root {
+	--background: light-dark(oklch(1 0 0), oklch(0.145 0 0));
+	--foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+	--card: light-dark(oklch(1 0 0), oklch(0.205 0 0));
+	--card-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+	--popover: light-dark(oklch(1 0 0), oklch(0.205 0 0));
+	--popover-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+	--primary: light-dark(oklch(0.205 0 0), oklch(0.922 0 0));
+	--primary-foreground: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
+	--secondary: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
+	--secondary-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
+	--muted: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
+	--muted-foreground: light-dark(oklch(0.5 0 0), oklch(0.708 0 0));
+	--accent: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
+	--accent-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
+	--destructive: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
+	--destructive-foreground: light-dark(oklch(0.985 0 0), oklch(0.145 0 0));
+	--success: light-dark(oklch(0.5 0.14 150), oklch(0.75 0.17 150));
+	--warning: light-dark(oklch(0.52 0.13 70), oklch(0.82 0.15 85));
+	--info: light-dark(oklch(0.5 0.17 255), oklch(0.74 0.12 250));
+	--border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 10%));
+	--input: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 15%));
+	--ring: light-dark(oklch(0.708 0 0), oklch(0.556 0 0));
+	--chart-1: light-dark(oklch(0.646 0.222 41.116), oklch(0.488 0.243 264.376));
+	--chart-2: light-dark(oklch(0.6 0.118 184.704), oklch(0.696 0.17 162.48));
+	--chart-3: light-dark(oklch(0.398 0.07 227.392), oklch(0.769 0.188 70.08));
+	--chart-4: light-dark(oklch(0.828 0.189 84.429), oklch(0.627 0.265 303.9));
+	--chart-5: light-dark(oklch(0.769 0.188 70.08), oklch(0.645 0.246 16.439));
+	--sidebar: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
+	--sidebar-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
+	--sidebar-primary: light-dark(oklch(0.205 0 0), oklch(0.488 0.243 264.376));
+	--sidebar-primary-foreground: light-dark(oklch(0.985 0 0), oklch(0.985 0 0));
+	--sidebar-accent: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
+	--sidebar-accent-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
+	--sidebar-border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 10%));
+	--sidebar-ring: light-dark(oklch(0.708 0 0), oklch(0.556 0 0));
+	color-scheme: dark;
+}
+
+/* Non-color tokens. */
+:root {
+	--radius: 0.625rem;
+	--font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+	--shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 5%);
+	--shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 10%), 0 1px 2px -1px oklch(0 0 0 / 10%);
+	--shadow-md: 0 4px 6px -1px oklch(0 0 0 / 10%), 0 2px 4px -2px oklch(0 0 0 / 10%);
+	--shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 15%), 0 4px 6px -4px oklch(0 0 0 / 15%);
+	--duration-fast: 120ms;
+	--duration-base: 200ms;
+	--ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* System setting: dark is the default, light only when the system asks for it.
+   An explicit class always wins. */
+@media (prefers-color-scheme: light) {
+	:root:not(.dark) {
+		color-scheme: light;
 	}
+}
+
+:root.light {
+	color-scheme: light;
+}
+
+:root.dark {
+	color-scheme: dark;
+}
+
+html {
+	-webkit-text-size-adjust: 100%;
+	text-size-adjust: 100%;
+	scrollbar-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent) transparent;
 }
 
 body {
 	background-color: var(--background);
 	color: var(--foreground);
+	font-family: var(--font-sans);
+	font-feature-settings: "calt", "kern";
 	/* Not a class: encre-css 0.21.1 names this utility `antialised`. */
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+	background-color: color-mix(in oklab, var(--primary) 30%, transparent);
+}
+
+:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
 }

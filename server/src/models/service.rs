@@ -11,12 +11,12 @@ use super::engines::{self, EngineKind, EngineSpec, GpuNeed};
 use super::{Model, ModelStatus, NAME_CONSTRAINT, NewModel, SLUG_CONSTRAINT};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ModelFileId, ModelId, ProjectId, TeamId, UserId};
+use crate::ids::{EnvironmentId, ModelFileId, ModelId, ProjectId, TeamId, UserId};
 use crate::jobs::JobKind;
 use crate::model_files::{self, ModelFileStatus};
 use crate::servers::{self, Server};
 use crate::state::AppState;
-use crate::{db, models, scope};
+use crate::{db, environments, models, scope};
 
 const MIB: u64 = 1 << 20;
 const DEFAULT_CONTEXT: u32 = 8192;
@@ -48,6 +48,8 @@ pub struct CreateModel {
 	/// The port of a [`EngineKind::Custom`] engine.
 	pub port: Option<u16>,
 	pub memory_limit_mb: Option<i32>,
+	/// The project's first environment when `None`.
+	pub environment_id: Option<EnvironmentId>,
 }
 
 /// What a model is expected to need, in MB.
@@ -293,6 +295,8 @@ pub async fn create(
 ) -> AppResult<Model> {
 	authorize(&s.db, user, team, Action::Create, Resource::Model).await?;
 	scope::project(&s.db, team, project).await?;
+	let environment =
+		environments::service::resolve(&s.db, team, project, req.environment_id).await?;
 	let file = model_files::find(&s.db, team, req.model_files_id)
 		.await?
 		.ok_or(ServerError::ModelFileNotFound)?;
@@ -345,6 +349,7 @@ pub async fn create(
 		let new = NewModel {
 			id,
 			project_id: project,
+			environment_id: environment,
 			server_id: server.id,
 			model_files_id: file.id,
 			name: req.name.clone(),
@@ -428,10 +433,12 @@ pub async fn list(
 	user: UserId,
 	team: TeamId,
 	project: ProjectId,
+	environment: Option<EnvironmentId>,
 ) -> AppResult<Vec<Model>> {
 	authorize(&s.db, user, team, Action::Read, Resource::Model).await?;
 	scope::project(&s.db, team, project).await?;
-	Ok(models::list_by_project(&s.db, project).await?)
+	let environment = environments::service::resolve(&s.db, team, project, environment).await?;
+	Ok(models::list_by_environment(&s.db, environment).await?)
 }
 
 /// # Errors
