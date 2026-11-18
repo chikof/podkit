@@ -9,11 +9,12 @@
 
 use axum::Router;
 use maud::{Markup, html};
+use serde::Deserialize;
 
 use crate::catalog::fit::{Fit, FitKind};
 use crate::ids::{ModelFileId, ModelId, ProjectId, TeamId};
 use crate::state::AppState;
-use crate::ui::components::Tone;
+use crate::ui::components::{LogoSize, Tone, logo};
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::Crumb;
 
@@ -23,6 +24,7 @@ mod flow;
 mod index;
 mod playground;
 mod settings;
+mod setup;
 #[cfg(test)]
 mod tests;
 
@@ -30,6 +32,7 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.merge(index::router())
 		.merge(catalog::router())
+		.merge(setup::router())
 		.merge(flow::router())
 		.merge(detail::router())
 		.merge(playground::router())
@@ -56,6 +59,58 @@ fn crumbs<'a>(ctx: &TeamCtx, trail: Vec<Crumb<'a>>) -> Vec<Crumb<'a>> {
 	let mut crumbs: Vec<Crumb<'a>> = vec![("Models", Some(models_url(ctx.team.id)))];
 	crumbs.extend(trail);
 	crumbs
+}
+
+/// Where a new model goes, when the create-resource picker said so: it links to the
+/// catalog with `?project=<id>&environment=<id>`, and the flow carries both through to
+/// the model it creates. Both are parsed leniently; the service checks that the
+/// environment belongs to the project and to the caller's team.
+#[derive(Debug, Default, Clone, Deserialize)]
+pub(super) struct Target {
+	pub project: Option<String>,
+	pub environment: Option<String>,
+}
+
+impl Target {
+	pub fn project_id(&self) -> Option<i64> {
+		self.project.as_deref().and_then(|p| p.parse().ok())
+	}
+
+	pub fn environment_id(&self) -> Option<i64> {
+		self.environment.as_deref().and_then(|e| e.parse().ok())
+	}
+
+	/// `project=3`, `environment=7`: the parts that are set, for a URL's query.
+	pub fn pairs(&self) -> Vec<String> {
+		let mut out = Vec::new();
+		if let Some(p) = self.project_id() {
+			out.push(format!("project={p}"));
+		}
+		if let Some(e) = self.environment_id() {
+			out.push(format!("environment={e}"));
+		}
+		out
+	}
+}
+
+/// The steps of creating a model, in order: the first four are the set-up (a dialog on the
+/// catalog), then the download's progress page, then the start form.
+fn flow_steps() -> [&'static str; 6] {
+	[
+		"Model",
+		"Server",
+		"Recipe",
+		"Overrides",
+		"Download",
+		"Start",
+	]
+}
+
+/// The mark of a model's vendor (`Qwen`, `Mistral`, ...): a monogram until podkit has the
+/// vendor's logo. When the logo registry lands, this is the one place that maps a family
+/// to its mark.
+fn family_logo(family: &str, size: LogoSize) -> Markup {
+	logo(family, size)
 }
 
 /// `1.5 GB`, `340 MB`: decimal units, like Hugging Face and `df`.

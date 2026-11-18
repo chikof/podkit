@@ -19,6 +19,7 @@ mod badge;
 mod breadcrumb;
 mod button;
 mod card;
+mod chip;
 mod dialog;
 mod empty_state;
 mod field;
@@ -28,7 +29,9 @@ mod log_viewer;
 mod logo;
 mod menu;
 mod metrics;
+mod progress;
 mod skeleton;
+mod stepper;
 mod table;
 mod tabs;
 mod theme_toggle;
@@ -46,6 +49,7 @@ pub use card::{
 	card, card_content, card_description, card_footer, card_header, card_section, card_title,
 	link_card,
 };
+pub use chip::{chip, chip_group};
 pub use dialog::{Dismiss, dialog, dialog_cancel, dialog_open_button};
 pub use empty_state::empty_state;
 pub use field::{
@@ -64,7 +68,9 @@ pub use metrics::{
 	MetricsSection, REFRESH_SECONDS, metrics_body, metrics_section, range_phrase, range_value,
 	resource_charts,
 };
+pub use progress::progress;
 pub use skeleton::skeleton;
+pub use stepper::{Current, stepper};
 pub use table::table;
 pub use tabs::{TabItem, tabs};
 pub use theme_toggle::theme_toggle;

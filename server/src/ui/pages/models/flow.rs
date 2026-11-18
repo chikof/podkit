@@ -1,5 +1,6 @@
-//! The create flow after the catalog: download the weights (with live
-//! progress and log), then start the engine.
+//! The create flow after the set-up: download the weights (live progress and log), then
+//! start the engine. The stepper at the top says where in the flow the person is; the
+//! first four steps were the set-up on the catalog.
 
 use axum::Router;
 use axum::extract::{Path, Query, State};
@@ -10,12 +11,12 @@ use maud::{Markup, html};
 use serde::Deserialize;
 
 use super::index::progress_bar;
-use super::{catalog_url, crumbs, download_url, model_url, models_url};
+use super::{catalog_url, crumbs, download_url, flow_steps, model_url, models_url};
 use crate::auth::permission::{Action, Resource};
 use crate::catalog::service as catalog_service;
 use crate::catalog::{self, Recipe, suggest};
 use crate::error::ServerError;
-use crate::ids::{ModelFileId, ProjectId, ServerId, TeamId};
+use crate::ids::{EnvironmentId, ModelFileId, ProjectId, ServerId, TeamId};
 use crate::model_files::hf::Selection;
 use crate::model_files::service::{self as files_service, CreateFile};
 use crate::model_files::{ModelFile, ModelFileStatus};
@@ -25,7 +26,8 @@ use crate::models::service::{self as models_service, CreateModel};
 use crate::projects;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, card, card_content, card_header,
+	BUTTON_DANGER, Current, INPUT, LABEL, LogoSize, SELECT, Size, Variant, button_class, card,
+	card_content, card_section, icon, logo, stepper,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -70,6 +72,7 @@ pub fn router() -> Router<AppState> {
 #[derive(Debug, Default, Clone, Deserialize)]
 struct Defaults {
 	project: Option<String>,
+	environment: Option<String>,
 	name: Option<String>,
 	engine: Option<String>,
 	path: Option<String>,
@@ -81,6 +84,10 @@ impl Defaults {
 	fn query(&self) -> String {
 		query_of(&[
 			("project", self.project.as_deref().unwrap_or_default()),
+			(
+				"environment",
+				self.environment.as_deref().unwrap_or_default(),
+			),
 			("name", self.name.as_deref().unwrap_or_default()),
 			("engine", self.engine.as_deref().unwrap_or_default()),
 			("path", self.path.as_deref().unwrap_or_default()),
@@ -174,6 +181,8 @@ struct RecipeSignals {
 	recipe: String,
 	server: String,
 	project: String,
+	#[serde(default)]
+	environment: String,
 	name: String,
 	#[serde(default)]
 	served: String,
@@ -222,6 +231,7 @@ async fn download_recipe(
 	};
 	let defaults = Defaults {
 		project: Some(sig.project),
+		environment: Some(sig.environment),
 		name: Some(sig.name),
 		engine: Some(engine_key(engine)),
 		path: Some(path),
@@ -287,21 +297,24 @@ async fn region(
 	let base = download_url(ctx.team.id, file.id);
 	let can_update = ctx.perms.can(Action::Update, Resource::ModelFile);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::ModelFile);
-	let form = if file.status == ModelFileStatus::Ready
-		&& ctx.perms.can(Action::Create, Resource::Model)
-	{
+	let ready = file.status == ModelFileStatus::Ready;
+	let form = if ready && ctx.perms.can(Action::Create, Resource::Model) {
 		Some(start_form(s, ctx, file, defaults).await?)
 	} else {
 		None
 	};
 	Ok(html! {
 		div id="download" class="flex flex-col gap-6" {
+			(stepper("Create a model", &flow_steps(), &Current::At(if ready { 6 } else { 5 })))
 			(card(&html! {
-				(card_header("Download", Some("Weights are fetched from Hugging Face onto the server. An interrupted download resumes.")))
+				(card_section("Download", Some("Weights are fetched from Hugging Face onto the server. An interrupted download resumes."), None))
 				(card_content(&html! {
 					div class="flex flex-col gap-4" {
 						div class="flex flex-wrap items-center justify-between gap-3" {
-							span class="break-all text-sm font-medium" { (file.repo) " @ " (file.revision.chars().take(8).collect::<String>()) }
+							span class="flex min-w-0 items-center gap-3" {
+								(logo("huggingface", LogoSize::Sm))
+								span class="text-sm font-medium break-all" { (file.repo) " @ " (file.revision.chars().take(8).collect::<String>()) }
+							}
 							(status_badge(file.status))
 						}
 						(progress_bar(file))
@@ -310,13 +323,13 @@ async fn region(
 						}
 						div class="flex flex-wrap gap-3" {
 							@if can_update && file.status.in_flight() {
-								button type="button" class=(BUTTON_OUTLINE) "data-on:click"={ "@post(" (js_string(&format!("{base}/cancel"))) ")" } { "Cancel" }
+								button type="button" class=(button_class(Variant::Outline, Size::Md)) "data-on:click"={ "@post(" (js_string(&format!("{base}/cancel"))) ")" } { "Cancel" }
 							}
 							@if can_update && file.status == ModelFileStatus::Failed {
-								button type="button" class=(BUTTON) "data-on:click"={ "@post(" (js_string(&format!("{base}/retry{}", defaults.query()))) ")" } { "Retry" }
+								button type="button" class=(button_class(Variant::Default, Size::Md)) "data-on:click"={ "@post(" (js_string(&format!("{base}/retry{}", defaults.query()))) ")" } { (icon("refresh-cw")) "Retry" }
 							}
 							@if can_delete && !file.status.in_flight() {
-								button type="button" class=(BUTTON_DANGER) "data-on:click"={ "@post(" (js_string(&format!("{base}/delete"))) ")" } { "Delete files" }
+								button type="button" class=(BUTTON_DANGER) "data-on:click"={ "@post(" (js_string(&format!("{base}/delete"))) ")" } { (icon("trash-2")) "Delete files" }
 							}
 						}
 					}
@@ -348,8 +361,15 @@ async fn start_form(
 		.filter(|e| *e != EngineKind::Custom)
 		.map_or_else(String::new, engine_key);
 	let signals = format!(
-		"{{project: {}, name: {}, engine: {}, path: {}, ctx: {}, served: {}, _error: ''}}",
+		"{{project: {}, environment: {}, name: {}, engine: {}, path: {}, ctx: {}, served: {}, _error: ''}}",
 		js_string(&chosen.map_or(String::new(), |id| id.to_string())),
+		js_string(
+			&defaults
+				.environment
+				.as_deref()
+				.and_then(|e| e.parse::<i64>().ok())
+				.map_or(String::new(), |e| e.to_string())
+		),
 		js_string(defaults.name.as_deref().unwrap_or(&file.repo)),
 		js_string(&engine),
 		js_string(defaults.path.as_deref().unwrap_or_default()),
@@ -363,12 +383,12 @@ async fn start_form(
 	Ok(html! {
 		div data-signals=(signals) {
 			(card(&html! {
-				(card_header("Start", Some("The files are on the server. Choose how to run them.")))
+				(card_section("Start", Some("The files are on the server. Choose how to run them."), None))
 				(card_content(&html! {
 					form class="flex flex-col gap-4" "data-on:submit"=(post) {
 						label class=(LABEL) {
 							"Project"
-							select class=(INPUT) required "data-bind:project" {
+							select class=(SELECT) required "data-bind:project" {
 								@for p in &projects { option value=(p.project.id.0) { (p.project.name) } }
 							}
 						}
@@ -378,7 +398,7 @@ async fn start_form(
 						}
 						label class=(LABEL) {
 							"Engine"
-							select class=(INPUT) required "data-bind:engine" {
+							select class=(SELECT) required "data-bind:engine" {
 								@for spec in engines::all().iter().filter(|e| e.kind != EngineKind::Custom) {
 									option value=(engine_key(spec.kind)) { (spec.label) }
 								}
@@ -403,7 +423,7 @@ async fn start_form(
 						}
 						(form_error())
 						div {
-							button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Start the model" }
+							button type="submit" class=(button_class(Variant::Default, Size::Md)) "data-indicator:_busy" "data-attr:disabled"="$_busy" { (icon("play")) "Start the model" }
 						}
 					}
 				}))
@@ -427,10 +447,13 @@ async fn page(
 	let log_url = format!("{}/log", download_url(ctx.team.id, file.id));
 	let body = html! {
 		div class="flex flex-col gap-6" {
-			h1 class="text-xl font-semibold" { "Download " (file.repo) }
+			div class="flex flex-col gap-1" {
+				h1 class="text-2xl font-semibold tracking-tight" { "Download " (file.repo) }
+				p class="text-sm text-muted-foreground" { "Then start it as a model in one of your projects." }
+			}
 			(body_region)
 			(card(&html! {
-				(card_header("Log", None))
+				(card_section("Log", None, None))
 				(card_content(&log_view("download-log", &log_url)))
 			}))
 		}
@@ -520,6 +543,8 @@ async fn remove(
 #[derive(Deserialize)]
 struct StartSignals {
 	project: String,
+	#[serde(default)]
+	environment: String,
 	name: String,
 	engine: String,
 	#[serde(default)]
@@ -547,6 +572,12 @@ async fn start(
 			.parse::<i64>()
 			.map(ProjectId)
 			.map_err(|_| ServerError::Validation("Pick a project.".to_owned()))?;
+		let environment = match non_empty(&sig.environment) {
+			Some(text) => Some(text.parse::<i64>().map(EnvironmentId).map_err(|_| {
+				ServerError::Validation("That environment doesn't exist.".to_owned())
+			})?),
+			None => None,
+		};
 		let engine = parse_engine(&sig.engine)
 			.filter(|e| *e != EngineKind::Custom)
 			.ok_or_else(|| ServerError::Validation("Pick an engine.".to_owned()))?;
@@ -573,7 +604,7 @@ async fn start(
 				image: None,
 				port: None,
 				memory_limit_mb: None,
-				environment_id: None,
+				environment_id: environment,
 			},
 		)
 		.await?;
@@ -596,9 +627,13 @@ mod unit {
 			name: Some("Qwen 3 & co".to_owned()),
 			engine: Some("llama_cuda".to_owned()),
 			path: Some(String::new()),
+			environment: Some("7".to_owned()),
 			..Defaults::default()
 		};
-		assert_eq!(d.query(), "?name=Qwen%203%20%26%20co&engine=llama_cuda");
+		assert_eq!(
+			d.query(),
+			"?environment=7&name=Qwen%203%20%26%20co&engine=llama_cuda"
+		);
 		assert_eq!(Defaults::default().query(), "");
 		assert_eq!(parse_engine("llama_cuda"), Some(EngineKind::LlamaCuda));
 		assert_eq!(parse_engine("nope"), None);
