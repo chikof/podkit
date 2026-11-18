@@ -26,7 +26,9 @@ use crate::auth::{self, Credentials, SessionToken};
 use crate::error::ServerError;
 use crate::state::AppState;
 
+mod apps;
 mod components;
+mod deployments;
 mod error;
 mod extract;
 mod layout;
@@ -71,6 +73,8 @@ pub fn router() -> Router<AppState> {
 		.merge(teams::router())
 		.merge(projects::router())
 		.merge(models::router())
+		.merge(apps::router())
+		.merge(deployments::router())
 		.merge(test_routes())
 		.layer(middleware::from_fn(origin_guard))
 }

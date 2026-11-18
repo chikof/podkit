@@ -53,6 +53,13 @@ pub fn redirect(url: &str) -> Events {
 	Events(vec![ExecuteScript::new(script).write_as_axum_sse_event()])
 }
 
+/// Reloads the current page, for an action that changes what most of it shows.
+pub fn reload() -> Events {
+	Events(vec![
+		ExecuteScript::new("window.location.reload()".to_owned()).write_as_axum_sse_event(),
+	])
+}
+
 /// Sets signals, e.g. to clear a form after success.
 pub fn signals(json: &serde_json::Value) -> Events {
 	Events(vec![

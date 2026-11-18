@@ -7,9 +7,11 @@ use super::Project;
 use crate::applications;
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::databases;
+use crate::deployments::{self, DeploymentStatus};
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ProjectId, TeamId, UserId};
+use crate::ids::{ApplicationId, ProjectId, TeamId, UserId};
 use crate::scope;
+use crate::servers;
 use crate::validate;
 
 /// Constraint violated when a team reuses a project slug.
@@ -32,10 +34,21 @@ pub struct ResourceRow {
 	pub detail: String,
 }
 
+/// One application of the project overview. Carries no secrets.
+#[derive(Debug, Clone)]
+pub struct AppRow {
+	pub id: ApplicationId,
+	pub name: String,
+	/// The generated public hostname.
+	pub url: String,
+	/// Status of the newest deployment, if there is one.
+	pub latest: Option<DeploymentStatus>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ProjectDetail {
 	pub project: Project,
-	pub applications: Vec<ResourceRow>,
+	pub applications: Vec<AppRow>,
 	pub databases: Vec<ResourceRow>,
 }
 
@@ -77,6 +90,13 @@ pub async fn list(db: &PgPool, user: UserId, team: TeamId) -> AppResult<Vec<Proj
 	Ok(super::list_with_counts(db, team).await?)
 }
 
+/// One project; needs `read project`. A project of another team is
+/// `ProjectNotFound`.
+pub async fn find(db: &PgPool, user: UserId, team: TeamId, id: ProjectId) -> AppResult<Project> {
+	authorize(db, user, team, Action::Read, Resource::Project).await?;
+	scope::project(db, team, id).await
+}
+
 /// One project and its applications and databases; needs `read project`.
 /// A project of another team is `ProjectNotFound`.
 pub async fn get(
@@ -88,14 +108,24 @@ pub async fn get(
 	authorize(db, user, team, Action::Read, Resource::Project).await?;
 	let project = scope::project(db, team, id).await?;
 
-	let applications = applications::list_by_project(db, project.id)
-		.await?
-		.into_iter()
-		.map(|a| ResourceRow {
+	let servers = servers::list_by_team(db, team).await?;
+	let mut rows = Vec::new();
+	for a in applications::list_by_project(db, project.id).await? {
+		let Some(server) = servers.iter().find(|s| s.id == a.server_id) else {
+			continue;
+		};
+		let latest = deployments::list(db, a.id, None, 1)
+			.await?
+			.first()
+			.map(|d| d.status);
+		rows.push(AppRow {
+			id: a.id,
+			url: applications::public_hostname(&a.slug, server),
 			name: a.name,
-			detail: a.slug,
-		})
-		.collect();
+			latest,
+		});
+	}
+	let applications = rows;
 	let databases = databases::list_by_project(db, project.id)
 		.await?
 		.into_iter()

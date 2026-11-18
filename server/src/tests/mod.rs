@@ -302,3 +302,137 @@ pub async fn playground_hash(db: &PgPool, model: i64) -> String {
 		.await
 		.unwrap()
 }
+
+/// The id of `team`'s local server.
+pub async fn local_server_id(db: &PgPool, team: i64) -> i64 {
+	sqlx::query_scalar("SELECT id FROM servers WHERE team_id = $1")
+		.bind(team)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// Adds a server of `team` that is not active, to check it can't be picked.
+pub async fn add_pending_server(db: &PgPool, team: i64) -> i64 {
+	sqlx::query_scalar(
+		"INSERT INTO servers (id, team_id, name, hostname, ssh_user, ssh_private_key, podman_socket_path, is_local, status)
+		 VALUES (7001, $1, 'builder', '203.0.113.9', 'root', decode('00', 'hex'), '/x', FALSE, 'pending') RETURNING id",
+	)
+	.bind(team)
+	.fetch_one(db)
+	.await
+	.unwrap()
+}
+
+/// Whether the application with `slug` has a stored deploy key, git token
+/// and webhook secret. The values themselves never leave the database.
+pub async fn stored_secrets(db: &PgPool, slug: &str) -> (bool, bool, bool) {
+	sqlx::query_as(
+		"SELECT deploy_key IS NOT NULL, git_token IS NOT NULL, webhook_secret IS NOT NULL
+		 FROM applications WHERE slug = $1",
+	)
+	.bind(slug)
+	.fetch_one(db)
+	.await
+	.unwrap()
+}
+
+/// The id of the application with `slug`.
+pub async fn application_id(db: &PgPool, slug: &str) -> i64 {
+	sqlx::query_scalar("SELECT id FROM applications WHERE slug = $1")
+		.bind(slug)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// A deployment of `application` in `status`.
+pub async fn seed_deployment(db: &PgPool, application: i64, status: &str) {
+	sqlx::query("INSERT INTO deployments (id, application_id, status) VALUES ($1, $2, $3)")
+		.bind(application + 1)
+		.bind(application)
+		.bind(status)
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+/// Inserts a deployment of `application` straight into `status`, as if it
+/// had run: a commit, a start and an end time 75 seconds apart.
+pub async fn insert_deployment(
+	db: &PgPool,
+	application: i64,
+	id: i64,
+	status: &str,
+	image: Option<&str>,
+	container: Option<&str>,
+) {
+	sqlx::query(
+		"INSERT INTO deployments (id, application_id, status, image_tag, container_id,
+			commit_sha, started_at, finished_at)
+		VALUES ($1, $2, $3, $4, $5, 'abcdef1234567890', NOW() - INTERVAL '75 seconds', NOW())",
+	)
+	.bind(id)
+	.bind(application)
+	.bind(status)
+	.bind(image)
+	.bind(container)
+	.execute(db)
+	.await
+	.unwrap();
+}
+
+/// The status of deployment `id`.
+pub async fn deployment_status(db: &PgPool, id: i64) -> String {
+	sqlx::query_scalar("SELECT status FROM deployments WHERE id = $1")
+		.bind(id)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// Moves deployment `id` to `status`, bypassing the state machine.
+pub async fn set_deployment_status(db: &PgPool, id: i64, status: &str) {
+	sqlx::query("UPDATE deployments SET status = $2 WHERE id = $1")
+		.bind(id)
+		.bind(status)
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+/// Gives deployment `id` a failure message.
+pub async fn set_deployment_error(db: &PgPool, id: i64, message: &str) {
+	sqlx::query("UPDATE deployments SET error_message = $2 WHERE id = $1")
+		.bind(id)
+		.bind(message)
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+/// The image tag of deployment `id`.
+pub async fn deployment_image(db: &PgPool, id: i64) -> Option<String> {
+	sqlx::query_scalar("SELECT image_tag FROM deployments WHERE id = $1")
+		.bind(id)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// The id of the newest deployment of any application.
+pub async fn newest_deployment(db: &PgPool) -> i64 {
+	sqlx::query_scalar("SELECT MAX(id) FROM deployments")
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// The id of the job that deploys deployment `deployment`.
+pub async fn deploy_job_id(db: &PgPool, deployment: i64) -> i64 {
+	sqlx::query_scalar("SELECT id FROM jobs WHERE target_id = $1")
+		.bind(deployment)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
