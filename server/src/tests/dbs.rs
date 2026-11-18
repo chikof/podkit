@@ -114,3 +114,87 @@ pub async fn delete_jobs(db: &PgPool, database: i64) {
 		.await
 		.unwrap();
 }
+
+/// Inserts a backup of `database` in `status` and returns its id. `target` is
+/// `None` for a backup whose target was deleted; `by` is who started it.
+#[allow(clippy::too_many_arguments)]
+pub async fn add_backup(
+	db: &PgPool,
+	id: i64,
+	database: i64,
+	target: Option<i64>,
+	status: &str,
+	size: Option<i64>,
+	error: Option<&str>,
+	by: Option<i64>,
+) -> i64 {
+	sqlx::query_scalar(
+		"INSERT INTO backups (id, database_id, target_id, status, size_bytes, error, triggered_by,
+			object_key, finished_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, NULL,
+			CASE WHEN $4 IN ('succeeded', 'failed') THEN now() END) RETURNING id",
+	)
+	.bind(id)
+	.bind(database)
+	.bind(target)
+	.bind(status)
+	.bind(size)
+	.bind(error)
+	.bind(by)
+	.fetch_one(db)
+	.await
+	.unwrap()
+}
+
+/// How many backups of `database` exist.
+pub async fn backup_count(db: &PgPool, database: i64) -> i64 {
+	sqlx::query_scalar("SELECT count(*) FROM backups WHERE database_id = $1")
+		.bind(database)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// How many backup targets exist, in any team.
+pub async fn target_count(db: &PgPool) -> i64 {
+	sqlx::query_scalar("SELECT count(*) FROM backup_targets")
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// The id of the user called `name`.
+pub async fn user_id(db: &PgPool, name: &str) -> i64 {
+	sqlx::query_scalar("SELECT id FROM users WHERE name = $1")
+		.bind(name)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// Points `database` at `target` for its backups.
+pub async fn set_backup_target(db: &PgPool, database: i64, target: i64) {
+	sqlx::query("UPDATE databases SET backup_target_id = $2 WHERE id = $1")
+		.bind(database)
+		.bind(target)
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+/// The stored (encrypted) secret of the only backup target, as text.
+pub async fn stored_secret(db: &PgPool) -> Vec<u8> {
+	sqlx::query_scalar("SELECT secret_access_key FROM backup_targets LIMIT 1")
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// Removes `database`'s backup target.
+pub async fn clear_backup_target(db: &PgPool, database: i64) {
+	sqlx::query("UPDATE databases SET backup_target_id = NULL WHERE id = $1")
+		.bind(database)
+		.execute(db)
+		.await
+		.unwrap();
+}

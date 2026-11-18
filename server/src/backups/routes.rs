@@ -1,25 +1,19 @@
 //! Backups of one database, under
 //! `/api/v1/teams/{team}/projects/{project}/databases/{database}/backups`.
+//! The use cases are in [`super::service`].
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, post};
 use axum::{Json, Router};
-use proto::Engine;
 use serde::{Deserialize, Serialize};
 
+use super::service;
 use super::{Backup, BackupStatus};
 use crate::auth::AuthUser;
-use crate::auth::permission::{Action, Resource, authorize};
-use crate::databases::DatabaseStatus;
-use crate::error::{AppResult, ServerError};
+use crate::error::AppResult;
 use crate::ids::{BackupId, BackupTargetId, DatabaseId, ProjectId, TeamId, UserId};
-use crate::jobs::{self, JobKind};
 use crate::state::AppState;
-use crate::{backups, scope};
-
-const DEFAULT_PAGE_SIZE: i64 = 50;
-const MAX_PAGE_SIZE: i64 = 200;
 
 pub fn router() -> Router<AppState> {
 	Router::new()
@@ -80,19 +74,7 @@ async fn create(
 	user: AuthUser,
 	Path((team, project, database)): Path<(TeamId, ProjectId, DatabaseId)>,
 ) -> AppResult<(StatusCode, Json<BackupResponse>)> {
-	authorize(&s.db, user.id, team, Action::Create, Resource::Backup).await?;
-	let database = scope::database(&s.db, team, project, database).await?;
-
-	if database.engine() == Engine::Redis {
-		return Err(ServerError::Validation(
-			"redis backups are not supported".to_owned(),
-		));
-	}
-	let target = database
-		.backup_target_id
-		.ok_or_else(|| ServerError::Validation("configure a backup target first".to_owned()))?;
-
-	let backup = backups::queue(&s, database.id, database.server_id, target, Some(user.id)).await?;
+	let backup = service::create(&s, user.id, team, project, database).await?;
 	Ok((StatusCode::ACCEPTED, Json(BackupResponse::from(&backup))))
 }
 
@@ -104,14 +86,16 @@ async fn list(
 	Path((team, project, database)): Path<(TeamId, ProjectId, DatabaseId)>,
 	Query(params): Query<ListParams>,
 ) -> AppResult<Json<Vec<BackupResponse>>> {
-	authorize(&s.db, user.id, team, Action::Read, Resource::Backup).await?;
-	let database = scope::database(&s.db, team, project, database).await?;
-
-	let limit = params
-		.limit
-		.unwrap_or(DEFAULT_PAGE_SIZE)
-		.clamp(1, MAX_PAGE_SIZE);
-	let rows = backups::list(&s.db, database.id, params.before, limit).await?;
+	let rows = service::list(
+		&s.db,
+		user.id,
+		team,
+		project,
+		database,
+		params.before,
+		params.limit,
+	)
+	.await?;
 	Ok(Json(rows.iter().map(BackupResponse::from).collect()))
 }
 
@@ -123,31 +107,7 @@ async fn restore(
 	user: AuthUser,
 	Path((team, project, database, id)): Path<(TeamId, ProjectId, DatabaseId, BackupId)>,
 ) -> AppResult<(StatusCode, Json<BackupResponse>)> {
-	authorize(&s.db, user.id, team, Action::Update, Resource::Database).await?;
-	let database = scope::database(&s.db, team, project, database).await?;
-	let backup = backups::find(&s.db, database.id, id)
-		.await?
-		.ok_or(ServerError::BackupNotFound)?;
-
-	if backup.status != BackupStatus::Succeeded {
-		return Err(ServerError::Validation(
-			"only a succeeded backup can be restored".to_owned(),
-		));
-	}
-	if database.status != DatabaseStatus::Running {
-		return Err(ServerError::Validation(
-			"the database must be running to restore a backup".to_owned(),
-		));
-	}
-
-	jobs::enqueue(
-		&s,
-		JobKind::Restore,
-		database.server_id,
-		backup.id.0,
-		format!("db:{}", database.id),
-	)
-	.await?;
+	let backup = service::restore(&s, user.id, team, project, database, id).await?;
 	Ok((StatusCode::ACCEPTED, Json(BackupResponse::from(&backup))))
 }
 
@@ -159,15 +119,6 @@ async fn remove(
 	user: AuthUser,
 	Path((team, project, database, id)): Path<(TeamId, ProjectId, DatabaseId, BackupId)>,
 ) -> AppResult<Json<DeleteBackupResponse>> {
-	authorize(&s.db, user.id, team, Action::Delete, Resource::Backup).await?;
-	let database = scope::database(&s.db, team, project, database).await?;
-	let backup = backups::find(&s.db, database.id, id)
-		.await?
-		.ok_or(ServerError::BackupNotFound)?;
-
-	if matches!(backup.status, BackupStatus::Queued | BackupStatus::Running) {
-		return Err(ServerError::Conflict("backup is in progress".to_owned()));
-	}
-	backups::purge(&s, &backup).await?;
-	Ok(Json(DeleteBackupResponse { id: backup.id }))
+	let id = service::remove(&s, user.id, team, project, database, id).await?;
+	Ok(Json(DeleteBackupResponse { id }))
 }

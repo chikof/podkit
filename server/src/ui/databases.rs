@@ -158,7 +158,7 @@ fn parse_engine(raw: &str) -> Result<EngineKind, ServerError> {
 }
 
 /// `2026-11-18 03:00 UTC`.
-fn when(t: OffsetDateTime) -> String {
+pub(super) fn when(t: OffsetDateTime) -> String {
 	format!(
 		"{:04}-{:02}-{:02} {:02}:{:02} UTC",
 		t.year(),
@@ -440,9 +440,10 @@ async fn create(
 // --- overview -----------------------------------------------------------------
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Tab {
+pub(super) enum Tab {
 	Overview,
 	Logs,
+	Backups,
 	Settings,
 }
 
@@ -461,6 +462,9 @@ fn tabs(ctx: &TeamCtx, database: &Database, active: Tab) -> Markup {
 		nav class="flex gap-1 border-b border-border" aria-label="Database" {
 			a class=(class(Tab::Overview)) href=(base) { "Overview" }
 			a class=(class(Tab::Logs)) href={ (base) "/logs" } { "Logs" }
+			@if ctx.perms.can(Action::Read, Resource::Backup) {
+				a class=(class(Tab::Backups)) href={ (base) "/backups" } { "Backups" }
+			}
 			@if can_configure {
 				a class=(class(Tab::Settings)) href={ (base) "/settings" } { "Settings" }
 			}
@@ -468,7 +472,7 @@ fn tabs(ctx: &TeamCtx, database: &Database, active: Tab) -> Markup {
 	}
 }
 
-fn shell(
+pub(super) fn shell(
 	ctx: &TeamCtx,
 	project: &Project,
 	d: &DatabaseDetail,
@@ -489,12 +493,13 @@ fn shell(
 	let title = match active {
 		Tab::Overview => database.name.clone(),
 		Tab::Logs => format!("Logs · {}", database.name),
+		Tab::Backups => format!("Backups · {}", database.name),
 		Tab::Settings => format!("Settings · {}", database.name),
 	};
 	app_page(ctx, &title, &crumbs(ctx, project, &database.name), &body)
 }
 
-async fn load(
+pub(super) async fn load(
 	s: &AppState,
 	ctx: &TeamCtx,
 	project: ProjectId,
@@ -888,6 +893,9 @@ async fn settings_page(
 									@for (target, name) in &targets {
 										option value=(target.0) { (name) }
 									}
+								}
+								@if ctx.perms.can(Action::Create, Resource::Backup) {
+									a class="text-sm font-normal underline" href={ "/teams/" (ctx.team.id) "/backup-targets" } { "Add a backup target" }
 								}
 							}
 							label class=(LABEL) {

@@ -5,6 +5,7 @@
 mod routes;
 pub mod s3;
 pub mod schedule;
+pub mod service;
 pub mod targets;
 
 use axum::http::Method;
