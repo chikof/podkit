@@ -411,7 +411,24 @@ pub(super) enum Tab {
 	Overview,
 	Deployments,
 	Logs,
+	Env,
+	Domains,
+	Volumes,
 	Settings,
+}
+
+impl Tab {
+	fn label(self) -> &'static str {
+		match self {
+			Self::Overview => "Overview",
+			Self::Deployments => "Deployments",
+			Self::Logs => "Logs",
+			Self::Env => "Environment",
+			Self::Domains => "Domains",
+			Self::Volumes => "Volumes",
+			Self::Settings => "Settings",
+		}
+	}
 }
 
 fn header_card(s: &AppState, app: &ApplicationView) -> Markup {
@@ -431,16 +448,25 @@ fn tabs(ctx: &TeamCtx, app: &ApplicationView, active: Tab) -> Markup {
 	let can_configure = ctx.perms.can(Action::Update, Resource::Application)
 		|| ctx.perms.can(Action::Delete, Resource::Application);
 	html! {
-		nav class="flex gap-1 border-b border-border" aria-label="Application" {
-			a class=(class(Tab::Overview)) href=(base) { "Overview" }
+		nav class="flex gap-1 overflow-x-auto border-b border-border" aria-label="Application" {
+			a class=(class(Tab::Overview)) href=(base) { (Tab::Overview.label()) }
 			@if ctx.perms.can(Action::Read, Resource::Deployment) {
-				a class=(class(Tab::Deployments)) href={ (base) "/deployments" } { "Deployments" }
+				a class=(class(Tab::Deployments)) href={ (base) "/deployments" } { (Tab::Deployments.label()) }
 			}
 			@if ctx.perms.can(Action::Read, Resource::Application) {
-				a class=(class(Tab::Logs)) href={ (base) "/logs" } { "Logs" }
+				a class=(class(Tab::Logs)) href={ (base) "/logs" } { (Tab::Logs.label()) }
+			}
+			@if ctx.perms.can(Action::Read, Resource::EnvVar) {
+				a class=(class(Tab::Env)) href={ (base) "/env" } { (Tab::Env.label()) }
+			}
+			@if ctx.perms.can(Action::Read, Resource::Domain) {
+				a class=(class(Tab::Domains)) href={ (base) "/domains" } { (Tab::Domains.label()) }
+			}
+			@if ctx.perms.can(Action::Read, Resource::Volume) {
+				a class=(class(Tab::Volumes)) href={ (base) "/volumes" } { (Tab::Volumes.label()) }
 			}
 			@if can_configure {
-				a class=(class(Tab::Settings)) href={ (base) "/settings" } { "Settings" }
+				a class=(class(Tab::Settings)) href={ (base) "/settings" } { (Tab::Settings.label()) }
 			}
 		}
 	}
@@ -462,9 +488,7 @@ pub(super) fn shell(
 	};
 	let title = match active {
 		Tab::Overview => app.name.clone(),
-		Tab::Deployments => format!("Deployments · {}", app.name),
-		Tab::Logs => format!("Logs · {}", app.name),
-		Tab::Settings => format!("Settings · {}", app.name),
+		tab => format!("{} · {}", tab.label(), app.name),
 	};
 	app_page(ctx, &title, &crumbs(ctx, project, &app.name), &body)
 }

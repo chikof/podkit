@@ -3,12 +3,10 @@ use axum::routing::{delete, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use super::EnvVar;
+use super::service::{self, EnvVarKey};
 use crate::auth::AuthUser;
-use crate::auth::permission::{Action, Resource, authorize};
-use crate::error::{AppResult, ServerError};
+use crate::error::AppResult;
 use crate::ids::{ApplicationId, EnvVarId, ProjectId, TeamId};
-use crate::scope;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -33,8 +31,8 @@ pub struct EnvVarResponse {
 	pub key: String,
 }
 
-impl From<&EnvVar> for EnvVarResponse {
-	fn from(e: &EnvVar) -> Self {
+impl From<&EnvVarKey> for EnvVarResponse {
+	fn from(e: &EnvVarKey) -> Self {
 		Self {
 			id: e.id,
 			application_id: e.application_id,
@@ -57,16 +55,8 @@ pub async fn upsert(
 	Path((team, project, app)): Path<(TeamId, ProjectId, ApplicationId)>,
 	Json(body): Json<UpsertEnvVarRequest>,
 ) -> AppResult<Json<EnvVarResponse>> {
-	authorize(&s.db, user.id, team, Action::Create, Resource::EnvVar).await?;
-	let app = scope::application(&s.db, team, project, app).await?;
-
-	let encrypted = s
-		.secrets
-		.encrypt(&body.value)
-		.map_err(|e| ServerError::Validation(format!("failed to encrypt value: {e}")))?;
-	let env_var = super::upsert(&s.db, app.id, &body.key, &encrypted).await?;
-
-	Ok(Json(EnvVarResponse::from(&env_var)))
+	let key = service::upsert(&s, user.id, team, project, app, &body.key, &body.value).await?;
+	Ok(Json(EnvVarResponse::from(&key)))
 }
 
 /// Lists an application's env var keys (values redacted); caller must hold
@@ -76,11 +66,8 @@ pub async fn list(
 	user: AuthUser,
 	Path((team, project, app)): Path<(TeamId, ProjectId, ApplicationId)>,
 ) -> AppResult<Json<Vec<EnvVarResponse>>> {
-	authorize(&s.db, user.id, team, Action::Read, Resource::EnvVar).await?;
-	let app = scope::application(&s.db, team, project, app).await?;
-
-	let env_vars = super::list(&s.db, app.id).await?;
-	Ok(Json(env_vars.iter().map(EnvVarResponse::from).collect()))
+	let keys = service::list(&s.db, user.id, team, project, app).await?;
+	Ok(Json(keys.iter().map(EnvVarResponse::from).collect()))
 }
 
 /// Deletes an env var; caller must hold `delete env_var` on the team. Must
@@ -90,11 +77,6 @@ pub async fn remove(
 	user: AuthUser,
 	Path((team, project, app, id)): Path<(TeamId, ProjectId, ApplicationId, EnvVarId)>,
 ) -> AppResult<Json<DeleteEnvVarResponse>> {
-	authorize(&s.db, user.id, team, Action::Delete, Resource::EnvVar).await?;
-	let app = scope::application(&s.db, team, project, app).await?;
-
-	if !super::delete(&s.db, app.id, id).await? {
-		return Err(ServerError::EnvVarNotFound);
-	}
+	let id = service::remove(&s.db, user.id, team, project, app, id).await?;
 	Ok(Json(DeleteEnvVarResponse { id }))
 }

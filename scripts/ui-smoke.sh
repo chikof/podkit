@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-SECTIONS=(shell applications deployments models)
+SECTIONS=(shell applications deployments app-config models)
 
 URL="${PODKIT_URL:-http://127.0.0.1:8080}"
 URL="${URL%/}"
@@ -283,14 +283,77 @@ section_deployments() {
 	api DELETE "/api/v1/teams/$TEAM/projects/$project" >/dev/null 2>&1 || true
 }
 
+# Sets an env var, a domain and a volume through the same signals the forms
+# post, and checks the secret value is stored but appears in no page.
+section_app_config() {
+	local suffix="$RANDOM$RANDOM" project server app base cfg
+	local secret="S3CR3T-$(cat /proc/sys/kernel/random/uuid)"
+	local slug="smoke-cfg-$suffix" host="smoke-$suffix.example.com"
+	project="$(api POST "/api/v1/teams/$TEAM/projects" \
+		"$(jq -n --arg s "smoke-cfg-$suffix" '{name: "Smoke config", slug: $s}')" | jq -er .id)"
+	server="$(api GET "/api/v1/teams/$TEAM/servers" |
+		jq -er '[.[] | select(.is_local and .status == "active")][0].id')" ||
+		fail "no active local server in team $TEAM"
+	base="/teams/$TEAM/projects/$project"
+	ui_post "$base/apps" "$(jq -n --arg slug "$slug" --arg server "$server" '{
+		name: "Smoke cfg", slug: $slug, server_id: $server,
+		repo_url: "https://example.com/smoke.git", git_ref: "main", deploy_key: "",
+		git_token: "", build_strategy: "dockerfile", dockerfile_path: "Dockerfile",
+		container_port: "3000", memory_limit_mb: "", cpu_limit: ""}')"
+	grep -qF 'Application created' "$BODY" || fail "create: $(head -c 300 "$BODY")"
+	app="$(api GET "/api/v1/teams/$TEAM/projects/$project/applications" | jq -er --arg s "$slug" '.[] | select(.slug == $s) | .id')"
+	cfg="$base/apps/$app"
+	local T="$TOKEN"
+
+	# Environment: one variable through the form, then a paste with a bad line.
+	expect_page "$cfg/env" "Save variable"
+	ui_post "$cfg/env" "$(jq -n --arg v "$secret" '{env_key: "SMOKE", env_value: $v}')"
+	grep -qF 'Changes apply on the next deploy' "$BODY" || fail "env: no saved banner"
+	if grep -qF "$secret" "$BODY"; then fail "env: the SSE response contains the value"; fi
+	curl -s -H "Authorization: Bearer $T" "$URL/api/v1/teams/$TEAM/projects/$project/applications/$app/env-vars" |
+		jq -e 'any(.[]; .key=="SMOKE")' >/dev/null || fail "env: SMOKE is not in the JSON API"
+	echo "ok   env var set through the UI is in the API"
+	ui_post "$cfg/env/bulk" "$(jq -n --arg v "$secret" '{env_bulk: ("# c\nBULK_A=1\nnot a pair " + $v + "\nBULK_B=\"2\"\n")}')"
+	grep -qF 'Saved 2 variables.' "$BODY" || fail "bulk: $(head -c 300 "$BODY")"
+	grep -qF 'Line 3: expected KEY=VALUE.' "$BODY" || fail "bulk: bad line not reported by number"
+	if grep -qF "$secret" "$BODY"; then fail "bulk: the response contains the value"; fi
+	expect_page "$cfg/env" "BULK_B"
+	expect_absent "$secret"
+	echo "ok   bulk paste saved the good lines and named line 3"
+
+	# Domains: add, a duplicate is a conflict, DNS help is shown.
+	expect_page "$cfg/domains" "DNS setup"
+	ui_post "$cfg/domains" "$(jq -n --arg h "$host" '{domain_hostname: $h}')"
+	grep -qF "$host" "$BODY" || fail "domain: not added: $(head -c 300 "$BODY")"
+	ui_post "$cfg/domains" "$(jq -n --arg h "$host" '{domain_hostname: $h}')"
+	grep -qF 'already routed' "$BODY" || fail "domain: duplicate not reported"
+	expect_page "$cfg/domains" "$host"
+	echo "ok   domain added, duplicate is a conflict"
+
+	# Volumes: add, a duplicate path is a conflict, delete asks first.
+	ui_post "$cfg/volumes" '{"volume_path": "/smoke-data"}'
+	grep -qF '/smoke-data' "$BODY" || fail "volume: not added"
+	ui_post "$cfg/volumes" '{"volume_path": "/smoke-data"}'
+	grep -qF 'already mounted' "$BODY" || fail "volume: duplicate not reported"
+	expect_page "$cfg/volumes" "permanently deletes all data"
+	expect_absent "$secret"
+	echo "ok   volume added, duplicate is a conflict, delete is behind a confirm"
+
+	expect_page "$cfg" "Smoke cfg"
+	expect_absent "$secret"
+	api DELETE "/api/v1/teams/$TEAM/projects/$project/applications/$app" >/dev/null 2>&1 || true
+	api DELETE "/api/v1/teams/$TEAM/projects/$project" >/dev/null 2>&1 || true
+}
+
 # --- run ----------------------------------------------------------------
 
 if [[ $# -eq 0 ]]; then
 	set -- "${SECTIONS[@]}"
 fi
 for section in "$@"; do
-	declare -F "section_$section" >/dev/null || fail "unknown section: $section (have: ${SECTIONS[*]})"
+	fn="section_${section//-/_}"
+	declare -F "$fn" >/dev/null || fail "unknown section: $section (have: ${SECTIONS[*]})"
 	echo "== $section"
-	"section_$section"
+	"$fn"
 done
 echo "all ok"
