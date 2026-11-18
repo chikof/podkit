@@ -57,6 +57,88 @@ pub fn ssh_user(s: &str) -> bool {
 			.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_' || *c == b'-')
 }
 
+/// A container image reference: `[registry[:port]/]name[/name...][:tag][@algo:hex]`.
+/// Lowercase path components, so it cannot start with `-`, carry whitespace or
+/// otherwise be read as an option or a URL.
+pub fn image_ref(s: &str) -> bool {
+	if s.is_empty() || s.len() > 255 {
+		return false;
+	}
+	let (name_tag, digest) = match s.split_once('@') {
+		Some((rest, digest)) => (rest, Some(digest)),
+		None => (s, None),
+	};
+	if let Some(digest) = digest {
+		let Some((algo, hex)) = digest.split_once(':') else {
+			return false;
+		};
+		let want = match algo {
+			"sha256" => 64,
+			"sha512" => 128,
+			_ => return false,
+		};
+		if hex.len() != want || !hex.bytes().all(|c| matches!(c, b'0'..=b'9' | b'a'..=b'f')) {
+			return false;
+		}
+	}
+	// A `:` after the last `/` starts the tag; one before it is a port.
+	let (name, tag) = match name_tag.rsplit_once(':') {
+		Some((name, tag)) if !tag.contains('/') => (name, Some(tag)),
+		_ => (name_tag, None),
+	};
+	if let Some(tag) = tag {
+		let b = tag.as_bytes();
+		let ok = (1..=128).contains(&b.len())
+			&& (b[0].is_ascii_alphanumeric() || b[0] == b'_')
+			&& b.iter()
+				.all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b'.' | b'-'));
+		if !ok {
+			return false;
+		}
+	}
+	let mut parts = name.split('/').peekable();
+	let Some(first) = parts.peek().copied() else {
+		return false;
+	};
+	let has_registry =
+		name.contains('/') && (first.contains('.') || first.contains(':') || first == "localhost");
+	if has_registry {
+		parts.next();
+		let (host, port) = match first.split_once(':') {
+			Some((host, port)) => (host, Some(port)),
+			None => (first, None),
+		};
+		let host_ok = !host.is_empty()
+			&& host.split('.').all(|l| {
+				let b = l.as_bytes();
+				!b.is_empty()
+					&& b[0].is_ascii_alphanumeric()
+					&& b[b.len() - 1].is_ascii_alphanumeric()
+					&& b.iter().all(|c| c.is_ascii_alphanumeric() || *c == b'-')
+			});
+		let port_ok = port
+			.is_none_or(|p| (1..=5).contains(&p.len()) && p.bytes().all(|c| c.is_ascii_digit()));
+		if !(host_ok && port_ok) {
+			return false;
+		}
+	}
+	let mut any = false;
+	for part in parts {
+		any = true;
+		let b = part.as_bytes();
+		let ok = !b.is_empty()
+			&& (b[0].is_ascii_lowercase() || b[0].is_ascii_digit())
+			&& (b[b.len() - 1].is_ascii_lowercase() || b[b.len() - 1].is_ascii_digit())
+			&& b.iter().all(|c| {
+				c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'.' | b'_' | b'-')
+			});
+		if !ok {
+			return false;
+		}
+	}
+	any
+}
+
 /// `https://...`, `ssh://...`, or scp form `user@host:path`. No whitespace or
 /// control characters anywhere, so the value cannot smuggle extra git arguments.
 pub fn repo_url(s: &str) -> bool {
@@ -244,6 +326,44 @@ mod tests {
 				("https://github.com/acme/app.git\n", false),
 				("https://github.com/acme/\tapp.git", false),
 				("-https://github.com/acme/app.git", false),
+			],
+		);
+	}
+
+	#[test]
+	fn image_ref_cases() {
+		let digest = format!("sha256:{}", "a".repeat(64));
+		let long = format!("{}/app", "a".repeat(260));
+		check(
+			"image_ref",
+			image_ref,
+			&[
+				("alpine", true),
+				("alpine:3.21", true),
+				("traefik/whoami", true),
+				("docker.io/traefik/whoami:v1.10", true),
+				("ghcr.io/acme/app.web_1:main-abc", true),
+				("localhost:5000/app", true),
+				("registry.example.com:5000/a/b/c:1", true),
+				(&format!("alpine@{digest}"), true),
+				(&format!("ghcr.io/acme/app:1@{digest}"), true),
+				("", false),
+				("Alpine", false),
+				("alpine:", false),
+				("alpine:bad tag", false),
+				("alpine:-x", false),
+				("-alpine", false),
+				("--privileged", false),
+				("alpine/", false),
+				("/alpine", false),
+				("a//b", false),
+				("alpine@sha256:abc", false),
+				("alpine@md5:abc", false),
+				("alpine;id", false),
+				("alpine\n", false),
+				("https://docker.io/alpine", false),
+				("host:port/app", false),
+				(long.as_str(), false),
 			],
 		);
 	}

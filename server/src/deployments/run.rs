@@ -6,13 +6,14 @@
 use axum::http::Method;
 use futures_util::StreamExt;
 use proto::{
-	Build, DeploySpec, Event, GitAuth, Ingress, Phase, Routing, Source, Strategy, VolumeMount,
+	Build, DeploySpec, Event, GitAuth, Ingress, Phase, RegistryAuth, Routing, Source, Strategy,
+	VolumeMount,
 };
 use tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use super::{Deployment, DeploymentStatus};
-use crate::applications::{self, Application, BuildStrategy};
+use crate::applications::{self, Application, BuildStrategy, SourceKind, StoredRegistryAuth};
 use crate::error::ServerError;
 use crate::ids::{DeploymentId, TeamId};
 use crate::jobs::{Job, JobFailure};
@@ -157,23 +158,7 @@ async fn build_spec(
 	let container_port = u16::try_from(application.container_port)
 		.map_err(|_| failed("application container_port is out of range"))?;
 
-	let source = match &deployment.image_tag {
-		Some(reference) => Source::Image {
-			reference: reference.clone(),
-			pull: false,
-		},
-		None => Source::Git {
-			repo_url: application.repo_url.clone(),
-			git_ref: application.git_ref.clone(),
-			auth: git_auth(state, application)?,
-			build: match application.build_strategy {
-				BuildStrategy::Dockerfile => Build::Dockerfile {
-					path: application.dockerfile_path.clone(),
-				},
-				BuildStrategy::Nixpacks => Build::Nixpacks,
-			},
-		},
-	};
+	let source = app_source(state, application, deployment)?;
 
 	let custom_domains = domains::list(&state.db, application.id)
 		.await
@@ -246,6 +231,75 @@ async fn build_spec(
 			acme_email: state.config.acme_email.clone(),
 		},
 	})
+}
+
+/// What the agent runs. A deployment that already has an image (restart,
+/// rollback) reuses it as it is on the server. Otherwise a git app is cloned
+/// and built, and an image app pulls its reference again, so a redeploy or a
+/// registry webhook picks up a moved tag. After a pull the agent reports the
+/// digest reference, which is what a later rollback runs.
+pub(crate) fn app_source(
+	state: &AppState,
+	application: &Application,
+	deployment: &Deployment,
+) -> Result<Source, JobFailure> {
+	if let Some(reference) = &deployment.image_tag {
+		return Ok(Source::Image {
+			reference: reference.clone(),
+			pull: false,
+			auth: None,
+		});
+	}
+	match application.source_kind {
+		SourceKind::Image => Ok(Source::Image {
+			reference: application
+				.image
+				.clone()
+				.ok_or_else(|| failed("application has no image"))?,
+			pull: true,
+			auth: registry_auth(state, application)?,
+		}),
+		SourceKind::Git => Ok(Source::Git {
+			repo_url: application
+				.repo_url
+				.clone()
+				.ok_or_else(|| failed("application has no repository"))?,
+			git_ref: application.git_ref.clone(),
+			auth: git_auth(state, application)?,
+			build: match application.build_strategy {
+				BuildStrategy::Dockerfile => Build::Dockerfile {
+					path: application.dockerfile_path.clone(),
+				},
+				BuildStrategy::Nixpacks => Build::Nixpacks,
+			},
+		}),
+	}
+}
+
+fn registry_auth(
+	state: &AppState,
+	application: &Application,
+) -> Result<Option<RegistryAuth>, JobFailure> {
+	let Some(sealed) = application.registry_auth.as_deref() else {
+		return Ok(None);
+	};
+	let stored = state
+		.secrets
+		.decrypt(sealed)
+		.ok()
+		.and_then(|json| serde_json::from_str::<StoredRegistryAuth>(&json).ok())
+		.ok_or_else(|| {
+			tracing::error!(
+				application = application.id.0,
+				"registry credential decrypt failed"
+			);
+			failed("failed to decrypt registry credentials")
+		})?;
+	Ok(Some(RegistryAuth {
+		username: stored.username,
+		password: stored.password,
+		server: None,
+	}))
 }
 
 /// One credential per application: an ssh key for ssh repo urls, a token

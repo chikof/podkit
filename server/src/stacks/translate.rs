@@ -253,6 +253,7 @@ fn translate(stack: i64, s: &Service, settings: &Settings<'_>) -> Result<DeployS
 		source: Source::Image {
 			reference: s.image.clone(),
 			pull: true,
+			auth: None,
 		},
 		env: s.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
 		command: s.command.clone(),

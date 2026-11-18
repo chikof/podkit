@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use bollard::Docker;
+use bollard::auth::DockerCredentials;
 use bollard::container::LogOutput;
 use bollard::models::{
 	ContainerCreateBody, ContainerInspectResponse, ContainerSummary, CreateImageInfo,
@@ -18,7 +19,7 @@ use bollard::query_parameters::{
 	RemoveContainerOptions, RemoveImageOptions, StartContainerOptions, StopContainerOptions,
 };
 use futures_util::{Stream, StreamExt};
-use proto::{GpuDevices, GpuRequest, GpuVendor};
+use proto::{GpuDevices, GpuRequest, GpuVendor, RegistryAuth};
 
 /// Per-request timeout of the Podman client. It bounds the wait for response
 /// headers only; streamed bodies (builds, logs, events) run untimed.
@@ -315,7 +316,26 @@ impl Podman {
 		&self,
 		reference: &str,
 	) -> impl Stream<Item = Result<CreateImageInfo, PodmanError>> + '_ {
+		self.pull_image_as(reference, None)
+	}
+
+	/// [`Self::pull_image`] with registry credentials, for private images.
+	pub fn pull_image_as(
+		&self,
+		reference: &str,
+		auth: Option<&RegistryAuth>,
+	) -> impl Stream<Item = Result<CreateImageInfo, PodmanError>> + '_ {
 		let (from_image, tag) = split_reference(reference);
+		let credentials = auth.map(|a| DockerCredentials {
+			username: Some(a.username.clone()),
+			password: Some(a.password.clone()),
+			serveraddress: Some(
+				a.server
+					.clone()
+					.unwrap_or_else(|| registry_host(reference).to_string()),
+			),
+			..Default::default()
+		});
 		self.docker
 			.create_image(
 				Some(CreateImageOptions {
@@ -324,7 +344,7 @@ impl Podman {
 					..Default::default()
 				}),
 				None,
-				None,
+				credentials,
 			)
 			.map(|item| item.map_err(PodmanError::from))
 	}
@@ -719,6 +739,17 @@ pub fn summary_name(summary: &ContainerSummary) -> Option<&str> {
 		.map(|n| n.trim_start_matches('/'))
 }
 
+/// The registry host of an image reference: the first path segment when it
+/// looks like a host (has a `.` or `:`, or is `localhost`), else Docker Hub.
+fn registry_host(reference: &str) -> &str {
+	match reference.split_once('/') {
+		Some((first, _)) if first.contains('.') || first.contains(':') || first == "localhost" => {
+			first
+		}
+		_ => "docker.io",
+	}
+}
+
 /// Splits `registry:5000/img:tag` into `(image, Some(tag))`. Digest
 /// references and untagged names keep the whole string; untagged names pull `latest`.
 fn split_reference(reference: &str) -> (String, Option<String>) {
@@ -856,6 +887,19 @@ mod tests {
 			Some(proto::HealthStatus::Unhealthy)
 		);
 		assert_eq!(health_of(&ContainerInspectResponse::default()), None);
+	}
+
+	#[test]
+	fn registry_host_cases() {
+		for (input, host) in [
+			("alpine:3", "docker.io"),
+			("traefik/whoami", "docker.io"),
+			("ghcr.io/me/app:1", "ghcr.io"),
+			("localhost:5000/app", "localhost:5000"),
+			("localhost/app", "localhost"),
+		] {
+			assert_eq!(registry_host(input), host, "{input}");
+		}
 	}
 
 	#[test]

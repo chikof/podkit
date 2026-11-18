@@ -12,7 +12,8 @@ use std::time::Duration;
 use bollard::models::ImageSummary;
 use futures_util::StreamExt;
 use proto::{
-	Cdi, DeploySpec, Event, GpuRequest, GpuVendor, Phase, Restart, Source, Strategy, Stream,
+	Cdi, DeploySpec, Event, GpuRequest, GpuVendor, Phase, RegistryAuth, Restart, Source, Strategy,
+	Stream,
 };
 use tokio::sync::mpsc;
 use tracing::warn;
@@ -120,6 +121,22 @@ async fn phase(tx: &mpsc::Sender<Event>, phase: Phase) -> Result<(), String> {
 	emit(tx, Event::Phase { phase }).await
 }
 
+async fn ensure_networks(podman: &crate::podman::Podman, spec: &DeploySpec) -> Result<(), String> {
+	if !spec.options.isolated {
+		podman
+			.ensure_network(NETWORK)
+			.await
+			.map_err(|e| format!("network setup failed: {e}"))?;
+	}
+	for network in &spec.networks {
+		podman
+			.ensure_network(network)
+			.await
+			.map_err(|e| format!("network {network} setup failed: {e}"))?;
+	}
+	Ok(())
+}
+
 async fn execute(
 	ctx: &Ctx,
 	spec: &DeploySpec,
@@ -135,9 +152,13 @@ async fn execute(
 
 	let (image, commit_sha) = match &spec.source {
 		Source::Git { .. } => build_from_git(ctx, &podman, spec, tx).await?,
-		Source::Image { reference, pull } => {
-			use_image(&podman, reference, *pull, tx).await?;
-			(reference.clone(), None)
+		Source::Image {
+			reference,
+			pull,
+			auth,
+		} => {
+			let image = use_image(&podman, reference, *pull, auth.as_ref(), tx).await?;
+			(image, None)
 		}
 	};
 
@@ -145,18 +166,7 @@ async fn execute(
 	let new_name = format!("podkit-{service}-{}", spec.instance_id);
 
 	phase(tx, Phase::Starting).await?;
-	if !spec.options.isolated {
-		podman
-			.ensure_network(NETWORK)
-			.await
-			.map_err(|e| format!("network setup failed: {e}"))?;
-	}
-	for network in &spec.networks {
-		podman
-			.ensure_network(network)
-			.await
-			.map_err(|e| format!("network {network} setup failed: {e}"))?;
-	}
+	ensure_networks(&podman, spec).await?;
 	if spec.routing.is_some() {
 		Box::pin(ingress::ensure_traefik(
 			&podman,
@@ -470,16 +480,21 @@ async fn build_from_git(
 	Ok((tag, Some(prepared.commit_sha.clone())))
 }
 
+/// Makes `reference` available locally and returns the reference to run and
+/// record. After a pull that is the immutable `repo@sha256:...` form when
+/// podman reports one, so a later rollback runs the bytes that were
+/// deployed even if the tag has moved since.
 async fn use_image(
 	podman: &Podman,
 	reference: &str,
 	pull: bool,
+	auth: Option<&RegistryAuth>,
 	tx: &mpsc::Sender<Event>,
-) -> Result<(), String> {
+) -> Result<String, String> {
 	if pull {
 		log(tx, Stream::System, format!("pulling {reference}")).await?;
 		let mut seen = HashSet::new();
-		let mut progress = std::pin::pin!(podman.pull_image(reference));
+		let mut progress = std::pin::pin!(podman.pull_image_as(reference, auth));
 		while let Some(info) = progress.next().await {
 			let info = info.map_err(|e| format!("image pull failed: {e}"))?;
 			// Progress ticks repeat one status string; log each string once.
@@ -489,10 +504,17 @@ async fn use_image(
 				log(tx, Stream::System, status).await?;
 			}
 		}
-		return Ok(());
+		let digest = podman
+			.inspect_image(reference)
+			.await
+			.ok()
+			.flatten()
+			.and_then(|i| i.repo_digests)
+			.and_then(|d| d.into_iter().next());
+		return Ok(digest.unwrap_or_else(|| reference.to_string()));
 	}
 	match podman.inspect_image(reference).await {
-		Ok(Some(_)) => Ok(()),
+		Ok(Some(_)) => Ok(reference.to_string()),
 		Ok(None) => Err(format!("image {reference} no longer exists on this server")),
 		Err(e) => Err(format!("image inspect failed: {e}")),
 	}
@@ -601,6 +623,7 @@ mod tests {
 			source: Source::Image {
 				reference: "alpine:3".to_string(),
 				pull: true,
+				auth: None,
 			},
 			env: vec![("A".to_string(), "b".to_string())],
 			command: None,

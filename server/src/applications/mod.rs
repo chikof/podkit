@@ -7,6 +7,9 @@ use crate::servers::Server;
 pub mod routes;
 pub mod service;
 
+#[cfg(test)]
+mod image_tests;
+
 pub use routes::router;
 
 /// How an application's image gets built.
@@ -38,6 +41,33 @@ impl BuildStrategy {
 	}
 }
 
+/// Where an application's image comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type)]
+#[sqlx(type_name = "text", rename_all = "lowercase")]
+pub enum SourceKind {
+	/// Cloned from `repo_url` and built on the server.
+	Git,
+	/// Pulled from a registry as `image`.
+	Image,
+}
+
+impl SourceKind {
+	/// The lowercase string form used for storage and display.
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Git => "git",
+			Self::Image => "image",
+		}
+	}
+}
+
+/// What `applications.registry_auth` holds once decrypted.
+#[derive(serde::Serialize, serde::Deserialize)]
+pub(crate) struct StoredRegistryAuth {
+	pub username: String,
+	pub password: String,
+}
+
 /// Row from the `applications` table.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Application {
@@ -49,9 +79,15 @@ pub struct Application {
 	/// Unique per server, not just per project; the generated subdomain is
 	/// derived from `(slug, server)`.
 	pub slug: String,
-	pub repo_url: String,
+	/// `Some` exactly when `source_kind` is [`SourceKind::Git`].
+	pub repo_url: Option<String>,
 	/// Git branch, tag, or ref to deploy.
 	pub git_ref: String,
+	pub source_kind: SourceKind,
+	/// Registry reference; `Some` exactly when `source_kind` is [`SourceKind::Image`].
+	pub image: Option<String>,
+	/// age-encrypted JSON `{"username", "password"}` for a private registry.
+	pub registry_auth: Option<Vec<u8>>,
 	/// age-encrypted SSH private key (PEM) for `ssh://`/scp-form repo URLs.
 	pub deploy_key: Option<Vec<u8>>,
 	/// age-encrypted access token for `https://` repo URLs.
@@ -78,8 +114,11 @@ pub struct NewApplication {
 	pub server_id: ServerId,
 	pub name: String,
 	pub slug: String,
-	pub repo_url: String,
+	pub repo_url: Option<String>,
 	pub git_ref: String,
+	pub source_kind: SourceKind,
+	pub image: Option<String>,
+	pub registry_auth: Option<Vec<u8>>,
 	pub deploy_key: Option<Vec<u8>>,
 	pub git_token: Option<Vec<u8>>,
 	pub build_strategy: BuildStrategy,
@@ -90,13 +129,15 @@ pub struct NewApplication {
 	pub cpu_limit: Option<f32>,
 }
 
-/// Editable fields. `deploy_key`/`git_token` of `None` leave the stored
-/// value untouched.
+/// Editable fields. `deploy_key`/`git_token`/`registry_auth` of `None`
+/// leave the stored value untouched. The source kind cannot change.
 pub struct ApplicationUpdate {
 	pub name: String,
 	pub slug: String,
-	pub repo_url: String,
+	pub repo_url: Option<String>,
 	pub git_ref: String,
+	pub image: Option<String>,
+	pub registry_auth: Option<Vec<u8>>,
 	pub deploy_key: Option<Vec<u8>>,
 	pub git_token: Option<Vec<u8>>,
 	pub build_strategy: BuildStrategy,
@@ -118,11 +159,13 @@ pub async fn insert(
 		r#"
 			INSERT INTO applications
 				(id, project_id, environment_id, server_id, name, slug, repo_url, git_ref, deploy_key, git_token,
-				 build_strategy, dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit)
-			VALUES ($1, $2, $16, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+				 build_strategy, dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,
+				 source_kind, image, registry_auth)
+			VALUES ($1, $2, $19, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 			RETURNING
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
+				source_kind AS "source_kind: SourceKind", image, registry_auth,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 		"#,
@@ -141,6 +184,9 @@ pub async fn insert(
 		new.webhook_secret,
 		new.memory_limit_mb,
 		new.cpu_limit,
+		new.source_kind as SourceKind,
+		new.image,
+		new.registry_auth,
 		new.environment_id as EnvironmentId,
 	)
 	.fetch_one(db)
@@ -160,11 +206,13 @@ pub async fn update(
 			SET name = $2, slug = $3, repo_url = $4, git_ref = $5,
 				deploy_key = COALESCE($6, deploy_key), git_token = COALESCE($7, git_token),
 				build_strategy = $8, dockerfile_path = $9, container_port = $10,
-				memory_limit_mb = $11, cpu_limit = $12, updated_at = NOW()
+				memory_limit_mb = $11, cpu_limit = $12, image = $13,
+				registry_auth = COALESCE($14, registry_auth), updated_at = NOW()
 			WHERE id = $1
 			RETURNING
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
+				source_kind AS "source_kind: SourceKind", image, registry_auth,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 		"#,
@@ -180,6 +228,8 @@ pub async fn update(
 		u.container_port,
 		u.memory_limit_mb,
 		u.cpu_limit,
+		u.image,
+		u.registry_auth,
 	)
 	.fetch_one(db)
 	.await
@@ -197,6 +247,7 @@ pub async fn find_by_id(
 			SELECT
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
+				source_kind AS "source_kind: SourceKind", image, registry_auth,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 			FROM applications WHERE id = $1
@@ -217,6 +268,7 @@ pub async fn list_by_project(
 			SELECT
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
+				source_kind AS "source_kind: SourceKind", image, registry_auth,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 			FROM applications WHERE project_id = $1 ORDER BY id
@@ -237,6 +289,7 @@ pub async fn list_by_environment(
 			SELECT
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
+				source_kind AS "source_kind: SourceKind", image, registry_auth,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 			FROM applications WHERE environment_id = $1 ORDER BY id

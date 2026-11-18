@@ -225,6 +225,7 @@ fn build_spec(
 		source: Source::Image {
 			reference: model.image.clone(),
 			pull: engine.pull,
+			auth: None,
 		},
 		env: launch.env,
 		command: Some(launch.command),

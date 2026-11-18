@@ -9,7 +9,8 @@ use sqlx::PgPool;
 use tracing::warn;
 
 use super::{
-	Application, ApplicationUpdate, BuildStrategy, NewApplication, SLUG_CONSTRAINT, public_hostname,
+	Application, ApplicationUpdate, BuildStrategy, NewApplication, SLUG_CONSTRAINT, SourceKind,
+	StoredRegistryAuth, public_hostname,
 };
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::deployments::{self, DeploymentStatus};
@@ -31,7 +32,11 @@ pub struct ApplicationView {
 	pub server_name: String,
 	pub name: String,
 	pub slug: String,
-	pub repo_url: String,
+	/// `None` for image applications.
+	pub repo_url: Option<String>,
+	pub source_kind: SourceKind,
+	/// `None` for git applications.
+	pub image: Option<String>,
 	pub git_ref: String,
 	pub build_strategy: BuildStrategy,
 	pub dockerfile_path: String,
@@ -42,6 +47,9 @@ pub struct ApplicationView {
 	pub url: String,
 	pub has_deploy_key: bool,
 	pub has_git_token: bool,
+	/// Whether registry credentials are stored (their contents never leave
+	/// the server).
+	pub has_registry_auth: bool,
 	/// Status of the newest deployment. Filled in by [`get`] only.
 	pub latest: Option<DeploymentStatus>,
 }
@@ -61,6 +69,8 @@ impl ApplicationView {
 			name: app.name.clone(),
 			slug: app.slug.clone(),
 			repo_url: app.repo_url.clone(),
+			source_kind: app.source_kind,
+			image: app.image.clone(),
 			git_ref: app.git_ref.clone(),
 			build_strategy: app.build_strategy,
 			dockerfile_path: app.dockerfile_path.clone(),
@@ -70,18 +80,25 @@ impl ApplicationView {
 			url: public_hostname(&app.slug, server),
 			has_deploy_key: app.deploy_key.is_some(),
 			has_git_token: app.git_token.is_some(),
+			has_registry_auth: app.registry_auth.is_some(),
 			latest,
 		}
 	}
 }
 
-/// What a create or an update sets. `deploy_key` and `git_token` are
-/// write-only: on update, `None` or empty keeps the stored value.
+/// What a create or an update sets. Either `repo_url` (git) or `image` is
+/// set, never both. `deploy_key`, `git_token` and the registry credentials
+/// are write-only: on update, `None` or empty keeps the stored value.
 #[derive(Debug, Clone)]
 pub struct AppInput {
 	pub name: String,
 	pub slug: String,
+	/// Empty for image applications.
 	pub repo_url: String,
+	/// Registry reference; `None` or empty for git applications.
+	pub image: Option<String>,
+	pub registry_username: Option<String>,
+	pub registry_password: Option<String>,
 	pub git_ref: String,
 	pub deploy_key: Option<String>,
 	pub git_token: Option<String>,
@@ -99,6 +116,105 @@ pub struct AppInput {
 pub struct Created {
 	pub app: ApplicationView,
 	pub webhook_secret: String,
+}
+
+/// The validated source half of an [`AppInput`].
+enum ResolvedSource {
+	Git {
+		repo_url: String,
+	},
+	Image {
+		image: String,
+		/// `(username, password)` when both were given.
+		registry: Option<(String, String)>,
+	},
+}
+
+impl ResolvedSource {
+	fn kind(&self) -> SourceKind {
+		match self {
+			Self::Git { .. } => SourceKind::Git,
+			Self::Image { .. } => SourceKind::Image,
+		}
+	}
+}
+
+fn given(v: Option<&str>) -> Option<&str> {
+	v.map(str::trim).filter(|v| !v.is_empty())
+}
+
+/// Picks and validates the source: exactly one of `repo_url` and `image`,
+/// the same one the application already has on update, with only the
+/// credentials that fit it.
+fn resolve_source(body: &AppInput, existing: Option<SourceKind>) -> AppResult<ResolvedSource> {
+	let repo_url = body.repo_url.as_str();
+	let image = given(body.image.as_deref());
+	let resolved = match (repo_url.is_empty(), image) {
+		(false, Some(_)) => {
+			return Err(ServerError::Validation(
+				"set either repo_url or image, not both".to_string(),
+			));
+		}
+		(true, None) => {
+			return Err(ServerError::Validation(
+				"repo_url or image is required".to_string(),
+			));
+		}
+		(false, None) => {
+			validate_source(
+				repo_url,
+				&body.dockerfile_path,
+				body.deploy_key.as_deref(),
+				body.git_token.as_deref(),
+			)?;
+			if given(body.registry_username.as_deref()).is_some()
+				|| given(body.registry_password.as_deref()).is_some()
+			{
+				return Err(ServerError::Validation(
+					"registry credentials only apply to image applications".to_string(),
+				));
+			}
+			ResolvedSource::Git {
+				repo_url: repo_url.to_owned(),
+			}
+		}
+		(true, Some(image)) => {
+			if !validate::image_ref(image) {
+				return Err(ServerError::Validation(
+					"invalid image reference".to_string(),
+				));
+			}
+			if given(body.deploy_key.as_deref()).is_some()
+				|| given(body.git_token.as_deref()).is_some()
+			{
+				return Err(ServerError::Validation(
+					"deploy_key and git_token only apply to git applications".to_string(),
+				));
+			}
+			let registry = match (
+				given(body.registry_username.as_deref()),
+				body.registry_password.as_deref().filter(|p| !p.is_empty()),
+			) {
+				(Some(user), Some(password)) => Some((user.to_owned(), password.to_owned())),
+				(None, None) => None,
+				_ => {
+					return Err(ServerError::Validation(
+						"registry_username and registry_password go together".to_string(),
+					));
+				}
+			};
+			ResolvedSource::Image {
+				image: image.to_owned(),
+				registry,
+			}
+		}
+	};
+	if existing.is_some_and(|kind| kind != resolved.kind()) {
+		return Err(ServerError::Validation(
+			"an application's source type cannot be changed".to_string(),
+		));
+	}
+	Ok(resolved)
 }
 
 /// Checks the repo URL, Dockerfile path, and that each credential matches
@@ -172,6 +288,32 @@ fn seal(state: &AppState, value: Option<&str>, what: &str) -> AppResult<Option<V
 		.map_err(|e| ServerError::Validation(format!("failed to encrypt {what}: {e}")))
 }
 
+/// Splits a validated source into the columns it fills. Registry
+/// credentials are sealed as JSON; `None` keeps the stored ones on update.
+#[allow(clippy::type_complexity)]
+fn split_source(
+	state: &AppState,
+	source: ResolvedSource,
+) -> AppResult<(Option<String>, Option<String>, Option<Vec<u8>>)> {
+	match source {
+		ResolvedSource::Git { repo_url } => Ok((Some(repo_url), None, None)),
+		ResolvedSource::Image { image, registry } => {
+			let sealed = registry
+				.map(|(username, password)| {
+					let json = serde_json::to_string(&StoredRegistryAuth { username, password })
+						.map_err(|e| {
+							ServerError::Validation(format!("failed to encode registry auth: {e}"))
+						})?;
+					state.secrets.encrypt(&json).map_err(|e| {
+						ServerError::Validation(format!("failed to encrypt registry auth: {e}"))
+					})
+				})
+				.transpose()?;
+			Ok((None, Some(image), sealed))
+		}
+	}
+}
+
 #[allow(clippy::cast_possible_truncation)]
 fn cpu_to_f32(cpu: Option<f64>) -> Option<f32> {
 	cpu.map(|c| c as f32)
@@ -210,14 +352,10 @@ pub async fn create(
 	let server = scope::server(&s.db, team, server_id).await?;
 
 	validate_basics(&body)?;
-	validate_source(
-		&body.repo_url,
-		&body.dockerfile_path,
-		body.deploy_key.as_deref(),
-		body.git_token.as_deref(),
-	)?;
+	let source = resolve_source(&body, None)?;
 	let deploy_key = seal(s, body.deploy_key.as_deref(), "deploy key")?;
 	let git_token = seal(s, body.git_token.as_deref(), "git token")?;
+	let (repo_url, image, registry_auth) = split_source(s, source)?;
 
 	let webhook_secret_plain = crypto::generate_token(24);
 	let webhook_secret = s
@@ -234,7 +372,14 @@ pub async fn create(
 			server_id: server.id,
 			name: body.name.trim().to_owned(),
 			slug: body.slug,
-			repo_url: body.repo_url,
+			source_kind: if image.is_some() {
+				SourceKind::Image
+			} else {
+				SourceKind::Git
+			},
+			repo_url,
+			image,
+			registry_auth,
 			git_ref: body.git_ref,
 			deploy_key,
 			git_token,
@@ -317,14 +462,10 @@ pub async fn update(
 	let server = scope::server(&s.db, team, app.server_id).await?;
 
 	validate_basics(&body)?;
-	validate_source(
-		&body.repo_url,
-		&body.dockerfile_path,
-		body.deploy_key.as_deref(),
-		body.git_token.as_deref(),
-	)?;
+	let source = resolve_source(&body, Some(app.source_kind))?;
 	let deploy_key = seal(s, body.deploy_key.as_deref(), "deploy key")?;
 	let git_token = seal(s, body.git_token.as_deref(), "git token")?;
+	let (repo_url, image, registry_auth) = split_source(s, source)?;
 
 	let updated = super::update(
 		&s.db,
@@ -332,7 +473,9 @@ pub async fn update(
 		ApplicationUpdate {
 			name: body.name.trim().to_owned(),
 			slug: body.slug,
-			repo_url: body.repo_url,
+			repo_url,
+			image,
+			registry_auth,
 			git_ref: body.git_ref,
 			deploy_key,
 			git_token,

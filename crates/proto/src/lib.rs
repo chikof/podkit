@@ -337,7 +337,33 @@ pub enum Source {
 		reference: String,
 		/// Pull before use; `false` requires the image to exist locally.
 		pull: bool,
+		/// Registry credentials for the pull; `None` pulls anonymously.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		auth: Option<RegistryAuth>,
 	},
+}
+
+/// Credentials for pulling from a private registry.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegistryAuth {
+	/// Registry user.
+	pub username: String,
+	/// Registry password or access token.
+	pub password: String,
+	/// Registry host the credentials belong to (`ghcr.io`); `None` lets the
+	/// agent derive it from the image reference.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub server: Option<String>,
+}
+
+impl std::fmt::Debug for RegistryAuth {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("RegistryAuth")
+			.field("username", &self.username)
+			.field("password", &"<redacted>")
+			.field("server", &self.server)
+			.finish()
+	}
 }
 
 /// Git credentials.
@@ -871,6 +897,36 @@ mod tests {
 		};
 		assert!(serde_json::to_string(&udp).unwrap().contains("udp"));
 		assert!(!serde_json::to_string(&port).unwrap().contains("protocol"));
+	}
+
+	#[test]
+	fn image_source_without_auth_round_trips() {
+		let spec: DeploySpec = serde_json::from_str(OLD_DEPLOY).unwrap();
+		let Source::Image { auth, .. } = &spec.source else {
+			panic!("expected an image source");
+		};
+		assert_eq!(*auth, None);
+		// `None` is not written, so older agents accept new payloads.
+		assert!(!serde_json::to_string(&spec).unwrap().contains("auth"));
+	}
+
+	#[test]
+	fn image_source_with_auth_round_trips_and_redacts_debug() {
+		let json = OLD_DEPLOY.replace(
+			r#""pull": true}"#,
+			r#""pull": true, "auth": {"username": "u", "password": "hunter2", "server": "ghcr.io"}}"#,
+		);
+		let spec: DeploySpec = serde_json::from_str(&json).unwrap();
+		let want = RegistryAuth {
+			username: "u".to_string(),
+			password: "hunter2".to_string(),
+			server: Some("ghcr.io".to_string()),
+		};
+		assert!(matches!(&spec.source, Source::Image { auth: Some(a), .. } if *a == want));
+		let again: DeploySpec =
+			serde_json::from_str(&serde_json::to_string(&spec).unwrap()).unwrap();
+		assert!(matches!(again.source, Source::Image { auth: Some(a), .. } if a == want));
+		assert!(!format!("{spec:?}").contains("hunter2"));
 	}
 
 	#[test]
