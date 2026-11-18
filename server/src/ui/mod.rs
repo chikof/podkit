@@ -34,6 +34,7 @@ use crate::error::ServerError;
 use crate::state::AppState;
 
 mod assets;
+mod charts;
 mod components;
 mod error;
 mod extract;
