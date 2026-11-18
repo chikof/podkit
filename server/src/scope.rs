@@ -4,7 +4,7 @@
 
 use sqlx::PgPool;
 
-use crate::applications::{Application, BuildStrategy};
+use crate::applications::{Application, BuildStrategy, SourceKind};
 use crate::backups::BackupTarget;
 use crate::databases::{Database, DatabaseStatus, EngineKind};
 use crate::environments::Environment;
@@ -66,6 +66,7 @@ pub async fn application(
 		r#"
 			SELECT a.id AS "id: ApplicationId", a.project_id AS "project_id: ProjectId", a.environment_id AS "environment_id: EnvironmentId",
 				a.server_id AS "server_id: ServerId", a.name, a.slug, a.repo_url, a.git_ref,
+				a.source_kind AS "source_kind: SourceKind", a.image, a.registry_auth,
 				a.deploy_key, a.git_token, a.build_strategy AS "build_strategy: BuildStrategy",
 				a.dockerfile_path, a.container_port, a.webhook_secret, a.memory_limit_mb,
 				a.cpu_limit

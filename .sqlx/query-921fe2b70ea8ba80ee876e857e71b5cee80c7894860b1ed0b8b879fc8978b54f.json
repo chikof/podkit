@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tdeploy_key, git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t\tFROM applications WHERE environment_id = $1 ORDER BY id\n\t\t",
+  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key, git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t\tFROM applications WHERE id = $1\n\t\t",
   "describe": {
     "columns": [
       {
@@ -93,6 +93,39 @@
       },
       {
         "ordinal": 8,
+        "name": "source_kind: SourceKind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "source_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "image",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "image"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "registry_auth",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "registry_auth"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
         "name": "deploy_key",
         "type_info": "Bytea",
         "origin": {
@@ -103,7 +136,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 12,
         "name": "git_token",
         "type_info": "Bytea",
         "origin": {
@@ -114,7 +147,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 13,
         "name": "build_strategy: BuildStrategy",
         "type_info": "Varchar",
         "origin": {
@@ -125,7 +158,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 14,
         "name": "dockerfile_path",
         "type_info": "Varchar",
         "origin": {
@@ -136,7 +169,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 15,
         "name": "container_port",
         "type_info": "Int4",
         "origin": {
@@ -147,7 +180,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 16,
         "name": "webhook_secret",
         "type_info": "Bytea",
         "origin": {
@@ -158,7 +191,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 17,
         "name": "memory_limit_mb",
         "type_info": "Int4",
         "origin": {
@@ -169,7 +202,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 18,
         "name": "cpu_limit",
         "type_info": "Float4",
         "origin": {
@@ -192,8 +225,11 @@
       false,
       false,
       false,
+      true,
       false,
       false,
+      true,
+      true,
       true,
       true,
       false,
@@ -204,5 +240,5 @@
       true
     ]
   },
-  "hash": "236dc68e92b8bfc703f26e5a32c9c73cbca9d54edb74cee59500e7de4f977147"
+  "hash": "921fe2b70ea8ba80ee876e857e71b5cee80c7894860b1ed0b8b879fc8978b54f"
 }

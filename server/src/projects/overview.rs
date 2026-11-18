@@ -128,7 +128,11 @@ pub enum Pick<'a> {
 
 /// The git host's mark for an application, else Docker's for a Dockerfile build, else none.
 #[must_use]
-pub fn application_mark(repo_url: &str, strategy: BuildStrategy) -> Option<&'static str> {
+pub fn application_mark(repo_url: Option<&str>, strategy: BuildStrategy) -> Option<&'static str> {
+	// An image app has no repository: Docker's mark is its logo.
+	let Some(repo_url) = repo_url else {
+		return Some("docker");
+	};
 	let url = repo_url.to_ascii_lowercase();
 	[
 		("github", "github"),
@@ -288,7 +292,7 @@ pub async fn cards(db: &PgPool, user: UserId, team: TeamId) -> AppResult<Vec<Pro
 				a.project_id,
 				ResourceLogo {
 					kind: ResourceKind::Application,
-					mark: application_mark(&a.repo_url, a.build_strategy),
+					mark: application_mark(a.repo_url.as_deref(), a.build_strategy),
 					name: a.name,
 				},
 			);
@@ -426,8 +430,12 @@ pub async fn environment_view(
 			resources.push(ResourceCard {
 				kind: ResourceKind::Application,
 				id: app.id.0,
-				mark: application_mark(&app.repo_url, app.build_strategy),
-				detail: format!("{} · {}", repo_label(&app.repo_url), app.git_ref),
+				mark: application_mark(app.repo_url.as_deref(), app.build_strategy),
+				detail: match (&app.repo_url, &app.image) {
+					(Some(url), _) => format!("{} · {}", repo_label(url), app.git_ref),
+					(None, Some(image)) => image.clone(),
+					(None, None) => String::new(),
+				},
 				host: Some(applications::public_hostname(&app.slug, server)),
 				status: latest.map_or(ResourceStatus::NotDeployed, |l| {
 					ResourceStatus::Deployment(l.status)
@@ -483,22 +491,26 @@ mod tests {
 		let d = BuildStrategy::Dockerfile;
 		let n = BuildStrategy::Nixpacks;
 		assert_eq!(
-			application_mark("git@github.com:acme/api.git", n),
+			application_mark(Some("git@github.com:acme/api.git"), n),
 			Some("github")
 		);
 		assert_eq!(
-			application_mark("https://GitLab.example.com/a/b", n),
+			application_mark(Some("https://GitLab.example.com/a/b"), n),
 			Some("gitlab")
 		);
 		assert_eq!(
-			application_mark("https://codeberg.org/a/b", d),
+			application_mark(Some("https://codeberg.org/a/b"), d),
 			Some("forgejo")
 		);
 		assert_eq!(
-			application_mark("https://git.example.com/a/b", d),
+			application_mark(Some("https://git.example.com/a/b"), d),
 			Some("docker")
 		);
-		assert_eq!(application_mark("https://git.example.com/a/b", n), None);
+		assert_eq!(
+			application_mark(Some("https://git.example.com/a/b"), n),
+			None
+		);
+		assert_eq!(application_mark(None, n), Some("docker"));
 	}
 
 	#[test]
