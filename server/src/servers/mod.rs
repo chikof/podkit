@@ -3,6 +3,7 @@
 pub mod bootstrap;
 pub mod hardware;
 mod routes;
+pub mod service;
 pub mod sync;
 
 pub use routes::router;

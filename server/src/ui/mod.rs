@@ -40,6 +40,7 @@ mod layout;
 mod live;
 mod models;
 mod projects;
+mod servers;
 mod sse;
 #[allow(dead_code)]
 mod status;
@@ -81,6 +82,7 @@ pub fn router() -> Router<AppState> {
 		.merge(app_config::router())
 		.merge(databases::router())
 		.merge(backups::router())
+		.merge(servers::router())
 		.merge(test_routes())
 		.layer(middleware::from_fn(origin_guard))
 }
