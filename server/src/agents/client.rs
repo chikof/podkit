@@ -54,6 +54,15 @@ impl AgentClient {
 			.await
 	}
 
+	/// One live sample of the host and its containers.
+	///
+	/// # Errors
+	/// See [`AgentClient::health`].
+	pub async fn stats(&self) -> Result<proto::Stats, ServerError> {
+		self.json_within(HARDWARE_TIMEOUT, Method::GET, "/v1/stats", None::<&()>)
+			.await
+	}
+
 	/// # Errors
 	/// See [`AgentClient::health`]; 409 maps to `Conflict`, 404 to `Validation`.
 	pub async fn json<T: DeserializeOwned>(

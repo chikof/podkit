@@ -581,6 +581,30 @@ impl Podman {
 		}
 	}
 
+	/// One resource-usage sample of a container; `None` when it is gone or
+	/// not running.
+	///
+	/// # Errors
+	/// Podman is unreachable.
+	pub async fn stats_once(
+		&self,
+		id: &str,
+	) -> Result<Option<bollard::models::ContainerStatsResponse>, PodmanError> {
+		let options = bollard::query_parameters::StatsOptionsBuilder::default()
+			.stream(false)
+			.one_shot(true)
+			.build();
+		match self.docker.stats(id, Some(options)).next().await {
+			Some(Ok(stats)) => Ok(Some(stats)),
+			Some(Err(bollard::errors::Error::DockerResponseServerError {
+				status_code: 404 | 409,
+				..
+			}))
+			| None => Ok(None),
+			Some(Err(e)) => Err(e.into()),
+		}
+	}
+
 	/// Inspects a container; `None` when it does not exist.
 	///
 	/// # Errors

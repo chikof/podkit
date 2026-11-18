@@ -7,3 +7,5 @@ https_port = 443
 # Who may create an account: "first-user" (only while no account exists, so the
 # first user is the admin), "open" (anyone, for a hosted instance) or "closed".
 registration = "first-user"
+# Seconds between samples of each active server (CPU, memory, disk, network, containers).
+metrics_interval_secs = 30

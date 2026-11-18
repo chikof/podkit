@@ -75,6 +75,11 @@ pub struct ServerConfig {
 	/// admin), `open` (anyone; for a hosted instance) or `closed` (nobody).
 	#[config(env = "REGISTRATION", default = "first-user")]
 	pub registration: String,
+
+	/// Seconds between the samples of each active server's CPU, memory, disk,
+	/// network and containers (`/v1/stats`). At least 5.
+	#[config(env = "METRICS_INTERVAL_SECS", default = 30)]
+	pub metrics_interval_secs: i32,
 }
 
 impl ServerConfig {

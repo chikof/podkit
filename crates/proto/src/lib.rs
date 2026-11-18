@@ -81,6 +81,73 @@ pub struct Cdi {
 	pub devices: Vec<String>,
 }
 
+/// `GET /v1/stats` response: one live sample of the host and its containers.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Stats {
+	/// The host as a whole.
+	pub host: HostStats,
+	/// Running containers that belong to a podkit resource.
+	pub containers: Vec<ContainerStats>,
+}
+
+/// Host-wide figures. Sizes are bytes; `net_*` are counters since boot.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HostStats {
+	/// CPU busy share since the previous sample, 0 to 100.
+	pub cpu_percent: Option<f64>,
+	/// Memory in use (total minus available).
+	pub mem_used: u64,
+	/// Physical memory.
+	pub mem_total: u64,
+	/// The filesystems holding the Podman storage and the agent data dir.
+	pub disks: Vec<DiskStats>,
+	/// Bytes received on the physical interfaces since boot.
+	pub net_rx: u64,
+	/// Bytes sent on the physical interfaces since boot.
+	pub net_tx: u64,
+	/// Utilisation of the busiest NVIDIA GPU, 0 to 100. `None` without `nvidia-smi`.
+	pub gpu_util: Option<f64>,
+	/// VRAM in use over all NVIDIA GPUs. `None` without `nvidia-smi`.
+	pub vram_used: Option<u64>,
+}
+
+/// Space on the filesystem holding `path`, in bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DiskStats {
+	/// Directory the figures are for.
+	pub path: String,
+	/// Bytes in use.
+	pub used: u64,
+	/// Bytes free to unprivileged users.
+	pub free: u64,
+	/// Size of the filesystem.
+	pub total: u64,
+}
+
+/// One container's resource use.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ContainerStats {
+	/// Container name.
+	pub name: String,
+	/// What the container is part of.
+	pub resource: ResourceRef,
+	/// Share of the whole host's CPU, 0 to 100. `None` until a second sample exists.
+	pub cpu_percent: Option<f64>,
+	/// Memory without page cache, in bytes.
+	pub mem_used: u64,
+}
+
+/// The podkit resource a container belongs to, from its `podkit.service` label.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ResourceRef {
+	/// `application`, `database`, `model` or `stack`.
+	pub kind: String,
+	/// The resource's id.
+	pub id: i64,
+	/// The compose service, for a stack.
+	pub service: Option<String>,
+}
+
 /// `POST /v1/deploy` body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeploySpec {

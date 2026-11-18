@@ -20,6 +20,7 @@ pub fn spawn(state: AppState) {
 				tracing::warn!("failed to purge old jobs: {e}");
 			}
 			purge_orphan_logs(&state).await;
+			crate::metrics::maintain(&state.db).await;
 		}
 	});
 }

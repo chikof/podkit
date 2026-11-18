@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\t\tINSERT INTO resource_metrics (kind, resource_id, at, cpu, mem)\n\t\t\t\tVALUES ($1, $2, $3, $4, $5)\n\t\t\t\tON CONFLICT DO NOTHING\n\t\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Varchar",
+        "Int8",
+        "Timestamptz",
+        "Float8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "792a2f8a737516866518c186a53f3b8fa0fe357373afa0e6f039e1c1870f54c0"
+}
