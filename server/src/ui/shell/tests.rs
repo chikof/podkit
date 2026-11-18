@@ -238,23 +238,23 @@ async fn the_header_switches_team_project_and_environment(db: PgPool) {
 	assert_contains(crumbs, "<span class=\"min-w-0 flex-1 truncate\">web</span>");
 	assert_contains(
 		crumbs,
-		&format!("href=\"/teams/{team}/projects/{api}?environment={staging}\""),
+		&format!("href=\"/teams/{team}/projects/{api}/staging\""),
 	);
 	// The first environment is in view by default, the chosen one when asked for.
 	assert_contains(
 		crumbs,
 		"<span class=\"ui-crumb-current\" aria-current=\"page\">production</span>",
 	);
-	let (_, _, body) = get_html(
-		&app,
-		&format!("/teams/{team}/projects/{api}?environment={staging}"),
-		Some(&cookie),
-	)
-	.await;
-	assert_contains(
-		&body,
-		"<span class=\"ui-crumb-current\" aria-current=\"page\">staging</span>",
-	);
+	for uri in [
+		format!("/teams/{team}/projects/{api}?environment={staging}"),
+		format!("/teams/{team}/projects/{api}/staging"),
+	] {
+		let (_, _, body) = get_html(&app, &uri, Some(&cookie)).await;
+		assert_contains(
+			&body,
+			"<span class=\"ui-crumb-current\" aria-current=\"page\">staging</span>",
+		);
+	}
 
 	// On a page below the project the project and environment are links back.
 	let (s, _, body) = get_html(

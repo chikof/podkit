@@ -279,6 +279,38 @@ the palette's key handling is section 5 of `podkit.js`. Pages live in
   first paint until `<main>` is parsed.
 - **Keyboard:** the first Tab stop is "Skip to content"; then the sidebar in reading order.
 
+## Projects and environments
+
+Code: `server/src/ui/pages/projects/{list,environment,picker,cards}.rs`; service reads in
+`projects::overview`; rules at the end of `components.css`.
+
+- **Projects grid** (`/teams/{t}/projects`, an Explore surface): one logo card per project: name
+  and slug, up to five resource logos then "+N", counts, environments and last deploy. The whole
+  card leads to the project's default environment (a stretched link); a menu holds Rename and
+  Delete, each a dialog (delete asks for the slug). New project is a dialog; success redirects
+  to the new project and leaves a toast (`shell::flash`). No projects: an empty state with the
+  same action. Projects have no description yet (there is no column), so the card shows the slug.
+- **Environment** (`/teams/{t}/projects/{p}` and `/{env_slug}`, an Operate surface): the title, one
+  primary action (**Create**, which opens the picker), environment tabs (links, one `aria-current`)
+  with a "+" and an actions menu (rename, delete dialogs; a refusal such as "still has
+  resources" is the dialog's inline error), a search box and a type filter, and a grid of
+  resource cards. `?environment=<id>` still picks one by id. An environment's slug cannot be
+  `apps`, `databases`, `models` or `environments`: those are the project's other pages.
+- **Resource card**: logo (the git host's mark or Docker's for an application, the engine's for a
+  database, Ollama's or Hugging Face's for a model, else the name's monogram), name, a type
+  badge, status dot with its word, last deployment (applications) or update (models), the engine
+  or repository, and the application's public URL. While any shown resource is changing the grid
+  re-fetches itself every 3 seconds with the current filter and stops when nothing changes.
+- **Filter**: a real GET form (`?q=&type=`), enhanced by Datastar to patch the grid in place
+  (`GET .../{env}/resources`, signals `q` and `type`). A filter that matches nothing says so and
+  offers to clear it.
+- **Create-resource picker**: a wide modal `<dialog>` listing what the caller may create, grouped
+  as Application (Git repository), Database (PostgreSQL, MySQL, MongoDB, Redis), Compose and
+  templates, and Model. Every link carries `?environment=<id>`. Options whose page does not exist
+  yet show a "Soon" badge and are not links (`COMPOSE_HREF`, `TEMPLATES_HREF`); the Docker image
+  option stays hidden until its API exists (`DOCKER_IMAGE_READY`).
+- **Width**: a list page puts `ui-wide` on its root so the shell's wrapper grows from 4xl to 80rem.
+
 ## Empty, loading and error patterns
 
 - **Empty:** `empty_state` in place of the list, with the single next action. A filtered

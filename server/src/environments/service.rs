@@ -18,6 +18,10 @@ const SLUG_UNIQUE: &str = "environments_project_id_slug_key";
 
 const MAX_NAME_LEN: usize = 60;
 
+/// Slugs the web UI keeps for its own pages under `/projects/{p}/`: an environment's page
+/// is `/projects/{p}/{slug}`, so these would shadow it.
+const RESERVED_SLUGS: &[&str] = &["apps", "databases", "models", "environments"];
+
 /// How many resources a refusal to delete names before saying "and N more".
 const LISTED: usize = 8;
 
@@ -33,6 +37,11 @@ fn validate_fields(name: &str, slug: &str) -> AppResult<String> {
 			"Slug must be 1 to 60 lowercase letters, digits or hyphens, and not start or end with a hyphen."
 				.to_owned(),
 		));
+	}
+	if RESERVED_SLUGS.contains(&slug) {
+		return Err(ServerError::Validation(format!(
+			"The slug \"{slug}\" is reserved; pick another."
+		)));
 	}
 	Ok(name.to_owned())
 }

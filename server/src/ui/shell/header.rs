@@ -120,7 +120,7 @@ fn project_segments(ctx: &TeamCtx, scope: &ProjectScope, on_project_page: bool) 
 	};
 	let env = Segment {
 		label: scope.environment.name.clone(),
-		href: (!on_project_page).then(|| format!("{url}?environment={}", scope.environment.id)),
+		href: (!on_project_page).then(|| format!("{url}/{}", scope.environment.slug)),
 		switcher: Some(Switcher {
 			id: "crumb-environment",
 			label: "Switch environment",
@@ -130,7 +130,7 @@ fn project_segments(ctx: &TeamCtx, scope: &ProjectScope, on_project_page: bool) 
 				.iter()
 				.map(|e| Choice {
 					label: e.name.clone(),
-					href: format!("{url}?environment={}", e.id),
+					href: format!("{url}/{}", e.slug),
 					current: e.id == scope.environment.id,
 				})
 				.collect(),

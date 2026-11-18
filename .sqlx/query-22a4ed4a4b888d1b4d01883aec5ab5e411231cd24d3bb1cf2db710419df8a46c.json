@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT p.id AS \"id: ProjectId\", p.team_id AS \"team_id: TeamId\", p.name, p.slug,\n\t\t\t\t(SELECT COUNT(*) FROM applications a WHERE a.project_id = p.id) AS \"applications!\",\n\t\t\t\t(SELECT COUNT(*) FROM databases d WHERE d.project_id = p.id) AS \"databases!\"\n\t\t\tFROM projects p\n\t\t\tWHERE p.team_id = $1\n\t\t\tORDER BY p.name, p.id\n\t\t",
+  "query": "\n\t\t\tSELECT p.id AS \"id: ProjectId\", p.team_id AS \"team_id: TeamId\", p.name, p.slug\n\t\t\tFROM projects p\n\t\t\tWHERE p.team_id = $1\n\t\t\tORDER BY p.name, p.id\n\t\t",
   "describe": {
     "columns": [
       {
@@ -46,18 +46,6 @@
             "name": "slug"
           }
         }
-      },
-      {
-        "ordinal": 4,
-        "name": "applications!",
-        "type_info": "Int8",
-        "origin": "Expression"
-      },
-      {
-        "ordinal": 5,
-        "name": "databases!",
-        "type_info": "Int8",
-        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -69,10 +57,8 @@
       false,
       false,
       false,
-      false,
-      null,
-      null
+      false
     ]
   },
-  "hash": "18fb015ebb9b81268e944e8888406a46c84abc0bd69eff1abb0a0caf5385dab9"
+  "hash": "22a4ed4a4b888d1b4d01883aec5ab5e411231cd24d3bb1cf2db710419df8a46c"
 }

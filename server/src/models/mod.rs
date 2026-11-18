@@ -218,18 +218,6 @@ pub async fn find_in_team(
 	.await
 }
 
-pub async fn list_by_project(
-	db: impl PgExecutor<'_>,
-	project: ProjectId,
-) -> Result<Vec<Model>, sqlx::Error> {
-	sqlx::query_as(sqlx::AssertSqlSafe(format!(
-		"SELECT {COLUMNS} FROM models WHERE project_id = $1 ORDER BY id"
-	)))
-	.bind(project)
-	.fetch_all(db)
-	.await
-}
-
 pub async fn list_by_environment(
 	db: impl PgExecutor<'_>,
 	environment: EnvironmentId,

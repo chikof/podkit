@@ -207,26 +207,6 @@ pub async fn find_by_id(
 	.await
 }
 
-pub async fn list_by_project(
-	db: impl sqlx::PgExecutor<'_>,
-	project_id: ProjectId,
-) -> Result<Vec<Application>, sqlx::Error> {
-	sqlx::query_as!(
-		Application,
-		r#"
-			SELECT
-				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
-				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
-				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
-				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
-			FROM applications WHERE project_id = $1 ORDER BY id
-		"#,
-		project_id as ProjectId,
-	)
-	.fetch_all(db)
-	.await
-}
-
 pub async fn list_by_environment(
 	db: impl sqlx::PgExecutor<'_>,
 	environment: EnvironmentId,

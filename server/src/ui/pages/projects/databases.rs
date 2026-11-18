@@ -244,6 +244,10 @@ pub fn project_rows(ctx: &TeamCtx, project: ProjectId, rows: &[service::Row]) ->
 
 /// The project overview's Databases card, with its "New database" button for
 /// whoever may create one.
+#[allow(
+	dead_code,
+	reason = "the environment grid replaced it; the database cards drop it"
+)]
 pub fn project_card(ctx: &TeamCtx, project: ProjectId, rows: &[service::Row]) -> Markup {
 	let can_create = ctx.perms.can(Action::Create, Resource::Database);
 	card(&html! {
@@ -1698,15 +1702,16 @@ mod tests {
 		let f = Fixture::new(&db).await;
 		let overview = format!("/teams/{}/projects/{}", f.team, f.project);
 		let (_, page) = f.get(&overview).await;
-		assert_contains(&page, "No databases yet.");
-		assert_contains(&page, "New database");
+		assert_contains(&page, "Nothing in production yet");
+		assert_contains(&page, "MySQL");
 
 		let id = f.create(&db, "orders", json!({ "engine": "mysql" })).await;
 		let (_, page) = f.get(&overview).await;
 		assert_contains(&page, &format!("href=\"{}\"", f.url(id)));
 		assert_contains(&page, "MySQL 9");
 		assert_contains(&page, "Pending");
-		assert_contains(&page, &format!("{}/rows", f.base()));
+		// The environment grid polls its own fragment while a database is changing.
+		assert_contains(&page, &format!("{overview}/production/resources"));
 		assert_contains(&page, "data-on-interval__duration.3s");
 
 		set_state(&db, id, "running", Some("c1")).await;
@@ -1720,7 +1725,7 @@ mod tests {
 		let carol = f.member("carol").await;
 		let (_, _, page) = get_html(&f.app, &overview, Some(&carol)).await;
 		assert_contains(&page, "orders");
-		assert_not_contains(&page, "New database");
+		assert_not_contains(&page, "Create a resource");
 	}
 
 	#[db_test]

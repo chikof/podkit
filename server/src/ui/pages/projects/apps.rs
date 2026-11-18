@@ -1078,8 +1078,9 @@ mod tests {
 		assert_contains(&page, "web.127-0-0-1.sslip.io");
 		assert_contains(&page, "Running");
 		assert_contains(&page, "Not deployed");
-		assert_contains(&page, "New application");
-		assert_contains(&page, &format!("{}/new", f.base()));
+		// The create-resource picker sends "Git repository" to the new-application page.
+		assert_contains(&page, "Git repository");
+		assert_contains(&page, &format!("{}/new?environment=", f.base()));
 	}
 
 	#[db_test]

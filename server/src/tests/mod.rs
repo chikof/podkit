@@ -1,4 +1,5 @@
 pub mod dbs;
+pub mod grid;
 mod tenancy;
 
 use std::sync::Arc;

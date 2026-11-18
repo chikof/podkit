@@ -115,6 +115,7 @@ impl ProjectScope {
 		user: UserId,
 		team: TeamId,
 		project: Option<ProjectId>,
+		env_slug: Option<&str>,
 	) -> Option<Self> {
 		// Datastar fragments (polls, previews) never render the header.
 		if !is_navigation(&parts.method) || parts.headers.contains_key("datastar-request") {
@@ -139,9 +140,12 @@ impl ProjectScope {
 		let environments = environments::service::list(&state.db, user, team, project_id)
 			.await
 			.ok()?;
+		// The path names the environment (`/projects/{p}/{env_slug}`) on an environment's
+		// own page; `?environment=<id>` picks it on the project's other pages.
 		let environment = environments
 			.iter()
-			.find(|e| Some(e.id) == wanted)
+			.find(|e| env_slug.is_some_and(|slug| e.slug == slug))
+			.or_else(|| environments.iter().find(|e| Some(e.id) == wanted))
 			.or_else(|| environments.first())?
 			.clone();
 		Some(Self {
@@ -165,18 +169,23 @@ impl FromRequestParts<AppState> for TeamCtx {
 			error::respond(&parts.method, Some(user), &e)
 		};
 
-		let (team_id, project_id) = match RawPathParams::from_request_parts(parts, state).await {
-			Ok(params) => {
-				let id = |name: &str| {
-					params
+		let (team_id, project_id, env_slug) =
+			match RawPathParams::from_request_parts(parts, state).await {
+				Ok(params) => {
+					let id = |name: &str| {
+						params
+							.iter()
+							.find(|(k, _)| *k == name)
+							.and_then(|(_, v)| v.parse::<i64>().ok())
+					};
+					let slug = params
 						.iter()
-						.find(|(k, _)| *k == name)
-						.and_then(|(_, v)| v.parse::<i64>().ok())
-				};
-				(id("team_id"), id("project_id").map(ProjectId))
-			}
-			Err(_) => (None, None),
-		};
+						.find(|(k, _)| *k == "env_slug")
+						.map(|(_, v)| v.to_owned());
+					(id("team_id"), id("project_id").map(ProjectId), slug)
+				}
+				Err(_) => (None, None, None),
+			};
 		let Some(team_id) = team_id.map(TeamId) else {
 			return Err(fail(parts, &user, ServerError::NotFound));
 		};
@@ -195,7 +204,15 @@ impl FromRequestParts<AppState> for TeamCtx {
 		};
 
 		let path = parts.uri.path().to_owned();
-		let scope = ProjectScope::load(parts, state, user.id, team_id, project_id).await;
+		let scope = ProjectScope::load(
+			parts,
+			state,
+			user.id,
+			team_id,
+			project_id,
+			env_slug.as_deref(),
+		)
+		.await;
 
 		Ok(Self {
 			user,

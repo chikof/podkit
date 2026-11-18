@@ -1388,3 +1388,75 @@ html {
 	outline: 2px solid var(--ring);
 	outline-offset: 2px;
 }
+
+/* ---- Projects grid, environment view, create-resource picker -------------------------- */
+
+/* The card menu sits above the link that stretches over the card, and so do any other
+   links inside it (the application's public URL). */
+.ui-card-menu,
+.ui-link-card a:not(.ui-link-card-link) {
+	position: relative;
+	z-index: 1;
+}
+
+/* One way to create something: a logo and two lines, as a link. */
+.ui-pick-grid {
+	display: grid;
+	gap: 0.5rem;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+}
+
+.ui-pick {
+	display: flex;
+	align-items: center;
+	gap: 0.75rem;
+	padding: 0.75rem;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	color: inherit;
+	text-decoration: none;
+	transition-property: border-color, background-color;
+	transition-duration: var(--duration-fast);
+}
+
+a.ui-pick:hover {
+	border-color: color-mix(in oklab, var(--foreground) 25%, var(--border));
+	background-color: var(--accent);
+}
+
+a.ui-pick:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
+}
+
+.ui-pick[aria-disabled="true"] {
+	cursor: not-allowed;
+	opacity: 0.6;
+}
+
+/* A mark drawn as an icon (stroked), in the same tile as a logo. */
+.ui-pick-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	width: 2.5rem;
+	height: 2.5rem;
+	border: 1px solid var(--border);
+	border-radius: calc(var(--radius) - 2px);
+	background-color: var(--muted);
+	color: var(--foreground);
+	font-size: 1.25rem;
+}
+
+@media (pointer: coarse) {
+	.ui-pick {
+		min-height: 3.5rem;
+	}
+}
+
+/* A list page asks for more width than the shell gives a form: the shell's wrapper holds a
+   child marked `ui-wide`, which lets the wrapper grow to the widest content width. */
+.ui-shell-main main > div:has(> .ui-wide) {
+	max-width: 80rem;
+}
