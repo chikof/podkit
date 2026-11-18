@@ -119,8 +119,7 @@ fn cookie_value<'h>(headers: &'h HeaderMap, name: &str) -> Option<&'h str> {
 		.iter()
 		.filter_map(|v| v.to_str().ok())
 		.flat_map(|v| v.split(';'))
-		.filter_map(|pair| pair.trim().strip_prefix(name)?.strip_prefix('='))
-		.next()
+		.find_map(|pair| pair.trim().strip_prefix(name)?.strip_prefix('='))
 }
 
 fn prefs_from(headers: &HeaderMap) -> Prefs {

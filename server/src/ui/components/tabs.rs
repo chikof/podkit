@@ -18,7 +18,7 @@ pub struct TabItem<'a> {
 /// row scrolls sideways instead of wrapping.
 pub fn tabs(label: &str, items: &[TabItem<'_>]) -> Markup {
 	html! {
-		nav aria-label=(label) class="flex gap-1 overflow-x-auto border-b border-border" {
+		nav aria-label=(label) class="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-border" {
 			@for item in items {
 				@if item.current {
 					a href=(item.href) class=(TAB_ACTIVE) aria-current="page" { (item.label) }

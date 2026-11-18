@@ -7,9 +7,8 @@
 use axum::Router;
 use axum::http::{StatusCode, header};
 use serde_json::json;
-use sqlx::PgPool;
 
-use crate::tests::{app, call, db_test, team_role, user_id, user_with_team};
+use crate::tests::{PgPool, app, call, db_test, team_name, user_id, user_with_team};
 use crate::ui::testing::{
 	assert_contains, assert_not_contains, get_html, page_main, post_signals, send, ui_login,
 	ui_session,
@@ -51,14 +50,6 @@ async fn team_with_member(app: &Router) -> (String, String, i64) {
 	.await;
 	assert_eq!(s, StatusCode::OK);
 	(alice, ui_login(app, "bob").await, team)
-}
-
-async fn team_name(db: &PgPool, team: i64) -> String {
-	sqlx::query_scalar("SELECT name FROM teams WHERE id = $1")
-		.bind(team)
-		.fetch_one(db)
-		.await
-		.unwrap()
 }
 
 /// The text of the SSE patch a search answers with.
@@ -161,22 +152,7 @@ async fn a_link_the_role_may_not_use_is_not_rendered(db: PgPool) {
 	register(&app, "carol").await;
 	let carol = user_id(&db, "carol").await;
 	// A role that reads projects and nothing else.
-	team_role(&db, 9001, team, "viewer").await;
-	sqlx::query(
-		"INSERT INTO role_permissions (role_id, permission_id)
-		 SELECT 9001, id FROM permissions WHERE action = 'read' AND resource = 'project'",
-	)
-	.execute(&db)
-	.await
-	.unwrap();
-	sqlx::query(
-		"INSERT INTO team_members (id, team_id, user_id, role_id) VALUES (9002, $1, $2, 9001)",
-	)
-	.bind(team)
-	.bind(carol)
-	.execute(&db)
-	.await
-	.unwrap();
+	crate::tests::join_as_project_reader(&db, team, carol, 9001).await;
 	let cookie = ui_login(&app, "carol").await;
 
 	let (s, _, body) = get_html(&app, &format!("/teams/{team}/projects"), Some(&cookie)).await;

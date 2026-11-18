@@ -5,7 +5,7 @@
 //! passes the part from the section down (`Projects › api › Settings`); the shell puts the
 //! team in front and, on a project's pages, adds the environment after the project and
 //! turns each of those into a switcher. On a narrow screen the middle of a long trail
-//! folds into a "…" menu, keeping the first and the last two.
+//! folds into a "…" menu, keeping the last two.
 
 use maud::{Markup, html};
 
@@ -64,15 +64,15 @@ fn segments(ctx: &TeamCtx, crumbs: &[Crumb<'_>]) -> Vec<Segment> {
 	let scope = ctx.scope.as_ref();
 	let list = projects_url(ctx);
 	for (i, (label, href)) in crumbs.iter().enumerate() {
-		let last = i + 1 == crumbs.len();
+		let is_last = i + 1 == crumbs.len();
 		// "Projects" is the sidebar's job once the project itself is in the trail.
-		if scope.is_some() && href.as_deref() == Some(list.as_str()) && !last {
+		if scope.is_some() && href.as_deref() == Some(list.as_str()) && !is_last {
 			continue;
 		}
 		if let Some(scope) =
-			scope.filter(|s| is_project_crumb(ctx, s, label, href.as_deref(), last))
+			scope.filter(|s| is_project_crumb(ctx, s, label, href.as_deref(), is_last))
 		{
-			out.extend(project_segments(ctx, scope, last));
+			out.extend(project_segments(ctx, scope, is_last));
 			continue;
 		}
 		out.push(Segment {
@@ -190,8 +190,8 @@ fn team_switcher(ctx: &TeamCtx) -> Markup {
 fn breadcrumbs(ctx: &TeamCtx, crumbs: &[Crumb<'_>]) -> Markup {
 	let segs = segments(ctx, crumbs);
 	let n = segs.len();
-	// Middle segments fold away on narrow screens: not the first, not the last two.
-	let folded = |i: usize| i != 0 && i + 2 < n;
+	// On a narrow screen everything but the last two segments folds into a "…" menu.
+	let folded = |i: usize| i + 2 < n;
 	let hidden: Vec<&Segment> = segs
 		.iter()
 		.enumerate()
@@ -201,27 +201,27 @@ fn breadcrumbs(ctx: &TeamCtx, crumbs: &[Crumb<'_>]) -> Markup {
 	html! {
 		nav aria-label="Breadcrumb" class="ui-crumbs min-w-0 flex-1" {
 			ol class="flex min-w-0 items-center text-sm" {
+				@if !hidden.is_empty() {
+					li class="ui-crumb ui-crumb-more" {
+						(dropdown_menu(
+							"crumb-more",
+							SWITCH_TRIGGER,
+							"Show the rest of the path",
+							&html! { (icon("ellipsis")) },
+							&html! {
+								@for seg in &hidden {
+									@if let Some(href) = &seg.href { (menu_link(href, &html! { (seg.label) })) }
+								}
+							},
+						))
+					}
+				}
 				@for (i, seg) in segs.iter().enumerate() {
 					@let inner = crumb_inner(seg, (i == 0).then(|| team_switcher(ctx)));
 					@if folded(i) {
 						li class="ui-crumb ui-crumb-mid" { (inner) }
 					} @else {
 						li class="ui-crumb" { (inner) }
-					}
-					@if i == 0 && !hidden.is_empty() {
-						li class="ui-crumb ui-crumb-more" {
-							(dropdown_menu(
-								"crumb-more",
-								SWITCH_TRIGGER,
-								"Show the rest of the path",
-								&html! { (icon("ellipsis")) },
-								&html! {
-									@for seg in &hidden {
-										@if let Some(href) = &seg.href { (menu_link(href, &html! { (seg.label) })) }
-									}
-								},
-							))
-						}
 					}
 				}
 			}
@@ -243,7 +243,7 @@ pub fn bar(ctx: &TeamCtx, crumbs: &[Crumb<'_>]) -> Markup {
 			span class="hidden md:inline-flex" {
 				button type="button" class=(ghost)
 					"data-on:click"="$_collapsed = !$_collapsed; document.cookie = 'sidebar=' + ($_collapsed ? 'collapsed' : 'open') + '; path=/; max-age=31536000; samesite=lax'"
-					"data-attr:aria-pressed"="$_collapsed" aria-pressed=(if sidebar_collapsed() { "true" } else { "false" }) {
+					"data-attr:aria-pressed"="$_collapsed ? 'true' : 'false'" aria-pressed=(if sidebar_collapsed() { "true" } else { "false" }) {
 					(icon("panel-left"))
 					span class="ui-visually-hidden" { "Collapse the sidebar" }
 				}

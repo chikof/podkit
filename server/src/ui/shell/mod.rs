@@ -41,12 +41,13 @@ pub fn app_page(ctx: &TeamCtx, title: &str, breadcrumbs: &[Crumb<'_>], body: &Ma
 				data-signals={ "{_collapsed: " (collapsed) "}" }
 				"data-attr:data-collapsed"="$_collapsed"
 				"data-on:keydown__window"=(palette::HOTKEY) {
+				a href="#main" class="ui-skip" { "Skip to content" }
 				(sidebar::aside(ctx))
 				(sidebar::drawer(ctx))
 				(palette::dialog(ctx))
 				div class="ui-shell-main" {
 					(header::bar(ctx, breadcrumbs))
-					main id="main" class="min-w-0 flex-1 px-4 py-6 md:px-8" {
+					main id="main" tabindex="-1" class="min-w-0 flex-1 px-4 py-6 outline-hidden md:px-8" {
 						div class="mx-auto flex max-w-4xl flex-col gap-6" { (body) }
 					}
 				}

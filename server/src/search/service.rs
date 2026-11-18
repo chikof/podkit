@@ -32,6 +32,10 @@ fn pattern(query: &str) -> String {
 ///
 /// # Errors
 /// `NotFound` when `user` is not in `team`, exactly as for a team that does not exist.
+#[allow(
+	clippy::too_many_lines,
+	reason = "six near-identical queries, one per kind; sqlx::query! cannot share a body"
+)]
 pub async fn search(db: &PgPool, user: UserId, team: TeamId, query: &str) -> AppResult<Vec<Hit>> {
 	let perms = permission::granted(db, user, team).await?;
 	if !perms.is_member() {

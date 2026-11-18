@@ -75,9 +75,9 @@ on `accent` for anything small.
 | Motion | `--duration-fast` 120ms, `--duration-base` 200ms, `--ease-out` | see Motion |
 | Widths | page content `max-w-4xl` (forms, detail) to `max-w-7xl` (lists, gallery); dialogs 32rem, wide 48rem | |
 
-Layout: a left sidebar (`sidebar` tokens) 14rem wide from `md` up, a drawer-style menu
-below; a header strip with breadcrumb, theme toggle and user; content on `background`.
-The shell is owned by the F2 card; this file only fixes its tokens and rules.
+Layout: a left sidebar (`sidebar` tokens) 15rem wide from `md` up (3.5rem folded to icons), a
+modal drawer below `md`; a header strip with breadcrumb, search and the sidebar toggle;
+content on `background`. The shell is described in "App shell" below.
 
 ## Theme
 
@@ -247,6 +247,37 @@ plus text; icon-only needs an `aria-label` on its control.
 ### Theme toggle (`theme_toggle.rs`)
 
 Three-button group (system, light, dark) in the header; a form posting to `/theme`.
+
+## App shell
+
+Code: `server/src/ui/shell/` (`nav`, `sidebar`, `header`, `palette`, `prefs`), entered through
+`layout::app_page(ctx, title, crumbs, body)`; rules in the "App shell" part of `components.css`;
+the palette's key handling is section 5 of `podkit.js`. Pages live in
+`server/src/ui/pages/<area>/` (one `router()` per area, merged in `ui/mod.rs`).
+
+- **Sidebar:** team switcher on top (a menu), the nav (Projects, Templates, Servers, Models,
+  S3 Destinations; Settings: Team, Members, Registration, Hugging Face token, Appearance), the
+  user menu at the bottom (theme, sign out). `shell::nav` is the one list; a link the role may not
+  use is not rendered, and the palette uses the same list. It folds to icons (the panel button in
+  the header; the choice is the `sidebar` cookie, so the server renders the folded state in the
+  first byte and nothing jumps). Below `md` the same content is a modal `<dialog>` drawer opened
+  from the header; Esc, a click outside or its close button close it.
+- **Breadcrumbs:** team › project › environment › resource. Pass only the part from the section
+  down; the shell adds the team and, on a project's pages (`ctx.scope`), the environment, and puts
+  a switcher menu on team, project and environment. `?environment=<id>` picks the environment in
+  view (the first one by default). Narrow: all but the last two fold into a "…" menu.
+- **Command palette:** Ctrl/⌘-K or the header's search button open a native `<dialog>` with a
+  combobox. Typing sends `GET /teams/{team}/search?q=` (debounced); the answer is a Datastar patch
+  of the listbox. Focus stays in the input, ↑ ↓ move the selection, Enter opens it, Esc closes and
+  focus goes back. Results are the team's own (the `search` service scopes and checks
+  permissions) plus pages and actions the role may use. Actions open the page where the action
+  is done; none of them mutates.
+- **Flash:** an action leaves a message with `shell::flash(&cookies, Tone, "text")` before it
+  redirects; the next page shows it once as a toast and drops the cookie.
+- **Transitions:** same-origin navigations cross-fade; the sidebar (`ui-chrome`) and the header
+  (`ui-header`) keep their place, and `<link rel="expect" href="#main" blocking="render">` holds the
+  first paint until `<main>` is parsed.
+- **Keyboard:** the first Tab stop is "Skip to content"; then the sidebar in reading order.
 
 ## Empty, loading and error patterns
 

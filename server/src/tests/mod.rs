@@ -542,3 +542,34 @@ pub async fn rename_applications(db: &PgPool, name: &str) {
 		.await
 		.unwrap();
 }
+
+/// The name of `team`.
+pub async fn team_name(db: &PgPool, team: i64) -> String {
+	sqlx::query_scalar("SELECT name FROM teams WHERE id = $1")
+		.bind(team)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// Adds `user` to `team` with a new role, `role`, that may read projects and nothing else.
+pub async fn join_as_project_reader(db: &PgPool, team: i64, user: i64, role: i64) {
+	team_role(db, role, team, "viewer").await;
+	sqlx::query(
+		"INSERT INTO role_permissions (role_id, permission_id)
+		 SELECT $1, id FROM permissions WHERE action = 'read' AND resource = 'project'",
+	)
+	.bind(role)
+	.execute(db)
+	.await
+	.unwrap();
+	sqlx::query(
+		"INSERT INTO team_members (id, team_id, user_id, role_id) VALUES ($1 + 1, $2, $3, $1)",
+	)
+	.bind(role)
+	.bind(team)
+	.bind(user)
+	.execute(db)
+	.await
+	.unwrap();
+}

@@ -1052,6 +1052,11 @@ html {
 	opacity: 0.6;
 }
 
+/* The "…" menu (below) comes first in the list but only shows on a narrow screen. */
+.ui-crumb-more + .ui-crumb::before {
+	content: none;
+}
+
 .ui-crumb-link,
 .ui-crumb-current {
 	min-width: 0;
@@ -1360,4 +1365,26 @@ html {
 
 .ui-crumbs {
 	min-width: 0;
+}
+
+/* The first stop for the keyboard: jumps past the sidebar to the page. Hidden until focused. */
+.ui-skip {
+	position: absolute;
+	inset-block-start: 0.5rem;
+	inset-inline-start: 0.5rem;
+	z-index: 60;
+	padding: 0.5rem 0.75rem;
+	border-radius: calc(var(--radius) - 2px);
+	background-color: var(--primary);
+	color: var(--primary-foreground);
+	font-size: 0.875rem;
+	font-weight: 500;
+	text-decoration: none;
+	translate: 0 -200%;
+}
+
+.ui-skip:focus-visible {
+	translate: 0 0;
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
 }
