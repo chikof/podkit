@@ -21,7 +21,7 @@ use crate::search::{Hit, Kind};
 use crate::state::AppState;
 use crate::ui::components::icon;
 use crate::ui::extract::TeamCtx;
-use crate::ui::pages::{models, projects};
+use crate::ui::pages::{databases, models};
 use crate::ui::shell::nav;
 use crate::ui::{error, sse};
 
@@ -194,7 +194,7 @@ fn entry(team: TeamId, hit: &Hit) -> Entry {
 		),
 		(Kind::Database, Some(project)) => (
 			"database",
-			projects::databases::database_url(team, project, DatabaseId(hit.id)),
+			databases::database_url(team, project, DatabaseId(hit.id)),
 		),
 		(Kind::Model, Some(project)) => {
 			("brain", models::model_url(team, project, ModelId(hit.id)))

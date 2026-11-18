@@ -1527,3 +1527,88 @@ a.ui-pick:focus-visible {
 .ui-shell-main main > div:has(> .ui-wide) {
 	max-width: 80rem;
 }
+
+/* ---- Databases and S3 destinations: choice cards -------------------------------------- */
+
+/* One option out of a few, drawn as a card around a native radio. The radio fills the card
+   (invisible but focusable), so a click anywhere selects it, the keyboard works as for any
+   radio group, and the selected card is marked by a heavier border and a check, not by
+   color alone. */
+.ui-choice-grid {
+	display: grid;
+	gap: 0.5rem;
+	min-inline-size: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+}
+
+.ui-choice {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.75rem;
+	padding: 0.875rem;
+	border: 1px solid var(--border);
+	border-radius: var(--radius);
+	cursor: pointer;
+	transition-property: border-color, background-color, box-shadow;
+	transition-duration: var(--duration-fast);
+}
+
+.ui-choice:hover {
+	background-color: var(--accent);
+}
+
+.ui-choice > input {
+	position: absolute;
+	inset: 0;
+	margin: 0;
+	opacity: 0;
+	cursor: pointer;
+}
+
+.ui-choice:has(> input:checked) {
+	border-color: var(--foreground);
+	background-color: var(--accent);
+	box-shadow: 0 0 0 1px var(--foreground);
+}
+
+.ui-choice:has(> input:focus-visible) {
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
+}
+
+.ui-choice-check {
+	position: absolute;
+	inset-block-start: 0.625rem;
+	inset-inline-end: 0.625rem;
+	display: inline-flex;
+	font-size: 1rem;
+	opacity: 0;
+	transition: opacity var(--duration-fast);
+}
+
+.ui-choice:has(> input:checked) .ui-choice-check {
+	opacity: 1;
+}
+
+/* Narrow containers lay the card out as a row, so four options stay short on a phone. */
+@media (max-width: 30rem) {
+	.ui-choice-grid {
+		grid-template-columns: 1fr;
+	}
+
+	.ui-choice {
+		flex-direction: row;
+		align-items: center;
+	}
+}
+
+@media (pointer: coarse) {
+	.ui-choice {
+		min-height: 3.5rem;
+	}
+}

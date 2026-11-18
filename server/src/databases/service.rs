@@ -79,28 +79,6 @@ pub struct DatabaseDetail {
 	pub job: Option<(JobId, JobStatus)>,
 }
 
-/// One line of a project's database list. Carries no credentials.
-#[derive(Debug, Clone)]
-pub struct Row {
-	pub id: DatabaseId,
-	pub name: String,
-	pub engine: EngineKind,
-	pub version: String,
-	pub status: DatabaseStatus,
-}
-
-impl From<&Database> for Row {
-	fn from(d: &Database) -> Self {
-		Self {
-			id: d.id,
-			name: d.name.clone(),
-			engine: d.engine,
-			version: d.version.clone(),
-			status: d.status,
-		}
-	}
-}
-
 /// What the create form offers for one engine.
 #[derive(Debug, Clone)]
 pub struct EngineOption {
@@ -166,14 +144,23 @@ fn validate_public_port(state: &AppState, port: Option<i32>) -> AppResult<()> {
 	Ok(())
 }
 
-/// The first occurrence of a backup schedule, for showing next to the field.
+/// How many upcoming runs the schedule preview lists.
+pub const PREVIEW_RUNS: usize = 3;
+
+/// The first `count` occurrences of a backup schedule, for the preview under the field.
 ///
 /// # Errors
-/// The parser's message when `schedule` is not a valid 5-field cron
-/// expression.
-pub fn check_schedule(schedule: &str) -> Result<OffsetDateTime, String> {
+/// The parser's message when `schedule` is not a valid 5-field cron expression.
+pub fn upcoming_runs(schedule: &str, count: usize) -> Result<Vec<OffsetDateTime>, String> {
 	backups::parse_schedule(schedule)?;
-	backups::next_run(schedule, OffsetDateTime::now_utc())
+	let mut runs = Vec::with_capacity(count);
+	let mut after = OffsetDateTime::now_utc();
+	for _ in 0..count {
+		let next = backups::next_run(schedule, after)?;
+		runs.push(next);
+		after = next;
+	}
+	Ok(runs)
 }
 
 fn credentials_of(s: &AppState, database: &Database) -> AppResult<Credentials> {
@@ -443,8 +430,8 @@ pub async fn reveal(
 	}
 }
 
-/// Checks `schedule` for the settings form's inline message; needs
-/// `update database` on a database of the team.
+/// Checks `schedule` for the settings form's inline message and returns its next
+/// three runs; needs `update database` on a database of the team.
 pub async fn preview_schedule(
 	db: &PgPool,
 	user: UserId,
@@ -452,10 +439,10 @@ pub async fn preview_schedule(
 	project: ProjectId,
 	id: DatabaseId,
 	schedule: &str,
-) -> AppResult<Result<OffsetDateTime, String>> {
+) -> AppResult<Result<Vec<OffsetDateTime>, String>> {
 	authorize(db, user, team, Action::Update, Resource::Database).await?;
 	scope::database(db, team, project, id).await?;
-	Ok(check_schedule(schedule))
+	Ok(upcoming_runs(schedule, PREVIEW_RUNS))
 }
 
 /// Replaces the database's settings. A changed public port or resource limit

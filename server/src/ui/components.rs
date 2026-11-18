@@ -58,7 +58,7 @@ pub use logo::{LogoSize, logo};
 pub use menu::{MENU_ITEM, MENU_ITEM_DANGER, dropdown_menu, menu_label, menu_link, menu_separator};
 pub use skeleton::skeleton;
 pub use table::table;
-pub use tabs::{TAB, TAB_ACTIVE, TabItem, tabs};
+pub use tabs::{TabItem, tabs};
 pub use theme_toggle::theme_toggle;
 pub use toast::{toast, toast_region, toast_region_with};
 pub use tooltip::tooltip;

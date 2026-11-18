@@ -103,6 +103,39 @@ pub async fn delete(
 	}
 }
 
+/// Checks that the bucket answers and accepts the keys: a signed read of an object that
+/// is not there. "Not found" means the keys and the bucket work; a refusal says which
+/// part is wrong.
+///
+/// # Errors
+/// [`S3Error`] when the request cannot be sent or storage refuses it.
+pub async fn probe(
+	http: &reqwest::Client,
+	target: &BackupTarget,
+	secret: &str,
+) -> Result<(), S3Error> {
+	let url = presign(target, secret, Method::Get, ".podkit-connection-test")?;
+	let response = http
+		.get(url)
+		.timeout(Duration::from_secs(10))
+		.send()
+		.await
+		.map_err(|e| S3Error::Request(e.without_url().to_string()))?;
+	match response.status() {
+		StatusCode::OK => Ok(()),
+		// A missing object is the expected answer; a missing bucket is the real failure.
+		StatusCode::NOT_FOUND => {
+			let body = response.text().await.unwrap_or_default();
+			if body.contains("NoSuchBucket") {
+				Err(S3Error::Bucket("the bucket does not exist".to_owned()))
+			} else {
+				Ok(())
+			}
+		}
+		status => Err(S3Error::Status(status)),
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use time::OffsetDateTime;

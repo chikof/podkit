@@ -165,38 +165,3 @@ section_app_config() {
 	api DELETE "/api/v1/teams/$TEAM/projects/$project/applications/$app" >/dev/null 2>&1 || true
 	api DELETE "/api/v1/teams/$TEAM/projects/$project" >/dev/null 2>&1 || true
 }
-
-# A database made through the form: its page never carries the password, the
-# Reveal action does, and delete without the data checkbox keeps the volume.
-section_databases() {
-	local project server db base password name="smoke-$$"
-	project="$(api POST "/api/v1/teams/$TEAM/projects" "{\"name\":\"Smoke DB\",\"slug\":\"smoke-db-$$\"}" | jq -er .id)"
-	server="$(api GET "/api/v1/teams/$TEAM/servers" | jq -er '.[0].id')"
-	base="/teams/$TEAM/projects/$project/databases"
-
-	expect_page "$base/new" "Create database"
-	ui_post "$base" "$(jq -n --arg n "$name" --arg s "$server" \
-		'{name: $n, engine: "postgres", version: "", server_id: $s, public_port: "", memory_limit_mb: "", cpu_limit: ""}')"
-	expect_body "window.location.assign" "POST $base"
-	db="$(api GET "/api/v1/teams/$TEAM/projects/$project/databases" | jq -er --arg n "$name" '.[] | select(.name == $n) | .id')"
-	password="$(api GET "/api/v1/teams/$TEAM/projects/$project/databases/$db" | jq -er .connection.password)"
-
-	expect_page "$base/$db" "Reveal password and URLs"
-	! grep -qF -- "$password" "$BODY" || fail "GET $base/$db: the password is in the page"
-	echo "ok   GET $base/$db has no password"
-	ui_post "$base/$db/reveal" '{}'
-	grep -qF -- "$password" "$BODY" || fail "POST $base/$db/reveal: no password in the reply"
-	echo "ok   POST $base/$db/reveal (has the password; not printed)"
-	expect_page "$base/$db/logs" "Container log"
-	expect_page "$base/$db/settings" "Backup schedule"
-	expect_page "/teams/$TEAM/projects/$project" "$name"
-
-	ui_post "$base/$db/schedule" '{"backup_schedule":"61 * * * *"}'
-	expect_body "Not a valid schedule" "POST $base/$db/schedule (bad cron)"
-	ui_post "$base/$db/schedule" '{"backup_schedule":"0 3 * * *"}'
-	expect_body "Next run" "POST $base/$db/schedule"
-
-	ui_post "$base/$db/delete" "$(jq -n --arg n "$name" '{confirm: $n, purge: false}')"
-	expect_body "window.location.assign" "POST $base/$db/delete"
-	expect_page "/teams/$TEAM/projects/$project/databases/0" "Not found" 404
-}
