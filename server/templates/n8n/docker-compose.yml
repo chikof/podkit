@@ -1,0 +1,21 @@
+services:
+  n8n:
+    image: docker.io/n8nio/n8n:1.123.0
+    restart: unless-stopped
+    environment:
+      N8N_HOST: ${N8N_HOST}
+      N8N_PORT: "5678"
+      N8N_PROTOCOL: http
+      WEBHOOK_URL: http://${N8N_HOST}/
+      GENERIC_TIMEZONE: ${GENERIC_TIMEZONE}
+      TZ: ${GENERIC_TIMEZONE}
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+      # podkit serves plain HTTP unless the domain has a certificate.
+      N8N_SECURE_COOKIE: "false"
+      # Lets workflows read $env.OPENAI_BASE_URL after a model is linked.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+volumes:
+  n8n_data:

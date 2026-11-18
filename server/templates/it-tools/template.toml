@@ -1,0 +1,22 @@
+id = "it-tools"
+name = "IT Tools"
+description = "A collection of handy online it-tools for developers."
+category = "tools"
+tags = [
+    "developer",
+    "tools",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://it-tools.tech"
+docs = "https://it-tools.tech/docs"
+source = "https://github.com/CorentinTh/it-tools"
+upstream = "Dokploy/templates@6313a2e blueprints/it-tools"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "it-tools"
+port = 80
+host = "${main_domain}"

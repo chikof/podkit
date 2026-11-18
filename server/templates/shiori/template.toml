@@ -1,0 +1,21 @@
+id = "shiori"
+name = "Shiori"
+description = "Shiori is a simple self-hosted bookmark manager with offline archive support and a web interface."
+category = "productivity"
+tags = [
+    "bookmarks",
+    "read-it-later",
+    "archiving",
+    "self-hosted",
+]
+version = "v1.8.0-2-g585ea34"
+logo = "logo.svg"
+website = "https://go-shiori.github.io/shiori/"
+docs = "https://go-shiori.github.io/shiori/"
+source = "https://github.com/go-shiori/shiori"
+upstream = "Dokploy/templates@6313a2e blueprints/shiori"
+
+[[config.domains]]
+serviceName = "shiori"
+port = 8080
+host = "${domain}"

@@ -1,0 +1,58 @@
+id = "pastefy"
+name = "Pastefy"
+description = "Pastefy is an open-source pastebin with support for syntax highlighting and OAuth2 authentication."
+category = "productivity"
+tags = [
+    "pastebin",
+    "text-sharing",
+    "collaboration",
+    "oauth2",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://pastefy.app"
+docs = "https://github.com/interaapps/pastefy/wiki"
+source = "https://github.com/interaapps/pastefy"
+upstream = "Dokploy/templates@6313a2e blueprints/pastefy"
+
+[variables]
+db_name = "pastefy"
+db_password = "${password:32}"
+db_root_password = "${password:32}"
+db_user = "pastefy"
+http_server_cors = "*"
+main_domain = "${domain}"
+oauth2_discord_client_id = "NONE"
+oauth2_discord_client_secret = ""
+oauth2_github_client_id = "NONE"
+oauth2_github_client_secret = ""
+oauth2_google_client_id = "NONE"
+oauth2_google_client_secret = ""
+oauth2_interaapps_client_id = "NONE"
+oauth2_interaapps_client_secret = ""
+oauth2_twitch_client_id = "NONE"
+oauth2_twitch_client_secret = ""
+server_name = "https://${main_domain}"
+
+[config.env]
+DB_NAME = "${db_name}"
+DB_PASSWORD = "${db_password}"
+DB_ROOT_PASSWORD = "${db_root_password}"
+DB_USER = "${db_user}"
+HTTP_SERVER_CORS = "${http_server_cors}"
+OAUTH2_DISCORD_CLIENT_ID = "${oauth2_discord_client_id} # Discord API Key (optional)"
+OAUTH2_DISCORD_CLIENT_SECRET = "${oauth2_discord_client_secret} # Discord API Secret (optional)"
+OAUTH2_GITHUB_CLIENT_ID = "${oauth2_github_client_id} # GitHub API Key (optional)"
+OAUTH2_GITHUB_CLIENT_SECRET = "${oauth2_github_client_secret} # GitHub API Secret (optional)"
+OAUTH2_GOOGLE_CLIENT_ID = "${oauth2_google_client_id} # Google API Key (optional)"
+OAUTH2_GOOGLE_CLIENT_SECRET = "${oauth2_google_client_secret} # Google API Secret (optional)"
+OAUTH2_INTERAAPPS_CLIENT_ID = "${oauth2_interaapps_client_id} # Interaapps API Key (optional)"
+OAUTH2_INTERAAPPS_CLIENT_SECRET = "${oauth2_interaapps_client_secret} # Interaapps API Secret (optional)"
+OAUTH2_TWITCH_CLIENT_ID = "${oauth2_twitch_client_id} # Twitch API Key (optional)"
+OAUTH2_TWITCH_CLIENT_SECRET = "${oauth2_twitch_client_secret} # Twitch API Secret (optional)"
+SERVER_NAME = "${server_name}"
+
+[[config.domains]]
+serviceName = "pastefy"
+port = 80
+host = "${main_domain}"

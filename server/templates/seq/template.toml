@@ -1,0 +1,30 @@
+id = "seq"
+name = "Seq"
+description = "Seq is a self-hosted search, analysis, and alerting server for structured application logs and events."
+category = "monitoring"
+tags = [
+    "logging",
+    "observability",
+    "monitoring",
+]
+version = "2025.2"
+logo = "logo.svg"
+website = "https://datalust.co/seq"
+docs = "https://datalust.co/docs"
+source = "https://github.com/datalust/seq-tickets"
+upstream = "Dokploy/templates@6313a2e blueprints/seq"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+ACCEPT_EULA = "Y"
+SEQ_API_CANONICALURI = "https://${main_domain}"
+SEQ_FIRSTRUN_ADMINPASSWORD = "${admin_password}"
+
+[[config.domains]]
+serviceName = "seq"
+port = 80
+host = "${main_domain}"

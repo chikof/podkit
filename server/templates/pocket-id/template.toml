@@ -1,0 +1,34 @@
+id = "pocket-id"
+name = "Pocket ID"
+description = "Pocket ID is a simple OpenID Connect and OAuth 2.0 provider that lets users authenticate to applications with passkeys."
+category = "security"
+tags = [
+    "authentication",
+    "identity",
+    "sso",
+    "oidc",
+    "oauth2",
+    "passkeys",
+    "security",
+    "self-hosted",
+]
+version = "2.14.0"
+logo = "logo.svg"
+website = "https://pocket-id.org/"
+docs = "https://pocket-id.org/docs/"
+source = "https://github.com/pocket-id/pocket-id"
+upstream = "Dokploy/templates@6313a2e blueprints/pocket-id"
+
+[variables]
+encryption_key = "${base64:32}"
+main_domain = "${domain}"
+
+[config.env]
+APP_URL = "https://${main_domain}"
+ENCRYPTION_KEY = "${encryption_key}"
+TRUST_PROXY = "true"
+
+[[config.domains]]
+serviceName = "pocket-id"
+port = 1411
+host = "${main_domain}"

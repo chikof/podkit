@@ -1,0 +1,36 @@
+id = "maybe"
+name = "Maybe"
+description = "Maybe is a self-hosted finance tracking application designed to simplify budgeting and expenses."
+category = "finance"
+tags = [
+    "finance",
+    "self-hosted",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://maybe.finance/"
+docs = "https://github.com/maybe-finance/maybe/blob/main/docs/hosting/docker.md"
+source = "https://github.com/maybe-finance/maybe"
+upstream = "Dokploy/templates@6313a2e blueprints/maybe"
+
+[variables]
+main_domain = "${domain}"
+secret_key_base = "${base64:64}"
+synth_api_key = "${base64:32}"
+
+[config.env]
+GOOD_JOB_EXECUTION_MODE = "async"
+RAILS_ASSUME_SSL = "false"
+RAILS_FORCE_SSL = "false"
+SECRET_KEY_BASE = "${secret_key_base}"
+SELF_HOSTED = "true"
+SYNTH_API_KEY = "${synth_api_key}"
+
+[[config.domains]]
+serviceName = "app"
+port = 3000
+host = "${main_domain}"
+
+[[config.mounts]]
+filePath = "./uploads"
+content = "This is where user uploads will be stored"

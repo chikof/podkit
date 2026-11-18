@@ -1781,3 +1781,108 @@ a.ui-pick:focus-visible {
 .ui-chat-thinking:empty {
 	display: none;
 }
+
+/* ---- Template logos, gallery, stacks ------------------------------------------------- */
+
+/* A template's own logo sits on a light plate in both schemes: registry marks are drawn for
+   a light page and some are black. */
+.ui-logo-img {
+	background-color: var(--logo-plate);
+}
+
+.ui-logo-img > img {
+	width: 72%;
+	height: 72%;
+	object-fit: contain;
+}
+
+/* Template gallery: a category list beside the results from lg up, a row of chips above them
+   below it. */
+.ui-tpl-layout {
+	display: grid;
+	gap: 1.5rem;
+}
+
+@media (min-width: 64rem) {
+	.ui-tpl-layout {
+		grid-template-columns: 12.5rem minmax(0, 1fr);
+		align-items: start;
+	}
+}
+
+.ui-tpl-cats {
+	display: flex;
+	gap: 0.5rem;
+	padding-bottom: 0.25rem;
+	overflow-x: auto;
+	scrollbar-width: thin;
+}
+
+@media (min-width: 64rem) {
+	.ui-tpl-cats {
+		position: sticky;
+		top: 1rem;
+		flex-direction: column;
+		gap: 0.125rem;
+		padding-bottom: 0;
+		overflow: visible;
+	}
+}
+
+.ui-tpl-cat {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	padding: 0.375rem 0.75rem;
+	border: 1px solid var(--border);
+	border-radius: calc(var(--radius) - 2px);
+	color: var(--muted-foreground);
+	font-size: 0.875rem;
+	font-weight: 500;
+	text-decoration: none;
+	transition-property: background-color, color;
+	transition-duration: var(--duration-fast);
+}
+
+@media (min-width: 64rem) {
+	.ui-tpl-cat {
+		border-color: transparent;
+	}
+}
+
+.ui-tpl-cat:hover {
+	background-color: var(--accent);
+	color: var(--accent-foreground);
+}
+
+.ui-tpl-cat[aria-current="page"] {
+	border-color: var(--border);
+	background-color: var(--accent);
+	color: var(--foreground);
+}
+
+.ui-tpl-cat:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+	.ui-tpl-cat {
+		min-height: 2.75rem;
+	}
+}
+
+/* The catalog is long. Cards after the first screen are not laid out or painted until they
+   scroll near; `contain-intrinsic-size` reserves their height (the browser remembers the real
+   one once it has drawn them) so the scrollbar does not jump. Cards have one height by
+   design: a one-line title, a two-line description, one row of badges. */
+.ui-tpl-grid > .ui-link-card {
+	min-height: 9.5rem;
+}
+
+.ui-tpl-grid > :nth-child(n + 13) {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 9.5rem;
+}

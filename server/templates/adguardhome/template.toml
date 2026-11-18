@@ -1,0 +1,24 @@
+id = "adguardhome"
+name = "AdGuard Home"
+description = "AdGuard Home is a network-wide ad and tracker blocker."
+category = "security"
+tags = [
+    "privacy",
+    "security",
+    "dns",
+    "ad-blocking",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://adguard.com"
+docs = "https://github.com/AdguardTeam/AdGuardHome/wiki"
+source = "https://github.com/AdguardTeam/AdGuardHome"
+upstream = "Dokploy/templates@6313a2e blueprints/adguardhome"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "adguardhome"
+port = 3000
+host = "${main_domain}"

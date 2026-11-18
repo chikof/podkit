@@ -1,0 +1,34 @@
+id = "rustrak"
+name = "Rustrak"
+description = "Self-hosted error tracking compatible with Sentry SDKs. Server only, written in Rust: 32 MB of memory at idle, with SQLite storage. No external database required."
+category = "monitoring"
+tags = [
+    "monitoring",
+    "error-tracking",
+    "sentry",
+    "rust",
+    "observability",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://rustrak.github.io/rustrak/"
+docs = "https://rustrak.github.io/rustrak/getting-started/overview"
+source = "https://github.com/rustrak/rustrak"
+upstream = "Dokploy/templates@6313a2e blueprints/rustrak"
+reveal = ["admin_password"]
+
+[variables]
+admin_email = "${email}"
+admin_password = "${password:16}"
+create_superuser = "${admin_email}:${admin_password}"
+main_domain = "${domain}"
+session_secret_key = "${password:64}"
+
+[config.env]
+CREATE_SUPERUSER = "${create_superuser}"
+SESSION_SECRET_KEY = "${session_secret_key}"
+
+[[config.domains]]
+serviceName = "rustrak"
+port = 8080
+host = "${main_domain}"

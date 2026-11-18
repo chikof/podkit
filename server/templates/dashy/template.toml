@@ -1,0 +1,24 @@
+id = "dashy"
+name = "Dashy"
+description = "Dashy is a customizable dashboard for organizing your apps and services."
+category = "productivity"
+tags = [
+    "dashboard",
+    "monitoring",
+    "self-hosted",
+    "homelab",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://dashy.to/"
+docs = "https://github.com/Lissy93/dashy/tree/master/docs"
+source = "https://github.com/Lissy93/dashy"
+upstream = "Dokploy/templates@6313a2e blueprints/dashy"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "dashy"
+port = 8080
+host = "${main_domain}"

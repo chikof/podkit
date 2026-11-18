@@ -1,0 +1,26 @@
+id = "bytebase"
+name = "Bytebase"
+description = "Bytebase is a database management tool that allows you to manage your databases with ease. It provides a simple and effective solution for managing your databases from anywhere."
+category = "database"
+tags = [
+    "database",
+    "self-hosted",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://www.bytebase.com"
+docs = "https://www.bytebase.com/docs"
+source = "https://github.com/bytebase/bytebase"
+upstream = "Dokploy/templates@6313a2e blueprints/bytebase"
+
+[variables]
+db_password = "${password:16}"
+main_domain = "${domain}"
+
+[config.env]
+DB_PASSWORD = "${db_password}"
+
+[[config.domains]]
+serviceName = "bytebase"
+port = 8080
+host = "${main_domain}"

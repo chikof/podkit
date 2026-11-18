@@ -1,0 +1,38 @@
+id = "bugsink"
+name = "Bugsink"
+description = "Bugsink is a self-hosted Error Tracker. Built to self-host; Sentry-SDK compatible; Scalable and reliable"
+category = "development"
+tags = [
+    "hosting",
+    "self-hosted",
+    "development",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://www.bugsink.com/"
+docs = "https://www.bugsink.com/docs/"
+source = "https://github.com/bugsink/bugsink/"
+upstream = "Dokploy/templates@6313a2e blueprints/bugsink"
+
+[variables]
+behind_https_proxy = "false"
+main_domain = "${domain}"
+postgres_db = "bugsink"
+postgres_password = "${password:32}"
+postgres_user = "bugsinkuser"
+secret_key = "${password:64}"
+superuser = "admin:admin"
+
+[config.env]
+BASE_URL = "https://${main_domain}"
+BEHIND_HTTPS_PROXY = "${behind_https_proxy}"
+CREATE_SUPERUSER = "${superuser}"
+POSTGRES_DB = "${postgres_db}"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USER = "${postgres_user}"
+SECRET_KEY = "${secret_key}"
+
+[[config.domains]]
+serviceName = "web"
+port = 8000
+host = "${main_domain}"

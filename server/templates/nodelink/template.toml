@@ -1,0 +1,63 @@
+id = "nodelink"
+name = "NodeLink"
+description = "NodeLink is a lightweight Lavalink-compatible audio server built in Node.js for Discord music bots and real-time audio systems."
+category = "media"
+tags = [
+    "audio",
+    "discord",
+    "lavalink",
+    "music",
+]
+version = "3.8.0"
+logo = "logo.svg"
+website = "https://nodelink.js.org/"
+docs = "https://nodelink.js.org/docs/advanced/docker"
+source = "https://github.com/PerformanC/NodeLink"
+upstream = "Dokploy/templates@6313a2e blueprints/nodelink"
+
+[variables]
+file_logging_enabled = "false"
+local_source_enabled = "false"
+logging_level = "info"
+main_domain = "${domain}"
+metrics_enabled = "false"
+server_password = "${password:32}"
+
+[config.env]
+NODELINK_LOGGING_FILE_ENABLED = "${file_logging_enabled}"
+NODELINK_LOGGING_LEVEL = "${logging_level}"
+NODELINK_METRICS_ENABLED = "${metrics_enabled}"
+NODELINK_SERVER_PASSWORD = "${server_password}"
+NODELINK_SOURCES_LOCAL_ENABLED = "${local_source_enabled}"
+
+[[config.domains]]
+serviceName = "nodelink"
+port = 2333
+host = "${main_domain}"
+path = "/"
+
+[[config.mounts]]
+filePath = "README.md"
+content = """
+# NodeLink
+
+This template deploys NodeLink, a Lavalink-compatible audio server for Discord music bots and real-time audio systems.
+
+## Connection
+
+Use the deployed domain as your NodeLink/Lavalink server URL:
+
+- Host: `https://${main_domain}`
+- Port: `443` when connecting through the Dokploy domain
+- Password: the generated `server_password` value
+
+NodeLink exposes the `/version`, `/v4/stats`, and Lavalink-compatible WebSocket/API endpoints through the same domain.
+
+## Local Music
+
+The template creates a persistent `nodelink-local-music` volume mounted at `/app/local-music`. Set `local_source_enabled` to `true` before deployment if you want NodeLink to resolve `file:///app/local-music/...` tracks.
+
+## Metrics
+
+Set `metrics_enabled` to `true` to expose Prometheus metrics at `/v4/metrics`. Keep this disabled unless your deployment is protected and monitored.
+"""

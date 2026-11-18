@@ -18,6 +18,7 @@ use proto::{ContainerOptions, Protocol};
 use serde::Serialize;
 use serde_json::Value;
 
+pub use service::normalize_relative;
 pub use value::interpolate;
 
 /// Largest compose file accepted, in bytes.

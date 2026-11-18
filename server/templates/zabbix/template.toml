@@ -1,0 +1,32 @@
+id = "zabbix"
+name = "Zabbix"
+description = "Zabbix is an open-source enterprise-grade monitoring platform for networks, servers, virtual machines, and cloud services. This template includes PostgreSQL, Nginx frontend, SNMP traps, and Java gateway."
+category = "monitoring"
+tags = [
+    "monitoring",
+    "infrastructure",
+    "observability",
+    "alerting",
+]
+version = "7.4"
+logo = "logo.png"
+website = "https://www.zabbix.com/"
+docs = "https://www.zabbix.com/documentation/current/en/manual/installation/containers"
+source = "https://github.com/zabbix/zabbix-docker"
+upstream = "Dokploy/templates@6313a2e blueprints/zabbix"
+
+[variables]
+main_domain = "${domain}"
+postgres_password = "${password:32}"
+
+[config.env]
+PHP_TZ = "UTC"
+POSTGRES_DB = "zabbix"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USER = "zabbix"
+ZBX_SERVER_NAME = "Dokploy Zabbix Monitoring"
+
+[[config.domains]]
+serviceName = "zabbix-web-nginx-pgsql"
+port = 8080
+host = "${main_domain}"

@@ -1,0 +1,29 @@
+id = "speedtest-tracker"
+name = "Speedtest Tracker"
+description = "Speedtest Tracker runs scheduled internet speed tests and stores the results in a self-hosted dashboard."
+category = "monitoring"
+tags = [
+    "monitoring",
+    "network",
+    "speedtest",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://docs.speedtest-tracker.dev/"
+docs = "https://docs.speedtest-tracker.dev/"
+source = "https://github.com/alexjustesen/speedtest-tracker"
+upstream = "Dokploy/templates@6313a2e blueprints/speedtest-tracker"
+
+[variables]
+app_key = "${base64:32}"
+main_domain = "${domain}"
+
+[config.env]
+APP_KEY = "base64:${app_key}"
+PGID = "1000"
+PUID = "1000"
+
+[[config.domains]]
+serviceName = "speedtest-tracker"
+port = 80
+host = "${main_domain}"

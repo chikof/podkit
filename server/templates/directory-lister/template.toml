@@ -1,0 +1,30 @@
+id = "directory-lister"
+name = "Directory Lister"
+description = "Directory Lister is a simple PHP application that lists the contents of any web-accessible directory and allows navigation there within."
+category = "storage"
+tags = [
+    "file-manager",
+    "directory-listing",
+    "php",
+]
+version = "latest"
+logo = "@mono-directory-lister"
+website = "https://www.directorylister.com/"
+docs = "https://docs.directorylister.com/"
+source = "https://github.com/DirectoryLister/DirectoryLister"
+upstream = "Dokploy/templates@6313a2e blueprints/directory-lister"
+
+[variables]
+app_domain = "${domain}"
+
+[config.env]
+APP_LANGUAGE = "en"
+DISPLAY_READMES = "true"
+READMES_FIRST = "false"
+TIMEZONE = "UTC"
+ZIP_DOWNLOADS = "true"
+
+[[config.domains]]
+serviceName = "directory-lister"
+port = 80
+host = "${app_domain}"

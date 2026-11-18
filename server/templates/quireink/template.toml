@@ -1,0 +1,26 @@
+id = "quireink"
+name = "Quire Ink"
+description = "A self-hosted blog in one container: a real editor over Markdown with tables, footnotes and mathematics, scheduled publishing, newsletters over your own SMTP, comments with a built-in spam gate, cookie-free analytics, full-text search and a book reading mode. Importers bring a WordPress, Ghost, S..."
+category = "cms"
+tags = [
+    "cms",
+    "self-hosted",
+    "blog",
+]
+version = "2.2.1"
+logo = "logo.png"
+website = "https://quireink.com"
+docs = "https://github.com/joiha-steven/quireink/blob/main/docs/self-host-docker.md"
+source = "https://github.com/joiha-steven/quireink"
+upstream = "Dokploy/templates@6313a2e blueprints/quireink"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+QUIREINK_HOST = "${main_domain}"
+
+[[config.domains]]
+serviceName = "quireink"
+port = 3000
+host = "${main_domain}"

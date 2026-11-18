@@ -1,0 +1,29 @@
+id = "maily"
+name = "Maily"
+description = "Temporary email REST API gateway with multi-provider rotation, real-time SSE streaming, and persistent storage."
+category = "communication"
+tags = [
+    "email",
+    "api",
+    "gateway",
+    "temporary-email",
+]
+version = "0.9.1"
+logo = "logo.svg"
+website = "https://github.com/stormsia/maily"
+docs = "https://github.com/stormsia/maily#readme"
+source = "https://github.com/stormsia/maily"
+upstream = "Dokploy/templates@6313a2e blueprints/maily"
+
+[variables]
+api_key = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+MAILY_API_KEY = "${api_key}"
+MAILY_SECRET_KEY = ""
+
+[[config.domains]]
+serviceName = "maily"
+port = 8477
+host = "${main_domain}"

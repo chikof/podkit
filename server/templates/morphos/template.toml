@@ -1,0 +1,23 @@
+id = "morphos"
+name = "Morphos"
+description = "Morphos is a lightweight service for distributed operations and orchestration."
+category = "other"
+tags = [
+    "server",
+    "orchestration",
+    "lightweight",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://github.com/danvergara/morphos-server"
+docs = "https://github.com/danvergara/morphos-server#readme"
+source = "https://github.com/danvergara/morphos-server"
+upstream = "Dokploy/templates@6313a2e blueprints/morphos"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "morphos-server"
+port = 8080
+host = "${main_domain}"

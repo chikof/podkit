@@ -1,0 +1,28 @@
+id = "couchdb"
+name = "CouchDB"
+description = "CouchDB is a document-oriented NoSQL database that excels at replication and horizontal scaling."
+category = "database"
+tags = [
+    "database",
+    "storage",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://couchdb.apache.org/"
+docs = "https://docs.couchdb.org/en/stable/"
+source = "https://github.com/apache/couchdb"
+upstream = "Dokploy/templates@6313a2e blueprints/couchdb"
+
+[variables]
+main_domain = "${domain}"
+password = "${password:32}"
+username = "${password:16}"
+
+[config.env]
+COUCHDB_PASSWORD = "${password}"
+COUCHDB_USER = "${username}"
+
+[[config.domains]]
+serviceName = "couchdb"
+port = 5984
+host = "${main_domain}"

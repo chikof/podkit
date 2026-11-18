@@ -1,0 +1,49 @@
+id = "zitadel"
+name = "Zitadel"
+description = "Open-source identity and access management platform with multi-tenancy, OpenID Connect, SAML, and OAuth 2.0 support."
+category = "security"
+tags = [
+    "identity",
+    "authentication",
+    "authorization",
+    "iam",
+    "security",
+    "oauth",
+    "openid-connect",
+    "saml",
+    "multi-tenant",
+]
+version = "4.16.0"
+logo = "logo.png"
+website = "https://zitadel.com/"
+docs = "https://zitadel.com/docs/"
+source = "https://github.com/zitadel/zitadel"
+upstream = "Dokploy/templates@6313a2e blueprints/zitadel"
+
+[variables]
+admin_email = "${email}"
+admin_password = "AdminPassword123!"
+admin_username = "${username}"
+main_domain = "${domain}"
+postgres_password = "${password:32}"
+tls_mode = "disabled"
+zitadel_masterkey = "${password:32}"
+
+[config.env]
+POSTGRES_PASSWORD = "${postgres_password}"
+ZITADEL_EXTERNALDOMAIN = "${main_domain}"
+ZITADEL_EXTERNALPORT = "80"
+ZITADEL_EXTERNALSECURE = "false"
+ZITADEL_FIRSTINSTANCE_ORG_HUMAN_EMAIL_ADDRESS = "${admin_email}"
+ZITADEL_FIRSTINSTANCE_ORG_HUMAN_FIRSTNAME = "Admin"
+ZITADEL_FIRSTINSTANCE_ORG_HUMAN_LASTNAME = "User"
+ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD = "${admin_password}"
+ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME = "${admin_username}"
+ZITADEL_MASTERKEY = "${zitadel_masterkey}"
+ZITADEL_TLSMODE = "${tls_mode}"
+
+[[config.domains]]
+serviceName = "zitadel"
+port = 8080
+host = "${main_domain}"
+path = "/"

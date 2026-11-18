@@ -35,6 +35,7 @@ mod error;
 mod ids;
 mod jobs;
 mod links;
+mod logos;
 mod logs;
 mod maintenance;
 mod members;
@@ -49,6 +50,7 @@ mod servers;
 mod stacks;
 mod state;
 mod teams;
+mod templates;
 mod ui;
 mod validate;
 mod volumes;
@@ -59,6 +61,9 @@ mod tests;
 
 #[tokio::main]
 async fn main() -> AppResult<()> {
+	if let Some(code) = templates::import::cli() {
+		std::process::exit(code);
+	}
 	#[cfg(debug_assertions)]
 	dotenvy::dotenv().ok(); // I wasn’t really sure whether we should use dotenv_override() or not
 

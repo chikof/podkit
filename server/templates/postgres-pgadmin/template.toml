@@ -1,0 +1,62 @@
+id = "postgres-pgadmin"
+name = "PostgreSQL + pgAdmin"
+description = "PostgreSQL 18 Alpine with pgAdmin 4 web UI, persistent volumes and healthchecks for easy database administration."
+category = "database"
+tags = [
+    "database",
+    "postgres",
+    "postgresql",
+    "admin",
+    "pgadmin",
+]
+version = "18-alpine"
+logo = "logo.svg"
+website = "https://www.postgresql.org/"
+docs = "https://www.pgadmin.org/docs/"
+source = "https://github.com/postgres/postgres"
+upstream = "Dokploy/templates@6313a2e blueprints/postgres-pgadmin"
+
+[variables]
+pgadmin_domain = "${domain}"
+pgadmin_email = "${email}"
+pgadmin_password = "${password:16}"
+postgres_db = "postgres"
+postgres_password = "${password:32}"
+postgres_user = "${username}"
+
+[config.env]
+PGADMIN_DEFAULT_EMAIL = "${pgadmin_email}"
+PGADMIN_DEFAULT_PASSWORD = "${pgadmin_password}"
+POSTGRES_DB = "${postgres_db}"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USER = "${postgres_user}"
+
+[[config.domains]]
+serviceName = "pgadmin"
+port = 80
+host = "${pgadmin_domain}"
+
+[[config.mounts]]
+filePath = "/servers.json"
+content = """
+{
+  "Servers": {
+    "1": {
+      "Name": "PostgreSQL",
+      "Group": "Servers",
+      "Host": "postgres",
+      "Port": 5432,
+      "MaintenanceDB": "${postgres_db}",
+      "Username": "${postgres_user}",
+      "PassFile": "/var/lib/pgadmin/pgpass",
+      "SSLMode": "prefer"
+    }
+  }
+}
+"""
+
+[[config.mounts]]
+filePath = "/pgpass"
+content = """
+postgres:5432:*:${postgres_user}:${postgres_password}
+"""

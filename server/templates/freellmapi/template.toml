@@ -1,0 +1,31 @@
+id = "freellmapi"
+name = "FreeLLMAPI"
+description = "FreeLLMAPI aggregates free tiers from 29 LLM providers into a single OpenAI-compatible endpoint with smart routing, automatic failover, per-key rate tracking, and encrypted key storage."
+category = "ai"
+tags = [
+    "ai",
+    "proxy",
+    "llm",
+    "openai-compatible",
+    "developer-tools",
+]
+version = "v0.8.4"
+logo = "logo.svg"
+website = "https://freellmapi.co"
+docs = "https://github.com/tashfeenahmed/freellmapi/blob/main/docs/install.md"
+source = "https://github.com/tashfeenahmed/freellmapi"
+upstream = "Dokploy/templates@6313a2e blueprints/freellmapi"
+
+[variables]
+encryption_key = "${hash:64}"
+main_domain = "${domain}"
+
+[config.env]
+ENCRYPTION_KEY = "${encryption_key}"
+NODE_ENV = "production"
+PORT = "3001"
+
+[[config.domains]]
+serviceName = "freellmapi"
+port = 3001
+host = "${main_domain}"

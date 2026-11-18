@@ -15,10 +15,10 @@ use crate::ui::extract::TeamCtx;
 
 pub const DIALOG_ID: &str = "create-resource";
 
-/// TODO(F8): the compose and template pages. Until they exist the two options show as
-/// "Soon" and are not links. F8 sets these to the routes it adds.
-const COMPOSE_HREF: Option<&str> = None;
-const TEMPLATES_HREF: Option<&str> = None;
+/// The compose and template pages, as paths under the project (F8). `None` shows the option as
+/// "Soon", not a link.
+const COMPOSE_HREF: Option<&str> = Some("/stacks/new");
+const TEMPLATES_HREF: Option<&str> = Some("/templates");
 
 /// How a tile draws its mark.
 enum Mark<'a> {
@@ -132,18 +132,22 @@ fn groups<'a>(
 	out.push(("Database", dbs));
 
 	let mut stacks = Vec::new();
-	if ctx.perms.can(Action::Create, Resource::Application) {
+	if ctx.perms.can(Action::Create, Resource::Stack) {
 		stacks.push(Choice {
 			title: "Compose",
 			description: "Deploy a stack from a compose file.",
 			mark: Mark::Logo("docker"),
-			href: COMPOSE_HREF.map(|h| format!("{h}?{q}")),
+			href: COMPOSE_HREF.map(|h| format!("{base}{h}?{q}")),
 		});
+	}
+	if ctx.perms.can(Action::Create, Resource::Stack)
+		|| ctx.perms.can(Action::Create, Resource::Application)
+	{
 		stacks.push(Choice {
 			title: "Template",
 			description: "Start from a ready-made service in the catalog.",
 			mark: Mark::Icon("package"),
-			href: TEMPLATES_HREF.map(|h| format!("{h}?{q}")),
+			href: TEMPLATES_HREF.map(|h| format!("{base}{h}?{q}")),
 		});
 	}
 	out.push(("Compose and templates", stacks));
@@ -165,9 +169,14 @@ fn groups<'a>(
 
 /// Whether the caller may create anything here at all; the button is hidden otherwise.
 pub fn can_create_any(ctx: &TeamCtx) -> bool {
-	[Resource::Application, Resource::Database, Resource::Model]
-		.into_iter()
-		.any(|r| ctx.perms.can(Action::Create, r))
+	[
+		Resource::Application,
+		Resource::Database,
+		Resource::Model,
+		Resource::Stack,
+	]
+	.into_iter()
+	.any(|r| ctx.perms.can(Action::Create, r))
 }
 
 /// The button that opens the picker (uses the invoker command, with the Datastar fallback).

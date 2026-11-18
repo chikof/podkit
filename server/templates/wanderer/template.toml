@@ -1,0 +1,45 @@
+id = "wanderer"
+name = "Wanderer"
+description = "Wanderer is a self-hosted mapping and geolocation platform powered by Meilisearch, PocketBase, and a web frontend."
+category = "tools"
+tags = [
+    "mapping",
+    "geolocation",
+    "search",
+    "self-hosted",
+]
+version = "1.0.0"
+logo = "logo.png"
+website = "https://wanderer.to"
+docs = "https://github.com/flomp/wanderer#readme"
+source = "https://github.com/flomp/wanderer"
+upstream = "Dokploy/templates@6313a2e blueprints/wanderer"
+
+[variables]
+main_domain = "${domain}"
+meili_master_key = "${password:32}"
+pocketbase_key = "${password:32}"
+upload_password = "${password:16}"
+upload_user = "${username}"
+
+[config.env]
+MEILI_MASTER_KEY = "${meili_master_key}"
+ORIGIN = "http://${main_domain}"
+POCKETBASE_ENCRYPTION_KEY = "${pocketbase_key}"
+UPLOAD_PASSWORD = "${upload_password}"
+UPLOAD_USER = "${upload_user}"
+
+[[config.domains]]
+serviceName = "web"
+port = 3000
+host = "${main_domain}"
+
+[[config.domains]]
+serviceName = "db"
+port = 8090
+host = "db.${main_domain}"
+
+[[config.domains]]
+serviceName = "search"
+port = 7700
+host = "search.${main_domain}"

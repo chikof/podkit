@@ -1,0 +1,30 @@
+id = "librespeed"
+name = "LibreSpeed"
+description = "LibreSpeed is a lightweight, self-hosted HTML5 speed test for measuring download, upload, ping, and jitter in modern browsers."
+category = "networking"
+tags = [
+    "speedtest",
+    "networking",
+    "monitoring",
+    "self-hosted",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://librespeed.org"
+docs = "https://docs.linuxserver.io/images/docker-librespeed/"
+source = "https://github.com/librespeed/speedtest"
+upstream = "Dokploy/templates@6313a2e blueprints/librespeed"
+
+[variables]
+main_domain = "${domain}"
+password = "${password:32}"
+
+[config.env]
+CUSTOM_RESULTS = "false"
+PASSWORD = "${password}"
+TZ = "UTC"
+
+[[config.domains]]
+serviceName = "librespeed"
+port = 80
+host = "${main_domain}"

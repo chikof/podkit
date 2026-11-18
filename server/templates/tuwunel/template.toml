@@ -1,0 +1,29 @@
+id = "tuwunel"
+name = "Tuwunel"
+description = "High performance Matrix homeserver written in Rust. Official successor to conduwuit - a scalable, low-cost, enterprise-ready alternative to Synapse."
+category = "communication"
+tags = [
+    "matrix",
+    "chat",
+    "messaging",
+    "rust",
+]
+version = "v1.5.0"
+logo = "logo.svg"
+website = "https://tuwunel.chat"
+docs = "https://matrix-construct.github.io/tuwunel/"
+source = "https://github.com/matrix-construct/tuwunel"
+upstream = "Dokploy/templates@6313a2e blueprints/tuwunel"
+
+[variables]
+main_domain = "${domain}"
+registration_token = "${password:32}"
+
+[config.env]
+TUWUNEL_REGISTRATION_TOKEN = "${registration_token}"
+TUWUNEL_SERVER_NAME = "${main_domain}"
+
+[[config.domains]]
+serviceName = "tuwunel"
+port = 6167
+host = "${main_domain}"

@@ -1,0 +1,20 @@
+id = "chromium"
+name = "Chromium"
+description = "Chromium is an open-source browser project that is designed to provide a safer, faster, and more stable way for all users to experience the web in a containerized environment."
+category = "development"
+tags = [
+    "browser",
+    "development",
+    "web",
+]
+version = "5f5dd27e-ls102"
+logo = "logo.png"
+website = "https://docs.linuxserver.io/images/docker-chromium"
+docs = "https://docs.linuxserver.io/images/docker-chromium"
+source = "https://github.com/linuxserver/docker-chromium"
+upstream = "Dokploy/templates@6313a2e blueprints/chromium"
+
+[[config.domains]]
+serviceName = "chromium"
+port = 3000
+host = "${domain}"

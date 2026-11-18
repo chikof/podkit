@@ -1,0 +1,29 @@
+id = "commento"
+name = "Commento"
+description = "Commento is a comments widget designed to enhance the interaction on your website. It allows your readers to contribute to the discussion by upvoting comments that add value and downvoting those that don't. The widget supports markdown formatting and provides moderation tools to manage conversati..."
+category = "cms"
+tags = [
+    "comments",
+    "discussion",
+    "website",
+]
+version = "v1.8.0"
+logo = "logo.png"
+website = "https://commento.io/"
+docs = "https://commento.io/"
+source = "https://github.com/souramoo/commentoplusplus"
+upstream = "Dokploy/templates@6313a2e blueprints/commento"
+
+[variables]
+DOMAIN = "${domain}"
+POSTGRES_PASSWORD = "${password:16}"
+
+[config.env]
+COMMENTO_ORIGIN = "http://${DOMAIN}"
+COMMENTO_POSTGRES = "postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/postgres?sslmode=disable"
+POSTGRES_PASSWORD = "${POSTGRES_PASSWORD}"
+
+[[config.domains]]
+serviceName = "commento"
+port = 8080
+host = "${DOMAIN}"

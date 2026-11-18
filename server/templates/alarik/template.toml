@@ -1,0 +1,37 @@
+id = "alarik"
+name = "Alarik"
+description = "Alarik is a high-performance, S3-compatible object storage."
+category = "storage"
+tags = [
+    "storage",
+    "s3",
+    "object-storage",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://alarik.io/"
+docs = "https://alarik.io/docs"
+source = "https://github.com/achtungsoftware/alarik"
+upstream = "Dokploy/templates@6313a2e blueprints/alarik"
+
+[variables]
+api_domain = "${domain}"
+console_domain = "${domain}"
+
+[config.env]
+ADMIN_PASSWORD = "${password:16}"
+ADMIN_USERNAME = "alarik"
+ALLOW_ACCOUNT_CREATION = "false"
+API_BASE_URL = "http://${api_domain}"
+CONSOLE_BASE_URL = "http://${console_domain}"
+JWT = "${base64:64}"
+
+[[config.domains]]
+serviceName = "alarik"
+port = 8080
+host = "${api_domain}"
+
+[[config.domains]]
+serviceName = "console"
+port = 3000
+host = "${console_domain}"

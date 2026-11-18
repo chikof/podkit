@@ -1,0 +1,31 @@
+id = "excaliself"
+name = "Excaliself"
+description = "Self-hosted, open-source alternative to Excalidraw+ for teams. Shared drawings, folders, live collaboration, comments and SSO, stored in Postgres."
+category = "productivity"
+tags = [
+    "whiteboard",
+    "diagrams",
+    "collaboration",
+    "self-hosted",
+]
+version = "0.12.0"
+logo = "logo.svg"
+website = "https://excaliself.com/"
+docs = "https://excaliself.com/docs/"
+source = "https://github.com/maciekzygmunt/excaliself"
+upstream = "Dokploy/templates@6313a2e blueprints/excaliself"
+
+[variables]
+auth_secret = "${password:64}"
+main_domain = "${domain}"
+postgres_password = "${password:32}"
+
+[config.env]
+BASE_URL = "http://${main_domain}"
+BETTER_AUTH_SECRET = "${auth_secret}"
+POSTGRES_PASSWORD = "${postgres_password}"
+
+[[config.domains]]
+serviceName = "excaliself"
+port = 3000
+host = "${main_domain}"

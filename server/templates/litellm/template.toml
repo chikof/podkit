@@ -1,0 +1,72 @@
+id = "litellm"
+name = "LiteLLM"
+description = "LiteLLM is a lightweight OpenAI API-compatible proxy for managing multiple LLM providers with a single endpoint."
+category = "ai"
+tags = [
+    "ai",
+    "proxy",
+    "llm",
+    "openai-compatible",
+    "monitoring",
+]
+version = "main-stable"
+logo = "logo.png"
+website = "https://docs.litellm.ai"
+docs = "https://docs.litellm.ai/docs/proxy/quick_start"
+source = "https://github.com/BerriAI/litellm"
+upstream = "Dokploy/templates@6313a2e blueprints/litellm"
+reveal = ["ui_password"]
+
+[variables]
+anthropic_api_key = ""
+azure_api_base = ""
+azure_api_key = ""
+azure_api_version = ""
+cohere_api_key = ""
+infinity_api_key = ""
+infisical_token = ""
+litellm_master_key = "${password:64}"
+main_domain = "${domain}"
+novita_api_key = ""
+openai_api_key = ""
+openai_base_url = ""
+or_api_key = ""
+or_app_name = "LiteLLM Example app"
+or_site_url = ""
+postgres_db = "litellm"
+postgres_password = "${password:32}"
+postgres_user = "litellm"
+replicate_api_key = ""
+replicate_api_token = ""
+ui_password = "${password:32}"
+ui_username = "${username}"
+
+[config.env]
+ANTHROPIC_API_KEY = "${anthropic_api_key}"
+AZURE_API_BASE = "${azure_api_base}"
+AZURE_API_KEY = "${azure_api_key}"
+AZURE_API_VERSION = "${azure_api_version}"
+COHERE_API_KEY = "${cohere_api_key}"
+DATABASE_URL = "postgresql://${postgres_user}:${postgres_password}@litellm-db:5432/${postgres_db}"
+INFINITY_API_KEY = "${infinity_api_key}"
+INFISICAL_TOKEN = "${infisical_token}"
+LITELLM_MASTER_KEY = "${litellm_master_key}"
+NOVITA_API_KEY = "${novita_api_key}"
+OPENAI_API_KEY = "${openai_api_key}"
+OPENAI_BASE_URL = "${openai_base_url}"
+OR_API_KEY = "${or_api_key}"
+OR_APP_NAME = "${or_app_name}"
+OR_SITE_URL = "${or_site_url}"
+POSTGRES_DB = "${postgres_db}"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USER = "${postgres_user}"
+REPLICATE_API_KEY = "${replicate_api_key}"
+REPLICATE_API_TOKEN = "${replicate_api_token}"
+STORE_MODEL_IN_DB = "True"
+UI_PASSWORD = "${ui_password}"
+UI_USERNAME = "${ui_username}"
+
+[[config.domains]]
+serviceName = "litellm"
+port = 4000
+host = "${main_domain}"

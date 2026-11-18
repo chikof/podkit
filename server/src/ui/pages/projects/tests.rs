@@ -892,11 +892,17 @@ async fn the_picker_routes_each_kind_to_its_create_flow(db: PgPool) {
 	}
 	assert_contains(main, "data-logo=\"mongodb\"");
 	assert_contains(main, "/models/catalog?project=");
-	// Not there yet: shown as such, never a dead link. Docker images stay hidden until B2.
-	assert_contains(main, "Compose");
-	assert_contains(main, "Template");
-	assert_contains(main, "Soon");
-	assert_contains(main, "aria-disabled=\"true\"");
+	// Compose and templates are links into the project, carrying the environment.
+	assert_contains(
+		main,
+		&format!("href=\"{base}/stacks/new?environment={prod}\""),
+	);
+	assert_contains(
+		main,
+		&format!("href=\"{base}/templates?environment={prod}\""),
+	);
+	assert_not_contains(main, "Soon");
+	// Docker images link to the image create form.
 	assert_contains(main, "Docker image");
 	assert_contains(
 		main,

@@ -1,0 +1,29 @@
+id = "zipline"
+name = "Zipline"
+description = "A ShareX/file upload server that is easy to use, packed with features, and with an easy setup!"
+category = "storage"
+tags = [
+    "media-system",
+    "storage",
+]
+version = "v3.7.9"
+logo = "logo.png"
+website = "https://zipline.diced.sh/"
+docs = "https://zipline.diced.sh/docs/"
+source = "https://github.com/diced/zipline"
+upstream = "Dokploy/templates@6313a2e blueprints/zipline"
+
+[variables]
+main_domain = "${domain}"
+secret_base = "${base64:64}"
+
+[config.env]
+ZIPLINE_LOGGER = "true"
+ZIPLINE_PORT = "3000"
+ZIPLINE_RETURN_HTTPS = "false"
+ZIPLINE_SECRET = "${secret_base}"
+
+[[config.domains]]
+serviceName = "zipline"
+port = 3000
+host = "${main_domain}"

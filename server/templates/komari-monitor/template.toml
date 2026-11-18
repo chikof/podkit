@@ -1,0 +1,28 @@
+id = "komari-monitor"
+name = "Komari Monitor"
+description = "A lightweight, self-hosted server monitoring tool for tracking server performance."
+category = "monitoring"
+tags = [
+    "monitoring",
+    "self-hosted",
+]
+version = "latest"
+logo = "@mono-komari-monitor"
+website = "https://github.com/komari-monitor/komari"
+docs = "https://github.com/komari-monitor/komari#readme"
+source = "https://github.com/komari-monitor/komari"
+upstream = "Dokploy/templates@6313a2e blueprints/komari-monitor"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password:16}"
+main_domain = "${domain}"
+
+[config.env]
+ADMIN_PASSWORD = "${admin_password}"
+ADMIN_USERNAME = "admin"
+
+[[config.domains]]
+serviceName = "komari"
+port = 25774
+host = "${main_domain}"

@@ -1,0 +1,26 @@
+id = "drizzle-gateway"
+name = "drizzle gateway"
+description = "Drizzle Gateway is a self-hosted database gateway that allows you to connect to your databases from anywhere."
+category = "database"
+tags = [
+    "database",
+    "gateway",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://gateway.drizzle.team/"
+docs = "https://gateway.drizzle.team/docs/railway"
+source = ""
+upstream = "Dokploy/templates@6313a2e blueprints/drizzle-gateway"
+
+[variables]
+main_domain = "${domain}"
+masterpass = "${base64:32}"
+
+[config.env]
+MASTERPASS = "${masterpass}"
+
+[[config.domains]]
+serviceName = "drizzle-gateway"
+port = 4983
+host = "${main_domain}"

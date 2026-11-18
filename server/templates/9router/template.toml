@@ -1,0 +1,35 @@
+id = "9router"
+name = "9Router"
+description = "Self-hosted AI model router that rotates requests across 40+ providers with automatic fallback, exposing an OpenAI-compatible endpoint for coding agents."
+category = "ai"
+tags = [
+    "ai",
+    "proxy",
+    "developer-tools",
+]
+version = "0.5.59"
+logo = "@9router"
+website = "https://9router.com"
+docs = "https://github.com/decolua/9router/blob/master/DOCKER.md"
+source = "https://github.com/decolua/9router"
+upstream = "Dokploy/templates@6313a2e blueprints/9router"
+reveal = ["initial_password"]
+
+[variables]
+api_key_secret = "${password:64}"
+initial_password = "${password:32}"
+jwt_secret = "${password:64}"
+machine_id_salt = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+API_KEY_SECRET = "${api_key_secret}"
+INITIAL_PASSWORD = "${initial_password}"
+JWT_SECRET = "${jwt_secret}"
+MACHINE_ID_SALT = "${machine_id_salt}"
+ROUTER_HOST = "${main_domain}"
+
+[[config.domains]]
+serviceName = "9router"
+port = 20128
+host = "${main_domain}"

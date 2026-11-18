@@ -1031,7 +1031,7 @@ impl Builder<'_, '_> {
 
 /// `./a/b/`, `a/b`, `../files/a/b` -> `a/b`: the path relative to the stack's
 /// files. Anything else that climbs out keeps its `..`.
-pub(super) fn normalize_relative(path: &str) -> String {
+pub fn normalize_relative(path: &str) -> String {
 	let mut rest = path;
 	loop {
 		if let Some(r) = rest.strip_prefix("./") {

@@ -1,0 +1,23 @@
+id = "glpi"
+name = "GLPI Project"
+description = "The most complete open source service management software"
+category = "productivity"
+tags = [
+    "self-hosted",
+    "project-management",
+    "management",
+]
+version = "10.0.16"
+logo = "@glpi"
+website = "https://glpi-project.org/"
+docs = "https://glpi-project.org/documentation/"
+source = "https://github.com/glpi-project/glpi"
+upstream = "Dokploy/templates@6313a2e blueprints/glpi"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "glpi-web"
+port = 80
+host = "${main_domain}"

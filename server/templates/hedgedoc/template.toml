@@ -1,0 +1,33 @@
+id = "hedgedoc"
+name = "HedgeDoc"
+description = "HedgeDoc is a collaborative Markdown editor for teams that need real-time notes, documentation, and knowledge sharing."
+category = "productivity"
+tags = [
+    "markdown",
+    "notes",
+    "documentation",
+    "collaboration",
+    "wiki",
+]
+version = "1.10.8"
+logo = "logo.svg"
+website = "https://hedgedoc.org/"
+docs = "https://docs.hedgedoc.org/"
+source = "https://github.com/hedgedoc/hedgedoc"
+upstream = "Dokploy/templates@6313a2e blueprints/hedgedoc"
+
+[variables]
+database_password = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+CMD_DB_URL = "postgres://hedgedoc:${database_password}@database:5432/hedgedoc"
+CMD_DOMAIN = "${main_domain}"
+CMD_PROTOCOL_USESSL = "true"
+CMD_URL_ADDPORT = "false"
+POSTGRES_PASSWORD = "${database_password}"
+
+[[config.domains]]
+serviceName = "hedgedoc"
+port = 3000
+host = "${main_domain}"

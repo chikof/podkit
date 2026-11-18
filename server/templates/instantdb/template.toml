@@ -1,0 +1,41 @@
+id = "instantdb"
+name = "InstantDB"
+description = "InstantDB is a real-time database server that provides instant data synchronization and real-time updates for applications."
+category = "database"
+tags = [
+    "database",
+    "real-time",
+    "self-hosted",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://github.com/instantdb/instant"
+docs = "https://github.com/instantdb/instant"
+source = "https://github.com/instantdb/instant/tree/main/server"
+upstream = "Dokploy/templates@6313a2e blueprints/instantdb"
+
+[variables]
+aws_access_key_id = "FILL-YOUR-CREDENTIALS"
+aws_region = "us-east-1"
+aws_secret_access_key = "FILL-YOUR-CREDENTIALS"
+main_domain = "${domain}"
+postgres_db = "instant"
+postgres_password = "${password:32}"
+postgres_user = "instant"
+
+[config.env]
+AWS_ACCESS_KEY_ID = "${aws_access_key_id}"
+AWS_REGION = "${aws_region}"
+AWS_SECRET_ACCESS_KEY = "${aws_secret_access_key}"
+DATABASE_URL = "postgresql://${postgres_user}:${postgres_password}@postgres:5432/${postgres_db}"
+HOST = "0.0.0.0"
+NREPL_BIND_ADDRESS = "0.0.0.0"
+PORT = "8888"
+POSTGRES_DB = "${postgres_db}"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USER = "${postgres_user}"
+
+[[config.domains]]
+serviceName = "server"
+port = 8888
+host = "${main_domain}"

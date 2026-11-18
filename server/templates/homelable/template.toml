@@ -1,0 +1,40 @@
+id = "homelable"
+name = "Homelable"
+description = "Self-hosted homelab infrastructure visualisation, documentation, network scanning and live monitoring."
+category = "networking"
+tags = [
+    "homelab",
+    "network",
+    "monitoring",
+    "documentation",
+    "self-hosted",
+]
+version = "3.6.0"
+logo = "logo.svg"
+website = "https://homelable.net"
+docs = "https://github.com/Pouzor/homelable/blob/main/INSTALLATION.md"
+source = "https://github.com/Pouzor/homelable"
+upstream = "Dokploy/templates@6313a2e blueprints/homelable"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password:32}"
+main_domain = "${domain}"
+secret_key = "${base64:32}"
+
+[config.env]
+AUTH_MODE = "local"
+AUTH_USERNAME = "admin"
+CORS_ORIGINS = '["https://${main_domain}", "http://${main_domain}"]'
+INITIAL_ADMIN_PASSWORD = "${admin_password}"
+SCANNER_RANGES = '["192.168.1.0/24"]'
+SECRET_KEY = "${secret_key}"
+SQLITE_PATH = "/app/data/homelab.db"
+STATUS_CHECKER_ENABLED = "true"
+STATUS_CHECKER_INTERVAL = "60"
+
+[[config.domains]]
+serviceName = "homelable"
+port = 80
+host = "${main_domain}"
+path = "/"

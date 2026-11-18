@@ -1,0 +1,42 @@
+id = "orbit"
+name = "Orbit by Noveum"
+description = "Open-source task management with issues, projects, sprints, docs, files, realtime collaboration and an OAuth MCP endpoint."
+category = "productivity"
+tags = [
+    "productivity",
+    "project-management",
+    "collaboration",
+    "mcp",
+]
+version = "2026.09.24"
+logo = "@mono-orbit"
+website = "https://orbit.noveum.ai"
+docs = "https://github.com/Noveum/orbit/blob/containers-2026.09.24/docs/container-catalogs.md"
+source = "https://github.com/Noveum/orbit"
+upstream = "Dokploy/templates@6313a2e blueprints/orbit"
+
+[variables]
+auth_secret = "${password:64}"
+cron_secret = "${password:64}"
+main_domain = "${domain}"
+minio_password = "${password:48}"
+postgres_password = "${password:48}"
+storage_domain = "${domain}"
+
+[config.env]
+BETTER_AUTH_SECRET = "${auth_secret}"
+CRON_SECRET = "${cron_secret}"
+MINIO_PASSWORD = "${minio_password}"
+ORBIT_APP_URL = "https://${main_domain}"
+ORBIT_STORAGE_URL = "https://${storage_domain}"
+POSTGRES_PASSWORD = "${postgres_password}"
+
+[[config.domains]]
+serviceName = "orbit"
+port = 3000
+host = "${main_domain}"
+
+[[config.domains]]
+serviceName = "storage"
+port = 9000
+host = "${storage_domain}"

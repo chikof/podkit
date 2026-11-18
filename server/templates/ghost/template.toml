@@ -1,0 +1,22 @@
+id = "ghost"
+name = "Ghost"
+description = "Ghost is an open-source publishing platform for blogs, newsletters, and paid memberships."
+category = "cms"
+tags = ["cms"]
+version = "6.0.0"
+logo = "@ghost"
+website = "https://ghost.org/"
+docs = "https://ghost.org/docs/"
+source = "https://github.com/TryGhost/Ghost"
+upstream = "Dokploy/templates@6313a2e blueprints/ghost"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+GHOST_HOST = "${main_domain}"
+
+[[config.domains]]
+serviceName = "ghost"
+port = 2368
+host = "${main_domain}"

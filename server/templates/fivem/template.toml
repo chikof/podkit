@@ -1,0 +1,31 @@
+id = "fivem"
+name = "FiveM Server"
+description = "A modded GTA V multiplayer server with optional txAdmin web interface for easy server management."
+category = "games"
+tags = [
+    "gaming",
+    "gta",
+    "multiplayer",
+    "server",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://fivem.net/"
+docs = "https://docs.fivem.net/docs/server-manual/"
+source = "https://github.com/spritsail/fivem"
+upstream = "Dokploy/templates@6313a2e blueprints/fivem"
+
+[variables]
+license_key = "${password:32}"
+main_domain = "${domain}"
+rcon_password = "${password:16}"
+
+[config.env]
+LICENSE_KEY = "${license_key}"
+NO_DEFAULT_CONFIG = "${NO_DEFAULT_CONFIG:-}"
+RCON_PASSWORD = "${rcon_password}"
+
+[[config.domains]]
+serviceName = "fivem"
+port = 40120
+host = "${main_domain}"

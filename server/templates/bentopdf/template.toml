@@ -1,0 +1,25 @@
+id = "bentopdf"
+name = "BentoPDF"
+description = "BentoPDF is a lightweight PDF conversion microservice that exposes a simple HTTP API for generating PDFs."
+category = "tools"
+tags = [
+    "pdf",
+    "converter",
+    "api",
+    "utility",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://bentopdf.com/"
+docs = "https://www.bentopdf.com/docs/"
+source = "https://github.com/alam00000/bentopdf/"
+upstream = "Dokploy/templates@6313a2e blueprints/bentopdf"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "bentopdf"
+port = 8080
+host = "${main_domain}"
+path = "/"

@@ -1,0 +1,27 @@
+id = "browserless"
+name = "Browserless"
+description = "Browserless allows remote clients to connect and execute headless work, all inside of docker. It supports the standard, unforked Puppeteer and Playwright libraries, as well offering REST-based APIs for common actions like data collection, PDF generation and more."
+category = "automation"
+tags = [
+    "browser",
+    "automation",
+]
+version = "2.23.0"
+logo = "logo.svg"
+website = "https://www.browserless.io/"
+docs = "https://docs.browserless.io/"
+source = "https://github.com/browserless/browserless"
+upstream = "Dokploy/templates@6313a2e blueprints/browserless"
+
+[variables]
+browserless_token = "${password:16}"
+main_domain = "${domain}"
+
+[config.env]
+BROWSERLESS_HOST = "${main_domain}"
+BROWSERLESS_TOKEN = "${browserless_token}"
+
+[[config.domains]]
+serviceName = "browserless"
+port = 3000
+host = "${main_domain}"

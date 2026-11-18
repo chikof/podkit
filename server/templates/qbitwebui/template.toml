@@ -1,0 +1,32 @@
+id = "qbitwebui"
+name = "qBittorrent Web UI"
+description = "A modern web interface for managing multiple qBittorrent instances. Built with React, Hono, and Bun."
+category = "media"
+tags = [
+    "torrent",
+    "download",
+    "media",
+    "qbittorrent",
+]
+version = "latest"
+logo = "@mono-qbitwebui"
+website = "https://github.com/Maciejonos/qbitwebui"
+docs = "https://github.com/Maciejonos/qbitwebui#readme"
+source = "https://github.com/Maciejonos/qbitwebui"
+upstream = "Dokploy/templates@6313a2e blueprints/qbitwebui"
+
+[variables]
+encryption_key = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+DATABASE_PATH = "/data/qbitwebui.db"
+ENCRYPTION_KEY = "${encryption_key}"
+PORT = "3000"
+SALT_PATH = "/data/.salt"
+
+[[config.domains]]
+serviceName = "qbitwebui"
+port = 3000
+host = "${main_domain}"
+path = "/"

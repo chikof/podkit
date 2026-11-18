@@ -1,0 +1,43 @@
+id = "legejo"
+name = "Legejo"
+description = "Legejo is a self-hosted library for your EPUB books, with a web reader, Kobo sync, OPDS for reading apps, KOReader progress sync, shared shelves and audiobooks. Runs on SQLite with no other services needed."
+category = "other"
+tags = [
+    "ebooks",
+    "library",
+    "reading",
+    "kobo",
+    "opds",
+]
+version = "1.33.0"
+logo = "logo.svg"
+website = "https://github.com/jularboolean/legejo"
+docs = "https://github.com/jularboolean/legejo#readme"
+source = "https://github.com/jularboolean/legejo"
+upstream = "Dokploy/templates@6313a2e blueprints/legejo"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password:24}"
+main_domain = "${domain}"
+
+[config.env]
+LEGEJO_ADMIN_PASSWORD = "${admin_password}"
+LEGEJO_ADMIN_USER = "admin"
+LEGEJO_AI_API_KEY = ""
+LEGEJO_FULLTEXT = ""
+LEGEJO_MAIL_FROM = ""
+LEGEJO_MCP = "false"
+LEGEJO_OIDC_CLIENT_ID = ""
+LEGEJO_OIDC_CLIENT_SECRET = ""
+LEGEJO_OIDC_ISSUER = ""
+LEGEJO_PUBLIC_URL = "http://${main_domain}"
+LEGEJO_SMTP_HOST = ""
+LEGEJO_SMTP_PASSWORD = ""
+LEGEJO_SMTP_PORT = "587"
+LEGEJO_SMTP_USER = ""
+
+[[config.domains]]
+serviceName = "legejo"
+port = 3000
+host = "${main_domain}"

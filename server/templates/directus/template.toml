@@ -1,0 +1,38 @@
+id = "directus"
+name = "Directus"
+description = "Directus is an open-source headless CMS that adds an API and admin app to your SQL database."
+category = "cms"
+tags = ["cms"]
+version = "12.1.1"
+logo = "@directus"
+website = "https://directus.io/"
+docs = "https://directus.com/docs/"
+source = "https://github.com/directus/directus"
+upstream = "Dokploy/templates@6313a2e blueprints/directus"
+reveal = ["admin_password"]
+
+[variables]
+admin_email = "${email}"
+admin_password = "${password:24}"
+db_name = "directus"
+db_password = "${password:32}"
+db_user = "directus"
+directus_secret = "${base64:64}"
+license_key = ""
+main_domain = "${domain}"
+public_url = "https://${main_domain}"
+
+[config.env]
+ADMIN_EMAIL = "${admin_email}"
+ADMIN_PASSWORD = "${admin_password}"
+DB_NAME = "${db_name}"
+DB_PASSWORD = "${db_password}"
+DB_USER = "${db_user}"
+DIRECTUS_SECRET = "${directus_secret}"
+LICENSE_KEY = "${license_key}"
+PUBLIC_URL = "${public_url}"
+
+[[config.domains]]
+serviceName = "directus"
+port = 8055
+host = "${main_domain}"

@@ -1,0 +1,31 @@
+id = "crawlab-master"
+name = "Crawlab (Master)"
+description = "Crawlab is a distributed web crawler admin platform supporting multiple programming languages and frameworks. This template deploys the master node with MongoDB."
+category = "other"
+tags = [
+    "crawler",
+    "scraping",
+    "distributed",
+    "self-hosted",
+]
+version = "latest"
+logo = "@mono-crawlab-master"
+website = "https://crawlab.cn"
+docs = "https://docs.crawlab.cn"
+source = "https://github.com/crawlab-team/crawlab"
+upstream = "Dokploy/templates@6313a2e blueprints/crawlab-master"
+
+[variables]
+CPU_LIMIT = "0.8"
+MONGO_PASSWORD = "${password:24}"
+MONGO_USERNAME = "crawlab"
+
+[config.env]
+CPU_LIMIT = "${CPU_LIMIT}"
+MONGO_PASSWORD = "${MONGO_PASSWORD}"
+MONGO_USERNAME = "${MONGO_USERNAME}"
+
+[[config.domains]]
+serviceName = "crawlab-master"
+port = 8080
+host = "${domain}"

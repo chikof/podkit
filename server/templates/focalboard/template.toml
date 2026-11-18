@@ -1,0 +1,27 @@
+id = "focalboard"
+name = "Focalboard"
+description = "Open source project management for technical teams"
+category = "other"
+tags = ["kanban"]
+version = "8.0.0"
+logo = "@focalboard"
+website = "https://focalboard.com"
+docs = "https://www.focalboard.com/docs/"
+source = "https://github.com/sysblok/focalboard"
+upstream = "Dokploy/templates@6313a2e blueprints/focalboard"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+DB_TYPE = "postgres"
+POSTGRES_DB = "focalboard"
+POSTGRES_PASSWORD = "${password:32}"
+POSTGRES_USER = "focalboard"
+VIRTUAL_HOST = "${main_domain}"
+VIRTUAL_PORT = "8000 # Do Not Alter"
+
+[[config.domains]]
+serviceName = "focalboard"
+port = 8000
+host = "${main_domain}"

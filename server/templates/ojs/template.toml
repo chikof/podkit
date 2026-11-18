@@ -1,0 +1,37 @@
+id = "ojs"
+name = "Open Journal Systems"
+description = "Open Journal Systems (OJS) is a journal management and publishing system that has been developed by the Public Knowledge Project through its federally funded efforts to expand and improve access to research."
+category = "other"
+tags = [
+    "publishing",
+    "journal",
+    "research",
+    "academic",
+]
+version = "3.3.0-21"
+logo = "logo.svg"
+website = "https://pkp.sfu.ca/ojs/"
+docs = "https://pkp.sfu.ca/ojs/docs/"
+source = "https://github.com/pkp/docker-ojs"
+upstream = "Dokploy/templates@6313a2e blueprints/ojs"
+
+[variables]
+main_domain = "${domain}"
+mysql_root_password = "${password:16}"
+ojs_db_password = "${password:16}"
+ojs_password = "${password:16}"
+
+[config.env]
+COMPOSE_PROJECT_NAME = "ojs"
+MYSQL_ROOT_PASSWORD = "${mysql_root_password}"
+OJS_CLI_INSTALL = "0"
+OJS_DB_DRIVER = "mysqli"
+OJS_DB_HOST = "db"
+OJS_DB_NAME = "ojs"
+OJS_DB_PASSWORD = "${ojs_db_password}"
+OJS_DB_USER = "ojs"
+
+[[config.domains]]
+serviceName = "ojs"
+port = 80
+host = "${main_domain}"

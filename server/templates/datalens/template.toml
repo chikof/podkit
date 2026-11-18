@@ -1,0 +1,27 @@
+id = "datalens"
+name = "DataLens"
+description = "A modern, scalable business intelligence and data visualization system."
+category = "analytics"
+tags = [
+    "analytics",
+    "self-hosted",
+    "bi",
+    "monitoring",
+]
+version = "1.23.0"
+logo = "logo.svg"
+website = "https://datalens.tech/"
+docs = "https://datalens.tech/docs/"
+source = "https://github.com/datalens-tech/datalens"
+upstream = "Dokploy/templates@6313a2e blueprints/datalens"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+HC = "1"
+
+[[config.domains]]
+serviceName = "datalens"
+port = 8080
+host = "${main_domain}"

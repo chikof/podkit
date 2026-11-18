@@ -17,7 +17,7 @@ use serde_json::json;
 use time::OffsetDateTime;
 use tower_cookies::Cookies;
 
-use super::cards::{in_flight, relative_time, resource_logo, status_line};
+use super::cards::{card_logo, in_flight, relative_time, status_line};
 use super::picker;
 use crate::auth::permission::{Action, Resource};
 use crate::environments;
@@ -25,9 +25,9 @@ use crate::ids::{EnvironmentId, ProjectId, TeamId};
 use crate::projects::overview::{self, EnvironmentView, Pick, ResourceCard, ResourceKind};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, Dismiss, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, SELECT, Size,
-	TabItem, Tone, Variant, badge, button_class, dialog, dialog_cancel, dialog_open_button,
-	dropdown_menu, empty_state, icon, menu_label, tabs,
+	BUTTON_DANGER, Dismiss, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, SELECT, Size, TabItem, Tone,
+	Variant, badge, button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu,
+	empty_state, icon, menu_label, tabs,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page, form_error};
@@ -132,6 +132,7 @@ fn resource_href(team: TeamId, project: ProjectId, card: &ResourceCard) -> Strin
 		ResourceKind::Application => app_url(team, project, crate::ids::ApplicationId(card.id)),
 		ResourceKind::Database => format!("{}/databases/{}", project_url(team, project), card.id),
 		ResourceKind::Model => format!("{}/models/{}", project_url(team, project), card.id),
+		ResourceKind::Stack => format!("{}/stacks/{}", project_url(team, project), card.id),
 	}
 }
 
@@ -145,14 +146,14 @@ fn tile(
 	let href = resource_href(ctx.team.id, project, card);
 	let when = match (card.kind, card.changed_at) {
 		(ResourceKind::Application, Some(at)) => Some(("Deployed ", at)),
-		(ResourceKind::Model, Some(at)) => Some(("Updated ", at)),
+		(ResourceKind::Model | ResourceKind::Stack, Some(at)) => Some(("Updated ", at)),
 		_ => None,
 	};
 	html! {
 		article class="ui-card ui-link-card flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-xs"
 			data-kind=(card.kind.slug()) data-resource=(card.id) {
 			div class="flex items-start gap-3" {
-				(resource_logo(card.mark, &card.name, LogoSize::Md))
+				(card_logo(card))
 				div class="flex min-w-0 flex-1 flex-col gap-1" {
 					div class="flex items-center justify-between gap-2" {
 						h3 class="min-w-0 truncate text-sm leading-tight font-semibold" {
@@ -253,7 +254,7 @@ fn filter_bar(view: &EnvironmentView, ctx: &TeamCtx, filter: &Filter) -> Markup 
 			select name="type" class={ (SELECT) " sm:w-44" } aria-label="Filter by type"
 				"data-bind:type" "data-on:change"=(get) {
 				button { selectedcontent {} }
-				@for (value, label) in [("all", "All types"), ("application", "Applications"), ("database", "Databases"), ("model", "Models")] {
+				@for (value, label) in [("all", "All types"), ("application", "Applications"), ("database", "Databases"), ("model", "Models"), ("stack", "Stacks")] {
 					option value=(value) selected[value == kind] { (label) }
 				}
 			}

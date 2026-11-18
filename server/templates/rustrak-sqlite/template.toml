@@ -1,0 +1,43 @@
+id = "rustrak-sqlite"
+name = "Rustrak (Full Stack SQLite)"
+description = "Self-hosted error tracking compatible with Sentry SDKs. Full stack with the Rust server, web dashboard and built-in SQLite storage. No external database required."
+category = "monitoring"
+tags = [
+    "monitoring",
+    "error-tracking",
+    "sentry",
+    "rust",
+    "observability",
+    "sqlite",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://rustrak.github.io/rustrak/"
+docs = "https://rustrak.github.io/rustrak/getting-started/overview"
+source = "https://github.com/rustrak/rustrak"
+upstream = "Dokploy/templates@6313a2e blueprints/rustrak-sqlite"
+reveal = ["admin_password"]
+
+[variables]
+admin_email = "${email}"
+admin_password = "${password:16}"
+api_domain = "${domain}"
+create_superuser = "${admin_email}:${admin_password}"
+main_domain = "${domain}"
+rustrak_api_url = "https://${api_domain}"
+session_secret_key = "${password:64}"
+
+[config.env]
+CREATE_SUPERUSER = "${create_superuser}"
+RUSTRAK_API_URL = "${rustrak_api_url}"
+SESSION_SECRET_KEY = "${session_secret_key}"
+
+[[config.domains]]
+serviceName = "rustrak-ui"
+port = 3000
+host = "${main_domain}"
+
+[[config.domains]]
+serviceName = "rustrak-server"
+port = 8080
+host = "${api_domain}"

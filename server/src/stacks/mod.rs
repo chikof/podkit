@@ -85,6 +85,9 @@ pub struct Stack {
 	pub compose_yaml: String,
 	/// age-encrypted JSON object of the stack's variables.
 	pub env: Vec<u8>,
+	/// age-encrypted JSON object of the files a template mounts (path to
+	/// content); empty when there are none.
+	pub files: Vec<u8>,
 	/// `raw`, or `template:<id>@<version>`.
 	pub source: String,
 	pub status: StackStatus,
@@ -110,7 +113,7 @@ pub struct StackService {
 }
 
 const STACK_COLUMNS: &str = "s.id, s.project_id, s.environment_id, s.server_id, s.name, s.slug,
-	s.compose_yaml, s.env, s.source, s.status, s.status_message, s.created_at, s.updated_at";
+	s.compose_yaml, s.env, s.files, s.source, s.status, s.status_message, s.created_at, s.updated_at";
 const SERVICE_COLUMNS: &str = "id, stack_id, name, image, container_id, status, status_message,
 	health, domain, domain_port, spec_hash";
 
@@ -124,14 +127,15 @@ pub struct NewStack {
 	pub slug: String,
 	pub compose_yaml: String,
 	pub env: Vec<u8>,
+	pub files: Vec<u8>,
 	pub source: String,
 }
 
 pub async fn insert(db: impl PgExecutor<'_>, new: NewStack) -> Result<Stack, sqlx::Error> {
 	sqlx::query_as::<_, Stack>(sqlx::AssertSqlSafe(format!(
 		"INSERT INTO stacks AS s
-			(id, project_id, environment_id, server_id, name, slug, compose_yaml, env, source)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			(id, project_id, environment_id, server_id, name, slug, compose_yaml, env, files, source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		RETURNING {STACK_COLUMNS}"
 	)))
 	.bind(new.id)
@@ -142,6 +146,7 @@ pub async fn insert(db: impl PgExecutor<'_>, new: NewStack) -> Result<Stack, sql
 	.bind(new.slug)
 	.bind(new.compose_yaml)
 	.bind(new.env)
+	.bind(new.files)
 	.bind(new.source)
 	.fetch_one(db)
 	.await
@@ -424,6 +429,21 @@ pub fn decrypt_env_blob(
 		.decrypt(blob)
 		.map_err(|e| format!("stack variables decrypt failed: {e}"))?;
 	serde_json::from_str(&json).map_err(|e| format!("stack variables are not valid json: {e}"))
+}
+
+/// The files a template mounts into the stack, decrypted; none for a raw
+/// stack.
+///
+/// # Errors
+/// The stored blob cannot be decrypted or parsed.
+pub fn decrypt_files(
+	secrets: &SecretBox,
+	stack: &Stack,
+) -> Result<BTreeMap<String, String>, String> {
+	if stack.files.is_empty() {
+		return Ok(BTreeMap::new());
+	}
+	decrypt_env_blob(secrets, &stack.files)
 }
 
 /// Encrypts the stack's variables for the `env` column.

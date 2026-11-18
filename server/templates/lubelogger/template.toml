@@ -1,0 +1,32 @@
+id = "lubelogger"
+name = "LubeLogger"
+description = "LubeLogger is a self-hosted vehicle maintenance and fuel mileage tracker for managing service records, reminders, fuel logs, and vehicle expenses."
+category = "other"
+tags = [
+    "vehicle",
+    "maintenance",
+    "fleet",
+    "self-hosted",
+]
+version = "v1.6.5"
+logo = "logo.png"
+website = "https://lubelogger.com/"
+docs = "https://docs.lubelogger.com/"
+source = "https://github.com/hargata/lubelog"
+upstream = "Dokploy/templates@6313a2e blueprints/lubelogger"
+
+[variables]
+lubelogger_domain = "https://${main_domain}"
+lubelogger_enable_auth = "false"
+lubelogger_locale = "en_US.UTF-8"
+main_domain = "${domain}"
+
+[config.env]
+LUBELOGGER_DOMAIN = "${lubelogger_domain}"
+LUBELOGGER_ENABLE_AUTH = "${lubelogger_enable_auth}"
+LUBELOGGER_LOCALE = "${lubelogger_locale}"
+
+[[config.domains]]
+serviceName = "lubelogger"
+port = 8080
+host = "${main_domain}"

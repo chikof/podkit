@@ -1,0 +1,24 @@
+id = "cyberchef"
+name = "CyberChef"
+description = "CyberChef is a web application for encryption, encoding, compression, and data analysis, developed by GCHQ."
+category = "security"
+tags = [
+    "security",
+    "encryption",
+    "data-analysis",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://gchq.github.io/CyberChef/"
+docs = "https://github.com/gchq/CyberChef/wiki"
+source = "https://github.com/gchq/CyberChef"
+upstream = "Dokploy/templates@6313a2e blueprints/cyberchef"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "cyberchef"
+port = 80
+host = "${main_domain}"
+path = "/"

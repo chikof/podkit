@@ -1,0 +1,33 @@
+id = "dumbbudget"
+name = "DumbBudget"
+description = "DumbBudget is a simple, self-hosted budget tracking service with PIN protection and no database required."
+category = "finance"
+tags = [
+    "budget",
+    "finance",
+    "self-hosted",
+    "simple",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://dumbware.io/DumbBudget"
+docs = "https://github.com/DumbWareio/DumbBudget/blob/main/README.md"
+source = "https://github.com/DumbWareio/DumbBudget"
+upstream = "Dokploy/templates@6313a2e blueprints/dumbbudget"
+
+[variables]
+dumbbudget_pin = "${password:16}"
+main_domain = "${domain}"
+
+[config.env]
+ALLOWED_ORIGINS = "${main_domain}"
+BASE_URL = "${main_domain}"
+CURRENCY = "USD"
+DUMBBUDGET_PIN = "${dumbbudget_pin}"
+INSTANCE_NAME = ""
+SITE_TITLE = "DumbBudget"
+
+[[config.domains]]
+serviceName = "dumbbudget"
+port = 3000
+host = "${main_domain}"

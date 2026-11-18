@@ -1,0 +1,29 @@
+id = "homebox"
+name = "Homebox"
+description = "Homebox is a self-hosted home inventory and organization app for tracking belongings, locations, and labels."
+category = "other"
+tags = [
+    "inventory",
+    "home",
+    "organization",
+    "self-hosted",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://homebox.software/"
+docs = "https://homebox.software/en/"
+source = "https://github.com/sysadminsmedia/homebox"
+upstream = "Dokploy/templates@6313a2e blueprints/homebox"
+
+[variables]
+api_key_pepper = "${password:64}"
+timezone = "Etc/UTC"
+
+[config.env]
+HBOX_AUTH_API_KEY_PEPPER = "${api_key_pepper}"
+TZ = "${timezone}"
+
+[[config.domains]]
+serviceName = "homebox"
+port = 7745
+host = "${domain}"

@@ -1,0 +1,41 @@
+id = "snipe-it"
+name = "Snipe-IT"
+description = "Snipe-IT is an open-source IT asset management system for tracking hardware, software licenses, and more."
+category = "productivity"
+tags = [
+    "asset-management",
+    "inventory",
+    "business",
+    "self-hosted",
+]
+version = "v8.5.0"
+logo = "logo.png"
+website = "https://snipeitapp.com/"
+docs = "https://snipe-it.readme.io/docs"
+source = "https://github.com/grokability/snipe-it"
+upstream = "Dokploy/templates@6313a2e blueprints/snipe-it"
+
+[variables]
+app_key = "${base64:32}"
+db_password = "${password:24}"
+main_domain = "${domain}"
+mysql_root_password = "${password:24}"
+
+[config.env]
+APP_FORCE_TLS = "true"
+APP_KEY = "base64:${app_key}"
+APP_LOCALE = "en-US"
+APP_TIMEZONE = "UTC"
+APP_TRUSTED_PROXIES = "172.0.0.0/8"
+APP_URL = "https://${main_domain}"
+DB_DATABASE = "snipeit"
+DB_PASSWORD = "${db_password}"
+DB_USERNAME = "snipeit"
+MAIL_FROM_ADDR = "snipe-it@${main_domain}"
+MYSQL_ROOT_PASSWORD = "${mysql_root_password}"
+SECURE_COOKIES = "true"
+
+[[config.domains]]
+serviceName = "snipe-it"
+port = 80
+host = "${main_domain}"

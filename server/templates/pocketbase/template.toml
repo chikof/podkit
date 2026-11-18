@@ -1,0 +1,30 @@
+id = "pocketbase"
+name = "PocketBase"
+description = "Open Source backend in 1 file"
+category = "database"
+tags = [
+    "backend",
+    "database",
+    "api",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://pocketbase.io/"
+docs = "https://pocketbase.io/docs/"
+source = "https://github.com/pocketbase/pocketbase"
+upstream = "Dokploy/templates@6313a2e blueprints/pocketbase"
+reveal = ["admin_password"]
+
+[variables]
+admin_email = "${email}"
+admin_password = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+ADMIN_EMAIL = "${admin_email}"
+ADMIN_PASSWORD = "${admin_password}"
+
+[[config.domains]]
+serviceName = "pocketbase"
+port = 8090
+host = "${main_domain}"

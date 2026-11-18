@@ -1,0 +1,23 @@
+id = "actualbudget"
+name = "Actual Budget"
+description = "A super fast and privacy-focused app for managing your finances."
+category = "finance"
+tags = [
+    "budgeting",
+    "finance",
+    "money",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://actualbudget.org"
+docs = "https://actualbudget.org/docs"
+source = "https://github.com/actualbudget/actual"
+upstream = "Dokploy/templates@6313a2e blueprints/actualbudget"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "actualbudget"
+port = 5006
+host = "${main_domain}"

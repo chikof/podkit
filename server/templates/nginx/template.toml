@@ -1,0 +1,19 @@
+id = "nginx"
+name = "Nginx"
+description = "Nginx is a high-performance web server and reverse proxy."
+category = "other"
+tags = ["webserver"]
+version = "latest"
+logo = "logo.png"
+website = "https://nginx.org/"
+docs = "https://nginx.org/en/docs/"
+source = "https://github.com/nginx/nginx"
+upstream = "Dokploy/templates@6313a2e blueprints/nginx"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "nginx"
+port = 80
+host = "${main_domain}"

@@ -1,0 +1,34 @@
+id = "mixpost"
+name = "Mixpost"
+description = "Mixpost is an open-source social media management tool that allows you to create, schedule, and publish posts across multiple social media platforms from a single interface."
+category = "productivity"
+tags = [
+    "social-media",
+    "management",
+    "scheduling",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://mixpost.app/"
+docs = "https://docs.mixpost.app/"
+source = "https://github.com/inovector/mixpost"
+upstream = "Dokploy/templates@6313a2e blueprints/mixpost"
+
+[variables]
+main_domain = "${domain}"
+mx_password = "${password:32}"
+
+[config.env]
+APP_DEBUG = "false"
+APP_DOMAIN = "${main_domain}"
+APP_KEY = "base64:ygtEUxD0fB3vUchihbUYqUzN57rfNi9ER5alJ98dWiA="
+APP_NAME = "Mixpost"
+APP_URL = "http://${APP_DOMAIN}"
+DB_DATABASE = "mixpost_db"
+DB_PASSWORD = "${mx_password}"
+DB_USERNAME = "mixpost_user"
+
+[[config.domains]]
+serviceName = "mixpost"
+port = 80
+host = "${main_domain}"

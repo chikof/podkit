@@ -1,0 +1,32 @@
+id = "louez"
+name = "Louez"
+description = "Open-source equipment rental platform: a branded booking storefront with live availability, plus a back office for reservations, customers, PDF contracts and revenue statistics. Ships with its database and a private image store, and installs its own schema on first boot."
+category = "productivity"
+tags = [
+    "rental",
+    "booking",
+    "reservations",
+    "inventory",
+    "ecommerce",
+    "business",
+]
+version = "2.1.0"
+logo = "logo.svg"
+website = "https://louez.io"
+docs = "https://github.com/Synapsr/Louez#readme"
+source = "https://github.com/Synapsr/Louez"
+upstream = "Dokploy/templates@6313a2e blueprints/louez"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+DB_PASSWORD = "${password:32}"
+DB_ROOT_PASSWORD = "${password:32}"
+LOUEZ_HOST = "${main_domain}"
+MINIO_PASSWORD = "${password:32}"
+
+[[config.domains]]
+serviceName = "louez"
+port = 3000
+host = "${main_domain}"

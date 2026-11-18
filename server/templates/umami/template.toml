@@ -1,0 +1,23 @@
+id = "umami"
+name = "Umami"
+description = "Umami is a simple website analytics tool and an alternative to Google Analytics."
+category = "analytics"
+tags = ["analytics"]
+version = "v3.4.1"
+logo = "logo.png"
+website = "https://umami.is"
+docs = "https://umami.is/docs"
+source = "https://github.com/umami-software/umami"
+upstream = "Dokploy/templates@6313a2e blueprints/umami"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+APP_SECRET = "${base64:64}"
+DB_PASSWORD = "${password:32}"
+
+[[config.domains]]
+serviceName = "umami"
+port = 3000
+host = "${main_domain}"

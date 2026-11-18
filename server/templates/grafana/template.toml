@@ -1,0 +1,19 @@
+id = "grafana"
+name = "Grafana"
+description = "Grafana is an open-source dashboard tool for monitoring and visualizing data."
+category = "monitoring"
+tags = ["monitoring"]
+version = "12.4"
+logo = "logo.svg"
+website = "https://grafana.com/"
+docs = "https://grafana.com/docs/"
+source = "https://github.com/grafana/grafana"
+upstream = "Dokploy/templates@6313a2e blueprints/grafana"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "grafana"
+port = 3000
+host = "${main_domain}"

@@ -1,0 +1,35 @@
+id = "limesurvey"
+name = "LimeSurvey"
+description = "LimeSurvey is an open-source research platform for building and running online surveys."
+category = "other"
+tags = [
+    "forms",
+    "questionnaire",
+    "survey",
+]
+version = "6.17.2+260507"
+logo = "logo.svg"
+website = "https://www.limesurvey.org"
+docs = "https://www.limesurvey.org/manual/"
+source = "https://github.com/LimeSurvey/LimeSurvey"
+upstream = "Dokploy/templates@6313a2e blueprints/limesurvey"
+reveal = ["admin_password"]
+
+[variables]
+admin_email = "${email}"
+admin_password = "${password:32}"
+main_domain = "${domain}"
+mysql_root_password = "${password:32}"
+mysql_user_password = "${password:32}"
+
+[config.env]
+ADMIN_EMAIL = "${admin_email}"
+ADMIN_PASSWORD = "${admin_password}"
+MYSQL_PASSWORD = "${mysql_user_password}"
+MYSQL_ROOT_PASSWORD = "${mysql_root_password}"
+PUBLIC_URL = "http://${main_domain}"
+
+[[config.domains]]
+serviceName = "limesurvey"
+port = 8080
+host = "${main_domain}"

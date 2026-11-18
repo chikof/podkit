@@ -34,6 +34,8 @@ pub struct CreateInput {
 	pub name: String,
 	pub compose_yaml: String,
 	pub env: BTreeMap<String, String>,
+	/// Files a template mounts, by path relative to the compose file.
+	pub files: BTreeMap<String, String>,
 	pub server_id: ServerId,
 	/// The project's first environment when `None`.
 	pub environment_id: Option<EnvironmentId>,
@@ -122,10 +124,10 @@ pub fn check(
 	stack: StackId,
 	yaml: &str,
 	env: &BTreeMap<String, String>,
+	files: &BTreeMap<String, String>,
 	domains: &BTreeMap<String, Domain>,
 ) -> AppResult<(Compose, Plan)> {
-	let files = BTreeMap::new();
-	let compose = compose::parse(yaml, &Inputs { env, files: &files })
+	let compose = compose::parse(yaml, &Inputs { env, files })
 		.map_err(|issues| unprocessable("the compose file uses unsupported features", &issues))?;
 	let plan = translate::plan(
 		&compose,
@@ -137,6 +139,34 @@ pub fn check(
 	)
 	.map_err(|issues| unprocessable("the stack cannot be deployed as configured", &issues))?;
 	Ok((compose, plan))
+}
+
+/// Checks a compose file as a new stack of `project` would be checked, creating
+/// nothing: the warnings and the variables it lacks when it would deploy, the offending keys when not. The
+/// web UI's validation panel. Caller must hold `create stack`.
+///
+/// # Errors
+/// `Unprocessable` listing each refused key with its service and path.
+pub async fn validate(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	yaml: &str,
+	env: &BTreeMap<String, String>,
+) -> AppResult<(Vec<Warning>, Vec<String>)> {
+	authorize(&s.db, user, team, Action::Create, Resource::Stack).await?;
+	scope::project(&s.db, team, project).await?;
+	validate_env(env)?;
+	let (compose, _) = check(
+		s,
+		StackId::generate(),
+		yaml,
+		env,
+		&BTreeMap::new(),
+		&BTreeMap::new(),
+	)?;
+	Ok((compose.warnings, compose.missing_vars.into_iter().collect()))
 }
 
 fn validate_name(name: &str) -> AppResult<String> {
@@ -191,6 +221,13 @@ fn images_of(compose: &Compose) -> BTreeMap<String, String> {
 		.collect()
 }
 
+fn files_of(s: &AppState, stack: &Stack) -> AppResult<BTreeMap<String, String>> {
+	stacks::decrypt_files(&s.secrets, stack).map_err(|e| {
+		tracing::error!(stack = stack.id.0, "{e}");
+		ServerError::Internal
+	})
+}
+
 fn env_of(s: &AppState, stack: &Stack) -> AppResult<BTreeMap<String, String>> {
 	stacks::decrypt_env(&s.secrets, stack).map_err(|e| {
 		tracing::error!(stack = stack.id.0, "{e}");
@@ -241,7 +278,14 @@ pub async fn create(
 	validate_env(&body.env)?;
 
 	let id = StackId::generate();
-	let (compose, _) = check(s, id, &body.compose_yaml, &body.env, &BTreeMap::new())?;
+	let (compose, _) = check(
+		s,
+		id,
+		&body.compose_yaml,
+		&body.env,
+		&body.files,
+		&BTreeMap::new(),
+	)?;
 	let source = body.source.unwrap_or_else(|| "raw".to_string());
 	if source.len() > 120 {
 		return Err(ServerError::Validation("source is too long".to_string()));
@@ -258,6 +302,11 @@ pub async fn create(
 			slug,
 			compose_yaml: body.compose_yaml,
 			env: stacks::encrypt_env(&s.secrets, &body.env)?,
+			files: if body.files.is_empty() {
+				Vec::new()
+			} else {
+				stacks::encrypt_env(&s.secrets, &body.files)?
+			},
 			source,
 		},
 	)
@@ -320,11 +369,12 @@ pub async fn detail(
 		tracing::debug!(stack = stack.id.0, "stack status refresh timed out");
 	}
 	let env = env_of(s, &stack)?;
+	let files = files_of(s, &stack)?;
 	let (warnings, missing_vars) = match compose::parse(
 		&stack.compose_yaml,
 		&Inputs {
 			env: &env,
-			files: &BTreeMap::new(),
+			files: &files,
 		},
 	) {
 		Ok(c) => (c.warnings, c.missing_vars.into_iter().collect()),
@@ -439,7 +489,8 @@ pub async fn update(
 	validate_env(&env)?;
 
 	let services = stacks::list_services(&s.db, stack.id).await?;
-	let (compose, _) = check(s, stack.id, &yaml, &env, &domains_of(&services))?;
+	let files = files_of(s, &stack)?;
+	let (compose, _) = check(s, stack.id, &yaml, &env, &files, &domains_of(&services))?;
 
 	let updated = stacks::update(
 		&s.db,
@@ -482,11 +533,13 @@ pub async fn deploy(
 	}
 	let env = env_of(s, &stack)?;
 	let services = stacks::list_services(&s.db, stack.id).await?;
+	let files = files_of(s, &stack)?;
 	check(
 		s,
 		stack.id,
 		&stack.compose_yaml,
 		&env,
+		&files,
 		&domains_of(&services),
 	)?;
 
@@ -602,7 +655,8 @@ pub async fn set_domain(
 			port,
 		},
 	);
-	check(s, stack.id, &stack.compose_yaml, &env, &domains)?;
+	let files = files_of(s, &stack)?;
+	check(s, stack.id, &stack.compose_yaml, &env, &files, &domains)?;
 
 	stacks::set_domain(&s.db, svc.id, Some(&host), port.map(i32::from))
 		.await

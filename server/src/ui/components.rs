@@ -24,6 +24,7 @@ mod dialog;
 mod empty_state;
 mod field;
 mod icon;
+mod image_logo;
 mod kbd;
 mod log_viewer;
 mod logo;
@@ -57,6 +58,7 @@ pub use field::{
 	select_field, switch_field, text_field, textarea_field,
 };
 pub use icon::{icon, icon_with};
+pub use image_logo::{Priority, image_logo};
 pub use kbd::{kbd, kbd_combo};
 pub use log_viewer::log_viewer;
 pub use logo::{LogoSize, logo};

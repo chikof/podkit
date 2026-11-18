@@ -1,0 +1,37 @@
+id = "immich"
+name = "Immich"
+description = "Immich is a photo and video backup app and an alternative to Google Photos."
+category = "media"
+tags = [
+    "photos",
+    "videos",
+    "backup",
+    "media",
+]
+version = "v3.0.2"
+logo = "logo.svg"
+website = "https://immich.app/"
+docs = "https://immich.app/docs/overview/introduction"
+source = "https://github.com/immich-app/immich"
+upstream = "Dokploy/templates@6313a2e blueprints/immich"
+
+[variables]
+db_password = "${password}"
+db_user = "immich"
+main_domain = "${domain}"
+
+[config.env]
+DB_DATABASE_NAME = "immich"
+DB_HOSTNAME = "immich-database"
+DB_PASSWORD = "${db_password}"
+DB_PORT = "5432"
+DB_USERNAME = "${db_user}"
+REDIS_DBINDEX = "0"
+REDIS_HOSTNAME = "immich-redis"
+REDIS_PORT = "6379"
+TZ = "UTC"
+
+[[config.domains]]
+serviceName = "immich-server"
+port = 2283
+host = "${main_domain}"

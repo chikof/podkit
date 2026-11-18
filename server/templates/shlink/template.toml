@@ -1,0 +1,33 @@
+id = "shlink"
+name = "Shlink"
+description = "URL shortener that can be used to serve shortened URLs under your own domain."
+category = "other"
+tags = [
+    "sharing",
+    "shortener",
+    "url",
+]
+version = "stable"
+logo = "logo.svg"
+website = "https://shlink.io"
+docs = "https://shlink.io/documentation"
+source = "https://github.com/shlinkio/shlink"
+upstream = "Dokploy/templates@6313a2e blueprints/shlink"
+
+[variables]
+initial_api_key = "${password:30}"
+main_domain = "${domain}"
+
+[config.env]
+DEFAULT_DOMAIN = "${main_domain}"
+INITIAL_API_KEY = "${initial_api_key}"
+
+[[config.domains]]
+serviceName = "shlink-web"
+port = 8080
+host = "web-${main_domain}"
+
+[[config.domains]]
+serviceName = "shlink"
+port = 8080
+host = "${main_domain}"

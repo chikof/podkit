@@ -214,6 +214,7 @@ async fn create(
 		name: body.name,
 		compose_yaml: body.compose_yaml,
 		env: body.env,
+		files: std::collections::BTreeMap::new(),
 		server_id: body.server_id,
 		environment_id: body.environment_id,
 		source: None,

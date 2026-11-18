@@ -1,0 +1,32 @@
+id = "invoiceshelf"
+name = "InvoiceShelf"
+description = "InvoiceShelf is a self-hosted open source invoicing system for freelancers and small businesses."
+category = "productivity"
+tags = [
+    "invoice",
+    "business",
+    "finance",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://invoiceshelf.com"
+docs = "https://github.com/InvoiceShelf/invoiceshelf#readme"
+source = "https://github.com/InvoiceShelf/invoiceshelf"
+upstream = "Dokploy/templates@6313a2e blueprints/invoiceshelf"
+
+[variables]
+db_database = "invoiceshelf"
+db_password = "${password}"
+db_username = "invoiceshelf"
+main_domain = "${domain}"
+
+[config.env]
+DB_DATABASE = "${db_database}"
+DB_PASSWORD = "${db_password}"
+DB_USERNAME = "${db_username}"
+INVOICESHELF_HOST = "${main_domain}"
+
+[[config.domains]]
+serviceName = "invoiceshelf-app"
+port = 8080
+host = "${main_domain}"

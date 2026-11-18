@@ -1,0 +1,26 @@
+id = "goatcounter"
+name = "GoatCounter"
+description = "GoatCounter is an open source web analytics platform available as a free donation-supported hosted service or self-hosted app. It aims to offer easy to use and meaningful privacy-friendly web analytics as an alternative to Google Analytics or Matomo."
+category = "analytics"
+tags = [
+    "analytics",
+    "privacy",
+]
+version = "2.7.0"
+logo = "logo.svg"
+website = "https://www.goatcounter.com/"
+docs = "https://www.goatcounter.com/help/"
+source = "https://github.com/arp242/goatcounter"
+upstream = "Dokploy/templates@6313a2e blueprints/goatcounter"
+
+[variables]
+db_password = "${password:32}"
+goatcounter_domain = "${domain}"
+
+[config.env]
+DB_PASSWORD = "${db_password}"
+
+[[config.domains]]
+serviceName = "goatcounter"
+port = 8080
+host = "${goatcounter_domain}"

@@ -1,0 +1,27 @@
+id = "kavita"
+name = "Kavita"
+description = "Kavita is a digital library server for comics, manga, and ebooks."
+category = "media"
+tags = [
+    "media",
+    "ebooks",
+    "comics",
+    "library",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://www.kavitareader.com/"
+docs = "https://wiki.kavitareader.com/installation/docker/"
+source = "https://github.com/Kareadita/Kavita"
+upstream = "Dokploy/templates@6313a2e blueprints/kavita"
+
+[variables]
+timezone = "Etc/UTC"
+
+[config.env]
+TZ = "${timezone}"
+
+[[config.domains]]
+serviceName = "kavita"
+port = 5000
+host = "${domain}"
