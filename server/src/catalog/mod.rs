@@ -13,7 +13,7 @@
 pub mod fit;
 mod routes;
 pub mod search;
-mod service;
+pub mod service;
 
 #[cfg(test)]
 mod api_tests;
@@ -135,7 +135,6 @@ pub struct Recipe {
 
 impl Recipe {
 	/// The download this recipe needs.
-	#[allow(dead_code, reason = "AI 07 turns a recipe into a model download")]
 	#[must_use]
 	pub fn selection(&self) -> Selection {
 		Selection {

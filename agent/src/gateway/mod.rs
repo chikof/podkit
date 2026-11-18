@@ -10,6 +10,7 @@
 //! --gateway`), because on rootless Podman only containers on the `podkit`
 //! network can reach the engines. See `docs/gateway.md`.
 
+pub mod chat;
 mod meter;
 pub mod sidecar;
 

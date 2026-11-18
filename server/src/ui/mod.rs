@@ -33,6 +33,7 @@ mod layout;
 // Used by the pages of cards 05-09; until then only tests call them.
 #[allow(dead_code)]
 mod live;
+mod models;
 mod projects;
 mod sse;
 #[allow(dead_code)]
@@ -69,6 +70,7 @@ pub fn router() -> Router<AppState> {
 		.route("/static/app.css", get(app_css))
 		.merge(teams::router())
 		.merge(projects::router())
+		.merge(models::router())
 		.merge(test_routes())
 		.layer(middleware::from_fn(origin_guard))
 }

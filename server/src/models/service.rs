@@ -587,6 +587,47 @@ pub async fn logs(
 	client.stream(Method::GET, &path, None::<&()>).await
 }
 
+/// Every model of the team, in any project, oldest first.
+///
+/// # Errors
+/// `Forbidden` without `read model`.
+pub async fn list_team(s: &AppState, user: UserId, team: TeamId) -> AppResult<Vec<Model>> {
+	authorize(&s.db, user, team, Action::Read, Resource::Model).await?;
+	Ok(models::list_by_team(&s.db, team).await?)
+}
+
+/// Where a model's log comes from.
+pub enum LogSource {
+	/// The engine container's output, live.
+	Container(BoxStream<'static, Result<Event, ServerError>>),
+	/// The start job's log: the deploy, before there is a container.
+	Job(Option<crate::ids::JobId>),
+}
+
+/// The best log to show for a model: the engine's own once it has a
+/// container, the start job's before.
+///
+/// # Errors
+/// `Forbidden` without `read model`, `NotFound` for another team's model.
+pub async fn log_source(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	id: ModelId,
+	tail: u32,
+) -> AppResult<LogSource> {
+	authorize(&s.db, user, team, Action::Read, Resource::Model).await?;
+	let model = scope::model(&s.db, team, project, id).await?;
+	if model.container_id.is_some() {
+		return Ok(LogSource::Container(
+			logs(s, user, team, project, id, tail, true).await?,
+		));
+	}
+	let job = crate::jobs::latest_for(&s.db, JobKind::ModelStart, model.id.0).await?;
+	Ok(LogSource::Job(job.map(|j| j.id)))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;

@@ -10,6 +10,7 @@
 //!
 //! Routes live under `/api/v1/teams/{team}/projects/{project}/applications/{app}/models`.
 
+pub mod playground;
 mod routes;
 pub mod service;
 
@@ -286,8 +287,25 @@ struct KeyedModel {
 	engine: EngineKind,
 }
 
+/// The playground keys of the models on `server`, with the model each opens.
+///
+/// # Errors
+/// The database fails.
+async fn playground_rows(db: &PgPool, server: ServerId) -> Result<Vec<KeyedModel>, sqlx::Error> {
+	sqlx::query_as(
+		"SELECT k.key_hash, m.id, m.served_name, m.slug, m.port, m.engine
+		FROM playground_keys k JOIN models m ON m.id = k.model_id
+		WHERE m.server_id = $1
+		ORDER BY k.key_hash",
+	)
+	.bind(server)
+	.fetch_all(db)
+	.await
+}
+
 /// What the agent of `server` should enforce: every key of an application on
-/// the server, with the models of its links that run there.
+/// the server, with the models of its links that run there, and the
+/// playground keys of its models.
 ///
 /// # Errors
 /// The database fails.
@@ -331,6 +349,15 @@ pub async fn build_config(db: &PgPool, server: ServerId) -> Result<GatewayConfig
 			.bind(server)
 			.fetch_all(db)
 			.await?;
+	for row in playground_rows(db, server).await? {
+		keys.entry(row.key_hash).or_default().push(GatewayModel {
+			model_id: row.id.0,
+			name: row.served_name,
+			host: crate::models::alias(&row.slug),
+			port: u16::try_from(row.port).unwrap_or(0),
+			stream_usage: row.engine != EngineKind::Custom,
+		});
+	}
 	Ok(GatewayConfig {
 		keys: keys
 			.into_iter()
@@ -379,11 +406,15 @@ async fn record_usage(db: &PgPool, row: &GatewayUsage) -> Result<(), sqlx::Error
 	sqlx::query(
 		"INSERT INTO model_usage
 			(key_hash, model_id, hour, application_id, team_id, requests, input_tokens, output_tokens)
-		SELECT $1, $2, TIMESTAMPTZ 'epoch' + $3::bigint * INTERVAL '1 second', k.application_id, p.team_id, $4, $5, $6
+		SELECT $1, $2, TIMESTAMPTZ 'epoch' + $3::bigint * INTERVAL '1 second', k.application_id,
+			COALESCE(p.team_id, pp.team_id), $4, $5, $6
 		FROM (SELECT 1) AS one
 		LEFT JOIN gateway_keys k ON k.key_hash = $1
 		LEFT JOIN applications a ON a.id = k.application_id
 		LEFT JOIN projects p ON p.id = a.project_id
+		LEFT JOIN playground_keys pk ON pk.key_hash = $1
+		LEFT JOIN models pm ON pm.id = pk.model_id
+		LEFT JOIN projects pp ON pp.id = pm.project_id
 		ON CONFLICT (key_hash, model_id, hour) DO UPDATE SET
 			requests = model_usage.requests + EXCLUDED.requests,
 			input_tokens = model_usage.input_tokens + EXCLUDED.input_tokens,
@@ -407,7 +438,9 @@ async fn record_usage(db: &PgPool, row: &GatewayUsage) -> Result<(), sqlx::Error
 pub async fn sync(state: &AppState, server: ServerId, client: &AgentClient) {
 	let keyed = sqlx::query_scalar::<_, bool>(
 		"SELECT EXISTS (SELECT 1 FROM gateway_keys k JOIN applications a ON a.id = k.application_id
-		WHERE a.server_id = $1)",
+		WHERE a.server_id = $1)
+		OR EXISTS (SELECT 1 FROM playground_keys k JOIN models m ON m.id = k.model_id
+		WHERE m.server_id = $1)",
 	)
 	.bind(server)
 	.fetch_one(&state.db)
@@ -442,4 +475,91 @@ pub async fn push_after_change(state: &AppState, server: ServerId) {
 	if let Err(e) = result {
 		tracing::warn!(%server, error = %e, "could not push the gateway routing table; the next sync will");
 	}
+}
+
+/// An application a model is linked to.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct LinkedApp {
+	pub application_id: ApplicationId,
+	pub name: String,
+	pub is_default: bool,
+}
+
+/// The applications linked to `model`, by name.
+pub async fn apps_for_model(
+	db: impl PgExecutor<'_>,
+	model: ModelId,
+) -> Result<Vec<LinkedApp>, sqlx::Error> {
+	sqlx::query_as(
+		"SELECT a.id AS application_id, a.name, am.is_default
+		FROM application_models am JOIN applications a ON a.id = am.application_id
+		WHERE am.model_id = $1 ORDER BY a.name, a.id",
+	)
+	.bind(model)
+	.fetch_all(db)
+	.await
+}
+
+/// Applications of `project` on `server` that `model` is not linked to yet.
+pub async fn linkable_apps(
+	db: impl PgExecutor<'_>,
+	project: crate::ids::ProjectId,
+	server: ServerId,
+	model: ModelId,
+) -> Result<Vec<(ApplicationId, String)>, sqlx::Error> {
+	sqlx::query_as(
+		"SELECT a.id, a.name FROM applications a
+		WHERE a.project_id = $1 AND a.server_id = $2
+			AND NOT EXISTS (SELECT 1 FROM application_models am
+				WHERE am.application_id = a.id AND am.model_id = $3)
+		ORDER BY a.name, a.id",
+	)
+	.bind(project)
+	.bind(server)
+	.bind(model)
+	.fetch_all(db)
+	.await
+}
+
+/// What one key used of a model.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct KeyUsage {
+	/// The application the key belongs to, `Playground`, or `Removed key`.
+	pub key_label: String,
+	pub requests_24h: i64,
+	pub input_24h: i64,
+	pub output_24h: i64,
+	pub requests_7d: i64,
+	pub input_7d: i64,
+	pub output_7d: i64,
+}
+
+/// Usage of `model` over the last 7 days, per key, busiest first. Counters
+/// are kept per hour, so "24 h" means the last 24 hourly buckets.
+pub async fn usage_for_model(
+	db: impl PgExecutor<'_>,
+	model: ModelId,
+) -> Result<Vec<KeyUsage>, sqlx::Error> {
+	sqlx::query_as(
+		"SELECT COALESCE(a.name, CASE WHEN pk.model_id IS NULL THEN 'Removed key' ELSE 'Playground' END)
+				AS key_label,
+			COALESCE(SUM(mu.requests) FILTER (WHERE mu.hour >= NOW() - INTERVAL '24 hours'), 0)::BIGINT
+				AS requests_24h,
+			COALESCE(SUM(mu.input_tokens) FILTER (WHERE mu.hour >= NOW() - INTERVAL '24 hours'), 0)::BIGINT
+				AS input_24h,
+			COALESCE(SUM(mu.output_tokens) FILTER (WHERE mu.hour >= NOW() - INTERVAL '24 hours'), 0)::BIGINT
+				AS output_24h,
+			COALESCE(SUM(mu.requests), 0)::BIGINT AS requests_7d,
+			COALESCE(SUM(mu.input_tokens), 0)::BIGINT AS input_7d,
+			COALESCE(SUM(mu.output_tokens), 0)::BIGINT AS output_7d
+		FROM model_usage mu
+		LEFT JOIN applications a ON a.id = mu.application_id
+		LEFT JOIN playground_keys pk ON pk.key_hash = mu.key_hash
+		WHERE mu.model_id = $1 AND mu.hour >= NOW() - INTERVAL '7 days'
+		GROUP BY mu.key_hash, a.name, pk.model_id
+		ORDER BY requests_7d DESC, key_label",
+	)
+	.bind(model)
+	.fetch_all(db)
+	.await
 }

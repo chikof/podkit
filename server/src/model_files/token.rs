@@ -11,7 +11,7 @@ use sqlx::PgExecutor;
 use crate::auth::AuthUser;
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
-use crate::ids::TeamId;
+use crate::ids::{TeamId, UserId};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -61,27 +61,22 @@ async fn configured(db: impl PgExecutor<'_>, team: TeamId) -> Result<bool, sqlx:
 		.await
 }
 
-/// Whether the team has a token; caller must hold `read model_file`.
-async fn status(
-	State(s): State<AppState>,
-	user: AuthUser,
-	Path(team): Path<TeamId>,
-) -> AppResult<Json<TokenStatus>> {
-	authorize(&s.db, user.id, team, Action::Read, Resource::ModelFile).await?;
-	Ok(Json(TokenStatus {
-		configured: configured(&s.db, team).await?,
-	}))
+/// Whether the team has a token.
+///
+/// # Errors
+/// `Forbidden` without `read model_file`.
+pub async fn is_configured(s: &AppState, user: UserId, team: TeamId) -> AppResult<bool> {
+	authorize(&s.db, user, team, Action::Read, Resource::ModelFile).await?;
+	Ok(configured(&s.db, team).await?)
 }
 
-/// Stores or replaces the token; caller must hold `update model_file`.
-async fn set(
-	State(s): State<AppState>,
-	user: AuthUser,
-	Path(team): Path<TeamId>,
-	Json(body): Json<SetTokenRequest>,
-) -> AppResult<Json<TokenStatus>> {
-	authorize(&s.db, user.id, team, Action::Update, Resource::ModelFile).await?;
-	let token = body.token.trim();
+/// Stores or replaces the token. The token is never read back out.
+///
+/// # Errors
+/// `Forbidden` without `update model_file`; `Validation` for a malformed token.
+pub async fn store(s: &AppState, user: UserId, team: TeamId, token: &str) -> AppResult<()> {
+	authorize(&s.db, user, team, Action::Update, Resource::ModelFile).await?;
+	let token = token.trim();
 	if token.is_empty()
 		|| token.len() > 512
 		|| token.chars().any(|c| c.is_control() || c.is_whitespace())
@@ -100,20 +95,50 @@ async fn set(
 	.bind(blob)
 	.execute(&s.db)
 	.await?;
+	Ok(())
+}
+
+/// Removes the token. Removing a token that is not set is fine.
+///
+/// # Errors
+/// `Forbidden` without `update model_file`.
+pub async fn clear(s: &AppState, user: UserId, team: TeamId) -> AppResult<()> {
+	authorize(&s.db, user, team, Action::Update, Resource::ModelFile).await?;
+	sqlx::query("DELETE FROM huggingface_tokens WHERE team_id = $1")
+		.bind(team)
+		.execute(&s.db)
+		.await?;
+	Ok(())
+}
+
+/// Whether the team has a token; caller must hold `read model_file`.
+async fn status(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path(team): Path<TeamId>,
+) -> AppResult<Json<TokenStatus>> {
+	Ok(Json(TokenStatus {
+		configured: is_configured(&s, user.id, team).await?,
+	}))
+}
+
+/// Stores or replaces the token; caller must hold `update model_file`.
+async fn set(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path(team): Path<TeamId>,
+	Json(body): Json<SetTokenRequest>,
+) -> AppResult<Json<TokenStatus>> {
+	store(&s, user.id, team, &body.token).await?;
 	Ok(Json(TokenStatus { configured: true }))
 }
 
-/// Removes the token; caller must hold `update model_file`. Removing a token
-/// that is not set is fine.
+/// Removes the token; caller must hold `update model_file`.
 async fn remove(
 	State(s): State<AppState>,
 	user: AuthUser,
 	Path(team): Path<TeamId>,
 ) -> AppResult<Json<TokenStatus>> {
-	authorize(&s.db, user.id, team, Action::Update, Resource::ModelFile).await?;
-	sqlx::query("DELETE FROM huggingface_tokens WHERE team_id = $1")
-		.bind(team)
-		.execute(&s.db)
-		.await?;
+	clear(&s, user.id, team).await?;
 	Ok(Json(TokenStatus { configured: false }))
 }

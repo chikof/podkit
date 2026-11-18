@@ -42,3 +42,51 @@ pub async fn hardware(
 		))),
 	}
 }
+
+/// A server of the team, with what it last reported.
+pub struct TeamServer {
+	pub id: ServerId,
+	pub name: String,
+	pub hardware: Option<Hardware>,
+}
+
+/// The team's servers with their hardware, for rating recipes against each.
+///
+/// # Errors
+/// `Forbidden` without `read server`.
+pub async fn team_servers(s: &AppState, user: UserId, team: TeamId) -> AppResult<Vec<TeamServer>> {
+	authorize(&s.db, user, team, Action::Read, Resource::Server).await?;
+	let mut servers: Vec<_> = crate::servers::list_by_team(&s.db, team)
+		.await?
+		.into_iter()
+		.map(|server| TeamServer {
+			id: server.id,
+			name: server.name,
+			hardware: server.hardware.map(|h| h.0),
+		})
+		.collect();
+	servers.sort_by_key(|server| server.id.0);
+	Ok(servers)
+}
+
+/// Searches Hugging Face for GGUF repos, sized against `hardware`.
+///
+/// # Errors
+/// `Forbidden` without `read model_file`; `Validation` for a query that is
+/// empty, too long or has control characters; `HuggingFaceUnavailable`.
+pub async fn hf_search(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	query: &str,
+	hardware: Option<&Hardware>,
+) -> AppResult<Vec<super::search::Hit>> {
+	authorize(&s.db, user, team, Action::Read, Resource::ModelFile).await?;
+	let query = query.trim();
+	if query.is_empty() || query.chars().count() > 100 || query.chars().any(char::is_control) {
+		return Err(ServerError::Validation(
+			"Search for 1 to 100 characters.".to_owned(),
+		));
+	}
+	super::search::search(s, query, super::search::DEFAULT_LIMIT, hardware).await
+}

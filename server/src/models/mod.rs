@@ -274,3 +274,22 @@ pub async fn enqueue(state: &AppState, kind: JobKind, model: &Model) -> Result<(
 	.await?;
 	Ok(())
 }
+
+/// Every model of `team`, in any project, oldest first.
+pub async fn list_by_team(
+	db: impl PgExecutor<'_>,
+	team: crate::ids::TeamId,
+) -> Result<Vec<Model>, sqlx::Error> {
+	sqlx::query_as(sqlx::AssertSqlSafe(format!(
+		"SELECT {} FROM models m JOIN projects p ON p.id = m.project_id
+		WHERE p.team_id = $1 ORDER BY m.id",
+		COLUMNS
+			.split(", ")
+			.map(|c| format!("m.{c}"))
+			.collect::<Vec<_>>()
+			.join(", ")
+	)))
+	.bind(team)
+	.fetch_all(db)
+	.await
+}

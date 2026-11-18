@@ -119,7 +119,7 @@ impl Permissions {
 
 const ACTIONS: [Action; 4] = [Action::Create, Action::Read, Action::Update, Action::Delete];
 
-const RESOURCES: [Resource; 12] = [
+const RESOURCES: [Resource; 14] = [
 	Resource::Team,
 	Resource::Project,
 	Resource::Membership,
@@ -132,6 +132,8 @@ const RESOURCES: [Resource; 12] = [
 	Resource::Database,
 	Resource::Volume,
 	Resource::Backup,
+	Resource::ModelFile,
+	Resource::Model,
 ];
 
 /// Loads `user`'s permission set in `team` with one query. A non-member gets an

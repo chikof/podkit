@@ -9,6 +9,7 @@
 pub mod hf;
 mod routes;
 pub mod run;
+pub mod service;
 pub mod token;
 
 use sqlx::PgExecutor;

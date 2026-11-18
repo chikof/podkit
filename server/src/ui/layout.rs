@@ -76,6 +76,9 @@ fn nav_links(ctx: &TeamCtx) -> Markup {
 		@if perms.can(Action::Read, Resource::Project) {
 			a class=(LINK) href={ (base) "/projects" } { "Projects" }
 		}
+		@if perms.can(Action::Read, Resource::Model) {
+			a class=(LINK) href={ (base) "/models" } { "Models" }
+		}
 		@if perms.can(Action::Read, Resource::Server) {
 			a class=(LINK) href={ (base) "/servers" } { "Servers" }
 		}

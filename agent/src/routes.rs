@@ -48,6 +48,7 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/probes", post(probe_route))
 		.route("/v1/gateway/config", put(gateway_config))
 		.route("/v1/gateway/usage/drain", post(gateway_drain))
+		.route("/v1/gateway/chat", post(gateway_chat))
 		.with_state(ctx)
 }
 
@@ -411,4 +412,15 @@ async fn gateway_config(
 
 async fn gateway_drain(State(ctx): State<Arc<Ctx>>) -> Json<Vec<proto::GatewayUsage>> {
 	Json(crate::gateway::sidecar::drain_usage(&crate::gateway::sidecar::dir(&ctx.data_dir)).await)
+}
+
+async fn gateway_chat(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::GatewayChatRequest>,
+) -> Response {
+	if let Err(message) = crate::gateway::chat::validate(&req) {
+		return ApiError::new(StatusCode::BAD_REQUEST, message).into_response();
+	}
+	let podman = ctx.podman();
+	ndjson(move |tx| crate::gateway::chat::run(podman, req, tx))
 }

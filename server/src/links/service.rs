@@ -146,3 +146,75 @@ async fn one(db: &PgPool, app: ApplicationId, model: ModelId) -> AppResult<Link>
 		.find(|l| l.model_id == model)
 		.ok_or_else(not_linked)
 }
+
+/// The applications `model` is linked to, and the applications of its project
+/// on its server that it could still be linked to.
+pub struct ModelLinks {
+	pub linked: Vec<links::LinkedApp>,
+	pub linkable: Vec<(ApplicationId, String)>,
+}
+
+/// # Errors
+/// `Forbidden` without `read model` and `read application`; `NotFound` for
+/// another team's model.
+pub async fn for_model(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	model: ModelId,
+) -> AppResult<ModelLinks> {
+	authorize(&s.db, user, team, Action::Read, Resource::Model).await?;
+	authorize(&s.db, user, team, Action::Read, Resource::Application).await?;
+	let model = scope::model(&s.db, team, project, model).await?;
+	Ok(ModelLinks {
+		linked: links::apps_for_model(&s.db, model.id).await?,
+		linkable: links::linkable_apps(&s.db, project, model.server_id, model.id).await?,
+	})
+}
+
+/// What a key looks like in a preview: the real one is never shown.
+pub const MASKED_KEY: &str = "pk-••••••••••••";
+
+/// The five variables an application gets once `model` is its default link,
+/// with the key masked. Nothing is stored or issued.
+///
+/// # Errors
+/// As [`for_model`]; `NotFound` for another team's application.
+pub async fn preview(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+	model: ModelId,
+) -> AppResult<Vec<(String, String)>> {
+	authorize(&s.db, user, team, Action::Read, Resource::Model).await?;
+	authorize(&s.db, user, team, Action::Read, Resource::Application).await?;
+	scope::application(&s.db, team, project, app).await?;
+	let model = scope::model(&s.db, team, project, model).await?;
+	let base = links::gateway_url();
+	Ok(vec![
+		("OPENAI_BASE_URL".to_owned(), format!("{base}/v1")),
+		("OPENAI_API_KEY".to_owned(), MASKED_KEY.to_owned()),
+		("ANTHROPIC_BASE_URL".to_owned(), base),
+		("ANTHROPIC_API_KEY".to_owned(), MASKED_KEY.to_owned()),
+		("PODKIT_MODEL".to_owned(), model.served_name),
+	])
+}
+
+/// A model's usage per key over the last 7 days.
+///
+/// # Errors
+/// `Forbidden` without `read model`; `NotFound` for another team's model.
+pub async fn usage(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	model: ModelId,
+) -> AppResult<Vec<links::KeyUsage>> {
+	authorize(&s.db, user, team, Action::Read, Resource::Model).await?;
+	let model = scope::model(&s.db, team, project, model).await?;
+	Ok(links::usage_for_model(&s.db, model.id).await?)
+}

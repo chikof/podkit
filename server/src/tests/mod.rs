@@ -149,3 +149,156 @@ pub async fn seed_app_and_database(db: &PgPool, team: i64, project: i64) {
 	.await
 	.unwrap();
 }
+
+/// Gives every server of `team` the hardware snapshot `hardware`.
+pub async fn set_hardware(db: &PgPool, team: i64, hardware: &proto::Hardware) {
+	sqlx::query("UPDATE servers SET hardware = $2 WHERE team_id = $1")
+		.bind(team)
+		.bind(sqlx::types::Json(hardware))
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+/// The id of the team's (local) server.
+pub async fn server_id(db: &PgPool, team: i64) -> i64 {
+	sqlx::query_scalar("SELECT id FROM servers WHERE team_id = $1")
+		.bind(team)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// A ready download and a model serving it, in `project` on the team's
+/// server. Returns (model file id, model id).
+pub async fn seed_model(
+	db: &PgPool,
+	team: i64,
+	project: i64,
+	name: &str,
+	status: &str,
+	container_id: Option<&str>,
+) -> (i64, i64) {
+	let server = server_id(db, team).await;
+	let (files, model) = (crypto::generate_id(), crypto::generate_id());
+	sqlx::query(
+		"INSERT INTO model_files
+			(id, team_id, server_id, repo, revision, selection, total_bytes, downloaded_bytes,
+			 status, volume_name)
+		VALUES ($1, $2, $3, 'acme/open', 'main', '{\"include\":[],\"files\":[\"q.gguf\"]}', 2000000000,
+			2000000000, 'ready', $4)",
+	)
+	.bind(files)
+	.bind(team)
+	.bind(server)
+	.bind(format!("model-files-{files}"))
+	.execute(db)
+	.await
+	.unwrap();
+	sqlx::query(
+		"INSERT INTO models
+			(id, project_id, server_id, model_files_id, name, slug, engine, image, port,
+			 model_path, served_name, context_size, status, container_id)
+		VALUES ($1, $2, $3, $4, $5, $6, 'llama_cpu', 'img', 8080, 'q.gguf', $7, 4096, $8, $9)",
+	)
+	.bind(model)
+	.bind(project)
+	.bind(server)
+	.bind(files)
+	.bind(name)
+	.bind(format!("slug-{model}"))
+	.bind(format!("served-{model}"))
+	.bind(status)
+	.bind(container_id)
+	.execute(db)
+	.await
+	.unwrap();
+	(files, model)
+}
+
+/// Sets a download's status and progress.
+pub async fn set_file_status(db: &PgPool, id: i64, status: &str, downloaded: i64) {
+	sqlx::query("UPDATE model_files SET status = $2, downloaded_bytes = $3 WHERE id = $1")
+		.bind(id)
+		.bind(status)
+		.bind(downloaded)
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+/// Forgets what every server reported about its hardware.
+pub async fn clear_hardware(db: &PgPool) {
+	sqlx::query("UPDATE servers SET hardware = NULL")
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+/// Sets a model's status and error.
+pub async fn set_model_status(db: &PgPool, id: i64, status: &str, error: Option<&str>) {
+	sqlx::query("UPDATE models SET status = $2, error = $3 WHERE id = $1")
+		.bind(id)
+		.bind(status)
+		.bind(error)
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+/// Marks a download failed with `error`.
+pub async fn fail_file(db: &PgPool, id: i64, error: &str) {
+	sqlx::query("UPDATE model_files SET status = 'failed', error = $2 WHERE id = $1")
+		.bind(id)
+		.bind(error)
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+/// The id of the team with `slug`.
+pub async fn team_id(db: &PgPool, slug: &str) -> i64 {
+	sqlx::query_scalar("SELECT id FROM teams WHERE slug = $1")
+		.bind(slug)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// One hour of gateway usage, `hours_ago` hours back.
+#[allow(clippy::too_many_arguments, reason = "a row of model_usage")]
+pub async fn seed_usage(
+	db: &PgPool,
+	key_hash: &str,
+	model: i64,
+	hours_ago: i32,
+	requests: i64,
+	input: i64,
+	output: i64,
+	application: Option<i64>,
+) {
+	sqlx::query(
+		"INSERT INTO model_usage
+			(key_hash, model_id, hour, application_id, requests, input_tokens, output_tokens)
+		VALUES ($1, $2, date_trunc('hour', NOW()) - make_interval(hours => $3), $4, $5, $6, $7)",
+	)
+	.bind(key_hash)
+	.bind(model)
+	.bind(hours_ago)
+	.bind(application)
+	.bind(requests)
+	.bind(input)
+	.bind(output)
+	.execute(db)
+	.await
+	.unwrap();
+}
+
+/// The hash of a model's playground key.
+pub async fn playground_hash(db: &PgPool, model: i64) -> String {
+	sqlx::query_scalar("SELECT key_hash FROM playground_keys WHERE model_id = $1")
+		.bind(model)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}

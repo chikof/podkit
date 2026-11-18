@@ -670,3 +670,29 @@ mod tests {
 		);
 	}
 }
+
+/// `POST /v1/gateway/chat` body: one streaming chat completion sent through
+/// the gateway, from a throwaway container on the `podkit` network (the host
+/// cannot reach the gateway itself on rootless Podman). The answer is an
+/// NDJSON stream of [`Event::Log`] lines, each the JSON the container printed:
+/// `{"data": "<one SSE data payload>"}`, then `{"end": true}`, or
+/// `{"error": "<why>"}`; then a terminal event.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatewayChatRequest {
+	/// Gateway key sent as the bearer token. Never logged.
+	pub key: String,
+	/// The `/v1/chat/completions` JSON body.
+	pub body: String,
+	/// Seconds the gateway may stay silent before the request is given up on.
+	pub timeout_s: u32,
+}
+
+impl std::fmt::Debug for GatewayChatRequest {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("GatewayChatRequest")
+			.field("key", &"***")
+			.field("body_bytes", &self.body.len())
+			.field("timeout_s", &self.timeout_s)
+			.finish()
+	}
+}
