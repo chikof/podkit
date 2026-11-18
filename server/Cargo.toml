@@ -46,6 +46,8 @@ croner.workspace = true
 rusty-s3.workspace = true
 tempfile.workspace = true
 dotenvy = "0.15.7"
+serde-saphyr = "=2.2.0"
+shlex = "=1.3.0"
 
 [lints]
 workspace = true

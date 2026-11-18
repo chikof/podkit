@@ -161,3 +161,14 @@ pub async fn model(
 		.await?
 		.ok_or(ServerError::ModelNotFound)
 }
+
+pub async fn stack(
+	db: &PgPool,
+	team: TeamId,
+	project: ProjectId,
+	id: crate::ids::StackId,
+) -> AppResult<crate::stacks::Stack> {
+	crate::stacks::find_scoped(db, team, project, id)
+		.await?
+		.ok_or(ServerError::StackNotFound)
+}

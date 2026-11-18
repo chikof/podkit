@@ -8,9 +8,9 @@ use bollard::Docker;
 use bollard::container::LogOutput;
 use bollard::models::{
 	ContainerCreateBody, ContainerInspectResponse, ContainerSummary, CreateImageInfo,
-	DeviceMapping, EndpointSettings, EventMessage, HostConfig, HostConfigLogConfig, ImageInspect,
-	ImageSummary, NetworkCreateRequest, NetworkingConfig, PortBinding, RestartPolicy,
-	RestartPolicyNameEnum, VolumeCreateRequest,
+	DeviceMapping, EndpointSettings, EventMessage, HealthConfig, HostConfig, HostConfigLogConfig,
+	ImageInspect, ImageSummary, NetworkConnectRequest, NetworkCreateRequest, NetworkingConfig,
+	PortBinding, ResourcesUlimits, RestartPolicy, RestartPolicyNameEnum, VolumeCreateRequest,
 };
 use bollard::query_parameters::{
 	BuildImageOptions, CreateContainerOptions, CreateImageOptions, EventsOptions,
@@ -69,8 +69,8 @@ pub struct ContainerSpec {
 	pub command: Option<Vec<String>>,
 	/// Environment.
 	pub env: Vec<(String, String)>,
-	/// `(host, container)` TCP ports bound on `0.0.0.0`.
-	pub published_ports: Vec<(u16, u16)>,
+	/// Ports published on the host.
+	pub published_ports: Vec<proto::PublishedPort>,
 	/// Network to join; empty for the default one.
 	pub network: String,
 	/// DNS aliases on `network`.
@@ -91,6 +91,11 @@ pub struct ContainerSpec {
 	pub shm_bytes: Option<i64>,
 	/// Seconds between SIGTERM and SIGKILL on stop.
 	pub stop_timeout_s: Option<u32>,
+	/// Networks joined after creation, with their DNS aliases.
+	pub extra_networks: Vec<(String, Vec<String>)>,
+	/// Settings only compose stacks use. `restart`, `isolated`, `net_aliases`
+	/// and `files` are the deployer's business, not applied here.
+	pub options: proto::ContainerOptions,
 }
 
 /// Device mappings for a GPU request: the CDI-name variant for NVIDIA
@@ -214,6 +219,21 @@ impl Podman {
 			Ok(_)
 			| Err(bollard::errors::Error::DockerResponseServerError {
 				status_code: 409, ..
+			}) => Ok(()),
+			Err(e) => Err(e.into()),
+		}
+	}
+
+	/// Removes a network. Podman answers 409 while containers are on it and
+	/// 404 when it does not exist; a missing one is fine here.
+	///
+	/// # Errors
+	/// Podman rejects the request.
+	pub async fn remove_network(&self, name: &str) -> Result<(), PodmanError> {
+		match self.docker.remove_network(name).await {
+			Ok(())
+			| Err(bollard::errors::Error::DockerResponseServerError {
+				status_code: 404, ..
 			}) => Ok(()),
 			Err(e) => Err(e.into()),
 		}
@@ -369,22 +389,25 @@ impl Podman {
 	///
 	/// # Errors
 	/// Podman rejects the spec (name conflict, missing image, ...).
+	#[allow(clippy::too_many_lines, reason = "one block per container setting")]
 	pub async fn create_container(&self, spec: ContainerSpec) -> Result<String, PodmanError> {
 		let exposed_ports = (!spec.published_ports.is_empty()).then(|| {
 			spec.published_ports
 				.iter()
-				.map(|(_, container)| format!("{container}/tcp"))
+				.map(|p| format!("{}/{}", p.container, p.protocol.as_str()))
 				.collect::<Vec<_>>()
 		});
 		let port_bindings = (!spec.published_ports.is_empty()).then(|| {
 			spec.published_ports
 				.iter()
-				.map(|(host, container)| {
+				.map(|p| {
 					(
-						format!("{container}/tcp"),
+						format!("{}/{}", p.container, p.protocol.as_str()),
 						Some(vec![PortBinding {
-							host_ip: Some("0.0.0.0".to_string()),
-							host_port: Some(host.to_string()),
+							host_ip: Some(
+								p.host_ip.clone().unwrap_or_else(|| "0.0.0.0".to_string()),
+							),
+							host_port: Some(p.host.to_string()),
 						}]),
 					)
 				})
@@ -410,11 +433,13 @@ impl Podman {
 			.transpose()
 			.map_err(PodmanError::Build)?;
 
+		let o = &spec.options;
+		let non_empty = |v: &[String]| (!v.is_empty()).then(|| v.to_vec());
 		let response = self
 			.docker
 			.create_container(
 				Some(CreateContainerOptions {
-					name: Some(spec.name),
+					name: Some(spec.name.clone()),
 					..Default::default()
 				}),
 				ContainerCreateBody {
@@ -422,10 +447,20 @@ impl Podman {
 					cmd: spec.command,
 					entrypoint: spec.entrypoint,
 					stop_timeout: spec.stop_timeout_s.map(i64::from),
+					user: o.user.clone(),
+					working_dir: o.working_dir.clone(),
+					hostname: o.hostname.clone(),
+					healthcheck: o.healthcheck.as_ref().map(health_config),
 					env: (!spec.env.is_empty())
 						.then(|| spec.env.iter().map(|(k, v)| format!("{k}={v}")).collect()),
 					exposed_ports,
-					labels: (!spec.labels.is_empty()).then(|| spec.labels.into_iter().collect()),
+					labels: (!spec.labels.is_empty() || !o.labels.is_empty()).then(|| {
+						spec.labels
+							.iter()
+							.chain(&o.labels)
+							.cloned()
+							.collect::<HashMap<_, _>>()
+					}),
 					networking_config,
 					host_config: Some(HostConfig {
 						devices,
@@ -434,6 +469,31 @@ impl Podman {
 						binds: (!spec.binds.is_empty()).then_some(spec.binds),
 						memory: spec.memory_bytes,
 						nano_cpus,
+						readonly_rootfs: o.read_only.then_some(true),
+						init: o.init.then_some(true),
+						tmpfs: (!o.tmpfs.is_empty()).then(|| {
+							o.tmpfs
+								.iter()
+								.map(|path| (path.clone(), String::new()))
+								.collect()
+						}),
+						extra_hosts: non_empty(&o.extra_hosts),
+						cap_add: non_empty(&o.cap_add),
+						cap_drop: non_empty(&o.cap_drop),
+						dns: non_empty(&o.dns),
+						group_add: non_empty(&o.group_add),
+						sysctls: (!o.sysctls.is_empty())
+							.then(|| o.sysctls.iter().cloned().collect()),
+						ulimits: (!o.ulimits.is_empty()).then(|| {
+							o.ulimits
+								.iter()
+								.map(|u| ResourcesUlimits {
+									name: Some(u.name.clone()),
+									soft: Some(u.soft),
+									hard: Some(u.hard),
+								})
+								.collect()
+						}),
 						restart_policy: Some(RestartPolicy {
 							name: Some(RestartPolicyNameEnum::NO),
 							maximum_retry_count: None,
@@ -451,6 +511,26 @@ impl Podman {
 				},
 			)
 			.await?;
+		for (network, aliases) in spec.extra_networks {
+			let connected = self
+				.docker
+				.connect_network(
+					&network,
+					NetworkConnectRequest {
+						container: response.id.clone(),
+						endpoint_config: Some(EndpointSettings {
+							aliases: (!aliases.is_empty()).then_some(aliases),
+							..Default::default()
+						}),
+					},
+				)
+				.await;
+			if let Err(e) = connected {
+				// Do not leave a half-networked container behind.
+				let _ = self.remove(&spec.name).await;
+				return Err(e.into());
+			}
+		}
 		Ok(response.id)
 	}
 
@@ -604,6 +684,31 @@ impl Podman {
 	}
 }
 
+/// Docker's `HealthConfig`: durations are nanoseconds.
+fn health_config(check: &proto::Healthcheck) -> HealthConfig {
+	let ns = |ms: u64| i64::try_from(ms.saturating_mul(1_000_000)).unwrap_or(i64::MAX);
+	HealthConfig {
+		test: Some(check.test.clone()),
+		interval: check.interval_ms.map(ns),
+		timeout: check.timeout_ms.map(ns),
+		retries: check.retries.map(i64::from),
+		start_period: check.start_period_ms.map(ns),
+		start_interval: None,
+	}
+}
+
+/// The health verdict in an inspect response; `None` without a health check.
+#[must_use]
+pub fn health_of(info: &ContainerInspectResponse) -> Option<proto::HealthStatus> {
+	use bollard::models::HealthStatusEnum as Status;
+	match info.state.as_ref()?.health.as_ref()?.status? {
+		Status::STARTING => Some(proto::HealthStatus::Starting),
+		Status::HEALTHY => Some(proto::HealthStatus::Healthy),
+		Status::UNHEALTHY => Some(proto::HealthStatus::Unhealthy),
+		Status::EMPTY | Status::NONE => None,
+	}
+}
+
 /// The container name of a listing entry, without Docker's leading `/`.
 #[must_use]
 pub fn summary_name(summary: &ContainerSummary) -> Option<&str> {
@@ -705,6 +810,52 @@ mod tests {
 				);
 			}
 		}
+	}
+
+	#[test]
+	fn stack_health_checks_are_sent_in_nanoseconds() {
+		let config = health_config(&proto::Healthcheck {
+			test: vec!["CMD-SHELL".into(), "true".into()],
+			interval_ms: Some(2_000),
+			timeout_ms: Some(500),
+			retries: Some(4),
+			start_period_ms: None,
+		});
+		assert_eq!(config.test, Some(vec!["CMD-SHELL".into(), "true".into()]));
+		assert_eq!(config.interval, Some(2_000_000_000));
+		assert_eq!(config.timeout, Some(500_000_000));
+		assert_eq!(config.retries, Some(4));
+		assert_eq!(config.start_period, None);
+	}
+
+	#[test]
+	fn stack_health_status_comes_from_the_inspect_state() {
+		use bollard::models::{ContainerState, Health, HealthStatusEnum};
+		let inspect = |health: Option<HealthStatusEnum>| ContainerInspectResponse {
+			state: Some(ContainerState {
+				health: health.map(|status| Health {
+					status: Some(status),
+					..Default::default()
+				}),
+				..Default::default()
+			}),
+			..Default::default()
+		};
+		assert_eq!(health_of(&inspect(None)), None, "no health check");
+		assert_eq!(health_of(&inspect(Some(HealthStatusEnum::NONE))), None);
+		assert_eq!(
+			health_of(&inspect(Some(HealthStatusEnum::STARTING))),
+			Some(proto::HealthStatus::Starting)
+		);
+		assert_eq!(
+			health_of(&inspect(Some(HealthStatusEnum::HEALTHY))),
+			Some(proto::HealthStatus::Healthy)
+		);
+		assert_eq!(
+			health_of(&inspect(Some(HealthStatusEnum::UNHEALTHY))),
+			Some(proto::HealthStatus::Unhealthy)
+		);
+		assert_eq!(health_of(&ContainerInspectResponse::default()), None);
 	}
 
 	#[test]

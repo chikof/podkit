@@ -43,5 +43,7 @@ id!(
 	BackupId,
 	ModelFileId,
 	ModelId,
+	StackId,
+	StackServiceId,
 	JobId,
 );

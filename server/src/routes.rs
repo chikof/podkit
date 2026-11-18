@@ -6,12 +6,13 @@ use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
 	applications, auth, backups, catalog, databases, deployments, domains, env_vars, environments,
-	links, members, model_files, models, projects, servers, teams, ui, volumes, webhooks,
+	links, members, model_files, models, projects, servers, stacks, teams, ui, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
 const DB: &str = "/teams/{team_id}/projects/{project_id}/databases";
 const MODELS: &str = "/teams/{team_id}/projects/{project_id}/models";
+const STACKS: &str = "/teams/{team_id}/projects/{project_id}/stacks";
 
 async fn health() -> &'static str {
 	"ok"
@@ -48,6 +49,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		)
 		.nest(DB, databases::router())
 		.nest(MODELS, models::router())
+		.nest(STACKS, stacks::router())
 		.nest("/catalog", catalog::router())
 		.nest("/huggingface", catalog::hf_router())
 		.nest("/teams/{team_id}/model-files", model_files::router())

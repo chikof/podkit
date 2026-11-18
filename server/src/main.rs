@@ -44,6 +44,7 @@ mod projects;
 mod routes;
 mod scope;
 mod servers;
+mod stacks;
 mod state;
 mod teams;
 mod ui;
