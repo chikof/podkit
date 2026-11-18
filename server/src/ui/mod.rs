@@ -40,13 +40,10 @@ mod error;
 mod extract;
 mod gallery;
 mod layout;
-// Used by the pages of cards 05-09; until then only tests call them.
-#[allow(dead_code)]
 mod live;
 mod pages;
 mod shell;
 mod sse;
-#[allow(dead_code)]
 mod status;
 #[cfg(test)]
 mod testing;

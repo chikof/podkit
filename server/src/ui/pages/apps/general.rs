@@ -20,7 +20,6 @@ use super::{AppPath, Tab, app_url, load, page, toast_ok};
 use crate::applications::service::{self, ApplicationView};
 use crate::applications::{BuildStrategy, SourceKind};
 use crate::auth::permission::{Action, Resource};
-use crate::error::ServerError;
 use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::state::AppState;
 use crate::ui::components::{
@@ -207,6 +206,3 @@ async fn save(
 		Err(e) => error::action(&e),
 	}
 }
-
-#[allow(dead_code)]
-fn unused(_: ServerError) {}

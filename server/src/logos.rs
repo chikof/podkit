@@ -138,15 +138,10 @@ const ALIASES: &[(&str, &str)] = &[
 /// `docker.io/library/redis:7-alpine` or `ghcr.io/ggml-org/llama.cpp:server`;
 /// `None` when nothing matches.
 #[must_use]
-#[allow(
-	dead_code,
-	reason = "the gallery and the resource cards of the UI cards call it"
-)]
 pub fn for_image(image: &str) -> Option<String> {
 	name_for_image(image).and_then(url)
 }
 
-#[allow(dead_code, reason = "see for_image")]
 fn name_for_image(image: &str) -> Option<&'static str> {
 	let image = image.trim().to_ascii_lowercase();
 	let image = image.split('@').next().unwrap_or_default();

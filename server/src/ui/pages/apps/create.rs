@@ -21,7 +21,6 @@ use super::form::{
 };
 use super::{app_url, crumbs, origin, project_url};
 use crate::applications::service::{self, Created};
-use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{EnvironmentId, ProjectId, ServerId, TeamId};
 use crate::projects;
@@ -229,10 +228,4 @@ async fn create(
 			.into_response(),
 		Err(e) => error::action(&e),
 	}
-}
-
-/// Whether the person may create at all (the page itself is refused by the service).
-#[allow(dead_code)]
-fn may_create(ctx: &TeamCtx) -> bool {
-	ctx.perms.can(Action::Create, Resource::Application)
 }
