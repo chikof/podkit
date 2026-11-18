@@ -1,0 +1,22 @@
+id = "jellyfin"
+name = "jellyfin"
+description = "Jellyfin is a Free Software Media System that puts you in control of managing and streaming your media."
+category = "other"
+tags = ["media-system"]
+version = "v10.9.7"
+logo = "logo.svg"
+website = "https://jellyfin.org/"
+docs = "https://jellyfin.org/docs/"
+source = "https://github.com/jellyfin/jellyfin"
+upstream = "Dokploy/templates@6313a2e blueprints/jellyfin"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+JELLYFIN_HOST = "${main_domain}"
+
+[[config.domains]]
+serviceName = "jellyfin"
+port = 8096
+host = "${main_domain}"

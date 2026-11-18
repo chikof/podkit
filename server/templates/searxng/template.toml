@@ -1,0 +1,40 @@
+id = "searxng"
+name = "SearXNG"
+description = "SearXNG is a privacy-respecting metasearch engine that combines results from many search engines."
+category = "security"
+tags = [
+    "search-engine",
+    "metasearch",
+    "privacy",
+    "self-hosted",
+    "aggregator",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://searxng.github.io/"
+docs = "https://docs.searxng.github.io/"
+source = "https://github.com/searxng/searxng"
+upstream = "Dokploy/templates@6313a2e blueprints/searxng"
+
+[variables]
+main_domain = "${domain}"
+secret_key = "${password:64}"
+
+[[config.domains]]
+serviceName = "searxng"
+port = 8080
+host = "${main_domain}"
+
+[[config.mounts]]
+filePath = "/searxng/settings.yml"
+content = """
+use_default_settings: true
+
+server:
+  secret_key: "${secret_key}"
+  limiter: false
+  image_proxy: false
+
+valkey:
+  url: valkey://valkey:6379/0
+"""

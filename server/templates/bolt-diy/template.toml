@@ -1,0 +1,40 @@
+id = "bolt-diy"
+name = "bolt.diy"
+description = "Prompt, run, edit, and deploy full-stack web applications using any LLM you want!"
+category = "ai"
+tags = [
+    "ai",
+    "self-hosted",
+    "development",
+    "chatbot",
+    "ide",
+    "llm",
+]
+version = "latest"
+logo = "@mono-bolt-diy"
+website = "https://stackblitz-labs.github.io/bolt.diy/"
+docs = "https://stackblitz-labs.github.io/bolt.diy/"
+source = "https://github.com/stackblitz-labs/bolt.diy"
+upstream = "Dokploy/templates@6313a2e blueprints/bolt.diy"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+ANTHROPIC_API_KEY = ""
+AWS_BEDROCK_CONFIG = ""
+DEFAULT_NUM_CTX = "32768"
+GOOGLE_GENERATIVE_AI_API_KEY = ""
+GROQ_API_KEY = ""
+HuggingFace_API_KEY = ""
+OLLAMA_API_BASE_URL = "http://127.0.0.1:11434"
+OPENAI_API_KEY = ""
+OPEN_ROUTER_API_KEY = ""
+TOGETHER_API_BASE_URL = ""
+TOGETHER_API_KEY = ""
+XAI_API_KEY = ""
+
+[[config.domains]]
+serviceName = "app"
+port = 5173
+host = "${main_domain}"

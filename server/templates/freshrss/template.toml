@@ -1,0 +1,35 @@
+id = "freshrss"
+name = "FreshRSS"
+description = "FreshRSS is a lightweight RSS and Atom feed aggregator."
+category = "productivity"
+tags = [
+    "rss",
+    "feed-reader",
+    "news",
+    "self-hosted",
+    "aggregator",
+    "reader",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://freshrss.org/"
+docs = "https://freshrss.github.io/FreshRSS/"
+source = "https://github.com/FreshRSS/FreshRSS"
+upstream = "Dokploy/templates@6313a2e blueprints/freshrss"
+
+[variables]
+main_domain = "${domain}"
+timezone = "UTC"
+
+[config.env]
+COPY_LOG_TO_SYSLOG = "On"
+COPY_SYSLOG_TO_STDERR = "On"
+CRON_MIN = "13,43"
+FRESHRSS_ENV = "production"
+FRESHRSS_VERSION = "latest"
+TZ = "${timezone}"
+
+[[config.domains]]
+serviceName = "freshrss"
+port = 80
+host = "${main_domain}"

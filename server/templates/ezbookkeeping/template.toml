@@ -1,0 +1,46 @@
+id = "ezbookkeeping"
+name = "EZBookkeeping"
+description = "EZBookkeeping is a self-hosted bookkeeping application that helps you manage your personal and business finances. It provides features for tracking income, expenses, accounts, and generating financial reports."
+category = "finance"
+tags = [
+    "bookkeeping",
+    "finance",
+    "accounting",
+    "self-hosted",
+    "personal-finance",
+    "business-finance",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://github.com/mayswind/ezbookkeeping"
+docs = "https://github.com/mayswind/ezbookkeeping"
+source = "https://github.com/mayswind/ezbookkeeping"
+upstream = "Dokploy/templates@6313a2e blueprints/ezbookkeeping"
+
+[variables]
+db_name = "ezbookkeeping"
+db_pass = "${password:32}"
+db_user = "ezbookkeeping"
+main_domain = "${domain}"
+root_pass = "${password:32}"
+secret_key = "${password:64}"
+
+[config.env]
+EBK_DATABASE_HOST = "mysql:3306"
+EBK_DATABASE_NAME = "${db_name}"
+EBK_DATABASE_PASSWD = "${db_pass}"
+EBK_DATABASE_TYPE = "mysql"
+EBK_DATABASE_USER = "${db_user}"
+EBK_LOG_MODE = "file"
+EBK_SECURITY_SECRET_KEY = "${secret_key}"
+EBK_SERVER_DOMAIN = "${main_domain}"
+EBK_SERVER_ENABLE_GZIP = "true"
+MYSQL_DATABASE = "${db_name}"
+MYSQL_PASSWORD = "${db_pass}"
+MYSQL_ROOT_PASSWORD = "${root_pass}"
+MYSQL_USER = "${db_user}"
+
+[[config.domains]]
+serviceName = "ezbookkeeping"
+port = 8080
+host = "${main_domain}"

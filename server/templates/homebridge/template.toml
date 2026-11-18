@@ -1,0 +1,25 @@
+id = "homebridge"
+name = "Homebridge"
+description = "Homebridge is a tool that brings Apple HomeKit support to smart home devices that don't support it natively."
+category = "other"
+tags = [
+    "iot",
+    "homekit",
+    "internet-of-things",
+    "self-hosted",
+    "server",
+]
+version = "latest"
+logo = "@homebridge"
+website = "https://homebridge.io/"
+docs = "https://github.com/homebridge/homebridge/wiki"
+source = "https://github.com/homebridge/homebridge"
+upstream = "Dokploy/templates@6313a2e blueprints/homebridge"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "homebridge"
+port = 8581
+host = "${main_domain}"

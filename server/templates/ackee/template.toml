@@ -1,0 +1,31 @@
+id = "ackee"
+name = "Ackee"
+description = "Ackee is a self-hosted analytics tool for your website."
+category = "analytics"
+tags = [
+    "analytics",
+    "self-hosted",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://ackee.electerious.com/"
+docs = "https://docs.ackee.electerious.com/"
+source = "https://github.com/electerious/Ackee"
+upstream = "Dokploy/templates@6313a2e blueprints/ackee"
+
+[variables]
+ACKEE_MONGODB = "mongodb://mongo:${MONGO_INITDB_ROOT_PASSWORD}@mongo:27017"
+ACKEE_PASSWORD = "${password:16}"
+ACKEE_USERNAME = "default"
+MONGO_INITDB_ROOT_PASSWORD = "${password:16}"
+
+[config.env]
+ACKEE_MONGODB = "${ACKEE_MONGODB}"
+ACKEE_PASSWORD = "${ACKEE_PASSWORD}"
+ACKEE_USERNAME = "${ACKEE_USERNAME}"
+MONGO_INITDB_ROOT_PASSWORD = "${MONGO_INITDB_ROOT_PASSWORD}"
+
+[[config.domains]]
+serviceName = "ackee"
+port = 3000
+host = "${domain}"

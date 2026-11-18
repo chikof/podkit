@@ -1,0 +1,49 @@
+id = "wupnext"
+name = "WupNext"
+description = "WupNext is a self-hosted to-do and task queue app: groups, subtasks, deadlines, a built-in pomodoro timer, email reminders, and an MCP server so an AI client can work the board. Server-rendered Django with HTMX, backed by SQLite."
+category = "productivity"
+tags = [
+    "todo",
+    "tasks",
+    "productivity",
+    "pomodoro",
+    "mcp",
+    "django",
+    "self-hosted",
+]
+version = "latest"
+logo = "logo.svg"
+website = ""
+docs = ""
+source = "https://github.com/javierlnmn/wupnext"
+upstream = "Dokploy/templates@6313a2e blueprints/wupnext"
+reveal = ["admin_password"]
+
+[variables]
+admin_email = "${email}"
+admin_password = "${password:24}"
+admin_username = "admin"
+from_email = "wupnext <onboarding@resend.dev>"
+main_domain = "${domain}"
+resend_api_key = ""
+secret_key = "${password:50}"
+
+[config.env]
+ALLOWED_HOSTS = "${main_domain}"
+CSRF_TRUSTED_ORIGINS = "https://${main_domain}"
+DEFAULT_FROM_EMAIL = "${from_email}"
+DJANGO_SUPERUSER_EMAIL = "${admin_email}"
+DJANGO_SUPERUSER_PASSWORD = "${admin_password}"
+DJANGO_SUPERUSER_USERNAME = "${admin_username}"
+MCP_BASE_URL = "https://${main_domain}"
+Q_RETRY = "120"
+Q_TIMEOUT = "60"
+Q_WORKERS = "2"
+RESEND_API_KEY = "${resend_api_key}"
+SECRET_KEY = "${secret_key}"
+SITE_URL = "https://${main_domain}"
+
+[[config.domains]]
+serviceName = "wupnext"
+port = 8000
+host = "${main_domain}"

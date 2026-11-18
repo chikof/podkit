@@ -1,0 +1,33 @@
+id = "inkvoice"
+name = "Inkvoice"
+description = "Open-source invoicing for freelancers and small teams: invoices, online payments (Stripe & PayPal), expenses, multi-currency and reports."
+category = "finance"
+tags = [
+    "invoicing",
+    "billing",
+    "finance",
+    "self-hosted",
+]
+version = "0.3.0"
+logo = "logo.svg"
+website = "https://inkvoice.app"
+docs = "https://docs.inkvoice.app"
+source = "https://github.com/pigontech/inkvoice"
+upstream = "Dokploy/templates@6313a2e blueprints/inkvoice"
+reveal = ["admin_pass"]
+
+[variables]
+admin_pass = "${password:16}"
+admin_user = "admin"
+jwt_secret = "${password:48}"
+main_domain = "${domain}"
+
+[config.env]
+ADMIN_PASS = "${admin_pass}"
+ADMIN_USER = "${admin_user}"
+JWT_SECRET = "${jwt_secret}"
+
+[[config.domains]]
+serviceName = "inkvoice"
+port = 3000
+host = "${main_domain}"

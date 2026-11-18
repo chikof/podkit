@@ -1,0 +1,26 @@
+id = "homarr"
+name = "Homarr"
+description = "Homarr is a dashboard for organizing and accessing all your apps from one place."
+category = "productivity"
+tags = [
+    "dashboard",
+    "monitoring",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://homarr.dev/"
+docs = "https://homarr.dev/docs/getting-started/installation/docker"
+source = "https://github.com/homarr-labs/homarr"
+upstream = "Dokploy/templates@6313a2e blueprints/homarr"
+
+[variables]
+main_domain = "${domain}"
+secret_key = "${hash:64}"
+
+[config.env]
+SECRET_ENCRYPTION_KEY = "${secret_key}"
+
+[[config.domains]]
+serviceName = "homarr"
+port = 7575
+host = "${main_domain}"

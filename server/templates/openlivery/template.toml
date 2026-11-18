@@ -1,0 +1,48 @@
+id = "openlivery"
+name = "OpenLivery"
+description = "MIT-licensed WhatsApp AI agents for agencies, with separate client workspaces and branded portals in one self-hosted installation"
+category = "ai"
+tags = [
+    "ai",
+    "chat",
+    "customer-support",
+]
+version = "v0.4.0"
+logo = "logo.png"
+website = "https://www.openlivery.com"
+docs = "https://github.com/sarrazola/openlivery/blob/main/docs/en/self-hosting.md"
+source = "https://github.com/sarrazola/openlivery"
+upstream = "Dokploy/templates@6313a2e blueprints/openlivery"
+
+[variables]
+bridge_token = "${hash:64}"
+encryption_key = "${hash:64}"
+main_domain = "${domain}"
+postgres_password = "${hash:48}"
+secret_key = "${hash:64}"
+
+[config.env]
+COOKIE_SECURE = "false"
+ENCRYPTION_KEY = "${encryption_key}"
+FRONTEND_URL = "http://${main_domain}"
+POSTGRES_PASSWORD = "${postgres_password}"
+SECRET_KEY = "${secret_key}"
+WHATSAPP_BRIDGE_TOKEN = "${bridge_token}"
+
+[[config.domains]]
+serviceName = "openlivery"
+port = 80
+host = "${main_domain}"
+
+[[config.mounts]]
+filePath = "./Caddyfile"
+content = """
+:80 {
+  handle /api/* {
+    reverse_proxy api:8000
+  }
+  handle {
+    reverse_proxy web:3000
+  }
+}
+"""

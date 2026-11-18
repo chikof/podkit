@@ -322,13 +322,17 @@ pub fn public_hostname(slug: &str, server: &Server) -> String {
 	sslip_hostname(slug, server.is_local, &server.hostname)
 }
 
-fn sslip_hostname(slug: &str, is_local: bool, hostname: &str) -> String {
-	let dashed_ip = if is_local {
+/// The server's address as sslip.io writes it: `203-0-113-7`.
+pub fn dashed_ip(is_local: bool, hostname: &str) -> String {
+	if is_local {
 		"127-0-0-1".to_string()
 	} else {
 		hostname.replace('.', "-")
-	};
-	format!("{slug}.{dashed_ip}.sslip.io")
+	}
+}
+
+fn sslip_hostname(slug: &str, is_local: bool, hostname: &str) -> String {
+	format!("{slug}.{}.sslip.io", dashed_ip(is_local, hostname))
 }
 
 #[cfg(test)]

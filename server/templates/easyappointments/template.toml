@@ -1,0 +1,28 @@
+id = "easyappointments"
+name = "Easy!Appointments"
+description = "Easy!Appointments is a highly customizable web application that allows customers to book appointments with you via a sophisticated web interface."
+category = "productivity"
+tags = [
+    "scheduling",
+    "appointments",
+    "booking",
+]
+version = "1.5.0"
+logo = "logo.png"
+website = "https://easyappointments.org"
+docs = "https://easyappointments.org/docs"
+source = "https://github.com/alextselegidis/easyappointments"
+upstream = "Dokploy/templates@6313a2e blueprints/easyappointments"
+
+[variables]
+db_password = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+DB_PASSWORD = "${db_password}"
+DOMAIN = "${main_domain}"
+
+[[config.domains]]
+serviceName = "easyappointments"
+port = 80
+host = "${main_domain}"

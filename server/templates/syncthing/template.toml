@@ -1,0 +1,24 @@
+id = "syncthing"
+name = "Syncthing"
+description = "Syncthing keeps your devices and files continuously in sync."
+category = "backup"
+tags = [
+    "file-sync",
+    "synchronization",
+    "backup",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://syncthing.net/"
+docs = "https://docs.syncthing.net/"
+source = "https://github.com/syncthing/syncthing"
+upstream = "Dokploy/templates@6313a2e blueprints/syncthing"
+
+[variables]
+main_domain = "${domain}"
+timezone = "America/Sao_Paulo"
+
+[[config.domains]]
+serviceName = "syncthing"
+port = 8384
+host = "${main_domain}"

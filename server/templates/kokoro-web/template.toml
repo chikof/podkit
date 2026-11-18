@@ -1,0 +1,30 @@
+id = "kokoro-web"
+name = "Kokoro Web"
+description = "Kokoro Web provides an interface for text-to-speech using advanced AI voice synthesis. It allows model caching and API integration with authentication."
+category = "ai"
+tags = [
+    "text-to-speech",
+    "ai",
+    "voice",
+    "web",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://github.com/eduardolat/kokoro-web"
+docs = "https://github.com/eduardolat/kokoro-web#readme"
+source = "https://github.com/eduardolat/kokoro-web"
+upstream = "Dokploy/templates@6313a2e blueprints/kokoro-web"
+
+[variables]
+api_key = "${password:32}"
+main_domain = "${domain}"
+no_track = "false"
+
+[config.env]
+KW_PUBLIC_NO_TRACK = "${no_track}"
+KW_SECRET_API_KEY = "${api_key}"
+
+[[config.domains]]
+serviceName = "kokoro-web"
+port = 3000
+host = "${main_domain}"

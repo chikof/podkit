@@ -1,0 +1,30 @@
+id = "agent-zero"
+name = "Agent Zero"
+description = "Agent Zero is an open-source autonomous AI agent framework with memory and tool use capabilities."
+category = "ai"
+tags = [
+    "ai",
+    "agent",
+    "automation",
+]
+version = "v1.9"
+logo = "logo.svg"
+website = "https://www.agent-zero.ai"
+docs = "https://www.agent-zero.ai/p/docs/"
+source = "https://github.com/agent0ai/agent-zero"
+upstream = "Dokploy/templates@6313a2e blueprints/agent-zero"
+reveal = ["auth_password"]
+
+[variables]
+auth_login = "${username}"
+auth_password = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+AUTH_LOGIN = "${auth_login}"
+AUTH_PASSWORD = "${auth_password}"
+
+[[config.domains]]
+serviceName = "agent-zero"
+port = 80
+host = "${main_domain}"

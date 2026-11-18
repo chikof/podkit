@@ -1,0 +1,22 @@
+id = "ontime"
+name = "Ontime"
+description = "Ontime is browser-based application that manages event rundowns, scheduliing and cuing"
+category = "other"
+tags = ["event"]
+version = "v3.8.0"
+logo = "logo.png"
+website = "https://getontime.no"
+docs = "https://docs.getontime.no"
+source = "https://github.com/cpvalente/ontime/"
+upstream = "Dokploy/templates@6313a2e blueprints/ontime"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+TZ = "UTC"
+
+[[config.domains]]
+serviceName = "ontime"
+port = 4001
+host = "${main_domain}"

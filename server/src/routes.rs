@@ -6,7 +6,8 @@ use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
 	applications, auth, backups, catalog, databases, deployments, domains, env_vars, environments,
-	links, members, model_files, models, projects, servers, stacks, teams, ui, volumes, webhooks,
+	links, logos, members, model_files, models, projects, servers, stacks, teams, templates, ui,
+	volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -50,6 +51,11 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest(DB, databases::router())
 		.nest(MODELS, models::router())
 		.nest(STACKS, stacks::router())
+		.nest("/templates", templates::router())
+		.nest(
+			"/teams/{team_id}/projects/{project_id}/templates",
+			templates::deploy_router(),
+		)
 		.nest("/catalog", catalog::router())
 		.nest("/huggingface", catalog::hf_router())
 		.nest("/teams/{team_id}/model-files", model_files::router())
@@ -61,6 +67,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest("/webhooks", webhooks::router());
 	Ok(Router::new()
 		.merge(ui::router())
+		.merge(logos::router())
 		.route("/health", get(health))
 		.nest("/api/v1", api)
 		.nest("/webhooks", webhooks::router())

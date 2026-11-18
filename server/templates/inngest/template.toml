@@ -1,0 +1,44 @@
+id = "inngest"
+name = "Inngest"
+description = "Inngest is a developer platform for serverless event-driven workflows. Build reliable, scalable background functions and workflows with built-in retries, scheduling, and observability."
+category = "automation"
+tags = [
+    "workflow",
+    "automation",
+    "self-hosted",
+    "serverless",
+    "events",
+]
+version = "v1.12.1"
+logo = "logo.svg"
+website = "https://www.inngest.com/"
+docs = "https://www.inngest.com/docs/self-hosting"
+source = "https://github.com/inngest/inngest"
+upstream = "Dokploy/templates@6313a2e blueprints/inngest"
+
+[variables]
+event_key = "${jwt:32}"
+main_domain = "${domain}"
+postgres_password = "${password:24}"
+signing_key = "${jwt:32}"
+
+[config.env]
+INNGEST_EVENT_KEY = "${event_key}"
+INNGEST_JSON = "true"
+INNGEST_LOG_LEVEL = "info"
+INNGEST_POLL_INTERVAL = "60"
+INNGEST_POSTGRES_URI = "postgresql://inngest:${postgres_password}@postgres:5432/inngest?sslmode=disable"
+INNGEST_QUEUE_WORKERS = "100"
+INNGEST_REDIS_URI = "redis://redis:6379"
+INNGEST_RETRY_INTERVAL = "1"
+INNGEST_SIGNING_KEY = "${signing_key}"
+INNGEST_TICK = "150"
+INNGEST_VERBOSE = "false"
+POSTGRES_DB = "inngest"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USER = "inngest"
+
+[[config.domains]]
+serviceName = "inngest"
+port = 8288
+host = "${main_domain}"

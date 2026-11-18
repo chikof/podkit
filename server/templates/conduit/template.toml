@@ -1,0 +1,25 @@
+id = "conduit"
+name = "Conduit"
+description = "Conduit is a simple, fast and reliable chat server powered by Matrix"
+category = "communication"
+tags = [
+    "matrix",
+    "communication",
+]
+version = "v0.9.0"
+logo = "logo.svg"
+website = "https://conduit.rs/"
+docs = "https://docs.conduit.rs/"
+source = "https://gitlab.com/famedly/conduit"
+upstream = "Dokploy/templates@6313a2e blueprints/conduit"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+MATRIX_SUBDOMAIN = "${main_domain}"
+
+[[config.domains]]
+serviceName = "homeserver"
+port = 6167
+host = "${main_domain}"

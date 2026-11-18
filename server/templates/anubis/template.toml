@@ -1,0 +1,31 @@
+id = "anubis"
+name = "Anubis"
+description = "Anubis is a bot protector, It will block bots from accessing your website."
+category = "other"
+tags = [
+    "self-hosted",
+    "bot-protection",
+]
+version = "latest"
+logo = "@mono-anubis"
+website = "https://anubis.techaro.lol"
+docs = "https://anubis.techaro.lol/docs/"
+source = "https://github.com/TecharoHQ/anubis"
+upstream = "Dokploy/templates@6313a2e blueprints/anubis"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+COOKIE_DOMAIN = "${main_domain}"
+DIFFICULTY = "5"
+OG_CACHE_CONSIDER_HOST = "true"
+OG_EXPIRY_TIME = "1h"
+OG_PASSTHROUGH = "true"
+SERVE_ROBOTS_TXT = "false"
+TARGET = "YOURLOCALHOST:PORT"
+
+[[config.domains]]
+serviceName = "anubis"
+port = 8923
+host = "${main_domain}"

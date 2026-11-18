@@ -1,0 +1,45 @@
+id = "java"
+name = "Java Runtime (Multi-Version)"
+description = "Configurable Java runtime environment supporting versions 8, 11, 16, 17, and 21. Perfect for Minecraft servers, Spring Boot apps, and custom Java applications."
+category = "games"
+tags = [
+    "java",
+    "minecraft",
+    "runtime",
+    "pterodactyl",
+]
+version = "8-21"
+logo = "logo.png"
+website = "https://java.com/"
+docs = "https://docs.oracle.com/en/java/"
+source = "https://github.com/pterodactyl/yolks"
+upstream = "Dokploy/templates@6313a2e blueprints/java"
+
+[variables]
+java_version = "21"
+server_jarfile = "server.jar"
+server_port = "25565"
+startup_command = "java -Xmx1024M -Xms512M -jar server.jar nogui"
+
+[config.env]
+JAVA_VERSION = "${java_version}"
+SERVER_JARFILE = "${server_jarfile}"
+SERVER_PORT = "${server_port}"
+STARTUP_COMMAND = "${startup_command}"
+
+[[config.domains]]
+serviceName = "java-app"
+port = 25565
+host = "${domain}"
+
+[[config.mounts]]
+filePath = "/home/container/server.properties"
+content = """
+# Minecraft server properties
+server-port=25565
+motd=Java Server powered by Dokploy
+online-mode=true
+difficulty=easy
+gamemode=survival
+max-players=20
+"""

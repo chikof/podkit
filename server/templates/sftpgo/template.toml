@@ -1,0 +1,23 @@
+id = "sftpgo"
+name = "SFTPGo"
+description = "SFTPGo is a full-featured and highly configurable SFTP, HTTP/S, FTP/S, and WebDAV server."
+category = "other"
+tags = [
+    "sftp",
+    "files",
+    "webdav",
+]
+version = "2.7.3"
+logo = "logo.svg"
+website = "https://sftpgo.com/"
+docs = "https://docs.sftpgo.com/"
+source = "https://github.com/drakkan/sftpgo"
+upstream = "Dokploy/templates@6313a2e blueprints/sftpgo"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "sftpgo"
+port = 8080
+host = "${main_domain}"

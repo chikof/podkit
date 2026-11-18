@@ -1,0 +1,19 @@
+id = "enshrouded"
+name = "Enshrouded"
+description = "Enshrouded steam dedicated server."
+category = "games"
+tags = ["gaming"]
+version = "1.0.0"
+logo = "@mono-enshrouded"
+website = ""
+docs = ""
+source = "https://github.com/mornedhels/enshrouded-server"
+upstream = "Dokploy/templates@6313a2e blueprints/enshrouded"
+
+[variables]
+SERVER_NAME = "Enshrouded Dokploy"
+SERVER_PASSWORD = "${password:15}"
+
+[config.env]
+SERVER_NAME = "${SERVER_NAME}"
+SERVER_PASSWORD = "${SERVER_PASSWORD}"

@@ -1,0 +1,30 @@
+id = "gitea-mirror"
+name = "Gitea Mirror"
+description = "Gitea Mirror is a modern web app for automatically mirroring repositories from GitHub to your self-hosted Gitea instance. It features a user-friendly interface to sync public, private, or starred GitHub repos, mirror entire organizations with structure preservation, and optionally mirror issues a..."
+category = "development"
+tags = [
+    "git",
+    "mirror",
+    "github",
+    "gitea",
+    "self-hosted",
+    "automation",
+]
+version = "v2.11.2"
+logo = "logo.png"
+website = "https://github.com/arunavo4/gitea-mirror"
+docs = "https://github.com/arunavo4/gitea-mirror#readme"
+source = "https://github.com/arunavo4/gitea-mirror"
+upstream = "Dokploy/templates@6313a2e blueprints/gitea-mirror"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+BETTER_AUTH_SECRET = "${base64:64}"
+BETTER_AUTH_URL = "https://${main_domain}"
+
+[[config.domains]]
+serviceName = "gitea-mirror"
+port = 4321
+host = "${main_domain}"

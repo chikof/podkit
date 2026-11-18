@@ -1,0 +1,31 @@
+id = "unifi"
+name = "Unifi Network"
+description = "Unifi Network is an open-source enterprise network management platform for wireless networks."
+category = "networking"
+tags = [
+    "self-hosted",
+    "networking",
+]
+version = "11.6.6"
+logo = "@unifi"
+website = "https://www.ui.com/"
+docs = "https://help.ui.com/hc/en-us/articles/360012282453-Self-Hosting-a-UniFi-Network-Server"
+source = "https://github.com/ubiquiti"
+upstream = "Dokploy/templates@6313a2e blueprints/unifi"
+
+[[config.mounts]]
+filePath = "init-mongo.sh"
+content = """
+#!/bin/bash
+mongo <<EOF
+use unifi
+db.createUser({
+user: "unifi",
+pwd: "unifi_password",
+roles: [
+    { db: "unifi", role: "dbOwner" },
+    { db: "unifi_stat", role: "dbOwner" }
+]
+})
+EOF 
+"""

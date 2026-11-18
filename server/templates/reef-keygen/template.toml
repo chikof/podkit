@@ -1,0 +1,28 @@
+id = "reef-keygen"
+name = "Reef Chain - Keys Generator"
+description = "Generates 3 Validators keys for a custom Reef Chain cluster"
+category = "other"
+tags = [
+    "reef-chain",
+    "keys generator",
+    "self-hosted",
+    "keys",
+]
+version = "1"
+logo = "logo.svg"
+website = "https://hub.docker.com/repository/docker/anukulpandey/reef-chain-node"
+docs = "https://docs.reef.io/"
+source = "https://github.com/reef-chain/chain-upgrade"
+upstream = "Dokploy/templates@6313a2e blueprints/reef-keygen"
+
+[variables]
+PORT = "48765"
+
+[config.env]
+PORT = "48765"
+
+[[config.domains]]
+serviceName = "reef-keygen"
+port = 48765
+host = "${domain}"
+path = "/"

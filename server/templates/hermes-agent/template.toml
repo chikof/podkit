@@ -1,0 +1,32 @@
+id = "hermes-agent"
+name = "Hermes Agent"
+description = "Self-improving AI agent by Nous Research with a web dashboard and an OpenAI-compatible API. Point it at any OpenAI-compatible endpoint, for example a podkit model's gateway."
+category = "ai"
+tags = ["ai", "agents", "llm", "assistant"]
+version = "v2026.6.19"
+logo = "@hermes-agent"
+website = "https://hermes-agent.nousresearch.com"
+docs = "https://hermes-agent.nousresearch.com/docs"
+source = "https://github.com/NousResearch/hermes-agent"
+reveal = ["dashboard_password"]
+
+[requires]
+ram_mb = 2048
+
+[variables]
+dashboard_domain = "${domain}"
+dashboard_password = "${password:32}"
+dashboard_secret = "${base64:32}"
+openai_base_url = { type = "string", default = "", label = "Model endpoint", description = "An OpenAI-compatible base URL such as http://llm.podkit.internal:8088/v1; empty to set a provider in the dashboard" }
+openai_api_key = { type = "string", default = "", label = "Model API key", description = "Key for that endpoint", secret = true }
+
+[config.env]
+HERMES_DASHBOARD_BASIC_AUTH_PASSWORD = "${dashboard_password}"
+HERMES_DASHBOARD_BASIC_AUTH_SECRET = "${dashboard_secret}"
+OPENAI_BASE_URL = "${openai_base_url}"
+OPENAI_API_KEY = "${openai_api_key}"
+
+[[config.domains]]
+serviceName = "hermes"
+port = 9119
+host = "${dashboard_domain}"

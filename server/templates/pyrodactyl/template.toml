@@ -1,0 +1,48 @@
+id = "pyrodactyl"
+name = "Pyrodactyl"
+description = "Pyrodactyl is the Pterodactyl-based game server panel that's faster, smaller, safer, and more accessible than Pelican."
+category = "other"
+tags = [
+    "self-hosted",
+    "open-source",
+    "management",
+]
+version = "main"
+logo = "logo.png"
+website = "https://pyrodactyl.dev"
+docs = "https://pyrodactyl.dev/docs"
+source = "https://github.com/pyrohost/pyrodactyl"
+upstream = "Dokploy/templates@6313a2e blueprints/pyrodactyl"
+
+[variables]
+db_password = "${password:32}"
+db_root_password = "${password:32}"
+main_domain = "${domain}"
+secret_key = "${base64:48}"
+
+[config.env]
+APP_DOMAIN = "${main_domain}"
+APP_SERVICE_AUTHOR = "noreply@example.com"
+APP_TIMEZONE = "UTC"
+CACHE_DRIVER = "redis"
+DB_HOST = "database"
+DB_PORT = "3306"
+Domain = "${main_domain}"
+MAIL_DRIVER = "smtp"
+MAIL_ENCRYPTION = "true"
+MAIL_FROM = "noreply@example.com"
+MAIL_HOST = "mail"
+MAIL_PASSWORD = ""
+MAIL_PORT = "1025"
+MAIL_USERNAME = ""
+MYSQL_PASSWORD = "${db_password}"
+MYSQL_ROOT_PASSWORD = "${db_root_password}"
+QUEUE_DRIVER = "redis"
+RECAPTCHA_ENABLED = "true"
+REDIS_HOST = "cache"
+SESSION_DRIVER = "redis"
+
+[[config.domains]]
+serviceName = "panel"
+port = 80
+host = "${main_domain}"

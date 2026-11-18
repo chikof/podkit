@@ -1,0 +1,30 @@
+id = "chevereto"
+name = "Chevereto"
+description = "Chevereto is a powerful, self-hosted image and video hosting platform designed for individuals, communities, and businesses. It allows users to upload, organize, and share media effortlessly."
+category = "other"
+tags = [
+    "image-hosting",
+    "file-management",
+    "open-source",
+    "multi-user",
+    "private-albums",
+]
+version = "4"
+logo = "logo.png"
+website = "https://chevereto.com/"
+docs = "https://v4-docs.chevereto.com/"
+source = "https://github.com/chevereto/chevereto"
+upstream = "Dokploy/templates@6313a2e blueprints/chevereto"
+
+[variables]
+db_password = "${password:16}"
+main_domain = "${domain}"
+
+[config.env]
+DB_PASSWORD = "${db_password}"
+DOMAIN = "${main_domain}"
+
+[[config.domains]]
+serviceName = "chevereto"
+port = 80
+host = "${main_domain}"

@@ -1,0 +1,32 @@
+id = "mattermost"
+name = "Mattermost"
+description = "Mattermost is a team chat platform and an alternative to Slack."
+category = "communication"
+tags = [
+    "chat",
+    "self-hosted",
+]
+version = "10.6.1"
+logo = "@mattermost"
+website = "https://mattermost.com/"
+docs = "https://docs.mattermost.com/"
+source = "https://github.com/mattermost/mattermost"
+upstream = "Dokploy/templates@6313a2e blueprints/mattermost"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+APP_PORT = "8065"
+Domain = "${main_domain}"
+MM_SQLSETTINGS_DATASOURCE = "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable&connect_timeout=10"
+MM_SQLSETTINGS_DRIVERNAME = "postgres"
+POSTGRES_DB = "mattermost"
+POSTGRES_PASSWORD = "${password:32}"
+POSTGRES_USER = "mmuser"
+TZ = "UTC"
+
+[[config.domains]]
+serviceName = "mattermost"
+port = 8065
+host = "${main_domain}"

@@ -1,0 +1,30 @@
+id = "flaresolverr"
+name = "FlareSolverr"
+description = "FlareSolverr is a proxy server to bypass Cloudflare and DDoS-GUARD protection."
+category = "networking"
+tags = [
+    "proxy",
+    "cloudflare",
+    "bypass",
+    "ddos-guard",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://github.com/FlareSolverr/FlareSolverr"
+docs = "https://github.com/FlareSolverr/FlareSolverr"
+source = "https://github.com/FlareSolverr/FlareSolverr"
+upstream = "Dokploy/templates@6313a2e blueprints/flaresolverr"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+CAPTCHA_SOLVER = "none"
+LOG_HTML = "false"
+LOG_LEVEL = "info"
+TZ = "Europe/London"
+
+[[config.domains]]
+serviceName = "flaresolverr"
+port = 8191
+host = "${main_domain}"

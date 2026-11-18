@@ -1,0 +1,30 @@
+id = "agentdvr"
+name = "Agent DVR"
+description = "Agent DVR is a comprehensive video surveillance software with motion detection, alerts, and remote access capabilities."
+category = "security"
+tags = [
+    "surveillance",
+    "security",
+    "video",
+    "monitoring",
+    "dvr",
+    "camera",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://www.ispyconnect.com/"
+docs = "https://www.ispyconnect.com/userguide-agent-dvr.aspx"
+source = "https://github.com/ispysoftware/AgentDVR"
+upstream = "Dokploy/templates@6313a2e blueprints/agentdvr"
+
+[variables]
+main_domain = "${domain}"
+timezone = "America/New_York"
+
+[config.env]
+TIMEZONE = "${timezone}"
+
+[[config.domains]]
+serviceName = "agentdvr"
+port = 8090
+host = "${main_domain}"

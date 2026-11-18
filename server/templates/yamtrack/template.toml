@@ -1,0 +1,31 @@
+id = "yamtrack"
+name = "Yamtrack"
+description = "Yamtrack is a self-hosted anime and manga tracker with Redis backend support."
+category = "media"
+tags = [
+    "media",
+    "anime",
+    "manga",
+    "tracker",
+    "redis",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://github.com/fuzzygrim/yamtrack"
+docs = "https://github.com/fuzzygrim/yamtrack"
+source = "https://github.com/fuzzygrim/yamtrack"
+upstream = "Dokploy/templates@6313a2e blueprints/yamtrack"
+
+[variables]
+SECRET = "${password:64}"
+main_domain = "${domain}"
+
+[config.env]
+REDIS_URL = "redis://redis:6379"
+SECRET = "${SECRET}"
+TZ = "Europe/Berlin"
+
+[[config.domains]]
+serviceName = "yamtrack"
+port = 8000
+host = "${main_domain}"

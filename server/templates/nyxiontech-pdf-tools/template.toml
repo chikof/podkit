@@ -1,0 +1,25 @@
+id = "nyxiontech-pdf-tools"
+name = "Nyxiontech PDF Tools"
+description = "25 PDF and image tools that run entirely in the browser. No backend, so documents are never uploaded to the server."
+category = "tools"
+tags = [
+    "pdf",
+    "ocr",
+    "privacy",
+    "productivity",
+    "utility",
+]
+version = "1.2.0"
+logo = "logo.svg"
+website = "https://tools.nyxiontech.com"
+docs = "https://tools.nyxiontech.com/guides"
+source = "https://github.com/jurecki007/nyxiontech-tools"
+upstream = "Dokploy/templates@6313a2e blueprints/nyxiontech-pdf-tools"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "nyxiontech-pdf-tools"
+port = 80
+host = "${main_domain}"

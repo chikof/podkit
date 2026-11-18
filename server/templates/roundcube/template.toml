@@ -1,0 +1,27 @@
+id = "roundcube"
+name = "Roundcube"
+description = "Free and open source webmail software for the masses, written in PHP."
+category = "communication"
+tags = [
+    "self-hosted",
+    "email",
+    "webmail",
+]
+version = "1.6.9"
+logo = "logo.svg"
+website = "https://roundcube.net/"
+docs = "https://roundcube.net/about/"
+source = "https://github.com/roundcube/roundcubemail"
+upstream = "Dokploy/templates@6313a2e blueprints/roundcube"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+DEFAULT_HOST = "tls://mail.example.com"
+SMTP_SERVER = "tls://mail.example.com"
+
+[[config.domains]]
+serviceName = "roundcubemail"
+port = 80
+host = "${main_domain}"

@@ -1,0 +1,28 @@
+id = "lfsx"
+name = "LFSX"
+description = "Self-hosted Git LFS server that keeps large binaries off your forge's metered storage."
+category = "development"
+tags = [
+    "git",
+    "developer-tools",
+    "storage",
+    "self-hosted",
+]
+version = "1.14.1"
+logo = "logo.svg"
+website = "https://lfsx.dev"
+docs = "https://lfsx.dev/docs/quickstart"
+source = "https://github.com/FerrLabs/LFSX"
+upstream = "Dokploy/templates@6313a2e blueprints/lfsx"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+LFSX_AUTH = "github"
+LFSX_PUBLIC_URL = "https://${main_domain}"
+
+[[config.domains]]
+serviceName = "lfsx"
+port = 8080
+host = "${main_domain}"

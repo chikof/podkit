@@ -1,0 +1,42 @@
+id = "typebot"
+name = "Typebot"
+description = "Typebot is an open-source chatbot builder platform."
+category = "ai"
+tags = [
+    "chatbot",
+    "builder",
+    "open-source",
+]
+version = "2.27.0"
+logo = "logo.svg"
+website = "https://typebot.io/"
+docs = "https://docs.typebot.io/get-started/introduction"
+source = "https://github.com/baptisteArno/typebot.io"
+upstream = "Dokploy/templates@6313a2e blueprints/typebot"
+
+[variables]
+builder_domain = "${domain}"
+encryption_secret = "${base64:24}"
+viewer_domain = "${domain}"
+
+[config.env]
+ADMIN_EMAIL = "typebot@example.com"
+DEFAULT_WORKSPACE_PLAN = "UNLIMITED"
+ENCRYPTION_SECRET = "${encryption_secret}"
+NEXTAUTH_URL = "http://${builder_domain}"
+NEXT_PUBLIC_SMTP_FROM = "typebot@example.com"
+NEXT_PUBLIC_VIEWER_URL = "http://${viewer_domain}"
+SMTP_HOST = "'Fill'"
+SMTP_PASSWORD = "'Fill'"
+SMTP_PORT = "25"
+SMTP_USERNAME = "'Fill'"
+
+[[config.domains]]
+serviceName = "typebot-builder"
+port = 3000
+host = "${builder_domain}"
+
+[[config.domains]]
+serviceName = "typebot-viewer"
+port = 3000
+host = "${viewer_domain}"

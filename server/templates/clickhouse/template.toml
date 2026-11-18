@@ -1,0 +1,31 @@
+id = "clickhouse"
+name = "ClickHouse"
+description = "ClickHouse is a fast, open-source columnar database built for real-time analytics."
+category = "database"
+tags = [
+    "self-hosted",
+    "open-source",
+    "database",
+    "olap",
+    "analytics",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://clickhouse.com/"
+docs = "https://clickhouse.com/docs"
+source = "https://github.com/ClickHouse/ClickHouse"
+upstream = "Dokploy/templates@6313a2e blueprints/clickhouse"
+
+[variables]
+clickhouse_password = "${password:32}"
+clickhouse_user = "default"
+main_domain = "${domain}"
+
+[config.env]
+CLICKHOUSE_PASSWORD = "${clickhouse_password}"
+CLICKHOUSE_USER = "${clickhouse_user}"
+
+[[config.domains]]
+serviceName = "clickhouse"
+port = 8123
+host = "${main_domain}"

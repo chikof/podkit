@@ -1,0 +1,33 @@
+id = "kotonoba"
+name = "Kotonoba"
+description = "A high-performance, self-hosted, multi-tenant blog CMS built with Next.js 16, SQLite, Tailwind CSS v4, and Docker."
+category = "cms"
+tags = [
+    "blog",
+    "i18n",
+    "nextjs",
+    "web",
+]
+version = "1.0.19"
+logo = "logo.svg"
+website = "https://github.com/trixtylab/kotonoba"
+docs = "https://github.com/TrixtyLab/kotonoba/tree/master/docs"
+source = "https://github.com/trixtylab/kotonoba"
+upstream = "Dokploy/templates@6313a2e blueprints/kotonoba"
+
+[variables]
+jwt_secret = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+ADMIN_DOMAIN = "${main_domain}"
+DB_PATH = "/app/data/kotonoba.db"
+JWT_SECRET = "${jwt_secret}"
+NODE_ENV = "production"
+SITE_URL = "https://${main_domain}"
+UPLOAD_DIR = "/app/data/uploads"
+
+[[config.domains]]
+serviceName = "kotonoba"
+port = 3000
+host = "${main_domain}"

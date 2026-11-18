@@ -1,0 +1,36 @@
+id = "customermates"
+name = "Customermates"
+description = "Customermates is an open-source CRM for contacts, organizations, deals, services and tasks, with a REST API, webhooks and an MCP endpoint for external AI clients. Self-hosted, it runs on PostgreSQL 16 and uses the Starter feature set."
+category = "productivity"
+tags = [
+    "crm",
+    "sales",
+    "business",
+]
+version = "sha-4f4d61c"
+logo = "logo.svg"
+website = "https://customermates.com"
+docs = "https://customermates.com/docs/self-hosting"
+source = "https://github.com/customermates/customermates"
+upstream = "Dokploy/templates@6313a2e blueprints/customermates"
+
+[variables]
+auth_secret = "${hash:32}"
+cron_secret = "${hash:32}"
+main_domain = "${domain}"
+postgres_password = "${hash:16}"
+
+[config.env]
+BASE_URL = "http://${main_domain}"
+BETTER_AUTH_SECRET = "${auth_secret}"
+CRON_SECRET = "${cron_secret}"
+POSTGRES_DB = "customermates"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USER = "customermates"
+RESEND_API_KEY = ""
+RESEND_OPERATOR_EMAIL = "mail@your-company.com"
+
+[[config.domains]]
+serviceName = "customermates"
+port = 4000
+host = "${main_domain}"

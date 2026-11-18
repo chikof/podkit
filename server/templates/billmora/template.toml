@@ -1,0 +1,47 @@
+id = "billmora"
+name = "Billmora"
+description = "Billmora (Billing Management, Operation, and Recurring Automation) is a free, open-source platform for hosting providers to manage clients, invoicing, and server provisioning."
+category = "development"
+tags = [
+    "laravel",
+    "billing",
+    "hosting",
+    "automation",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://billmora.com"
+docs = "https://billmora.com/docs/introduction"
+source = "https://github.com/Billmora/billmora"
+upstream = "Dokploy/templates@6313a2e blueprints/billmora"
+
+[variables]
+APP_KEY = "base64:${base64:32}"
+APP_URL = "https://${domain}"
+DB_PASSWORD = "${password:16}"
+DB_ROOT_PASSWORD = "${password:16}"
+REDIS_PASSWORD = "${password:16}"
+
+[config.env]
+APP_ENV = "production"
+APP_KEY = "${APP_KEY}"
+APP_NAME = "Billmora"
+APP_URL = "${APP_URL}"
+CACHE_STORE = "redis"
+DB_CONNECTION = "mariadb"
+DB_DATABASE = "billmora"
+DB_HOST = "billmora-db"
+DB_PASSWORD = "${DB_PASSWORD}"
+DB_PORT = "3306"
+DB_ROOT_PASSWORD = "${DB_ROOT_PASSWORD}"
+DB_USERNAME = "billmora"
+QUEUE_CONNECTION = "redis"
+REDIS_HOST = "billmora-redis"
+REDIS_PASSWORD = "${REDIS_PASSWORD}"
+REDIS_PORT = "6379"
+SESSION_DRIVER = "redis"
+
+[[config.domains]]
+serviceName = "billmora-app"
+port = 8080
+host = "${domain}"

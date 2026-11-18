@@ -1,0 +1,35 @@
+id = "crawl4ai"
+name = "Crawl4AI"
+description = "Crawl4AI is a modern AI-powered web crawler with support for screenshots, PDFs, JavaScript execution, and LLM-based extraction. Includes an interactive playground and MCP (Model Context Protocol) integration."
+category = "ai"
+tags = [
+    "crawler",
+    "scraping",
+    "ai",
+    "llm",
+    "api",
+]
+version = "0.7.3"
+logo = "logo.png"
+website = "https://crawl4ai.com"
+docs = "https://github.com/unclecode/crawl4ai#readme"
+source = "https://github.com/unclecode/crawl4ai"
+upstream = "Dokploy/templates@6313a2e blueprints/crawl4ai"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+ANTHROPIC_API_KEY = ""
+DEEPSEEK_API_KEY = ""
+GEMINI_API_TOKEN = ""
+GROQ_API_KEY = ""
+LLM_PROVIDER = "openai/gpt-4o-mini"
+MISTRAL_API_KEY = ""
+OPENAI_API_KEY = "${password:48}"
+TOGETHER_API_KEY = ""
+
+[[config.domains]]
+serviceName = "crawl4ai"
+port = 11235
+host = "${main_domain}"

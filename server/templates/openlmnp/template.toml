@@ -1,0 +1,27 @@
+id = "openlmnp"
+name = "OpenLMNP"
+description = "Self-hosted accounting for French furnished rentals (LMNP): depreciation schedules, ready-to-file 2031/2033 tax forms, FEC export and Airbnb CSV import."
+category = "finance"
+tags = [
+    "finance",
+    "accounting",
+    "tax",
+    "rental",
+]
+version = "1.6.6"
+logo = "logo.png"
+website = "https://openlmnp.fr"
+docs = "https://github.com/manganate006/openlmnp/blob/main/docs/INSTALLATION.md"
+source = "https://github.com/manganate006/openlmnp"
+upstream = "Dokploy/templates@6313a2e blueprints/openlmnp"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+OPENLMNP_HOST = "${main_domain}"
+
+[[config.domains]]
+serviceName = "openlmnp"
+port = 8000
+host = "${main_domain}"

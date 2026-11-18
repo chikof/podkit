@@ -1,0 +1,23 @@
+id = "meilisearch"
+name = "Meilisearch"
+description = "Meilisearch is a free and open-source search engine that allows you to easily add search functionality to your web applications."
+category = "tools"
+tags = ["search"]
+version = "v1.35.1"
+logo = "logo.png"
+website = "https://www.meilisearch.com/"
+docs = "https://docs.meilisearch.com/"
+source = "https://github.com/meilisearch/meilisearch"
+upstream = "Dokploy/templates@6313a2e blueprints/meilisearch"
+
+[variables]
+main_domain = "${domain}"
+master_key = "${base64:32}"
+
+[config.env]
+MEILI_MASTER_KEY = "${master_key}"
+
+[[config.domains]]
+serviceName = "meilisearch"
+port = 7700
+host = "${main_domain}"

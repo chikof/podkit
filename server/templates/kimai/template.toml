@@ -1,0 +1,36 @@
+id = "kimai"
+name = "Kimai"
+description = "Kimai is a time-tracking app for freelancers and teams."
+category = "productivity"
+tags = [
+    "invoice",
+    "business",
+    "finance",
+]
+version = "2.31.0"
+logo = "logo.svg"
+website = "https://www.kimai.org"
+docs = "https://www.kimai.org/documentation"
+source = "https://github.com/kimai/kimai"
+upstream = "Dokploy/templates@6313a2e blueprints/kimai"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password:32}"
+app_secret = "${password:32}"
+main_domain = "${domain}"
+mysql_password = "${password:32}"
+mysql_root_password = "${password:32}"
+
+[config.env]
+KI_ADMINMAIL = "admin@kimai.local"
+KI_ADMINPASS = "${admin_password}"
+KI_APP_SECRET = "${app_secret}"
+KI_HOST = "${main_domain}"
+KI_MYSQL_PASSWORD = "${mysql_password}"
+KI_MYSQL_ROOT_PASSWORD = "${mysql_root_password}"
+
+[[config.domains]]
+serviceName = "app"
+port = 8001
+host = "${main_domain}"

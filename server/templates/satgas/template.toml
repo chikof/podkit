@@ -1,0 +1,29 @@
+id = "satgas"
+name = "Satgas"
+description = "Your own AI team, self-hosted. Describe what you want, and a lead hires the right agents, runs them in parallel on the model you choose, and puts the results on a shared canvas you can watch and edit."
+category = "ai"
+tags = [
+    "ai",
+    "agents",
+    "developer-tools",
+    "self-hosted",
+]
+version = "0.1.13"
+logo = "logo.svg"
+website = "https://github.com/zeative/satgas"
+docs = "https://github.com/zeative/satgas#self-hosting"
+source = "https://github.com/zeative/satgas"
+upstream = "Dokploy/templates@6313a2e blueprints/satgas"
+
+[variables]
+main_domain = "${domain}"
+sign_in_token = "${password:32}"
+
+[config.env]
+SATGAS_PUBLIC_URL = "http://${main_domain}"
+SATGAS_TOKEN = "${sign_in_token}"
+
+[[config.domains]]
+serviceName = "satgas"
+port = 4317
+host = "${main_domain}"

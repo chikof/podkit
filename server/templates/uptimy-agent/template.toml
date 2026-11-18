@@ -1,0 +1,30 @@
+id = "uptimy-agent"
+name = "Uptimy Agent"
+description = "Uptimy Agent is a lightweight, open-source uptime monitor with a status page: HTTP, TCP, ping, DNS, TLS and database checks, heartbeats for cron jobs, and alerts to Slack, Discord, Telegram, email and more. A single Go binary that idles at a few MiB of memory."
+category = "monitoring"
+tags = [
+    "monitoring",
+    "uptime",
+    "status-page",
+    "alerts",
+]
+version = "0.3.2"
+logo = "logo.svg"
+website = "https://www.upti.my/agent"
+docs = "https://www.upti.my/docs/agent"
+source = "https://github.com/uptimy/agent"
+upstream = "Dokploy/templates@6313a2e blueprints/uptimy-agent"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password:24}"
+main_domain = "${domain}"
+
+[config.env]
+ADMIN_PASSWORD = "${admin_password}"
+ADMIN_USERNAME = "admin"
+
+[[config.domains]]
+serviceName = "uptimy-agent"
+port = 8080
+host = "${main_domain}"

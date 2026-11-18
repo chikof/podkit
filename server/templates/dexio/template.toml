@@ -1,0 +1,31 @@
+id = "dexio"
+name = "Dexio"
+description = "One wiki for all your agents. AI agents read and write linked markdown pages over MCP from any machine, and people see what they know in a web app: the link graph, every page and its history."
+category = "productivity"
+tags = [
+    "wiki",
+    "knowledge-base",
+    "markdown",
+    "mcp",
+    "ai",
+    "agents",
+]
+version = "1.0.0"
+logo = "logo.svg"
+website = "https://dexio.wiki"
+docs = "https://github.com/dexio-wiki/dexio/blob/main/deploy/README.md"
+source = "https://github.com/dexio-wiki/dexio"
+upstream = "Dokploy/templates@6313a2e blueprints/dexio"
+
+[variables]
+main_domain = "${domain}"
+secret_key = "${password:64}"
+
+[config.env]
+DEXIO_PUBLIC_URL = "https://${main_domain}"
+DEXIO_SECRET_KEY = "${secret_key}"
+
+[[config.domains]]
+serviceName = "dexio"
+port = 8080
+host = "${main_domain}"

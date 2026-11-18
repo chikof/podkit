@@ -1,0 +1,26 @@
+id = "calibre"
+name = "Calibre"
+description = "Calibre is a comprehensive e-book management tool designed to organize, convert, and read your e-book collection. It supports most of the major e-book formats and is compatible with various e-book reader devices."
+category = "other"
+tags = [
+    "documents",
+    "e-commerce",
+]
+version = "7.26.0"
+logo = "logo.png"
+website = "https://calibre-ebook.com/"
+docs = "https://manual.calibre-ebook.com/"
+source = "https://github.com/kovidgoyal/calibre"
+upstream = "Dokploy/templates@6313a2e blueprints/calibre"
+
+[variables]
+main_domain = "${domain}"
+password = "${password:16}"
+
+[config.env]
+PASSWORD = "${password}"
+
+[[config.domains]]
+serviceName = "calibre"
+port = 8080
+host = "${main_domain}"

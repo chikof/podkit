@@ -1,0 +1,86 @@
+id = "librechat"
+name = "LibreChat"
+description = "LibreChat is the ultimate open-source app for all your AI conversations, fully customizable and compatible with any AI provider (Openai, Ollama, Google etc.) â€” all in one sleek interface."
+category = "ai"
+tags = [
+    "ai",
+    "chatbot",
+    "llm",
+    "mit-license",
+    "byok",
+    "generative-ai",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://librechat.ai"
+docs = "https://docs.librechat.ai"
+source = "https://github.com/danny-avila/librechat"
+upstream = "Dokploy/templates@6313a2e blueprints/librechat"
+
+[variables]
+creds_iv = "e2341419ec3dd3d19b13a1a87fafcbfb"
+creds_key = "f34be427ebb29de8d88c107a71546019685ed8b241d8f2ed00c3df97ad2566f0"
+jwt_refresh_secret = "${password:64}"
+jwt_secret = "${password:64}"
+main_domain = "${domain}"
+meili_master_key = "${password:32}"
+mongo_password = "${password:16}"
+postgresql_password = "${password:16}"
+
+[config.env]
+ALLOW_EMAIL_LOGIN = "true"
+ALLOW_REGISTRATION = "false"
+ALLOW_SOCIAL_LOGIN = "false"
+ANTHROPIC_API_KEY = ""
+APP_TITLE = "LibreChat"
+CHUNK_OVERLAP = "100"
+CHUNK_SIZE = "1500"
+CREDS_IV = "${creds_iv}"
+CREDS_KEY = "${creds_key}"
+CUSTOM_FOOTER = "Made with ❤️ by LibreChat"
+DOMAIN_CLIENT = "https://${main_domain}"
+DOMAIN_SERVER = "https://${main_domain}"
+EMBEDDINGS_MODEL = "text-embedding-3-small"
+EMBEDDINGS_PROVIDER = "openai"
+GOOGLE_KEY = ""
+HOST = "0.0.0.0"
+JWT_REFRESH_SECRET = "${jwt_refresh_secret}"
+JWT_SECRET = "${jwt_secret}"
+MEILI_MASTER_KEY = "${meili_master_key}"
+OPENAI_API_KEY = ""
+OPENROUTER_KEY = ""
+PORT = "3080"
+POSTGRES_DB = "librechat_db"
+POSTGRES_PASSWORD = "${postgresql_password}"
+POSTGRES_USER = "librechat_user"
+RAG_GOOGLE_API_KEY = ""
+RAG_OPENAI_API_KEY = ""
+
+[[config.domains]]
+serviceName = "librechat"
+port = 3080
+host = "${main_domain}"
+
+[[config.mounts]]
+filePath = "librechat.yaml"
+content = """
+### librechat.yaml configs ###
+
+version: 1.2.8
+cache: true
+endpoints:
+  custom:
+    - name: "OpenRouter"
+      apiKey: "${OPENROUTER_KEY}"
+      baseURL: "https://openrouter.ai/api/v1"
+      models:
+        default: ["meta-llama/llama-3.3-70b-instruct:free"]
+        fetch: true
+      titleConvo: true
+      titleModel: "current_model"
+      summarize: false
+      summaryModel: "current_model"
+      forcePrompt: false
+      dropParams: ["stop"]
+      modelDisplayLabel: "OpenRouter"
+"""

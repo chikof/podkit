@@ -1,0 +1,36 @@
+id = "linkstack"
+name = "LinkStack"
+description = "LinkStack is an open-source link-in-bio platform for sharing multiple links using a customizable landing page."
+category = "cms"
+tags = [
+    "bio",
+    "personal",
+    "cms",
+    "php",
+]
+version = "latest"
+logo = "@linkstack"
+website = "https://linkstack.org/"
+docs = "https://docs.linkstack.org/"
+source = "https://github.com/linkstackorg/linkstack"
+upstream = "Dokploy/templates@6313a2e blueprints/linkstack"
+
+[variables]
+admin_email = "${email}"
+main_domain = "${domain}"
+mysql_root_password = "${password:32}"
+
+[config.env]
+HTTPS_SERVER_NAME = "${main_domain}"
+HTTP_SERVER_NAME = "${main_domain}"
+LOG_LEVEL = "info"
+MYSQL_ROOT_PASSWORD = "${mysql_root_password}"
+PHP_MEMORY_LIMIT = "256M"
+SERVER_ADMIN = "${admin_email}"
+TZ = "Europe/Berlin"
+UPLOAD_MAX_FILESIZE = "8M"
+
+[[config.domains]]
+serviceName = "linkstack"
+port = 80
+host = "${main_domain}"

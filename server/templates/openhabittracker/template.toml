@@ -1,0 +1,34 @@
+id = "openhabittracker"
+name = "OpenHabitTracker"
+description = "Take notes, plan tasks and track habits - free, ad-free, open source, with all data on your own server. Native apps for Windows, Linux, Android, iOS and macOS sync to it."
+category = "productivity"
+tags = [
+    "productivity",
+    "notes",
+    "tasks",
+    "habits",
+    "self-hosted",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://openhabittracker.net"
+docs = ""
+source = "https://github.com/Jinjinov/OpenHabitTracker"
+upstream = "Dokploy/templates@6313a2e blueprints/openhabittracker"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password:24}"
+jwt_secret = "${base64:48}"
+main_domain = "${domain}"
+
+[config.env]
+OHT_EMAIL = "admin@example.com"
+OHT_JWT_SECRET = "${jwt_secret}"
+OHT_PASSWORD = "${admin_password}"
+OHT_USERNAME = "admin"
+
+[[config.domains]]
+serviceName = "openhabittracker"
+port = 8080
+host = "${main_domain}"

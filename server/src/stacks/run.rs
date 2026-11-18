@@ -136,7 +136,10 @@ impl Ctx<'_> {
 			tracing::error!(stack = self.stack.id.0, "{e}");
 			failed("failed to read the stack's variables")
 		})?;
-		let files = BTreeMap::new();
+		let files = stacks::decrypt_files(&self.state.secrets, self.stack).map_err(|e| {
+			tracing::error!(stack = self.stack.id.0, "{e}");
+			failed("failed to read the stack's files")
+		})?;
 		let compose = compose::parse(
 			&self.stack.compose_yaml,
 			&Inputs {
@@ -426,7 +429,7 @@ impl Ctx<'_> {
 	/// no longer parses.
 	fn stop_order(&self, rows: &[StackService]) -> Vec<String> {
 		let env = stacks::decrypt_env(&self.state.secrets, self.stack).unwrap_or_default();
-		let files = BTreeMap::new();
+		let files = stacks::decrypt_files(&self.state.secrets, self.stack).unwrap_or_default();
 		match compose::parse(
 			&self.stack.compose_yaml,
 			&Inputs {

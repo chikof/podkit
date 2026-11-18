@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Rebuilds server/templates (imported part), server/static/logos, NOTICE and
+# server/templates/IMPORT_REPORT.md from pinned revisions of
+#   Dokploy/templates                (MIT)         blueprints
+#   homarr-labs/dashboard-icons      (Apache-2.0)  svg/
+#   simple-icons/simple-icons        (CC0-1.0)     icons/
+#
+#   scripts/templates-import                     import, verify the hand-written templates' images
+#   scripts/templates-import --verify-images=all also drop imported templates whose image does not exist
+#                                                (slow; Docker Hub rate-limits anonymous reads)
+#   scripts/templates-import --no-verify-images  skip podman manifest inspect
+#
+# Needs: git, cargo, network (clones go to $PODKIT_TEMPLATES_CACHE, default
+# ~/.cache/podkit-templates), and podman for the image checks. Hand-written
+# templates (no `upstream` line) are never touched.
+set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cache="${PODKIT_TEMPLATES_CACHE:-$HOME/.cache/podkit-templates}"
+
+DOKPLOY_REV=6313a2e2305b6f1b5e7da6811d3b0ee2fcb3f597
+DASHBOARD_ICONS_REV=d4b500dc40a8e1043b1581cabb7208892cf35472
+SIMPLE_ICONS_REV=17cd4ee07612198a1d8777a060d4100423762a8b
+
+fetch() { # <name> <url> <rev> <sparse path>...
+	local name=$1 url=$2 rev=$3
+	shift 3
+	local dir="$cache/$name"
+	if [ ! -d "$dir/.git" ]; then
+		mkdir -p "$dir"
+		git -C "$dir" init -q
+		git -C "$dir" remote add origin "$url"
+	fi
+	if [ "$(git -C "$dir" rev-parse -q --verify HEAD 2>/dev/null || true)" != "$rev" ]; then
+		git -C "$dir" sparse-checkout set --no-cone "$@" >/dev/null 2>&1 || true
+		git -C "$dir" fetch -q --depth 1 --filter=blob:none origin "$rev"
+		git -C "$dir" checkout -q --force "$rev"
+	fi
+}
+
+fetch dokploy https://github.com/Dokploy/templates "$DOKPLOY_REV" /blueprints /LICENSE
+fetch dashboard-icons https://github.com/homarr-labs/dashboard-icons "$DASHBOARD_ICONS_REV" /svg /LICENSE
+fetch simple-icons https://github.com/simple-icons/simple-icons "$SIMPLE_ICONS_REV" /icons /LICENSE.md
+
+cd "$root"
+SQLX_OFFLINE=true cargo run -q -p server -- templates-import \
+	--dokploy "$cache/dokploy/blueprints" --dokploy-rev "$DOKPLOY_REV" \
+	--dashboard-icons "$cache/dashboard-icons/svg" --dashboard-icons-rev "$DASHBOARD_ICONS_REV" \
+	--simple-icons "$cache/simple-icons/icons" --simple-icons-rev "$SIMPLE_ICONS_REV" \
+	--out server/templates --static server/static/logos \
+	--logos scripts/logos.txt --notice NOTICE "$@"

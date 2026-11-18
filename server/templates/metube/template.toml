@@ -1,0 +1,56 @@
+id = "metube"
+name = "MeTube"
+description = "MeTube is a web-based YouTube downloader that allows downloading videos and audio using yt-dlp."
+category = "media"
+tags = [
+    "downloader",
+    "youtube",
+    "media",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://github.com/alexta69/metube"
+docs = "https://github.com/alexta69/metube/wiki"
+source = "https://github.com/alexta69/metube"
+upstream = "Dokploy/templates@6313a2e blueprints/metube"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+AUDIO_DOWNLOAD_DIR = "/downloads"
+CERTFILE = ""
+CREATE_CUSTOM_DIRS = "true"
+CUSTOM_DIRS = "true"
+CUSTOM_DIRS_EXCLUDE_REGEX = "(^|/)[.@].*$"
+DEFAULT_OPTION_PLAYLIST_ITEM_LIMIT = "0"
+DEFAULT_OPTION_PLAYLIST_STRICT_MODE = "false"
+DEFAULT_THEME = "auto"
+DELETE_FILE_ON_TRASHCAN = "false"
+DOWNLOAD_DIR = "/downloads"
+DOWNLOAD_DIRS_INDEXABLE = "false"
+DOWNLOAD_MODE = "limited"
+ENABLE_ACCESSLOG = "false"
+GID = "1000"
+HTTPS = "false"
+KEYFILE = ""
+LOGLEVEL = "INFO"
+MAX_CONCURRENT_DOWNLOADS = "3"
+OUTPUT_TEMPLATE = "%(title)s.%(ext)s"
+OUTPUT_TEMPLATE_CHAPTER = "%(title)s - %(section_number)s %(section_title)s.%(ext)s"
+OUTPUT_TEMPLATE_PLAYLIST = "%(playlist_title)s/%(title)s.%(ext)s"
+PUBLIC_HOST_AUDIO_URL = ""
+PUBLIC_HOST_URL = ""
+ROBOTS_TXT = ""
+STATE_DIR = "/downloads/.metube"
+TEMP_DIR = "/downloads"
+UID = "1000"
+UMASK = "022"
+URL_PREFIX = "/"
+YTDL_OPTIONS = "{}"
+YTDL_OPTIONS_FILE = ""
+
+[[config.domains]]
+serviceName = "metube"
+port = 8081
+host = "${main_domain}"

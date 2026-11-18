@@ -1,0 +1,43 @@
+id = "budibase"
+name = "Budibase"
+description = "Budibase is an open-source low-code platform that saves engineers 100s of hours building forms, portals, and approval apps, securely."
+category = "database"
+tags = [
+    "database",
+    "low-code",
+    "nocode",
+    "applications",
+]
+version = "3.23.47"
+logo = "logo.svg"
+website = "https://budibase.com/"
+docs = "https://docs.budibase.com/docs/"
+source = "https://github.com/Budibase/budibase"
+upstream = "Dokploy/templates@6313a2e blueprints/budibase"
+
+[variables]
+api_key = "${password:32}"
+couchdb_password = "${password:32}"
+encryption_key = "${password:32}"
+jwt_secret = "${password:32}"
+main_domain = "${domain}"
+minio_access_key = "${password:32}"
+minio_secret_key = "${password:32}"
+redis_password = "${password:32}"
+watchtower_password = "${password:32}"
+
+[config.env]
+BB_API_ENCRYPTION_KEY = "${encryption_key}"
+BB_COUCHDB_PASSWORD = "${couchdb_password}"
+BB_HOST = "${main_domain}"
+BB_INTERNAL_API_KEY = "${api_key}"
+BB_JWT_SECRET = "${jwt_secret}"
+BB_MINIO_ACCESS_KEY = "${minio_access_key}"
+BB_MINIO_SECRET_KEY = "${minio_secret_key}"
+BB_REDIS_PASSWORD = "${redis_password}"
+BB_WATCHTOWER_PASSWORD = "${watchtower_password}"
+
+[[config.domains]]
+serviceName = "proxy"
+port = 10000
+host = "${main_domain}"

@@ -1,0 +1,35 @@
+id = "dossier"
+name = "Dossier"
+description = "Dossier is a personal job search app with a career profile, resume and cover letter drafting, PDF export, and an application tracking board. It supports local and hosted AI providers."
+category = "productivity"
+tags = [
+    "productivity",
+    "job-search",
+    "ai",
+]
+version = "v1.9.0"
+logo = "logo.svg"
+website = "https://github.com/AienTech/dossier"
+docs = "https://github.com/AienTech/dossier#self-hosting"
+source = "https://github.com/AienTech/dossier"
+upstream = "Dokploy/templates@6313a2e blueprints/dossier"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password:24}"
+dossier_secret = "${hash:64}"
+main_domain = "${domain}"
+postgres_password = "${hash:48}"
+
+[config.env]
+DOSSIER_ADMIN_PASSWORD = "${admin_password}"
+DOSSIER_BACKUP_RETENTION_DAYS = "14"
+DOSSIER_SECRET = "${dossier_secret}"
+DOSSIER_TELEMETRY = "off"
+POSTGRES_PASSWORD = "${postgres_password}"
+TZ = "UTC"
+
+[[config.domains]]
+serviceName = "dossier"
+port = 3000
+host = "${main_domain}"

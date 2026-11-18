@@ -1,0 +1,111 @@
+id = "peerdb"
+name = "PeerDB"
+description = "Data integration platform that synchronizes and federates data across databases with a unified API."
+category = "database"
+tags = [
+    "database",
+    "integration",
+    "sync",
+    "sql",
+    "workflow",
+]
+version = "v0.35.5"
+logo = "@mono-peerdb"
+website = "https://peerdb.io"
+docs = "https://docs.peerdb.io"
+source = "https://github.com/peerdb-io/peerdb"
+upstream = "Dokploy/templates@6313a2e blueprints/peerdb"
+
+[variables]
+main_domain = "${domain}"
+minio_root_password = "${password:32}"
+minio_root_user = "_peerdb_minioadmin"
+nextauth_secret = "${password:32}"
+peerdb_password = "${password:32}"
+postgres_password = "${password:32}"
+
+[config.env]
+AWS_ACCESS_KEY_ID = ""
+AWS_ENDPOINT = ""
+AWS_REGION = ""
+AWS_SECRET_ACCESS_KEY = ""
+DATABASE_URL = "postgres://postgres:${postgres_password}@catalog:5432/postgres"
+MINIO_ROOT_PASSWORD = "${minio_root_password}"
+MINIO_ROOT_USER = "${minio_root_user}"
+NEXTAUTH_SECRET = "${nextauth_secret}"
+NEXTAUTH_URL = "http://localhost:3000"
+PEERDB_ALLOWED_TARGETS = ""
+PEERDB_CATALOG_DATABASE = "postgres"
+PEERDB_CATALOG_HOST = "catalog"
+PEERDB_CATALOG_PASSWORD = "${postgres_password}"
+PEERDB_CATALOG_PORT = "5432"
+PEERDB_CATALOG_USER = "postgres"
+PEERDB_CLICKHOUSE_ALLOWED_DOMAINS = ""
+PEERDB_CLICKHOUSE_AWS_ENDPOINT_URL_S3 = "http://minio:9000"
+PEERDB_CLICKHOUSE_AWS_REGION = "us-east-1"
+PEERDB_CLICKHOUSE_AWS_S3_BUCKET_NAME = "peerdbbucket"
+PEERDB_EXPERIMENTAL_ENABLE_SCRIPTING = "true"
+PEERDB_FLOW_SERVER_ADDRESS = "grpc://flow-api:8112"
+PEERDB_FLOW_SERVER_HTTP = "http://flow-api:8113"
+PEERDB_PASSWORD = "${peerdb_password}"
+
+[[config.domains]]
+serviceName = "peerdb-ui"
+port = 3000
+host = "${main_domain}"
+
+[[config.domains]]
+serviceName = "minio"
+port = 9001
+host = "${main_domain}"
+
+[[config.domains]]
+serviceName = "temporal-ui"
+port = 8080
+host = "${main_domain}"
+
+[[config.mounts]]
+filePath = "./postgresql.conf"
+content = """
+listen_addresses = '*'
+
+wal_level = logical
+max_wal_senders = 4
+max_replication_slots = 4
+"""
+
+[[config.mounts]]
+filePath = "./docker-entrypoint-initdb.d/pg-hba-replication.sh"
+content = """
+#!/bin/sh
+echo "host replication $POSTGRES_USER 0.0.0.0/0 trust" >> "$PGDATA/pg_hba.conf"
+"""
+
+[[config.mounts]]
+filePath = "./temporal-dynamicconfig/production-sql.yaml"
+content = """
+limit.maxIDLength:
+  - value: 255
+    constraints: {}
+system.forceSearchAttributesCacheRefreshOnRead:
+  - value: false
+    constraints: {}
+frontend.enableUpdateWorkflowExecution:
+  - value: true
+"""
+
+[[config.mounts]]
+filePath = "./scripts/mirror-name-search.sh"
+content = """
+#!/bin/sh
+
+sleep 5
+
+# Check if MirrorName attribute exists
+if ! temporal operator search-attribute list | grep -w MirrorName >/dev/null 2>&1; then
+    # If not, create MirrorName attribute
+    temporal operator search-attribute create --name MirrorName --type Text --namespace default
+fi
+
+tini -s -- sleep infinity
+"""

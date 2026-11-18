@@ -29,6 +29,7 @@ crypto.workspace = true
 sqlx.workspace = true
 sha2.workspace = true
 hmac.workspace = true
+getrandom.workspace = true
 proto.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true

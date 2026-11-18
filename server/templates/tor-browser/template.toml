@@ -1,0 +1,34 @@
+id = "tor-browser"
+name = "Tor Browser"
+description = "A Dockerized Tor Browser accessible via web VNC (noVNC) and VNC client."
+category = "security"
+tags = [
+    "privacy",
+    "security",
+    "browser",
+    "tor",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://www.torproject.org/"
+docs = "https://hub.docker.com/r/domistyle/tor-browser"
+source = "https://github.com/DomiStyle/docker-tor-browser"
+upstream = "Dokploy/templates@6313a2e blueprints/tor-browser"
+
+[variables]
+display_height = "1080"
+display_width = "1920"
+keep_app_running = "1"
+main_domain = "${domain}"
+timezone = "Europe/Vienna"
+
+[config.env]
+DISPLAY_HEIGHT = "${display_height}"
+DISPLAY_WIDTH = "${display_width}"
+KEEP_APP_RUNNING = "${keep_app_running}"
+TZ = "${timezone}"
+
+[[config.domains]]
+serviceName = "tor"
+port = 5800
+host = "${main_domain}"

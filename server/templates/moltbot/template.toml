@@ -1,0 +1,35 @@
+id = "moltbot"
+name = "Moltbot"
+description = "WhatsApp gateway CLI with Pi RPC agent - self-hosted AI-powered messaging platform"
+category = "communication"
+tags = [
+    "whatsapp",
+    "ai",
+    "messaging",
+    "chatbot",
+    "gateway",
+    "self-hosted",
+    "automation",
+]
+version = "2026.1.25"
+logo = "logo.svg"
+website = "https://molt.bot"
+docs = "https://docs.molt.bot"
+source = "https://github.com/moltbot/moltbot"
+upstream = "Dokploy/templates@6313a2e blueprints/moltbot"
+
+[variables]
+gateway_token = "${password:32}"
+
+[config.env]
+CLAWDBOT_BRIDGE_PORT = "18790"
+CLAWDBOT_GATEWAY_BIND = "lan"
+CLAWDBOT_GATEWAY_PORT = "18789"
+CLAWDBOT_GATEWAY_TOKEN = "${gateway_token}"
+CLAWDBOT_PLUGINS = "discord,memory-core"
+OPENROUTER_API_KEY = "YOUR-API-KEY"
+
+[[config.domains]]
+serviceName = "moltbot-gateway"
+port = 18789
+host = "${domain}"

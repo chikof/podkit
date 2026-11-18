@@ -1,0 +1,29 @@
+id = "surrealdb"
+name = "SurrealDB"
+description = "SurrealDB is a native, open-source, multi-model database that lets you store and manage data across relational, document, graph, time-series, vector & search, and geospatial modelsâ€”all in one place."
+category = "database"
+tags = [
+    "database",
+    "sql",
+    "surrealdb",
+]
+version = "2.3.10"
+logo = "logo.svg"
+website = "https://surrealdb.com"
+docs = "https://surrealdb.com/docs/surrealdb"
+source = "https://github.com/surrealdb/surrealdb"
+upstream = "Dokploy/templates@6313a2e blueprints/surrealdb"
+
+[variables]
+main_domain = "${domain}"
+surrealdb_password = "${password:32}"
+surrealdb_user = "${username}"
+
+[config.env]
+SURREAL_PASS = "${surrealdb_password}"
+SURREAL_USER = "${surrealdb_user}"
+
+[[config.domains]]
+serviceName = "surrealdb"
+port = 8000
+host = "${main_domain}"

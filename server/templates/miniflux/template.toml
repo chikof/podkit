@@ -1,0 +1,33 @@
+id = "miniflux"
+name = "Miniflux"
+description = "Miniflux is a minimalist and opinionated feed reader for self-hosted RSS and Atom subscriptions."
+category = "productivity"
+tags = [
+    "rss",
+    "feed-reader",
+    "news",
+]
+version = "2.2.19"
+logo = "logo.svg"
+website = "https://miniflux.app/"
+docs = "https://miniflux.app/docs/"
+source = "https://github.com/miniflux/v2"
+upstream = "Dokploy/templates@6313a2e blueprints/miniflux"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password:32}"
+admin_username = "admin"
+main_domain = "${domain}"
+postgres_password = "${password:32}"
+
+[config.env]
+ADMIN_PASSWORD = "${admin_password}"
+ADMIN_USERNAME = "${admin_username}"
+MINIFLUX_DOMAIN = "${main_domain}"
+POSTGRES_PASSWORD = "${postgres_password}"
+
+[[config.domains]]
+serviceName = "miniflux"
+port = 8080
+host = "${main_domain}"

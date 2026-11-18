@@ -1,0 +1,31 @@
+id = "dagu"
+name = "Dagu"
+description = "Dagu is a self-contained workflow engine with a Web UI. Schedule and orchestrate jobs as DAGs defined in declarative YAML, with no DBMS required."
+category = "automation"
+tags = [
+    "workflow",
+    "automation",
+    "scheduler",
+    "cron",
+    "devops",
+]
+version = "2.25.4"
+logo = "logo.png"
+website = "https://dagu.sh"
+docs = "https://docs.dagu.sh"
+source = "https://github.com/dagucloud/dagu"
+upstream = "Dokploy/templates@6313a2e blueprints/dagu"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+ADMIN_PASSWORD = "${admin_password}"
+ADMIN_USERNAME = "admin"
+
+[[config.domains]]
+serviceName = "dagu"
+port = 8080
+host = "${main_domain}"

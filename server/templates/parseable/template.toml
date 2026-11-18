@@ -1,0 +1,30 @@
+id = "parseable"
+name = "Parseable"
+description = "Fast observability and log analytics platform on object storage"
+category = "monitoring"
+tags = [
+    "observability",
+    "logging",
+    "analytics",
+    "monitoring",
+]
+version = "v1.6.5"
+logo = "logo.svg"
+website = "https://www.parseable.com/"
+docs = "https://www.parseable.com/docs"
+source = "https://github.com/parseablehq/parseable"
+upstream = "Dokploy/templates@6313a2e blueprints/parseable"
+
+[variables]
+main_domain = "${domain}"
+parseable_password = "${password:32}"
+parseable_username = "${username}"
+
+[config.env]
+PARSEABLE_PASSWORD = "${parseable_password}"
+PARSEABLE_USERNAME = "${parseable_username}"
+
+[[config.domains]]
+serviceName = "parseable"
+port = 8000
+host = "${main_domain}"

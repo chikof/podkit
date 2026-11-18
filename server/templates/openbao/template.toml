@@ -1,0 +1,46 @@
+id = "openbao"
+name = "OpenBao"
+description = "OpenBao is an open-source, community-driven fork of HashiCorp Vault under the Linux Foundation for managing secrets, encryption keys and certificates. This template runs a single node with persistent Raft storage and the web UI. After deploy, open the UI to initialize OpenBao, store the unseal ke..."
+category = "security"
+tags = [
+    "security",
+    "secrets",
+    "devops",
+    "infrastructure",
+]
+version = "2.7.2"
+logo = "logo.svg"
+website = "https://openbao.org/"
+docs = "https://openbao.org/docs/"
+source = "https://github.com/openbao/openbao"
+upstream = "Dokploy/templates@6313a2e blueprints/openbao"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "openbao"
+port = 8200
+host = "${main_domain}"
+
+[[config.mounts]]
+filePath = "./config/openbao.hcl"
+content = """
+ui            = true
+disable_mlock = true
+
+api_addr     = "https://${main_domain}"
+cluster_addr = "https://openbao:8201"
+
+storage "raft" {
+  path    = "/openbao/file"
+  node_id = "openbao-1"
+}
+
+listener "tcp" {
+  address         = "0.0.0.0:8200"
+  cluster_address = "0.0.0.0:8201"
+  # TLS is terminated by Traefik (Dokploy)
+  tls_disable     = true
+}
+"""

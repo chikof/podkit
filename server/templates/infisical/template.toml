@@ -1,0 +1,41 @@
+id = "infisical"
+name = "Infisical"
+description = "All-in-one platform to securely manage application configuration and secrets across your team and infrastructure."
+category = "other"
+tags = [
+    "self-hosted",
+    "open-source",
+]
+version = "0.162.6"
+logo = "@infisical"
+website = "https://infisical.com/"
+docs = "https://infisical.com/docs/documentation/getting-started/introduction"
+source = "https://github.com/Infisical/infisical"
+upstream = "Dokploy/templates@6313a2e blueprints/infisical"
+
+[variables]
+auth_secret = "${base64:32}"
+encryption_key = "${hash:32}"
+main_domain = "${domain}"
+postgres_db = "infisical"
+postgres_password = "${password}"
+postgres_user = "infisical"
+
+[config.env]
+AUTH_SECRET = "${auth_secret}"
+ENCRYPTION_KEY = "${encryption_key}"
+POSTGRES_DB = "${postgres_db}"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USER = "${postgres_user}"
+SITE_URL = "http://${main_domain}"
+SMTP_FROM_ADDRESS = ""
+SMTP_FROM_NAME = "Infisical"
+SMTP_HOST = ""
+SMTP_PASSWORD = ""
+SMTP_PORT = "587"
+SMTP_USERNAME = ""
+
+[[config.domains]]
+serviceName = "backend"
+port = 8080
+host = "${main_domain}"

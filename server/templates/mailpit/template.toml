@@ -1,0 +1,23 @@
+id = "mailpit"
+name = "Mailpit"
+description = "Mailpit is a tiny, self-contained, and secure email & SMTP testing tool with API for developers."
+category = "communication"
+tags = [
+    "email",
+    "smtp",
+]
+version = "v1.22.3"
+logo = "logo.svg"
+website = "https://mailpit.axllent.org/"
+docs = "https://mailpit.axllent.org/docs/"
+source = "https://github.com/axllent/mailpit"
+upstream = "Dokploy/templates@6313a2e blueprints/mailpit"
+
+[variables]
+default_password = "${password}"
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "mailpit"
+port = 8025
+host = "${main_domain}"

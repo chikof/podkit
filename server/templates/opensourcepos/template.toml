@@ -1,0 +1,70 @@
+id = "opensourcepos"
+name = "OpenSourcePOS"
+description = "OpenSourcePOS is a web-based point of sale system for managing sales, inventory, customers, and reports."
+category = "productivity"
+tags = [
+    "pos",
+    "retail",
+    "inventory",
+    "sales",
+    "business",
+]
+version = "master"
+logo = "logo.svg"
+website = "https://opensourcepos.org/"
+docs = "https://github.com/opensourcepos/opensourcepos/blob/master/README.md"
+source = "https://github.com/opensourcepos/opensourcepos"
+upstream = "Dokploy/templates@6313a2e blueprints/opensourcepos"
+
+[variables]
+allowed_hostnames = "${main_domain}"
+force_https = "false"
+main_domain = "${domain}"
+mysql_password = "${password:32}"
+mysql_root_password = "${password:32}"
+php_timezone = "UTC"
+
+[config.env]
+ALLOWED_HOSTNAMES = "${allowed_hostnames}"
+FORCE_HTTPS = "${force_https}"
+MYSQL_DATABASE = "ospos"
+MYSQL_PASSWORD = "${mysql_password}"
+MYSQL_ROOT_PASSWORD = "${mysql_root_password}"
+MYSQL_USER = "admin"
+PHP_TIMEZONE = "${php_timezone}"
+
+[[config.domains]]
+serviceName = "opensourcepos"
+port = 80
+host = "${main_domain}"
+path = "/"
+
+[[config.mounts]]
+filePath = "README.md"
+content = """
+# OpenSourcePOS
+
+This template deploys Open Source Point of Sale with MariaDB using the upstream Docker image and persistent storage for uploads, logs, and database data.
+
+## Access
+
+- URL: `http://${main_domain}`
+- Default application user: `admin`
+- Default application password: `pointofsale`
+
+Change the default application password immediately after the first login.
+
+## Hostnames and HTTPS
+
+OpenSourcePOS validates incoming host headers in production. The `allowed_hostnames` variable defaults to `${main_domain}` and can be set to a comma-separated list such as `pos.example.com,www.pos.example.com`.
+
+The template defaults `force_https` to `false` because Dokploy terminates TLS outside the container. Set it to `true` only when your deployment always reaches OpenSourcePOS through HTTPS and the reverse proxy sends the expected headers.
+
+## Storage
+
+The template creates persistent volumes for:
+
+- MariaDB data
+- uploaded files
+- application logs
+"""

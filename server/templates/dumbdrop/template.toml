@@ -1,0 +1,36 @@
+id = "dumbdrop"
+name = "DumbDrop"
+description = "DumbDrop is a simple, self-hosted file sharing service with no database or authentication required."
+category = "storage"
+tags = [
+    "file-sharing",
+    "self-hosted",
+    "simple",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://dumbware.io/DumbDrop/"
+docs = "https://github.com/dumbwareio/dumbdrop"
+source = "https://github.com/dumbwareio/dumbdrop"
+upstream = "Dokploy/templates@6313a2e blueprints/dumbdrop"
+
+[variables]
+main_domain = "https://${domain}"
+
+[config.env]
+ALLOWED_EXTENSIONS = ""
+ALLOWED_ORIGINS = ""
+APPRISE_MESSAGE = "New file uploaded {filename} ({size}), Storage used {storage}"
+APPRISE_SIZE_UNIT = "Auto"
+APPRISE_URL = ""
+AUTO_UPLOAD = "true"
+BASE_URL = "${main_domain}"
+DUMBDROP_PIN = "${password:6}"
+DUMBDROP_TITLE = "DumbDrop"
+MAX_FILE_SIZE = "1024"
+UPLOAD_DIR = "/app/uploads"
+
+[[config.domains]]
+serviceName = "dumbdrop"
+port = 3000
+host = "${domain}"

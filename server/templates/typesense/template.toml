@@ -1,0 +1,25 @@
+id = "typesense"
+name = "Typesense"
+description = "Typesense is a fast, open-source search engine for building modern search experiences."
+category = "tools"
+tags = ["search"]
+version = "29.0"
+logo = "logo.png"
+website = "https://typesense.org/"
+docs = "https://typesense.org/docs"
+source = "https://github.com/typesense/typesense"
+upstream = "Dokploy/templates@6313a2e blueprints/typesense"
+
+[variables]
+api_key = "${password:16}"
+enable_cors = "true"
+main_domain = "${domain}"
+
+[config.env]
+TYPESENSE_API_KEY = "${api_key}"
+TYPESENSE_ENABLE_CORS = "${enable_cors}"
+
+[[config.domains]]
+serviceName = "typesense"
+port = 8108
+host = "${main_domain}"

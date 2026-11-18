@@ -1,0 +1,31 @@
+id = "docling-serve"
+name = "Docling Serve"
+description = "Running Docling as an API service for document processing and conversion with AI-powered capabilities."
+category = "development"
+tags = [
+    "document-processing",
+    "api",
+    "ai",
+    "conversion",
+    "pdf",
+    "office",
+]
+version = "latest"
+logo = "@mono-docling-serve"
+website = ""
+docs = "https://github.com/docling-project/docling-serve/blob/main/docs/README.md"
+source = "https://github.com/docling-project/docling-serve"
+upstream = "Dokploy/templates@6313a2e blueprints/docling-serve"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+DOCLING_SERVE_ENABLE_UI = "1"
+DOCLING_SERVE_HOST = "0.0.0.0"
+DOCLING_SERVE_PORT = "5001"
+
+[[config.domains]]
+serviceName = "docling-serve"
+port = 5001
+host = "${main_domain}"

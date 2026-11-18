@@ -1,0 +1,27 @@
+id = "answer"
+name = "Answer"
+description = "Answer is an open-source Q&A platform for building a self-hosted question-and-answer service."
+category = "other"
+tags = [
+    "q-and-a",
+    "self-hosted",
+]
+version = "v1.4.1"
+logo = "logo.png"
+website = "https://answer.apache.org/"
+docs = "https://answer.apache.org/docs"
+source = "https://github.com/apache/answer"
+upstream = "Dokploy/templates@6313a2e blueprints/answer"
+
+[variables]
+main_domain = "${domain}"
+service_hash = "${hash:32}"
+
+[config.env]
+ANSWER_HOST = "http://${main_domain}"
+SERVICE_HASH = "${service_hash}"
+
+[[config.domains]]
+serviceName = "answer"
+port = 9080
+host = "${main_domain}"
