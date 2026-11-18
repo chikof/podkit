@@ -1,0 +1,35 @@
+id = "zulip"
+name = "Zulip"
+description = "Open-source threaded team chat designed to keep team communication organized and productive."
+category = "communication"
+tags = [
+    "chat",
+    "collaboration",
+    "team",
+    "self-hosted",
+]
+version = "12.1-0"
+logo = "logo.svg"
+website = "https://zulip.com/"
+docs = "https://zulip.readthedocs.io/projects/docker/"
+source = "https://github.com/zulip/docker-zulip"
+upstream = "Dokploy/templates@6313a2e blueprints/zulip"
+
+[variables]
+admin_email = "${email}"
+main_domain = "${domain}"
+
+[config.env]
+ZULIP_ADMINISTRATOR = "${admin_email}"
+ZULIP_EXTERNAL_HOST = "${main_domain}"
+ZULIP_LOADBALANCER_IPS = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+ZULIP_MEMCACHED_PASSWORD = "${password:32}"
+ZULIP_POSTGRES_PASSWORD = "${password:32}"
+ZULIP_RABBITMQ_PASSWORD = "${password:32}"
+ZULIP_REDIS_PASSWORD = "${password:32}"
+ZULIP_SECRET_KEY = "${password:64}"
+
+[[config.domains]]
+serviceName = "zulip"
+port = 80
+host = "${main_domain}"

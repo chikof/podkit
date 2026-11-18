@@ -1,0 +1,33 @@
+id = "alltube"
+name = "AllTube"
+description = "AllTube Download is an application designed to facilitate the downloading of videos from YouTube and other video sites. It provides an HTML GUI for youtube-dl with video conversion capabilities and JSON API support."
+category = "media"
+tags = [
+    "media",
+    "video",
+    "downloader",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://github.com/Rudloff/alltube"
+docs = "https://github.com/Rudloff/alltube/wiki"
+source = "https://github.com/Rudloff/alltube"
+upstream = "Dokploy/templates@6313a2e blueprints/alltube"
+
+[variables]
+convert = "true"
+main_domain = "${domain}"
+remux = "true"
+stream = "true"
+title = "My AllTube Site"
+
+[config.env]
+CONVERT = "${convert}"
+REMUX = "${remux}"
+STREAM = "${stream}"
+TITLE = "${title}"
+
+[[config.domains]]
+serviceName = "alltube"
+port = 80
+host = "${main_domain}"

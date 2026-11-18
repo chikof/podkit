@@ -11,7 +11,10 @@ use std::time::Duration;
 
 use bollard::models::ImageSummary;
 use futures_util::StreamExt;
-use proto::{Cdi, DeploySpec, Event, GpuRequest, GpuVendor, Phase, Source, Strategy, Stream};
+use proto::{
+	Cdi, DeploySpec, Event, GpuRequest, GpuVendor, Phase, RegistryAuth, Restart, Source, Strategy,
+	Stream,
+};
 use tokio::sync::mpsc;
 use tracing::warn;
 
@@ -118,6 +121,22 @@ async fn phase(tx: &mpsc::Sender<Event>, phase: Phase) -> Result<(), String> {
 	emit(tx, Event::Phase { phase }).await
 }
 
+async fn ensure_networks(podman: &crate::podman::Podman, spec: &DeploySpec) -> Result<(), String> {
+	if !spec.options.isolated {
+		podman
+			.ensure_network(NETWORK)
+			.await
+			.map_err(|e| format!("network setup failed: {e}"))?;
+	}
+	for network in &spec.networks {
+		podman
+			.ensure_network(network)
+			.await
+			.map_err(|e| format!("network {network} setup failed: {e}"))?;
+	}
+	Ok(())
+}
+
 async fn execute(
 	ctx: &Ctx,
 	spec: &DeploySpec,
@@ -133,9 +152,13 @@ async fn execute(
 
 	let (image, commit_sha) = match &spec.source {
 		Source::Git { .. } => build_from_git(ctx, &podman, spec, tx).await?,
-		Source::Image { reference, pull } => {
-			use_image(&podman, reference, *pull, tx).await?;
-			(reference.clone(), None)
+		Source::Image {
+			reference,
+			pull,
+			auth,
+		} => {
+			let image = use_image(&podman, reference, *pull, auth.as_ref(), tx).await?;
+			(image, None)
 		}
 	};
 
@@ -143,10 +166,7 @@ async fn execute(
 	let new_name = format!("podkit-{service}-{}", spec.instance_id);
 
 	phase(tx, Phase::Starting).await?;
-	podman
-		.ensure_network(NETWORK)
-		.await
-		.map_err(|e| format!("network setup failed: {e}"))?;
+	ensure_networks(&podman, spec).await?;
 	if spec.routing.is_some() {
 		Box::pin(ingress::ensure_traefik(
 			&podman,
@@ -164,6 +184,7 @@ async fn execute(
 			.await
 			.map_err(|e| format!("volume {} setup failed: {e}", volume.name))?;
 	}
+	let file_binds = write_files(&ctx.data_dir, spec).await?;
 
 	let mut old = Vec::new();
 	let existing = podman
@@ -179,7 +200,7 @@ async fn execute(
 	}
 
 	let container_id = podman
-		.create_container(container_spec(spec, &image, &new_name))
+		.create_container(container_spec(spec, &image, &new_name, &file_binds))
 		.await
 		.map_err(|e| format!("container create failed: {e}"))?;
 	cleanup.arm(new_name.clone());
@@ -187,7 +208,9 @@ async fn execute(
 		.start(&new_name)
 		.await
 		.map_err(|e| format!("container start failed: {e}"))?;
-	ctx.supervisor.add(&new_name).await;
+	if spec.options.restart == Restart::Always {
+		ctx.supervisor.add(&new_name).await;
+	}
 
 	phase(tx, Phase::HealthCheck).await?;
 	if let Err(message) = health_check(&podman, &new_name).await {
@@ -225,6 +248,89 @@ fn valid_name(s: &str, extra: &[u8]) -> bool {
 			.all(|b| b.is_ascii_alphanumeric() || extra.contains(&b))
 }
 
+/// Networks created for stacks; the agent refuses to join or remove any other.
+pub const STACK_NETWORK_PREFIX: &str = "podkit-stack-";
+/// Capabilities a container may never be given.
+const DANGEROUS_CAPS: [&str; 5] = ["ALL", "SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE", "SYS_RAWIO"];
+const MAX_FILE_BYTES: usize = 1 << 20;
+
+fn valid_abs_path(path: &str) -> bool {
+	path.starts_with('/') && !path.contains(':') && !path.contains('\0')
+}
+
+fn validate_options(spec: &DeploySpec) -> Result<(), String> {
+	let o = &spec.options;
+	for network in &spec.networks {
+		if !network.starts_with(STACK_NETWORK_PREFIX) || !valid_name(network, b"_.-") {
+			return Err(format!("invalid network name {network:?}"));
+		}
+	}
+	if o.isolated && (spec.networks.is_empty() || spec.routing.is_some()) {
+		return Err("an isolated container needs a stack network and no routing".to_string());
+	}
+	for alias in spec.network_aliases.iter().chain(&o.net_aliases) {
+		if !valid_name(alias, b"_.-") {
+			return Err(format!("invalid network alias {alias:?}"));
+		}
+	}
+	if let Some(cap) = o.cap_add.iter().find(|c| {
+		let upper = c.to_ascii_uppercase();
+		DANGEROUS_CAPS.contains(&upper.strip_prefix("CAP_").unwrap_or(&upper))
+	}) {
+		return Err(format!("capability {cap} is not allowed"));
+	}
+	if let Some(bad) = o.tmpfs.iter().find(|p| !valid_abs_path(p)) {
+		return Err(format!("invalid tmpfs path {bad:?}"));
+	}
+	if let Some(label) = o
+		.labels
+		.iter()
+		.find(|(k, _)| k.starts_with("traefik.") || k.starts_with("podkit."))
+	{
+		return Err(format!("label {:?} is reserved", label.0));
+	}
+	for file in &o.files {
+		if !valid_abs_path(&file.path) || file.path.ends_with('/') {
+			return Err(format!("invalid file mount path {:?}", file.path));
+		}
+		if file.content.len() > MAX_FILE_BYTES {
+			return Err(format!("file mount {:?} is too large", file.path));
+		}
+	}
+	Ok(())
+}
+
+/// Writes the spec's file mounts below `<data_dir>/stack-files/<service>/` and
+/// returns the read-only binds for them. A file's name carries a hash of its
+/// content, so a changed file is a new bind and an unchanged one is reused.
+async fn write_files(data_dir: &std::path::Path, spec: &DeploySpec) -> Result<Vec<String>, String> {
+	use sha2::{Digest, Sha256};
+	use std::fmt::Write as _;
+
+	if spec.options.files.is_empty() {
+		return Ok(Vec::new());
+	}
+	let dir = data_dir.join("stack-files").join(&spec.service);
+	tokio::fs::create_dir_all(&dir)
+		.await
+		.map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
+	let mut binds = Vec::new();
+	for file in &spec.options.files {
+		let digest = Sha256::digest(format!("{}\0{}", file.path, file.content).as_bytes());
+		let hash = digest.iter().take(8).fold(String::new(), |mut out, b| {
+			let _ = write!(out, "{b:02x}");
+			out
+		});
+		let base = file.path.rsplit('/').next().unwrap_or("file");
+		let host = dir.join(format!("{hash}-{base}"));
+		tokio::fs::write(&host, &file.content)
+			.await
+			.map_err(|e| format!("cannot write {}: {e}", host.display()))?;
+		binds.push(format!("{}:{}:ro", host.display(), file.path));
+	}
+	Ok(binds)
+}
+
 fn validate(spec: &DeploySpec) -> Result<(), String> {
 	if !valid_name(&spec.service, b"-") || spec.service.bytes().any(|b| b.is_ascii_uppercase()) {
 		return Err(format!("invalid service name {:?}", spec.service));
@@ -232,6 +338,7 @@ fn validate(spec: &DeploySpec) -> Result<(), String> {
 	if spec.routing.is_some() && spec.container_port.is_none() {
 		return Err("routing requires container_port".to_string());
 	}
+	validate_options(spec)?;
 	for volume in &spec.volumes {
 		if !valid_name(&volume.name, b"_.-") {
 			return Err(format!("invalid volume name {:?}", volume.name));
@@ -262,7 +369,12 @@ fn check_gpu_support(request: &GpuRequest, cdi: &Cdi, kfd_present: bool) -> Resu
 	}
 }
 
-fn container_spec(spec: &DeploySpec, image: &str, name: &str) -> ContainerSpec {
+fn container_spec(
+	spec: &DeploySpec,
+	image: &str,
+	name: &str,
+	file_binds: &[String],
+) -> ContainerSpec {
 	let mut labels = vec![("podkit.service".to_string(), spec.service.clone())];
 	if let (Some(routing), Some(port)) = (&spec.routing, spec.container_port) {
 		labels.extend(ingress::routing_labels(
@@ -275,18 +387,32 @@ fn container_spec(spec: &DeploySpec, image: &str, name: &str) -> ContainerSpec {
 			&routing.https_hosts,
 		));
 	}
+	// Where the container lives: the stack network alone when isolated,
+	// otherwise `podkit` first and the stack networks after it.
+	let (network, aliases, extra_networks) = if spec.options.isolated {
+		let mut networks = spec.networks.iter();
+		let first = networks.next().cloned().unwrap_or_default();
+		let rest = networks
+			.map(|n| (n.clone(), spec.options.net_aliases.clone()))
+			.collect();
+		(first, spec.options.net_aliases.clone(), rest)
+	} else {
+		let rest = spec
+			.networks
+			.iter()
+			.map(|n| (n.clone(), spec.options.net_aliases.clone()))
+			.collect();
+		(NETWORK.to_string(), spec.network_aliases.clone(), rest)
+	};
 	ContainerSpec {
 		name: name.to_string(),
 		image: image.to_string(),
 		command: spec.command.clone(),
 		env: spec.env.clone(),
-		published_ports: spec
-			.published_ports
-			.iter()
-			.map(|p| (p.host, p.container))
-			.collect(),
-		network: NETWORK.to_string(),
-		aliases: spec.network_aliases.clone(),
+		published_ports: spec.published_ports.clone(),
+		network,
+		aliases,
+		extra_networks,
 		labels,
 		binds: spec
 			.volumes
@@ -295,6 +421,7 @@ fn container_spec(spec: &DeploySpec, image: &str, name: &str) -> ContainerSpec {
 				let mode = if v.read_only { ":ro" } else { "" };
 				format!("{}:{}{mode}", v.name, v.path)
 			})
+			.chain(file_binds.iter().cloned())
 			.collect(),
 		memory_bytes: spec.memory_bytes,
 		cpu_cores: spec.cpu_cores,
@@ -302,6 +429,7 @@ fn container_spec(spec: &DeploySpec, image: &str, name: &str) -> ContainerSpec {
 		entrypoint: spec.entrypoint.clone(),
 		shm_bytes: spec.shm_bytes,
 		stop_timeout_s: spec.stop_timeout_s,
+		options: spec.options.clone(),
 	}
 }
 
@@ -352,16 +480,21 @@ async fn build_from_git(
 	Ok((tag, Some(prepared.commit_sha.clone())))
 }
 
+/// Makes `reference` available locally and returns the reference to run and
+/// record. After a pull that is the immutable `repo@sha256:...` form when
+/// podman reports one, so a later rollback runs the bytes that were
+/// deployed even if the tag has moved since.
 async fn use_image(
 	podman: &Podman,
 	reference: &str,
 	pull: bool,
+	auth: Option<&RegistryAuth>,
 	tx: &mpsc::Sender<Event>,
-) -> Result<(), String> {
+) -> Result<String, String> {
 	if pull {
 		log(tx, Stream::System, format!("pulling {reference}")).await?;
 		let mut seen = HashSet::new();
-		let mut progress = std::pin::pin!(podman.pull_image(reference));
+		let mut progress = std::pin::pin!(podman.pull_image_as(reference, auth));
 		while let Some(info) = progress.next().await {
 			let info = info.map_err(|e| format!("image pull failed: {e}"))?;
 			// Progress ticks repeat one status string; log each string once.
@@ -371,10 +504,17 @@ async fn use_image(
 				log(tx, Stream::System, status).await?;
 			}
 		}
-		return Ok(());
+		let digest = podman
+			.inspect_image(reference)
+			.await
+			.ok()
+			.flatten()
+			.and_then(|i| i.repo_digests)
+			.and_then(|d| d.into_iter().next());
+		return Ok(digest.unwrap_or_else(|| reference.to_string()));
 	}
 	match podman.inspect_image(reference).await {
-		Ok(Some(_)) => Ok(()),
+		Ok(Some(_)) => Ok(reference.to_string()),
 		Ok(None) => Err(format!("image {reference} no longer exists on this server")),
 		Err(e) => Err(format!("image inspect failed: {e}")),
 	}
@@ -483,6 +623,7 @@ mod tests {
 			source: Source::Image {
 				reference: "alpine:3".to_string(),
 				pull: true,
+				auth: None,
 			},
 			env: vec![("A".to_string(), "b".to_string())],
 			command: None,
@@ -506,6 +647,8 @@ mod tests {
 			entrypoint: None,
 			shm_bytes: None,
 			stop_timeout_s: None,
+			networks: Vec::new(),
+			options: proto::ContainerOptions::default(),
 		}
 	}
 
@@ -548,8 +691,11 @@ mod tests {
 			devices: proto::GpuDevices::Count(2),
 		});
 		assert!(validate(&with_gpu).is_ok());
-		assert_eq!(container_spec(&with_gpu, "img", "c").gpus, with_gpu.gpus,);
-		assert!(container_spec(&spec(), "img", "c").gpus.is_none());
+		assert_eq!(
+			container_spec(&with_gpu, "img", "c", &[]).gpus,
+			with_gpu.gpus,
+		);
+		assert!(container_spec(&spec(), "img", "c", &[]).gpus.is_none());
 
 		with_gpu.gpus = Some(GpuRequest {
 			vendor: GpuVendor::Nvidia,
@@ -587,7 +733,7 @@ mod tests {
 			path: "/var/lib/data".to_string(),
 			read_only: false,
 		}];
-		let c = container_spec(&s, "alpine:3", "podkit-app-1-9");
+		let c = container_spec(&s, "alpine:3", "podkit-app-1-9", &[]);
 		assert_eq!(c.binds, ["data:/var/lib/data"]);
 		assert_eq!(c.network, "podkit");
 		assert!(
@@ -618,6 +764,169 @@ mod tests {
 		assert_eq!(
 			prune_candidates(&images, &used, "app-1"),
 			["podkit-app-1:4", "podkit-app-1:6"]
+		);
+	}
+
+	fn stack_spec() -> DeploySpec {
+		let mut spec = spec();
+		spec.service = "stack-7-db".to_string();
+		spec.routing = None;
+		spec.container_port = None;
+		spec.network_aliases = Vec::new();
+		spec.networks = vec!["podkit-stack-7".to_string()];
+		spec.options.isolated = true;
+		spec.options.net_aliases = vec!["db".to_string()];
+		spec
+	}
+
+	#[test]
+	fn stack_isolated_container_lives_on_the_stack_network_only() {
+		let c = container_spec(&stack_spec(), "postgres:17", "podkit-stack-7-db-1", &[]);
+		assert_eq!(c.network, "podkit-stack-7");
+		assert_eq!(c.aliases, ["db"]);
+		assert!(c.extra_networks.is_empty());
+	}
+
+	#[test]
+	fn stack_routed_container_joins_podkit_first_and_then_the_stack_network() {
+		let mut spec = stack_spec();
+		spec.options.isolated = false;
+		spec.network_aliases = vec!["podkit-stack-7-app".to_string()];
+		spec.options.net_aliases = vec!["app".to_string()];
+		let c = container_spec(&spec, "app:1", "podkit-stack-7-app-1", &[]);
+		assert_eq!(c.network, "podkit");
+		assert_eq!(
+			c.aliases,
+			["podkit-stack-7-app"],
+			"unique on the shared network"
+		);
+		assert_eq!(
+			c.extra_networks,
+			[("podkit-stack-7".to_string(), vec!["app".to_string()])],
+			"the compose name only resolves on the stack network"
+		);
+	}
+
+	#[test]
+	fn stack_ports_keep_their_protocol_and_host_address() {
+		let mut spec = stack_spec();
+		spec.published_ports = vec![
+			proto::PublishedPort::tcp(8080, 80),
+			proto::PublishedPort {
+				host: 5353,
+				container: 53,
+				protocol: proto::Protocol::Udp,
+				host_ip: Some("127.0.0.1".to_string()),
+			},
+		];
+		let c = container_spec(&spec, "x", "n", &[]);
+		assert_eq!(c.published_ports, spec.published_ports);
+	}
+
+	#[test]
+	fn stack_file_mounts_are_bound_read_only_after_the_volumes() {
+		let mut spec = stack_spec();
+		spec.volumes = vec![proto::VolumeMount {
+			name: "podkit-stack-7-data".to_string(),
+			path: "/data".to_string(),
+			read_only: false,
+		}];
+		let files = vec!["/agent/stack-files/stack-7-db/ab-app.conf:/etc/app.conf:ro".to_string()];
+		let c = container_spec(&spec, "x", "n", &files);
+		assert_eq!(
+			c.binds,
+			[
+				"podkit-stack-7-data:/data",
+				"/agent/stack-files/stack-7-db/ab-app.conf:/etc/app.conf:ro"
+			]
+		);
+	}
+
+	#[test]
+	fn stack_options_are_validated() {
+		assert!(validate(&stack_spec()).is_ok());
+		let bad = |edit: fn(&mut DeploySpec)| {
+			let mut spec = stack_spec();
+			edit(&mut spec);
+			validate(&spec).unwrap_err()
+		};
+		// Only stack networks may be joined: never `podkit` or the host's own.
+		assert!(bad(|s| s.networks = vec!["podkit".into()]).contains("network"));
+		assert!(bad(|s| s.networks = vec!["bridge".into()]).contains("network"));
+		assert!(bad(|s| s.networks = vec!["podkit-stack-7/../x".into()]).contains("network"));
+		assert!(bad(|s| s.networks.clear()).contains("isolated"));
+		assert!(
+			bad(|s| {
+				s.routing = Some(proto::Routing {
+					http_hosts: vec!["a.example.com".into()],
+					https_hosts: vec![],
+				});
+				s.container_port = Some(80);
+			})
+			.contains("isolated")
+		);
+		assert!(bad(|s| s.options.net_aliases = vec!["bad alias".into()]).contains("alias"));
+		for cap in ["SYS_ADMIN", "cap_sys_module", "ALL", "CAP_SYS_PTRACE"] {
+			let mut spec = stack_spec();
+			spec.options.cap_add = vec![cap.to_string()];
+			assert!(
+				validate(&spec).unwrap_err().contains("not allowed"),
+				"{cap}"
+			);
+		}
+		let mut spec = stack_spec();
+		spec.options.cap_add = vec!["NET_BIND_SERVICE".to_string()];
+		assert!(validate(&spec).is_ok());
+		assert!(
+			bad(|s| s.options.labels = vec![("traefik.enable".into(), "true".into())])
+				.contains("reserved")
+		);
+		assert!(bad(|s| s.options.tmpfs = vec!["tmp".into()]).contains("tmpfs"));
+		assert!(
+			bad(|s| {
+				s.options.files = vec![proto::FileMount {
+					path: "etc/app.conf".into(),
+					content: String::new(),
+				}];
+			})
+			.contains("file mount")
+		);
+	}
+
+	#[tokio::test]
+	async fn stack_files_are_written_under_the_data_dir_and_changes_get_a_new_name() {
+		let dir = tempfile::tempdir().unwrap();
+		let mut spec = stack_spec();
+		spec.options.files = vec![proto::FileMount {
+			path: "/etc/app/app.conf".to_string(),
+			content: "listen 80;".to_string(),
+		}];
+		let first = write_files(dir.path(), &spec).await.unwrap();
+		assert_eq!(first.len(), 1);
+		let (host, rest) = first[0].split_once(':').unwrap();
+		assert_eq!(rest, "/etc/app/app.conf:ro");
+		assert!(
+			host.starts_with(
+				&dir.path()
+					.join("stack-files/stack-7-db")
+					.display()
+					.to_string()
+			)
+		);
+		assert_eq!(std::fs::read_to_string(host).unwrap(), "listen 80;");
+
+		spec.options.files[0].content = "listen 8080;".to_string();
+		let second = write_files(dir.path(), &spec).await.unwrap();
+		assert_ne!(first, second, "a new bind for new content");
+		assert_eq!(
+			std::fs::read_to_string(second[0].split_once(':').unwrap().0).unwrap(),
+			"listen 8080;"
+		);
+		assert!(
+			write_files(dir.path(), &stack_spec())
+				.await
+				.unwrap()
+				.is_empty()
 		);
 	}
 }

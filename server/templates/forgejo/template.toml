@@ -1,0 +1,28 @@
+id = "forgejo"
+name = "Forgejo"
+description = "Forgejo is a self-hosted lightweight software forge. Easy to install and low maintenance, it just does the job"
+category = "storage"
+tags = [
+    "self-hosted",
+    "storage",
+]
+version = "16"
+logo = "logo.svg"
+website = "https://forgejo.org/"
+docs = "https://forgejo.org/docs/latest/"
+source = "https://codeberg.org/forgejo/forgejo"
+upstream = "Dokploy/templates@6313a2e blueprints/forgejo"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+FORGEJO_DOMAIN = "${main_domain}"
+FORGEJO_SSH_DOMAIN = "${main_domain}"
+USER_GID = "1000"
+USER_UID = "1000"
+
+[[config.domains]]
+serviceName = "forgejo"
+port = 3000
+host = "${main_domain}"

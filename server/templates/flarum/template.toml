@@ -1,0 +1,35 @@
+id = "flarum"
+name = "Flarum"
+description = "Flarum is a delightfully simple, modern forum software. It is fast, free, and easy to use with a clean and extensible architecture."
+category = "communication"
+tags = [
+    "forum",
+    "community",
+    "discussion",
+    "php",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://flarum.org/"
+docs = "https://docs.flarum.org/"
+source = "https://github.com/flarum/flarum"
+upstream = "Dokploy/templates@6313a2e blueprints/flarum"
+
+[variables]
+db_name = "flarum"
+db_password = "${password:16}"
+db_root_password = "${password:16}"
+db_user = "flarum"
+main_domain = "${domain}"
+
+[config.env]
+DB_NAME = "${db_name}"
+DB_PASSWORD = "${db_password}"
+DB_USER = "${db_user}"
+FLARUM_DOMAIN = "${main_domain}"
+MYSQL_ROOT_PASSWORD = "${db_root_password}"
+
+[[config.domains]]
+serviceName = "flarum"
+port = 8000
+host = "${main_domain}"

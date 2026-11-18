@@ -1,0 +1,25 @@
+id = "steedos"
+name = "Steedos"
+description = "Steedos is an open-source low-code platform and alternative to Salesforce, designed to help you build enterprise applications like CRM with clicks, not code."
+category = "productivity"
+tags = [
+    "crm",
+    "low-code",
+]
+version = "3.0.14"
+logo = "logo.png"
+website = "https://www.steedos.com/"
+docs = "https://docs.steedos.com/"
+source = "https://github.com/steedos/steedos-platform"
+upstream = "Dokploy/templates@6313a2e blueprints/steedos"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+STEEDOS_HOST = "${main_domain}"
+
+[[config.domains]]
+serviceName = "steedos"
+port = 80
+host = "${main_domain}"

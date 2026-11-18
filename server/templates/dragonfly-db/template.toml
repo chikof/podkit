@@ -1,0 +1,36 @@
+id = "dragonfly-db"
+name = "Dragonfly"
+description = "Dragonfly is a drop-in Redis replacement that is designed for heavy data workloads running on modern cloud hardware."
+category = "database"
+tags = [
+    "database",
+    "redis",
+]
+version = "1.28.1"
+logo = "logo.png"
+website = "https://www.dragonflydb.io/"
+docs = "https://www.dragonflydb.io/docs"
+source = "https://github.com/dragonflydb/dragonfly"
+upstream = "Dokploy/templates@6313a2e blueprints/dragonfly-db"
+
+[variables]
+any_helper = "${uuid}"
+db_password = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+DFLY_requirepass = "${db_password}"
+
+[[config.domains]]
+serviceName = "dragonflydb"
+port = 6379
+host = "${main_domain}"
+path = "/"
+
+[[config.mounts]]
+filePath = "/content/configuration.conf"
+content = """
+bind-address = "0.0.0.0"
+port = 6379
+log-level = "info"
+"""

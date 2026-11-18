@@ -1,0 +1,23 @@
+id = "filegator"
+name = "FileGator"
+description = "FileGator is a simple self-hosted web file manager with multi-user support."
+category = "storage"
+tags = [
+    "files",
+    "file-manager",
+    "self-hosted",
+]
+version = "7.14.3"
+logo = "logo.svg"
+website = "https://filegator.io/"
+docs = "https://docs.filegator.io/"
+source = "https://github.com/filegator/filegator"
+upstream = "Dokploy/templates@6313a2e blueprints/filegator"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "filegator"
+port = 8080
+host = "${main_domain}"

@@ -1,0 +1,39 @@
+id = "wordpress"
+name = "Wordpress"
+description = "Wordpress is a free and open source content management system (CMS) for publishing and managing websites."
+category = "cms"
+tags = ["cms"]
+version = "latest"
+logo = "@wordpress"
+website = "https://wordpress.org/"
+docs = "https://wordpress.org/documentation/"
+source = "https://github.com/WordPress/WordPress"
+upstream = "Dokploy/templates@6313a2e blueprints/wordpress"
+
+[variables]
+db_name = "wordpress"
+db_password = "${password:32}"
+db_user = "wordpress"
+main_domain = "${domain}"
+
+[config.env]
+DB_NAME = "${db_name}"
+DB_PASSWORD = "${db_password}"
+DB_USER = "${db_user}"
+WORDPRESS_DEBUG = "0"
+WP_DOMAIN = "${main_domain}"
+
+[[config.domains]]
+serviceName = "wordpress"
+port = 80
+host = "${main_domain}"
+
+[[config.mounts]]
+filePath = "uploads.ini"
+content = """
+upload_max_filesize = 64M
+post_max_size = 64M
+memory_limit = 256M
+max_execution_time = 300
+max_input_vars = 3000
+"""

@@ -39,6 +39,8 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/containers/{id}/start", post(start_container))
 		.route("/v1/containers/{id}/stop", post(stop_container))
 		.route("/v1/containers/{id}/logs", get(container_logs))
+		.route("/v1/containers/{id}/health", get(container_health))
+		.route("/v1/networks/{name}", delete(delete_network))
 		.route("/v1/services/{service}", delete(delete_service))
 		.route("/v1/volumes/{name}", delete(delete_volume))
 		.route("/v1/backups/dump", post(backup_dump))
@@ -255,6 +257,76 @@ async fn stop_container(
 		.stop(&name)
 		.await
 		.map_err(|e| ApiError::podman("container stop failed", &e))?;
+	Ok(StatusCode::NO_CONTENT)
+}
+
+/// Health and state of one container, for stacks that wait on a dependency's
+/// health check.
+async fn container_health(
+	State(ctx): State<Arc<Ctx>>,
+	Path(id): Path<String>,
+) -> Result<Json<proto::ContainerHealth>, ApiError> {
+	check_ref(&id)?;
+	let info = ctx
+		.podman()
+		.inspect(&id)
+		.await
+		.map_err(|e| ApiError::podman("inspect failed", &e))?
+		.ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, format!("container {id} not found")))?;
+	Ok(Json(health_response(&ctx, &id, &info).await))
+}
+
+async fn health_response(
+	ctx: &Ctx,
+	id: &str,
+	info: &bollard::models::ContainerInspectResponse,
+) -> proto::ContainerHealth {
+	use bollard::models::ContainerStateStatusEnum as Status;
+	let name = info
+		.name
+		.as_deref()
+		.map_or_else(|| id.to_string(), |n| n.trim_start_matches('/').to_string());
+	let state = info.state.as_ref();
+	let container_state = match state.and_then(|s| s.status) {
+		Some(Status::CREATED) => ContainerState::Created,
+		Some(Status::RUNNING) => ContainerState::Running,
+		Some(Status::PAUSED) => ContainerState::Paused,
+		Some(Status::RESTARTING) => ContainerState::Restarting,
+		Some(Status::EXITED) => ContainerState::Exited,
+		Some(Status::DEAD) => ContainerState::Dead,
+		_ => ContainerState::Unknown,
+	};
+	proto::ContainerHealth {
+		id: info.id.clone().unwrap_or_else(|| id.to_string()),
+		state: container_state,
+		exit_code: matches!(
+			container_state,
+			ContainerState::Exited | ContainerState::Dead
+		)
+		.then(|| state.and_then(|s| s.exit_code))
+		.flatten(),
+		health: crate::podman::health_of(info),
+		gave_up: ctx.supervisor.is_gave_up(&name).await,
+		name,
+	}
+}
+
+/// Removes a stack network. Only `podkit-stack-*` networks may be removed.
+async fn delete_network(
+	State(ctx): State<Arc<Ctx>>,
+	Path(name): Path<String>,
+) -> Result<StatusCode, ApiError> {
+	check_ref(&name)?;
+	if !name.starts_with(deploy::STACK_NETWORK_PREFIX) {
+		return Err(ApiError::new(
+			StatusCode::BAD_REQUEST,
+			format!("{name:?} is not a stack network"),
+		));
+	}
+	ctx.podman()
+		.remove_network(&name)
+		.await
+		.map_err(|e| ApiError::podman(&format!("removing network {name} failed"), &e))?;
 	Ok(StatusCode::NO_CONTENT)
 }
 

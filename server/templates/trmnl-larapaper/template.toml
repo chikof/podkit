@@ -1,0 +1,26 @@
+id = "trmnl-larapaper"
+name = "TRMNL LaraPaper"
+description = "LaraPaper is a self-hosted application (BYOS) to manage TRMNL e-ink devices."
+category = "other"
+tags = ["e-ink"]
+version = "0.46.0"
+logo = "logo.svg"
+website = "https://docs.usetrmnl.com/go/diy/byos"
+docs = "https://github.com/usetrmnl/larapaper/blob/main/README.md"
+source = "https://github.com/usetrmnl/larapaper"
+upstream = "Dokploy/templates@6313a2e blueprints/trmnl-larapaper"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+APP_TIMEZONE = "UTC"
+APP_URL = "${main_domain}"
+FORCE_HTTPS = "0"
+PHP_OPCACHE_ENABLE = "1"
+REGISTRATION_ENABLED = "1"
+
+[[config.domains]]
+serviceName = "trmnl-larapaper"
+port = 8080
+host = "${main_domain}"

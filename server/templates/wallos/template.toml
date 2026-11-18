@@ -1,0 +1,25 @@
+id = "wallos"
+name = "Wallos"
+description = "Wallos is a self-hosted subscription tracking application that helps you manage and monitor your subscriptions, providing insights into your spending habits."
+category = "finance"
+tags = [
+    "finance",
+    "subscription",
+    "budgeting",
+    "expense-tracking",
+    "spending",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://wallosapp.com"
+docs = "https://github.com/ellite/wallos?tab=readme-ov-file#getting-started"
+source = "https://github.com/ellite/wallos"
+upstream = "Dokploy/templates@6313a2e blueprints/wallos"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "wallos"
+port = 80
+host = "${main_domain}"

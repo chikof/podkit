@@ -1,0 +1,29 @@
+id = "phpmyadmin"
+name = "Phpmyadmin"
+description = "phpMyAdmin is an open-source web interface for managing MySQL and MariaDB databases."
+category = "database"
+tags = ["database"]
+version = "5.2.3"
+logo = "logo.png"
+website = "https://www.phpmyadmin.net/"
+docs = "https://www.phpmyadmin.net/docs/"
+source = "https://github.com/phpmyadmin/phpmyadmin"
+upstream = "Dokploy/templates@6313a2e blueprints/phpmyadmin"
+
+[variables]
+main_domain = "${domain}"
+root_password = "${password:32}"
+user_password = "${password:32}"
+
+[config.env]
+MAX_EXECUTION_TIME = "600"
+MYSQL_DATABASE = "phpmyadmin"
+MYSQL_PASSWORD = "${user_password}"
+MYSQL_ROOT_PASSWORD = "${root_password}"
+MYSQL_USER = "phpmyadmin"
+UPLOAD_LIMIT = "512M"
+
+[[config.domains]]
+serviceName = "phpmyadmin"
+port = 80
+host = "${main_domain}"

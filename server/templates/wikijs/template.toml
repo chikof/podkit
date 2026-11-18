@@ -1,0 +1,34 @@
+id = "wikijs"
+name = "Wiki.js"
+description = "The most powerful and extensible open source Wiki software."
+category = "productivity"
+tags = [
+    "knowledge-base",
+    "self-hosted",
+    "documentation",
+]
+version = "2.5"
+logo = "logo.svg"
+website = "https://js.wiki/"
+docs = "https://docs.requarks.io/"
+source = "https://github.com/requarks/wiki"
+upstream = "Dokploy/templates@6313a2e blueprints/wikijs"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+DB_HOST = "db"
+DB_NAME = "wiki"
+DB_PASS = "wikijsrocks"
+DB_PORT = "5432"
+DB_TYPE = "postgres"
+DB_USER = "wikijs"
+POSTGRES_DB = "wiki"
+POSTGRES_PASSWORD = "wikijsrocks"
+POSTGRES_USER = "wikijs"
+
+[[config.domains]]
+serviceName = "wiki"
+port = 3000
+host = "${main_domain}"

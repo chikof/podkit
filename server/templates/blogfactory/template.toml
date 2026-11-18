@@ -1,0 +1,41 @@
+id = "blogfactory"
+name = "BlogFactory"
+description = "Self-hosted control plane for AI-assisted content operations and human-approved CMS draft delivery."
+category = "ai"
+tags = [
+    "ai",
+    "automation",
+    "content-management",
+]
+version = "v0.1.0"
+logo = "logo.svg"
+website = "https://blogfactory.io/"
+docs = "https://github.com/BlogFactoryHQ/blogfactory/blob/main/docs/self-hosting.md"
+source = "https://github.com/BlogFactoryHQ/blogfactory"
+upstream = "Dokploy/templates@6313a2e blueprints/blogfactory"
+
+[variables]
+admin_email = "${email}"
+cron_secret = "${base64:48}"
+encryption_secret = "${base64:48}"
+jwt_secret = "${base64:48}"
+main_domain = "${domain}"
+minio_root_password = "${password:48}"
+minio_root_user = "blogfactory"
+postgres_password = "${password:48}"
+
+[config.env]
+ADMIN_EMAILS = "${admin_email}"
+API_KEY_ENCRYPTION_SECRET = "${encryption_secret}"
+BLOGFACTORY_ALLOW_SIGNUP = "true"
+BLOGFACTORY_URL = "https://${main_domain}"
+CRON_SECRET = "${cron_secret}"
+JWT_SECRET = "${jwt_secret}"
+MINIO_ROOT_PASSWORD = "${minio_root_password}"
+MINIO_ROOT_USER = "${minio_root_user}"
+POSTGRES_PASSWORD = "${postgres_password}"
+
+[[config.domains]]
+serviceName = "web"
+port = 80
+host = "${main_domain}"

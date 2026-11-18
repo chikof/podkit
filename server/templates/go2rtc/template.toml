@@ -1,0 +1,24 @@
+id = "go2rtc"
+name = "go2rtc"
+description = "Ultimate camera streaming application with support for dozens formats and protocols."
+category = "media"
+tags = [
+    "streaming",
+    "webrtc",
+    "video",
+    "home-assistant",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://go2rtc.org/"
+docs = "https://go2rtc.org/"
+source = "https://github.com/AlexxIT/go2rtc"
+upstream = "Dokploy/templates@6313a2e blueprints/go2rtc"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "go2rtc"
+port = 1984
+host = "${main_domain}"

@@ -1,0 +1,35 @@
+id = "coralproject"
+name = "Coral"
+description = "Coral is a revolutionary commenting platform designed to enhance website interactions. It features smart technology for meaningful discussions, journalist identification, moderation tools with AI support, and complete data control without ads or trackers. Used by major news sites worldwide."
+category = "communication"
+tags = [
+    "communication",
+    "community",
+    "privacy",
+]
+version = "9.7.0"
+logo = "logo.png"
+website = "https://coralproject.net/"
+docs = "https://docs.coralproject.net/"
+source = "https://github.com/coralproject/talk"
+upstream = "Dokploy/templates@6313a2e blueprints/coralproject"
+
+[variables]
+DOMAIN = "${domain}"
+MONGO_PASSWORD = "${password:16}"
+REDIS_PASSWORD = "${password:16}"
+SIGNING_SECRET = "${password:45}"
+
+[config.env]
+MONGODB_URI = "mongodb://mongo:${MONGO_PASSWORD}@mongo:27017"
+MONGO_PASSWORD = "${MONGO_PASSWORD}"
+MONGO_USER = "mongo"
+NODE_ENV = "production"
+REDIS_PASSWORD = "${REDIS_PASSWORD}"
+REDIS_URI = "redis://default:${REDIS_PASSWORD}@redis:6379"
+SIGNING_SECRET = "${SIGNING_SECRET}"
+
+[[config.domains]]
+serviceName = "coral"
+port = 3000
+host = "${DOMAIN}"

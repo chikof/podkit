@@ -1,0 +1,26 @@
+id = "botpress"
+name = "Botpress"
+description = "Botpress is a platform for building conversational AI agents. It provides a simple and effective solution for building conversational AI agents from anywhere."
+category = "ai"
+tags = [
+    "ai",
+    "self-hosted",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://botpress.com"
+docs = "https://botpress.com/docs"
+source = "https://github.com/botpress/botpress"
+upstream = "Dokploy/templates@6313a2e blueprints/botpress"
+
+[variables]
+db_password = "${password:16}"
+main_domain = "${domain}"
+
+[config.env]
+DB_PASSWORD = "${db_password}"
+
+[[config.domains]]
+serviceName = "botpress"
+port = 81
+host = "${main_domain}"

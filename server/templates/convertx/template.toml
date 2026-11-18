@@ -1,0 +1,43 @@
+id = "convertx"
+name = "ConvertX"
+description = "ConvertX is a service for converting media files, with optional user registration and file management features."
+category = "media"
+tags = [
+    "media",
+    "converter",
+    "ffmpeg",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://github.com/c4illin/ConvertX"
+docs = "https://github.com/c4illin/ConvertX#environment-variables"
+source = "https://github.com/c4illin/ConvertX"
+upstream = "Dokploy/templates@6313a2e blueprints/convertx"
+
+[variables]
+account_registration = "false"
+allow_unauthenticated = "false"
+auto_delete_every_n_hours = "24"
+ffmpeg_args = ""
+hide_history = "false"
+http_allowed = "true"
+jwt_secret = "${jwt:32}"
+language = "en"
+main_domain = "${domain}"
+webroot = ""
+
+[config.env]
+ACCOUNT_REGISTRATION = "${account_registration}"
+ALLOW_UNAUTHENTICATED = "${allow_unauthenticated}"
+AUTO_DELETE_EVERY_N_HOURS = "${auto_delete_every_n_hours}"
+FFMPEG_ARGS = "${ffmpeg_args}"
+HIDE_HISTORY = "${hide_history}"
+HTTP_ALLOWED = "${http_allowed}"
+JWT_SECRET = "${jwt_secret}"
+LANGUAGE = "${language}"
+WEBROOT = "${webroot}"
+
+[[config.domains]]
+serviceName = "convertx"
+port = 3000
+host = "${main_domain}"

@@ -1,0 +1,27 @@
+id = "stalwart"
+name = "Stalwart"
+description = "Stalwart Mail Server is an open-source mail server solution with JMAP, IMAP4, POP3, and SMTP support and a wide range of modern features. It is written in Rust and designed to be secure, fast, robust and scalable."
+category = "communication"
+tags = [
+    "email",
+    "smtp",
+    "jmap",
+    "imap4",
+    "pop3",
+    "self-hosted",
+    "mail-server",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://stalw.art/"
+docs = "https://stalw.art/docs/"
+source = "https://github.com/stalwartlabs/mail-server"
+upstream = "Dokploy/templates@6313a2e blueprints/stalwart"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "stalwart-mail"
+port = 8080
+host = "${main_domain}"

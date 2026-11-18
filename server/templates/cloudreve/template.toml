@@ -1,0 +1,32 @@
+id = "cloudreve"
+name = "Cloudreve"
+description = "Self-hosted file management and sharing system with multi-cloud storage support. Compatible with local, OneDrive, S3, and various cloud providers."
+category = "storage"
+tags = [
+    "storage",
+    "file-sharing",
+    "cloud",
+    "self-hosted",
+]
+version = "4.10.1"
+logo = "logo.png"
+website = "https://cloudreve.org"
+docs = "https://docs.cloudreve.org"
+source = "https://github.com/cloudreve/Cloudreve"
+upstream = "Dokploy/templates@6313a2e blueprints/cloudreve"
+
+[variables]
+db_name = "cloudreve"
+db_password = "${password:32}"
+db_user = "cloudreve"
+main_domain = "${domain}"
+
+[config.env]
+POSTGRES_DB = "${db_name}"
+POSTGRES_PASSWORD = "${db_password}"
+POSTGRES_USER = "${db_user}"
+
+[[config.domains]]
+serviceName = "cloudreve"
+port = 5212
+host = "${main_domain}"

@@ -1,0 +1,33 @@
+services:
+  navi-music:
+    image: ghcr.io/andre-carbajal/navimusic:4.3.0
+    restart: unless-stopped
+    depends_on:
+      - yt-cipher
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        java $$JAVA_OPTS -jar /app/NaviMusic.jar nogui --spring.profiles.active=prod;
+        code=$$?;
+        if [ "$$code" -eq 0 ]; then
+        echo "NaviMusic is idle. Set DISCORD_TOKEN and required YouTube credentials in the Environment tab, then redeploy.";
+        tail -f /dev/null;
+        fi;
+        exit $$code
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      SPOTIFY_CLIENT_ID: ${SPOTIFY_CLIENT_ID}
+      SPOTIFY_CLIENT_SECRET: ${SPOTIFY_CLIENT_SECRET}
+      YOUTUBE_POTOKEN: ${YOUTUBE_POTOKEN}
+      YOUTUBE_VISITOR: ${YOUTUBE_VISITOR}
+      YOUTUBE_OAUTH2: ${YOUTUBE_OAUTH2}
+      YOUTUBE_CIPHER_URL: http://yt-cipher:8001
+      YOUTUBE_CIPHER_PASSWORD: ${YOUTUBE_CIPHER_PASSWORD}
+
+  yt-cipher:
+    image: ghcr.io/kikkia/yt-cipher:master@sha256:4c5ec381ff57336cfc24822d2b526a5ad7cd0171f61065a1bbc87bb736842449
+    restart: unless-stopped
+    environment:
+      OVERRIDE_PLAYER_VARIANT: IAS
+      API_TOKEN: ${YOUTUBE_CIPHER_PASSWORD}

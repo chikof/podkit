@@ -1,0 +1,38 @@
+id = "gitea-mysql"
+name = "Gitea (MySQL)"
+description = "Gitea bundled with MySQL 8."
+category = "development"
+tags = [
+    "git",
+    "scm",
+    "mysql",
+    "developer-tools",
+    "self-hosted",
+]
+version = "1.24.4"
+logo = "logo.png"
+website = "https://gitea.io/"
+docs = "https://docs.gitea.com/"
+source = "https://github.com/go-gitea/gitea"
+upstream = "Dokploy/templates@6313a2e blueprints/gitea-mysql"
+
+[variables]
+db_password = "${password:24}"
+db_root_password = "${password:24}"
+main_domain = "${domain}"
+
+[config.env]
+GITEA_DB_PASSWORD = "${db_password}"
+GITEA__database__DB_TYPE = "mysql"
+GITEA__database__HOST = "mysql:3306"
+GITEA__database__NAME = "gitea"
+GITEA__database__PASSWD = "${db_password}"
+GITEA__database__USER = "gitea"
+MYSQL_ROOT_PASSWORD = "${db_root_password}"
+USER_GID = "1000"
+USER_UID = "1000"
+
+[[config.domains]]
+serviceName = "gitea"
+port = 3000
+host = "${main_domain}"

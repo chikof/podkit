@@ -1,0 +1,40 @@
+id = "colanode"
+name = "Colanode Server"
+description = "Open-source and local-first Slack and Notion alternative that puts you in control of your data"
+category = "productivity"
+tags = [
+    "documentation",
+    "knowledge-base",
+    "collaboration",
+]
+version = "v0.1.6"
+logo = "logo.svg"
+website = "https://colanode.com"
+docs = "https://colanode.com/docs/"
+source = "https://github.com/colanode/colanode"
+upstream = "Dokploy/templates@6313a2e blueprints/colanode"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+MINIO_ROOT_PASSWORD = "your_minio_password"
+MINIO_ROOT_USER = "admin"
+POSTGRES_DB = "colanode_db"
+POSTGRES_PASSWORD = "your_postgres_password"
+POSTGRES_USER = "colanode_user"
+SERVER_AVATAR = "https://colanode.com/assets/logo-black.png"
+SERVER_NAME = "My Colanode"
+SMTP_EMAIL_FROM = "your_email@example.com"
+SMTP_EMAIL_FROM_NAME = "Colanode"
+SMTP_ENABLED = "false"
+SMTP_HOST = "smtp.gmail.com"
+SMTP_PASSWORD = "your_smtp_password"
+SMTP_PORT = "587"
+SMTP_USER = "your_smtp_username"
+VALKEY_PASSWORD = "your_valkey_password"
+
+[[config.domains]]
+serviceName = "server"
+port = 3000
+host = "${main_domain}"

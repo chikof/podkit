@@ -1,0 +1,23 @@
+id = "privatebin"
+name = "PrivateBin"
+description = "PrivateBin is a minimalist, open-source online pastebin where the server has zero knowledge of pasted data."
+category = "security"
+tags = [
+    "pastebin",
+    "privacy",
+    "self-hosted",
+]
+version = "2.0.4"
+logo = "logo.svg"
+website = "https://privatebin.info/"
+docs = "https://github.com/PrivateBin/docker-nginx-fpm-alpine"
+source = "https://github.com/PrivateBin/PrivateBin"
+upstream = "Dokploy/templates@6313a2e blueprints/privatebin"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "privatebin"
+port = 8080
+host = "${main_domain}"

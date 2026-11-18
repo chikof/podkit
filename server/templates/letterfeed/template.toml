@@ -1,0 +1,42 @@
+id = "letterfeed"
+name = "Letterfeed"
+description = "Convert email newsletters into RSS feeds"
+category = "communication"
+tags = [
+    "email",
+    "self-hosted",
+    "productivity",
+]
+version = "latest"
+logo = "@mono-letterfeed"
+website = "https://github.com/leonmuscoden/letterfeed"
+docs = "https://github.com/leonmuscoden/letterfeed"
+source = "https://github.com/leonmuscoden/letterfeed"
+upstream = "Dokploy/templates@6313a2e blueprints/letterfeed"
+reveal = ["auth_password"]
+
+[variables]
+auth_password = "${password:32}"
+main_domain = "${domain}"
+secret_key = "${password:64}"
+
+[config.env]
+LETTERFEED_APP_BASE_URL = "https://${main_domain}"
+LETTERFEED_AUTH_PASSWORD = "${auth_password}"
+LETTERFEED_AUTH_USERNAME = "admin"
+LETTERFEED_AUTO_ADD_NEW_SENDERS = "false"
+LETTERFEED_BACKEND_URL = "http://backend:8000"
+LETTERFEED_DATABASE_URL = "sqlite:////data/letterfeed.db"
+LETTERFEED_EMAIL_CHECK_INTERVAL = "15"
+LETTERFEED_IMAP_PASSWORD = ""
+LETTERFEED_IMAP_SERVER = ""
+LETTERFEED_IMAP_USERNAME = ""
+LETTERFEED_MARK_AS_READ = "true"
+LETTERFEED_MOVE_TO_FOLDER = ""
+LETTERFEED_SEARCH_FOLDER = "INBOX"
+LETTERFEED_SECRET_KEY = "${secret_key}"
+
+[[config.domains]]
+serviceName = "frontend"
+port = 3000
+host = "${main_domain}"

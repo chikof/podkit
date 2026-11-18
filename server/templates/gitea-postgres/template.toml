@@ -1,0 +1,38 @@
+id = "gitea-postgres"
+name = "Gitea (PostgreSQL)"
+description = "Gitea is a lightweight Git service for hosting code repositories."
+category = "development"
+tags = [
+    "git",
+    "scm",
+    "postgres",
+    "developer-tools",
+    "self-hosted",
+]
+version = "1.27.3"
+logo = "logo.png"
+website = "https://gitea.io/"
+docs = "https://docs.gitea.com/"
+source = "https://github.com/go-gitea/gitea"
+upstream = "Dokploy/templates@6313a2e blueprints/gitea-postgres"
+
+[variables]
+db_password = "${password:24}"
+db_user = "${username}"
+main_domain = "${domain}"
+
+[config.env]
+DISABLE_REGISTRATION = "false"
+GITEA_DOMAIN = "${main_domain}"
+GITEA_SSH_DOMAIN = "${main_domain}"
+POSTGRES_DB = "gitea"
+POSTGRES_PASSWORD = "${db_password}"
+POSTGRES_USER = "${db_user}"
+REQUIRE_SIGNIN_VIEW = "false"
+USER_GID = "1000"
+USER_UID = "1000"
+
+[[config.domains]]
+serviceName = "gitea"
+port = 3000
+host = "${main_domain}"

@@ -1,0 +1,57 @@
+id = "calnode"
+name = "Calnode"
+description = "Calnode is a Calendly-style booking app — with first-party video meetings, recording, and AI notetaking built in. It's API-first, webhook-native, and built for a world where agents do the booking. Nothing is paywalled."
+category = "productivity"
+tags = [
+    "scheduling",
+    "booking",
+    "calendar",
+    "meetings",
+]
+version = "v0.12.0"
+logo = "logo.svg"
+website = "https://calnode.com/"
+docs = "https://github.com/Calnode/calnode/tree/main/docs"
+source = "https://github.com/Calnode/calnode"
+upstream = "Dokploy/templates@6313a2e blueprints/calnode"
+
+[variables]
+calnode_encryption_key = "${base64:32}"
+main_domain = "${domain}"
+
+[config.env]
+BASE_URL = "http:${main_domain}"
+CALNODE_ENCRYPTION_KEY = "${calnode_encryption_key}"
+CALNODE_RECOVERY_SECRET = ""
+COOKIE_SECURE = ""
+DATABASE_URL = "sqlite://./data/calnode.db"
+EMAIL_FROM_ADDRESS = ""
+EMAIL_FROM_NAME = "Calnode"
+EMAIL_SMTP_CONNECT_HOST = ""
+EMAIL_SMTP_CONNECT_PORT = ""
+EMAIL_SMTP_HOST = ""
+EMAIL_SMTP_PASS = ""
+EMAIL_SMTP_PORT = "587"
+EMAIL_SMTP_STARTTLS = ""
+EMAIL_SMTP_TLS = ""
+EMAIL_SMTP_USER = ""
+FRAME_ANCESTORS = ""
+GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_SECRET = ""
+LITESTREAM_ACCESS_KEY_ID = ""
+LITESTREAM_ENDPOINT = ""
+LITESTREAM_REGION = ""
+LITESTREAM_REPLICA_URL = ""
+LITESTREAM_SECRET_ACCESS_KEY = ""
+LOG_LEVEL = ""
+MICROSOFT_CLIENT_ID = ""
+MICROSOFT_CLIENT_SECRET = ""
+MICROSOFT_TENANT = "common"
+PORT = "3000"
+PUBLIC_BASE_URL = ""
+TRUSTED_PROXY_CIDRS = ""
+
+[[config.domains]]
+serviceName = "calnode"
+port = 3000
+host = "${main_domain}"

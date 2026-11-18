@@ -1,0 +1,23 @@
+id = "kividb"
+name = "KiviDB"
+description = "KiviDB is a Redis-compatible in-memory database written in Rust, with full-text and vector search (FT.*) built in."
+category = "database"
+tags = [
+    "database",
+    "cache",
+    "redis",
+    "in-memory",
+    "vector-database",
+]
+version = "1.2.0"
+logo = "@mono-kividb"
+website = "https://kividb.io/"
+docs = "https://kividb.io/docs"
+source = "https://github.com/kividbio/kividb"
+upstream = "Dokploy/templates@6313a2e blueprints/kividb"
+
+[variables]
+kividb_password = "${password:32}"
+
+[config.env]
+KIVIDB_PASSWORD = "${kividb_password}"

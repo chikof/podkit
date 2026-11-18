@@ -1,0 +1,36 @@
+id = "falkordb"
+name = "FalkorDB"
+description = "A high-performance graph database for knowledge graphs, GraphRAG, agent memory, fraud detection and other relationship-heavy workloads. Includes the FalkorDB Browser interface."
+category = "database"
+tags = [
+    "database",
+    "graph-database",
+    "knowledge-graph",
+    "graphrag",
+    "ai",
+    "redis",
+]
+version = "4.20.4"
+logo = "logo.svg"
+website = "https://www.falkordb.com/"
+docs = "https://docs.falkordb.com/"
+source = "https://github.com/FalkorDB/FalkorDB"
+upstream = "Dokploy/templates@6313a2e blueprints/falkordb"
+
+[variables]
+auth_secret = "${base64:48}"
+encryption_key = "${hash:32}"
+falkordb_password = "${hash:32}"
+falkordb_url = "https://${main_domain}"
+main_domain = "${domain}"
+
+[config.env]
+AUTH_SECRET = "${auth_secret}"
+AUTH_URL = "${falkordb_url}"
+ENCRYPTION_KEY = "${encryption_key}"
+FALKORDB_PASSWORD = "${falkordb_password}"
+
+[[config.domains]]
+serviceName = "falkordb"
+port = 3000
+host = "${main_domain}"

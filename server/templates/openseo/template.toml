@@ -1,0 +1,30 @@
+id = "openseo"
+name = "OpenSEO"
+description = "OpenSEO is an open source, self-hosted alternative to Semrush and Ahrefs for keyword research, rank tracking, backlinks, and site audits."
+category = "analytics"
+tags = [
+    "seo",
+    "analytics",
+    "marketing",
+]
+version = "0.1.6"
+logo = "@mono-openseo"
+website = "https://openseo.so"
+docs = "https://openseo.so/docs/self-hosting"
+source = "https://github.com/every-app/open-seo"
+upstream = "Dokploy/templates@6313a2e blueprints/openseo"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+DATAFORSEO_API_KEY = ""
+OPENROUTER_API_KEY = ""
+OPENROUTER_MODEL = "openai/gpt-4o-mini"
+OPENSEO_HOST = "${main_domain}"
+OPENSEO_TELEMETRY_DISABLED = ""
+
+[[config.domains]]
+serviceName = "openseo"
+port = 3001
+host = "${main_domain}"

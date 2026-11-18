@@ -1,0 +1,32 @@
+id = "karakeep"
+name = "KaraKeep"
+description = "A self-hostable bookmark-everything app (links, notes and images) with AI-based automatic tagging and full text search. Previously known as Hoarder."
+category = "productivity"
+tags = [
+    "bookmarks",
+    "bookmark-manager",
+    "self-hosted",
+    "ai",
+    "search",
+    "notes",
+    "productivity",
+]
+version = "0.25.0"
+logo = "logo.svg"
+website = "https://karakeep.app/"
+docs = "https://github.com/karakeep-app/karakeep/tree/main/docs"
+source = "https://github.com/karakeep-app/karakeep"
+upstream = "Dokploy/templates@6313a2e blueprints/karakeep"
+
+[variables]
+karakeep_version = "release"
+main_domain = "${domain}"
+
+[config.env]
+MEILI_MASTER_KEY = "${password:36}"
+NEXTAUTH_URL = "http://${main_domain}"
+
+[[config.domains]]
+serviceName = "web"
+port = 3000
+host = "${main_domain}"

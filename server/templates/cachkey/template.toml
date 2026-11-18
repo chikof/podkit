@@ -1,0 +1,40 @@
+id = "cachkey"
+name = "Cachkey"
+description = "Cachkey is an open-source, self-hosted manager for secrets and environment variables: encrypted values, per-environment access for your team, a CLI and a read-only API for servers and CI."
+category = "security"
+tags = [
+    "security",
+    "secrets",
+    "self-hosted",
+]
+version = "0.2.0"
+logo = "logo.svg"
+website = "https://github.com/Joyboy-dy/cachkey"
+docs = "https://github.com/Joyboy-dy/cachkey/tree/main/docs"
+source = "https://github.com/Joyboy-dy/cachkey"
+upstream = "Dokploy/templates@6313a2e blueprints/cachkey"
+
+[variables]
+better_auth_secret = "${base64:48}"
+encryption_key = "${base64:32}"
+main_domain = "${domain}"
+postgres_password = "${hash:32}"
+
+[config.env]
+APP_URL = "http://${main_domain}"
+BETTER_AUTH_SECRET = "${better_auth_secret}"
+EMAIL_FROM = "Cachkey <no-reply@example.com>"
+EMAIL_PROVIDER = "smtp"
+ENCRYPTION_KEY = "${encryption_key}"
+POSTGRES_PASSWORD = "${postgres_password}"
+RESEND_API_KEY = ""
+SMTP_HOST = ""
+SMTP_PASSWORD = ""
+SMTP_PORT = "587"
+SMTP_SECURE = "false"
+SMTP_USER = ""
+
+[[config.domains]]
+serviceName = "cachkey"
+port = 3000
+host = "${main_domain}"

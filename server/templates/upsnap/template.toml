@@ -1,0 +1,34 @@
+id = "upsnap"
+name = "Upsnap"
+description = "Upsnap is a simple network device monitor and dashboard built on PocketBase."
+category = "networking"
+tags = [
+    "network",
+    "monitoring",
+    "dashboard",
+    "self-hosted",
+]
+version = "5"
+logo = "@upsnap"
+website = "https://github.com/seriousm4x/upsnap"
+docs = "https://github.com/seriousm4x/upsnap#readme"
+source = "https://github.com/seriousm4x/upsnap"
+upstream = "Dokploy/templates@6313a2e blueprints/upsnap"
+
+[variables]
+main_domain = "${domain}"
+upsnap_password = "${password:32}"
+
+[config.env]
+TZ = "Europe/Berlin"
+UPSNAP_INTERVAL = "*/10 * * * * *"
+UPSNAP_PING_PRIVILEGED = "true"
+UPSNAP_SCAN_RANGE = "192.168.1.0/24"
+UPSNAP_SCAN_TIMEOUT = "500ms"
+UPSNAP_WEBSITE_TITLE = "Upsnap Network Monitor"
+
+[[config.domains]]
+serviceName = "upsnap"
+port = 8090
+host = "${main_domain}"
+path = "/"

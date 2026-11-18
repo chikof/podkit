@@ -1,0 +1,23 @@
+id = "alist"
+name = "AList"
+description = "ðŸ—‚ï¸A file list/WebDAV program that supports multiple storages, powered by Gin and Solidjs."
+category = "storage"
+tags = [
+    "file",
+    "webdav",
+    "storage",
+]
+version = "v3.55.0"
+logo = "logo.svg"
+website = "https://alistgo.com/"
+docs = "https://alistgo.com/guide/install/docker.html"
+source = "https://github.com/AlistGo/alist"
+upstream = "Dokploy/templates@6313a2e blueprints/alist"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "alist"
+port = 5244
+host = "${main_domain}"

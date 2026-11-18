@@ -1,0 +1,27 @@
+id = "mumble"
+name = "Mumble"
+description = "Mumble is an open-source, low-latency, high-quality voice chat software primarily intended for use while gaming."
+category = "communication"
+tags = [
+    "voice-chat",
+    "communication",
+    "gaming",
+    "voip",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://www.mumble.info/"
+docs = "https://www.mumble.info/documentation/"
+source = "https://github.com/mumble-voip/mumble"
+upstream = "Dokploy/templates@6313a2e blueprints/mumble"
+reveal = ["superuser_password"]
+
+[variables]
+max_users = "50"
+superuser_password = "${password:32}"
+welcome_text = "Welcome to Mumble Server! Low-latency voice chat."
+
+[config.env]
+MAX_USERS = "${max_users}"
+SUPERUSER_PASSWORD = "${superuser_password}"
+WELCOME_TEXT = "${welcome_text}"

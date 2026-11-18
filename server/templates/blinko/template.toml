@@ -1,0 +1,36 @@
+id = "blinko"
+name = "Blinko"
+description = "Blinko is a modern web application for managing and organizing your digital content and workflows."
+category = "productivity"
+tags = [
+    "productivity",
+    "organization",
+    "workflow",
+    "nextjs",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://blinko.space/"
+docs = "https://docs.blinko.space/"
+source = "https://github.com/blinkospace/blinko"
+upstream = "Dokploy/templates@6313a2e blueprints/blinko"
+
+[variables]
+database_url = "postgresql://postgres:${postgres_password}@blinko-postgres:5432/postgres"
+main_domain = "${domain}"
+next_public_base_url = "http://${main_domain}"
+nextauth_secret = "${password:32}"
+nextauth_url = "http://${main_domain}"
+postgres_password = "${password:32}"
+
+[config.env]
+DATABASE_URL = "${database_url}"
+NEXTAUTH_SECRET = "${nextauth_secret}"
+NEXTAUTH_URL = "${nextauth_url}"
+NEXT_PUBLIC_BASE_URL = "${next_public_base_url}"
+POSTGRES_PASSWORD = "${postgres_password}"
+
+[[config.domains]]
+serviceName = "blinko-website"
+port = 1111
+host = "${main_domain}"

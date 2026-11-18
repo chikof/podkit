@@ -1,0 +1,29 @@
+id = "gitlab-ce"
+name = "GitLab CE"
+description = "GitLab CE is a platform for Git repositories, CI/CD, and project management."
+category = "development"
+tags = [
+    "git",
+    "ci-cd",
+    "version-control",
+    "project-management",
+]
+version = "19.1.2"
+logo = "logo.svg"
+website = "https://gitlab.com/"
+docs = "https://docs.gitlab.com/ee/"
+source = "https://gitlab.com/gitlab-org/gitlab-ce"
+upstream = "Dokploy/templates@6313a2e blueprints/gitlab-ce"
+
+[variables]
+gitlab_root_password = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+GITLAB_HOST = "${main_domain}"
+GITLAB_ROOT_PASSWORD = "${gitlab_root_password}"
+
+[[config.domains]]
+serviceName = "gitlab"
+port = 80
+host = "${main_domain}"

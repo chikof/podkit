@@ -1,0 +1,29 @@
+id = "homepage"
+name = "Homepage"
+description = "Homepage is a customizable dashboard and start page for your apps and services."
+category = "productivity"
+tags = [
+    "dashboard",
+    "startpage",
+    "self-hosted",
+    "productivity",
+]
+version = "1.13.1"
+logo = "logo.png"
+website = "https://gethomepage.dev/"
+docs = "https://gethomepage.dev/installation/"
+source = "https://github.com/gethomepage/homepage"
+upstream = "Dokploy/templates@6313a2e blueprints/homepage"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+HOMEPAGE_ALLOWED_HOSTS = "${main_domain}"
+PGID = "1000"
+PUID = "1000"
+
+[[config.domains]]
+serviceName = "homepage"
+port = 3000
+host = "${main_domain}"

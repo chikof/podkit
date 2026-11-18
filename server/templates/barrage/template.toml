@@ -1,0 +1,30 @@
+id = "barrage"
+name = "Barrage"
+description = "Barrage is a minimalistic Deluge WebUI app with full mobile support. It features a responsive mobile-first design, allowing you to manage your torrents with ease from any device."
+category = "other"
+tags = [
+    "torrents",
+    "deluge",
+    "mobile",
+]
+version = "0.3.0"
+logo = "logo.png"
+website = "https://github.com/maulik9898/barrage"
+docs = "https://github.com/maulik9898/barrage/blob/main/README.md"
+source = "https://github.com/maulik9898/barrage"
+upstream = "Dokploy/templates@6313a2e blueprints/barrage"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+BARRAGE_PASSWORD = "${password:16}"
+DELUGE_PASSWORD = "${password:16}"
+DELUGE_URL = "http://your-deluge-ip:8112"
+NEXTAUTH_SECRET = "${base64}"
+NEXTAUTH_URL = "http://${main_domain}"
+
+[[config.domains]]
+serviceName = "barrage"
+port = 3000
+host = "${main_domain}"

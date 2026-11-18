@@ -1,0 +1,44 @@
+id = "bookorbit"
+name = "BookOrbit"
+description = "BookOrbit is a self-hosted reading space to organize, track, and read your personal book library, with OPDS feeds and KOReader and Kobo sync."
+category = "media"
+tags = [
+    "books",
+    "reading",
+    "library",
+    "ebooks",
+    "opds",
+]
+version = "3.8.0"
+logo = "logo.png"
+website = "https://bookorbit.app"
+docs = "https://bookorbit.app/installation"
+source = "https://github.com/bookorbit/bookorbit"
+upstream = "Dokploy/templates@6313a2e blueprints/bookorbit"
+
+[variables]
+jwt_secret = "${password:32}"
+main_domain = "${domain}"
+postgres_password = "${password:32}"
+setup_token = "${password:32}"
+
+[config.env]
+APP_URL = "https://${main_domain}"
+CLIENT_URL = "https://${main_domain}"
+DATABASE_URL = "postgresql://bookorbit:${postgres_password}@postgres:5432/bookorbit"
+JWT_SECRET = "${jwt_secret}"
+NODE_ENV = "production"
+PGID = "1000"
+PORT = "3000"
+POSTGRES_DB = "bookorbit"
+POSTGRES_HOST = "postgres"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_PORT = "5432"
+POSTGRES_USER = "bookorbit"
+PUID = "1000"
+SETUP_BOOTSTRAP_TOKEN = "${setup_token}"
+
+[[config.domains]]
+serviceName = "app"
+port = 3000
+host = "${main_domain}"

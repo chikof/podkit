@@ -21,3 +21,44 @@ Datastar (server/static/datastar-1.0.5.js)
 
 Parts of the UI components are adapted from Topcoat UI (MIT):
   https://github.com/tokio-rs/topcoat
+
+podkit includes third-party material under the following terms.
+
+== Dokploy templates (server/templates/*, `upstream` in each template.toml) ==
+
+Templates marked `upstream = "Dokploy/templates@6313a2e ..."` are converted from the blueprints of
+https://github.com/Dokploy/templates. Each one's path in that repository is in its template.toml
+and in server/templates/IMPORT_REPORT.md.
+
+MIT License
+
+Copyright (c) 2024 Dokploy and Carlos Ortiz
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+== Logos (server/static/logos, templates' own logo files) ==
+
+105 SVG files come from https://github.com/homarr-labs/dashboard-icons at d4b500dc40a8e1043b1581cabb7208892cf35472 (Apache License 2.0,
+https://www.apache.org/licenses/LICENSE-2.0). 17 come from https://github.com/simple-icons/simple-icons
+at 17cd4ee07612198a1d8777a060d4100423762a8b (CC0 1.0 Universal, https://creativecommons.org/publicdomain/zero/1.0/). Each file's origin is
+in server/static/logos/SOURCES.tsv; Simple Icons files had a neutral `fill` added.
+
+The logo files that ship inside imported templates were published by the Dokploy/templates
+repository (MIT, above). The logos remain trademarks of their owners and appear only to
+identify the software a template installs. Files named mono-<id>.svg were generated for podkit.

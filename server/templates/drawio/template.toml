@@ -1,0 +1,27 @@
+id = "drawio"
+name = "draw.io"
+description = "draw.io is a configurable diagramming/whiteboarding visualization application."
+category = "other"
+tags = [
+    "drawing",
+    "diagrams",
+]
+version = "24.7.17"
+logo = "logo.svg"
+website = "https://www.drawio.com/"
+docs = "https://www.drawio.com/docs/"
+source = "https://github.com/jgraph/drawio"
+upstream = "Dokploy/templates@6313a2e blueprints/drawio"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+DRAWIO_BASE_URL = "https://${main_domain}"
+DRAWIO_HOST = "${main_domain}"
+DRAWIO_SERVER_URL = "https://${main_domain}/"
+
+[[config.domains]]
+serviceName = "drawio"
+port = 8080
+host = "${main_domain}"

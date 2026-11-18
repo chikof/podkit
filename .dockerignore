@@ -13,3 +13,5 @@
 /target
 LICENSE
 README.md
+# server/build.rs embeds these; the rules above would drop them from the build context.
+!server/templates/**/docker-compose.yml

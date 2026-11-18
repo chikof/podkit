@@ -1,0 +1,27 @@
+id = "arangodb"
+name = "ArangoDB"
+description = "ArangoDB is a native multi-model database with flexible data models for documents, graphs, and key-values. Build high performance applications using a convenient SQL-like query language or JavaScript extensions."
+category = "database"
+tags = [
+    "database",
+    "graph-database",
+    "nosql",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://www.arangodb.com/"
+docs = "https://www.arangodb.com/docs/"
+source = "https://github.com/arangodb/arangodb"
+upstream = "Dokploy/templates@6313a2e blueprints/arangodb"
+
+[variables]
+arango_password = "${password:16}"
+main_domain = "${domain}"
+
+[config.env]
+ARANGO_PASSWORD = "${arango_password}"
+
+[[config.domains]]
+serviceName = "arangodb"
+port = 8529
+host = "${main_domain}"

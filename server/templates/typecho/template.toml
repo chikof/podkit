@@ -1,0 +1,25 @@
+id = "typecho"
+name = "Typecho"
+description = "Typecho æ˜¯ä¸€ä¸ªè½»é‡çº§çš„å¼€æºåšå®¢ç¨‹åºï¼ŒåŸºäºŽ PHP å¼€å‘ï¼Œæ”¯æŒå¤šç§æ•°æ®åº“ï¼Œç®€æ´è€Œå¼ºå¤§ã€‚"
+category = "cms"
+tags = [
+    "blog",
+    "cms",
+    "php",
+]
+version = "stable"
+logo = "logo.png"
+website = "https://typecho.org/"
+docs = "http://docs.typecho.org"
+source = "https://github.com/typecho/typecho"
+upstream = "Dokploy/templates@6313a2e blueprints/typecho"
+
+[variables]
+db_password = "${password:16}"
+main_domain = "${domain}"
+root_password = "${password:16}"
+
+[[config.domains]]
+serviceName = "typecho"
+port = 80
+host = "${main_domain}"

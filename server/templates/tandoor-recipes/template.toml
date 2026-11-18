@@ -1,0 +1,33 @@
+id = "tandoor-recipes"
+name = "Tandoor Recipes"
+description = "Tandoor Recipes is a self-hosted recipe manager, meal planner, and shopping list application."
+category = "other"
+tags = [
+    "recipes",
+    "meal-planning",
+    "self-hosted",
+]
+version = "2.6.11"
+logo = "logo.svg"
+website = "https://tandoor.dev/"
+docs = "https://docs.tandoor.dev/"
+source = "https://github.com/TandoorRecipes/recipes"
+upstream = "Dokploy/templates@6313a2e blueprints/tandoor-recipes"
+
+[variables]
+main_domain = "${domain}"
+postgres_password = "${password:32}"
+secret_key = "${password:64}"
+
+[config.env]
+ALLOWED_HOSTS = "${main_domain}"
+CSRF_TRUSTED_ORIGINS = "https://${main_domain}"
+POSTGRES_DB = "tandoor"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USER = "tandoor"
+SECRET_KEY = "${secret_key}"
+
+[[config.domains]]
+serviceName = "tandoor-recipes"
+port = 8080
+host = "${main_domain}"

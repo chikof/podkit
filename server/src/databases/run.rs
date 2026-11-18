@@ -155,10 +155,7 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 		.public_port
 		.map(|port| {
 			u16::try_from(port)
-				.map(|host| PublishedPort {
-					host,
-					container: engine.port,
-				})
+				.map(|host| PublishedPort::tcp(host, engine.port))
 				.map_err(|_| failed("database public_port is out of range"))
 		})
 		.transpose()?
@@ -174,6 +171,7 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 			reference: engine.image(&database.version),
 			// Picks up patch releases of the major tag.
 			pull: true,
+			auth: None,
 		},
 		env: engine.env(&credentials),
 		command: engine
@@ -196,6 +194,8 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 		entrypoint: None,
 		shm_bytes: None,
 		stop_timeout_s: None,
+		networks: Vec::new(),
+		options: proto::ContainerOptions::default(),
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,

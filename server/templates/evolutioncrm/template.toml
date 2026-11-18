@@ -1,0 +1,79 @@
+id = "evolutioncrm"
+name = "Evolution CRM"
+description = "Evo CRM Community is the open-source edition of the Evo CRM platform — a complete suite for AI-assisted customer support. It brings together authentication, CRM, AI agents, agent processing, bot pipelines and a modern frontend into a unified, self-hostable stack."
+category = "productivity"
+tags = [
+    "crm",
+    "ai",
+    "agent",
+    "processing",
+    "bot",
+    "pipeline",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://evolutionfoundation.com.br"
+docs = "https://docs.evolutionfoundation.com.br"
+source = "https://github.com/evolution-foundation/evo-crm-community"
+upstream = "Dokploy/templates@6313a2e blueprints/evolutioncrm"
+
+[variables]
+api_domain = "${domain}"
+api_token = "${base64:64}"
+auth_domain = "${domain}"
+bot_runtime_secret = "${base64:64}"
+doorkeeper_jwt_secret_key = "${base64:64}"
+encryption_key = "${base64:32}"
+evoia_domain = "${domain}"
+front_domain = "${domain}"
+global_api_key = "${base64:64}"
+jwt_secret_key = "${base64:64}"
+postgres_password = "${password}"
+processor_domain = "${domain}"
+secret_key_base = "${base64:64}"
+
+[config.env]
+AUTH_DOMAIN = "${auth_domain}"
+AUTH_URL = '"http://${auth_domain}"'
+BACK_DOMAIN = "${api_domain}"
+BACK_URL = '"http://${api_domain}"'
+BOT_RUNTIME_SECRET = "${bot_runtime_secret}"
+DOORKEEPER_JWT_ALGORITHM = "hs256"
+DOORKEEPER_JWT_ISS = "evo-auth-service"
+DOORKEEPER_JWT_SECRET_KEY = "${doorkeeper_jwt_secret_key}"
+ENCRYPTION_KEY = "${encryption_key}"
+EVOAI_CRM_API_TOKEN = "${api_token}"
+EVOIA_DOMAIN = "${evoia_domain}"
+EVOIA_URL = '"http://${evoia_domain}"'
+FRONT_DOMAIN = "${front_domain}"
+FRONT_URL = '"http://${front_domain}"'
+GLOBAL_API_KEY = "${global_api_key}"
+JWT_SECRET_KEY = "${jwt_secret_key}"
+MFA_ISSUER = "EvoCRM"
+POSTGRES_DATABASE = "evo_crm_community"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USERNAME = "postgres"
+PROCESSOR_DOMAIN = "${processor_domain}"
+PROCESSOR_URL = '"http://${processor_domain}"'
+REDIS_URL = "redis://redis:6379/3"
+SECRET_KEY_BASE = "${secret_key_base}"
+
+[[config.domains]]
+serviceName = "evo-auth"
+port = 3001
+host = "${auth_domain}"
+
+[[config.domains]]
+serviceName = "evo-crm-frontend"
+port = 80
+host = "${front_domain}"
+
+[[config.domains]]
+serviceName = "evo-crm"
+port = 3000
+host = "${api_domain}"
+
+[[config.domains]]
+serviceName = "evo-processor"
+port = 8000
+host = "${processor_domain}"

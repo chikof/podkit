@@ -1,0 +1,30 @@
+id = "3dokploy"
+name = "3Dokploy"
+description = "Read-only."
+category = "monitoring"
+tags = [
+    "monitoring",
+    "dashboard",
+    "devops",
+]
+version = "0.1.1"
+logo = "logo.svg"
+website = ""
+docs = "https://github.com/suleyman/3dokploy#readme"
+source = "https://github.com/suleyman/3dokploy"
+upstream = "Dokploy/templates@6313a2e blueprints/3dokploy"
+reveal = ["auth_password"]
+
+[variables]
+auth_password = "${password:24}"
+main_domain = "${domain}"
+
+[config.env]
+BASIC_AUTH = "admin:${auth_password}"
+DOKPLOY_API_KEY = ""
+DOKPLOY_URL = "http://host.docker.internal:3000"
+
+[[config.domains]]
+serviceName = "3dokploy"
+port = 3000
+host = "${main_domain}"

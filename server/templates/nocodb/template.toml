@@ -1,0 +1,32 @@
+id = "nocodb"
+name = "NocoDB"
+description = "NocoDB is an open-source alternative to Airtable that turns your database into a smart spreadsheet."
+category = "database"
+tags = [
+    "database",
+    "spreadsheet",
+    "low-code",
+    "nocode",
+]
+version = "latest"
+logo = "@nocodb"
+website = "https://nocodb.com/"
+docs = "https://docs.nocodb.com/"
+source = "https://github.com/nocodb/nocodb"
+upstream = "Dokploy/templates@6313a2e blueprints/nocodb"
+
+[variables]
+main_domain = "${domain}"
+postgres_db = "root_db"
+postgres_password = "${password:32}"
+postgres_user = "postgres"
+
+[config.env]
+POSTGRES_DB = "${postgres_db}"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USER = "${postgres_user}"
+
+[[config.domains]]
+serviceName = "nocodb"
+port = 8080
+host = "${main_domain}"

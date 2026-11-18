@@ -1,0 +1,23 @@
+id = "rsshub"
+name = "RSSHub"
+description = "RSSHub is the world's largest RSS network, consisting of over 5,000 global instances.RSSHub delivers millions of contents aggregated from all kinds of sources, our vibrant open source community is ensuring the deliver of RSSHub's new routes, new features and bug fixes."
+category = "productivity"
+tags = [
+    "rss",
+    "api",
+    "self-hosted",
+]
+version = "1.0.0"
+logo = "@mono-rsshub"
+website = "https://rsshub.app/"
+docs = "https://docs.rsshub.app/"
+source = "https://github.com/DIYgod/RSSHub"
+upstream = "Dokploy/templates@6313a2e blueprints/rsshub"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "rsshub"
+port = 1200
+host = "${main_domain}"

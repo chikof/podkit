@@ -1,0 +1,38 @@
+id = "pretix"
+name = "Pretix"
+description = "Ticket shop application for conferences, festivals, concerts, tech events, shows, workshops, etc."
+category = "other"
+tags = [
+    "ticketing",
+    "events",
+    "e-commerce",
+]
+version = "2026.8.0"
+logo = "logo.svg"
+website = "https://pretix.eu/"
+docs = "https://docs.pretix.eu/"
+source = "https://github.com/pretix/pretix/"
+upstream = "Dokploy/templates@6313a2e blueprints/pretix"
+
+[variables]
+main_domain = "${domain}"
+postgres_password = "${password:32}"
+secret_key = "${password:64}"
+
+[config.env]
+POSTGRES_PASSWORD = "${postgres_password}"
+PRETIX_CURRENCY = "EUR"
+PRETIX_INSTANCE_NAME = "pretix"
+PRETIX_MAIL_FROM = "tickets@example.com"
+PRETIX_MAIL_HOST = "localhost"
+PRETIX_MAIL_PASSWORD = ""
+PRETIX_MAIL_PORT = "25"
+PRETIX_MAIL_TLS = "false"
+PRETIX_MAIL_USER = ""
+PRETIX_SECRET_KEY = "${secret_key}"
+PRETIX_URL = "http://${main_domain}"
+
+[[config.domains]]
+serviceName = "pretix"
+port = 80
+host = "${main_domain}"

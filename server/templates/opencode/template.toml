@@ -1,0 +1,33 @@
+id = "opencode"
+name = "OpenCode"
+description = "OpenCode is an open source AI coding agent. This template runs its password-protected web UI; optionally set a repository URL to clone on start-up, then chat with, edit and run your code from the browser."
+category = "ai"
+tags = [
+    "ai",
+    "coding",
+    "agent",
+    "development",
+    "self-hosted",
+]
+version = "1.18.32"
+logo = "logo.svg"
+website = "https://opencode.ai"
+docs = "https://opencode.ai/v2/docs"
+source = "https://github.com/anomalyco/opencode"
+upstream = "Dokploy/templates@6313a2e blueprints/opencode"
+
+[variables]
+main_domain = "${domain}"
+opencode_password = "${password:32}"
+
+[config.env]
+GIT_REPO_URL = ""
+GIT_TOKEN = ""
+OPENCODE_SERVER_PASSWORD = "${opencode_password}"
+OPENCODE_SERVER_USERNAME = "opencode"
+TOOLCHAIN_PACKAGES = "git nodejs npm python3"
+
+[[config.domains]]
+serviceName = "opencode"
+port = 4096
+host = "${main_domain}"

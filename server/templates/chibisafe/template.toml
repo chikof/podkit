@@ -1,0 +1,55 @@
+id = "chibisafe"
+name = "Chibisafe"
+description = "A beautiful and performant vault to save all your files in the cloud."
+category = "storage"
+tags = [
+    "media-system",
+    "storage",
+    "file-sharing",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://chibisafe.app"
+docs = "https://chibisafe.app/docs/intro"
+source = "https://github.com/chibisafe/chibisafe"
+upstream = "Dokploy/templates@6313a2e blueprints/chibisafe"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "caddy"
+port = 80
+host = "${main_domain}"
+
+[[config.mounts]]
+filePath = "./Caddyfile"
+content = """
+# chibisafe/Caddyfile
+# https://chibisafe.app/docs/installation/running-with-docker
+{$BASE_URL} {
+\troute {
+\t\tfile_server * {
+\t\t\t\troot /app/uploads
+\t\t\t\tpass_thru
+\t\t}
+
+\t\t@api path /api/*
+\t\treverse_proxy @api http://chibisafe_server:8000 {
+\t\t\t\theader_up Host {http.reverse_proxy.upstream.hostport}
+\t\t\t\theader_up X-Real-IP {http.request.header.X-Real-IP}
+\t\t}
+
+\t\t@docs path /docs*
+\t\treverse_proxy @docs http://chibisafe_server:8000 {
+\t\t\t\theader_up Host {http.reverse_proxy.upstream.hostport}
+\t\t\t\theader_up X-Real-IP {http.request.header.X-Real-IP}
+\t\t}
+
+\t\treverse_proxy http://chibisafe:8001 {
+\t\t\t\theader_up Host {http.reverse_proxy.upstream.hostport}
+\t\t\t\theader_up X-Real-IP {http.request.header.X-Real-IP}
+\t\t}
+\t}
+}
+"""

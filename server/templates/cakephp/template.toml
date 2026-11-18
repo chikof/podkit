@@ -1,0 +1,38 @@
+id = "cakephp"
+name = "CakePHP 5"
+description = "CakePHP 5 starter app running on the themusicdev/php-apache 8.5 Apache + PHP runtime image, backed by MariaDB."
+category = "cms"
+tags = [
+    "php",
+    "framework",
+    "cakephp",
+    "website",
+]
+version = "1.0.0"
+logo = "logo.svg"
+website = "https://cakephp.org/"
+docs = "https://book.cakephp.org/5/en/index.html"
+source = "https://github.com/TheMusicDev/cakephp-hello"
+upstream = "Dokploy/templates@6313a2e blueprints/cakephp"
+
+[variables]
+app_debug = "false"
+database_name = "cakephp"
+database_password = "${password:32}"
+database_username = "${username:8}"
+main_domain = "${domain}"
+root_password = "${password:32}"
+security_salt = "${base64:32}"
+
+[config.env]
+DEBUG = "${app_debug}"
+MARIADB_DATABASE = "${database_name}"
+MARIADB_PASSWORD = "${database_password}"
+MARIADB_ROOT_PASSWORD = "${root_password}"
+MARIADB_USER = "${database_username}"
+SECURITY_SALT = "${security_salt}"
+
+[[config.domains]]
+serviceName = "cakephp"
+port = 80
+host = "${main_domain}"

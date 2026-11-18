@@ -1,0 +1,51 @@
+id = "langfuse"
+name = "Langfuse"
+description = "Langfuse is an open-source LLM engineering platform for tracing, prompt management, evaluation, and cost/usage analytics of LLM applications."
+category = "ai"
+tags = [
+    "ai",
+    "llm",
+    "observability",
+    "analytics",
+    "monitoring",
+]
+version = "4"
+logo = "logo.svg"
+website = "https://langfuse.com/"
+docs = "https://langfuse.com/self-hosting"
+source = "https://github.com/langfuse/langfuse"
+upstream = "Dokploy/templates@6313a2e blueprints/langfuse"
+
+[variables]
+clickhouse_password = "${password:32}"
+encryption_key = "${hash:64}"
+main_domain = "${domain}"
+minio_domain = "${domain}"
+minio_public_endpoint = "http://${minio_domain}"
+minio_root_password = "${password:32}"
+nextauth_secret = "${password:32}"
+nextauth_url = "http://${main_domain}"
+postgres_password = "${password:32}"
+redis_auth = "${password:32}"
+salt = "${password:32}"
+
+[config.env]
+CLICKHOUSE_PASSWORD = "${clickhouse_password}"
+ENCRYPTION_KEY = "${encryption_key}"
+LANGFUSE_S3_MEDIA_PUBLIC_ENDPOINT = "${minio_public_endpoint}"
+MINIO_ROOT_PASSWORD = "${minio_root_password}"
+NEXTAUTH_SECRET = "${nextauth_secret}"
+NEXTAUTH_URL = "${nextauth_url}"
+POSTGRES_PASSWORD = "${postgres_password}"
+REDIS_AUTH = "${redis_auth}"
+SALT = "${salt}"
+
+[[config.domains]]
+serviceName = "langfuse-web"
+port = 3000
+host = "${main_domain}"
+
+[[config.domains]]
+serviceName = "minio"
+port = 9000
+host = "${minio_domain}"

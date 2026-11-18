@@ -1,0 +1,32 @@
+id = "checkmate"
+name = "Checkmate"
+description = "Checkmate is an open-source, self-hosted tool designed to track and monitor server hardware, uptime, response times, and incidents in real-time with beautiful visualizations."
+category = "monitoring"
+tags = [
+    "self-hosted",
+    "monitoring",
+    "uptime",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://checkmate.so/"
+docs = "https://checkmate.so/docs"
+source = "https://github.com/bluewave-labs/checkmate"
+upstream = "Dokploy/templates@6313a2e blueprints/checkmate"
+
+[variables]
+jwt_secret = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+CLIENT_HOST = "http://${main_domain}"
+DB_CONNECTION_STRING = "mongodb://mongodb:27017/uptime_db?replicaSet=rs0"
+JWT_SECRET = "${jwt_secret}"
+REDIS_URL = "redis://redis:6379"
+UPTIME_APP_API_BASE_URL = "http://${main_domain}:52345/api/v1"
+UPTIME_APP_CLIENT_HOST = "http://${main_domain}"
+
+[[config.domains]]
+serviceName = "server"
+port = 52345
+host = "${main_domain}"

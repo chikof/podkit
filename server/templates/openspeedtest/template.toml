@@ -1,0 +1,25 @@
+id = "openspeedtest"
+name = "OpenSpeedTest"
+description = "OpenSpeedTest is a 100% browser-based HTML5 network performance estimation tool for accurately measuring network speed."
+category = "networking"
+tags = [
+    "network",
+    "testing",
+    "performance",
+    "monitoring",
+    "bandwidth",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://openspeedtest.com/"
+docs = "https://github.com/openspeedtest/Speed-Test/wiki"
+source = "https://github.com/openspeedtest/Speed-Test"
+upstream = "Dokploy/templates@6313a2e blueprints/openspeedtest"
+
+[variables]
+main_domain = "${domain}"
+
+[[config.domains]]
+serviceName = "openspeedtest"
+port = 3000
+host = "${main_domain}"

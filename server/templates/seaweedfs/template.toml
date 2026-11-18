@@ -1,0 +1,42 @@
+id = "seaweedfs"
+name = "SeaweedFS"
+description = "SeaweedFS is a fast distributed storage system for blobs, objects, and files. Features S3-compatible API, POSIX FUSE mount, and WebDAV support."
+category = "storage"
+tags = [
+    "storage",
+    "s3",
+    "distributed",
+    "object-storage",
+    "file-system",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://seaweedfs.com/"
+docs = "https://github.com/seaweedfs/seaweedfs/wiki"
+source = "https://github.com/seaweedfs/seaweedfs"
+upstream = "Dokploy/templates@6313a2e blueprints/seaweedfs"
+
+[variables]
+filer_domain = "filer.${domain}"
+main_domain = "${domain}"
+master_domain = "master.${domain}"
+s3_domain = "s3.${domain}"
+
+[config.env]
+S3_ACCESS_KEY = "admin"
+S3_SECRET_KEY = "${password:16}"
+
+[[config.domains]]
+serviceName = "filer"
+port = 8888
+host = "${filer_domain}"
+
+[[config.domains]]
+serviceName = "master"
+port = 9333
+host = "${master_domain}"
+
+[[config.domains]]
+serviceName = "s3"
+port = 8333
+host = "${s3_domain}"

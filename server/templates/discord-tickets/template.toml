@@ -1,0 +1,39 @@
+id = "discord-tickets"
+name = "Discord Tickets"
+description = "An open-source Discord bot for creating and managing support ticket channels."
+category = "other"
+tags = [
+    "discord",
+    "tickets",
+    "support",
+]
+version = "4.0.21"
+logo = "logo.png"
+website = "https://discordtickets.app"
+docs = "https://discordtickets.app/self-hosting/installation/docker/"
+source = "https://github.com/discord-tickets/bot"
+upstream = "Dokploy/templates@6313a2e blueprints/discord-tickets"
+
+[variables]
+encryption_key = "${password:48}"
+main_domain = "${domain}"
+mysql_database = "tickets"
+mysql_password = "${password}"
+mysql_root_password = "${password}"
+mysql_user = "tickets"
+
+[config.env]
+DISCORD_SECRET = ""
+DISCORD_TOKEN = ""
+ENCRYPTION_KEY = "${encryption_key}"
+MYSQL_DATABASE = "${mysql_database}"
+MYSQL_PASSWORD = "${mysql_password}"
+MYSQL_ROOT_PASSWORD = "${mysql_root_password}"
+MYSQL_USER = "${mysql_user}"
+SUPER_USERS = "YOUR_DISCORD_USER_ID"
+TICKETS_HOST = "${main_domain}"
+
+[[config.domains]]
+serviceName = "tickets-app"
+port = 8169
+host = "${main_domain}"

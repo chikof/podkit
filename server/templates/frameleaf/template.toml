@@ -1,0 +1,33 @@
+id = "frameleaf"
+name = "Frameleaf"
+description = "Frameleaf is a self-hosted photo and video library with native apps, private face and smart search, photo and video editing, and optional cloud backup. It is an open-source (AGPLv3) fork of Immich and is currently in beta."
+category = "media"
+tags = [
+    "photos",
+    "videos",
+    "media",
+    "backup",
+    "photo-management",
+    "self-hosted",
+]
+version = "1.2.3"
+logo = "logo.png"
+website = "https://frameleaf.app/"
+docs = "https://frameleaf.app/docs/start/introduction/"
+source = "https://github.com/Frameleaf/frameleaf-app"
+upstream = "Dokploy/templates@6313a2e blueprints/frameleaf"
+
+[variables]
+db_password = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+DB_DATABASE_NAME = "frameleaf"
+DB_PASSWORD = "${db_password}"
+DB_USERNAME = "frameleaf"
+TZ = "Etc/UTC"
+
+[[config.domains]]
+serviceName = "frameleaf"
+port = 2283
+host = "${main_domain}"

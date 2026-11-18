@@ -1,0 +1,29 @@
+id = "scrypted"
+name = "Scrypted"
+description = "Scrypted is a home automation platform that integrates with various smart home devices and provides NVR capabilities for video surveillance."
+category = "other"
+tags = [
+    "home-automation",
+    "nvr",
+    "smart-home",
+    "surveillance",
+]
+version = "latest"
+logo = "logo.png"
+website = "https://www.scrypted.app/"
+docs = "https://docs.scrypted.app/"
+source = "https://github.com/koush/scrypted"
+upstream = "Dokploy/templates@6313a2e blueprints/scrypted"
+
+[variables]
+SCRYPTED_WEBHOOK_UPDATE_AUTHORIZATION = "${password:32}"
+main_domain = "${domain}"
+
+[config.env]
+SCRYPTED_WEBHOOK_UPDATE = "http://${main_domain}:10444/v1/update"
+SCRYPTED_WEBHOOK_UPDATE_AUTHORIZATION = "${SCRYPTED_WEBHOOK_UPDATE_AUTHORIZATION}"
+
+[[config.domains]]
+serviceName = "scrypted"
+port = 11080
+host = "${main_domain}"

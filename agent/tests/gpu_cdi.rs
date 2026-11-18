@@ -149,6 +149,7 @@ async fn deploy_route_passes_the_gpu_through() {
 		source: Source::Image {
 			reference: IMAGE.to_string(),
 			pull: false,
+			auth: None,
 		},
 		env: vec![],
 		// The health check wants a container that stays up.
@@ -177,6 +178,8 @@ async fn deploy_route_passes_the_gpu_through() {
 		entrypoint: None,
 		shm_bytes: None,
 		stop_timeout_s: None,
+		networks: Vec::new(),
+		options: proto::ContainerOptions::default(),
 	};
 	let body = reqwest::Client::new()
 		.post(format!("http://{addr}/v1/deploy"))

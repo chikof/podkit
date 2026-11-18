@@ -1,0 +1,38 @@
+id = "shopnex"
+name = "ShopNex"
+description = "Open-source ecommerce platform with an admin, hosted checkout, storefront and Stripe payments, all configured from the browser."
+category = "other"
+tags = [
+    "ecommerce",
+    "self-hosted",
+    "storefront",
+]
+version = "v0.13.1"
+logo = "logo.svg"
+website = "https://shopnex.ai"
+docs = "https://docs.shopnex.ai/docs/self-hosting/dokploy"
+source = "https://github.com/shopnex-ai/shopnex"
+upstream = "Dokploy/templates@6313a2e blueprints/shopnex"
+
+[variables]
+auth_secret = "${base64:32}"
+main_domain = "${domain}"
+shopnex_secret = "${base64:32}"
+stripe_domain = "${domain}"
+
+[config.env]
+APP_URL = "https://${main_domain}"
+BETTER_AUTH_SECRET = "${auth_secret}"
+SHOPNEX_SECRET = "${shopnex_secret}"
+SHOPNEX_VERSION = "v0.13.1"
+STRIPE_APP_URL = "https://${stripe_domain}"
+
+[[config.domains]]
+serviceName = "shopnex"
+port = 3000
+host = "${main_domain}"
+
+[[config.domains]]
+serviceName = "stripe"
+port = 4600
+host = "${stripe_domain}"

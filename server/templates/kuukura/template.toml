@@ -1,0 +1,29 @@
+id = "kuukura"
+name = "kuukura"
+description = "kuukura is a self-hosted secrets vault for small teams: values are decrypted only on your server, reveals require a passkey, and every access is audit-logged. Requires a Google OAuth client ID and secret, set in the Environment tab before deploying."
+category = "security"
+tags = [
+    "security",
+    "secrets",
+    "self-hosted",
+]
+version = "2026.10.13"
+logo = "logo.svg"
+website = "https://kuukura-main-landing.neodev-f72.workers.dev"
+docs = "https://github.com/victorlunam/kuukura/blob/main/docs/deploy.md"
+source = "https://github.com/victorlunam/kuukura"
+upstream = "Dokploy/templates@6313a2e blueprints/kuukura"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+VAULT_DOMAIN = "${main_domain}"
+VAULT_OIDC_CLIENT_ID = ""
+VAULT_OIDC_CLIENT_SECRET = ""
+VAULT_TRUSTED_PROXIES = ""
+
+[[config.domains]]
+serviceName = "kuukura"
+port = 8080
+host = "${main_domain}"

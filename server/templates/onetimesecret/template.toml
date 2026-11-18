@@ -1,0 +1,32 @@
+id = "onetimesecret"
+name = "One Time Secret"
+description = "Share sensitive information securely with self-destructing links that are only viewable once."
+category = "security"
+tags = [
+    "auth",
+    "password",
+    "secret",
+    "secure",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://onetimesecret.com"
+docs = "https://docs.onetimesecret.com"
+source = "https://github.com/onetimesecret/onetimesecret"
+upstream = "Dokploy/templates@6313a2e blueprints/onetimesecret"
+
+[variables]
+main_domain = "${domain}"
+redis_password = "${password:30}"
+secret = "${password:30}"
+
+[config.env]
+COLONEL = "admin@example.com"
+HOST = "${main_domain}"
+REDIS_PASSWORD = "${redis_password}"
+SECRET = "${secret}"
+
+[[config.domains]]
+serviceName = "onetimesecret"
+port = 3000
+host = "${main_domain}"

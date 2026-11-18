@@ -1,0 +1,34 @@
+id = "cypht"
+name = "Cypht"
+description = "Lightweight open source webmail aggregator. Read and send mail from multiple IMAP, SMTP, JMAP and EWS accounts in one place."
+category = "communication"
+tags = [
+    "self-hosted",
+    "email",
+    "webmail",
+]
+version = "2.13.0"
+logo = "logo.svg"
+website = "https://cypht.org/"
+docs = "https://cypht.org/install.html"
+source = "https://github.com/cypht-org/cypht"
+upstream = "Dokploy/templates@6313a2e blueprints/cypht"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password:24}"
+admin_username = "admin"
+db_password = "${password:32}"
+main_domain = "${domain}"
+redis_password = "${password:32}"
+
+[config.env]
+ADMIN_PASSWORD = "${admin_password}"
+ADMIN_USERNAME = "${admin_username}"
+DB_PASSWORD = "${db_password}"
+REDIS_PASSWORD = "${redis_password}"
+
+[[config.domains]]
+serviceName = "cypht"
+port = 80
+host = "${main_domain}"

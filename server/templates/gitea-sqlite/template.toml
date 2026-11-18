@@ -1,0 +1,28 @@
+id = "gitea-sqlite"
+name = "Gitea (SQLite)"
+description = "Self-hosted Git service using SQLite for a simple one-container setup."
+category = "development"
+tags = [
+    "git",
+    "scm",
+    "developer-tools",
+    "self-hosted",
+]
+version = "1.24.4"
+logo = "logo.png"
+website = "https://gitea.io/"
+docs = "https://docs.gitea.com/"
+source = "https://github.com/go-gitea/gitea"
+upstream = "Dokploy/templates@6313a2e blueprints/gitea-sqlite"
+
+[variables]
+main_domain = "${domain}"
+
+[config.env]
+USER_GID = "1000"
+USER_UID = "1000"
+
+[[config.domains]]
+serviceName = "gitea"
+port = 3000
+host = "${main_domain}"

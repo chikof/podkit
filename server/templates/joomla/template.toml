@@ -1,0 +1,70 @@
+id = "joomla"
+name = "Joomla"
+description = "Joomla is a flexible open-source content management system for building websites, portals, and online applications."
+category = "cms"
+tags = [
+    "cms",
+    "website",
+    "php",
+    "mariadb",
+]
+version = "6.1.0-apache"
+logo = "logo.svg"
+website = "https://www.joomla.org/"
+docs = "https://manual.joomla.org/"
+source = "https://github.com/joomla/joomla-cms"
+upstream = "Dokploy/templates@6313a2e blueprints/joomla"
+reveal = ["admin_password"]
+
+[variables]
+admin_email = "${email}"
+admin_name = "Joomla Administrator"
+admin_password = "${password:24}"
+admin_username = "${username}"
+db_name = "joomla"
+db_password = "${password:32}"
+db_user = "joomla"
+main_domain = "${domain}"
+site_name = "Joomla"
+
+[config.env]
+JOOMLA_ADMIN_EMAIL = "${admin_email}"
+JOOMLA_ADMIN_PASSWORD = "${admin_password}"
+JOOMLA_ADMIN_USER = "${admin_name}"
+JOOMLA_ADMIN_USERNAME = "${admin_username}"
+JOOMLA_DB_NAME = "${db_name}"
+JOOMLA_DB_PASSWORD = "${db_password}"
+JOOMLA_DB_USER = "${db_user}"
+JOOMLA_SITE_NAME = "${site_name}"
+
+[[config.domains]]
+serviceName = "joomla"
+port = 80
+host = "${main_domain}"
+path = "/"
+
+[[config.mounts]]
+filePath = "README.md"
+content = """
+# Joomla
+
+This template deploys Joomla CMS with MariaDB using the official Joomla Apache image.
+
+## Access
+
+- URL: `http://${main_domain}`
+- Administrator username: the configured `admin_username` value
+- Administrator password: the generated `admin_password` value
+- Administrator email: the configured `admin_email` value
+
+The template uses Joomla's auto-deployment environment variables so the site and administrator account are initialized on first start.
+
+## Storage
+
+The template creates persistent volumes for:
+
+- Joomla application files at `/var/www/html`
+- MariaDB data at `/var/lib/mysql`
+
+Back up both volumes together before upgrades or migrations.
+"""

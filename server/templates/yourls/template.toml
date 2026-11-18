@@ -1,0 +1,33 @@
+id = "yourls"
+name = "YOURLS"
+description = "YOURLS (Your Own URL Shortener) is a set of PHP scripts that will allow you to run your own URL shortening service (a la TinyURL or Bitly)."
+category = "other"
+tags = [
+    "url-shortener",
+    "php",
+]
+version = "1.9.2"
+logo = "logo.svg"
+website = "https://yourls.org/"
+docs = "https://yourls.org/#documentation"
+source = "https://github.com/YOURLS/YOURLS"
+upstream = "Dokploy/templates@6313a2e blueprints/yourls"
+reveal = ["admin_password"]
+
+[variables]
+admin_password = "${password}"
+main_domain = "${domain}"
+mysql_password = "${password}"
+mysql_root_password = "${password}"
+
+[config.env]
+MYSQL_PASSWORD = "${mysql_password}"
+MYSQL_ROOT_PASSWORD = "${mysql_root_password}"
+YOURLS_ADMIN_PASSWORD = "${admin_password}"
+YOURLS_ADMIN_USER = "admin"
+YOURLS_HOST = "${main_domain}"
+
+[[config.domains]]
+serviceName = "yourls-app"
+port = 80
+host = "${main_domain}"

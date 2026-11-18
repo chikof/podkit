@@ -40,6 +40,16 @@ pub enum JobKind {
 	ModelStop,
 	/// `target_id` is a model id.
 	ModelRemove,
+	/// `target_id` is a stack id. Translates the compose file and deploys what changed.
+	StackDeploy,
+	/// `target_id` is a stack id.
+	StackStop,
+	/// `target_id` is a stack id. Removes containers and network, keeps volumes.
+	StackRemove,
+	/// `target_id` is a stack id. Like [`JobKind::StackRemove`], and deletes the volumes.
+	StackPurge,
+	/// `target_id` is a stack service id.
+	StackRestartService,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -128,6 +138,21 @@ pub async fn latest_for_database(
 		ORDER BY id DESC LIMIT 1",
 	)
 	.bind(database)
+	.fetch_optional(db)
+	.await
+}
+
+/// The newest deploy, stop, remove or purge job of a stack, or restart job of
+/// one of its services.
+pub async fn latest_for_stack(
+	db: impl PgExecutor<'_>,
+	stack: i64,
+) -> Result<Option<Job>, sqlx::Error> {
+	sqlx::query_as::<_, Job>(
+		"SELECT id, kind, server_id, target_id, lock_key, status, error FROM jobs
+		WHERE lock_key = $1 ORDER BY id DESC LIMIT 1",
+	)
+	.bind(format!("stack:{stack}"))
 	.fetch_optional(db)
 	.await
 }
@@ -264,6 +289,35 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 			.bind(target_id)
 			.bind(message)
 			.bind(kind == JobKind::ModelRemove)
+			.execute(&state.db)
+			.await
+		}
+		// A failed removal leaves the row so it can be retried.
+		JobKind::StackDeploy | JobKind::StackStop | JobKind::StackRemove | JobKind::StackPurge => {
+			let message = match failure {
+				JobFailure::Cancelled => "cancelled",
+				JobFailure::Failed(m) => m.as_str(),
+			};
+			sqlx::query(
+				"UPDATE stacks SET status = 'failed', status_message = $2, updated_at = NOW()
+				WHERE id = $1",
+			)
+			.bind(target_id)
+			.bind(message)
+			.execute(&state.db)
+			.await
+		}
+		JobKind::StackRestartService => {
+			let message = match failure {
+				JobFailure::Cancelled => "cancelled",
+				JobFailure::Failed(m) => m.as_str(),
+			};
+			sqlx::query(
+				"UPDATE stack_services SET status = 'failed', status_message = $2, updated_at = NOW()
+				WHERE id = $1",
+			)
+			.bind(target_id)
+			.bind(message)
 			.execute(&state.db)
 			.await
 		}

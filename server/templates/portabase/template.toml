@@ -1,0 +1,59 @@
+id = "portabase"
+name = "Portabase"
+description = "A free, open-source and self-hosted tool from a non-profit organization that helps you automate backups and restore your databases on demand."
+category = "database"
+tags = [
+    "postgres",
+    "mysql",
+    "mariadb",
+    "mongodb",
+    "sqlite",
+    "firebird",
+    "valkey",
+    "redis",
+    "mssql",
+    "docker-volumes",
+    "backup",
+    "s3",
+    "gcs",
+    "azure",
+    "google-drive",
+    "discord",
+    "telegram",
+    "slack",
+    "email",
+    "apprise",
+    "ntfy",
+    "gotify",
+    "pushover",
+    "teams",
+    "webhook",
+    "self-hosted",
+    "open-source",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://portabase.io"
+docs = "https://portabase.io/docs"
+source = "https://github.com/portabase/portabase"
+upstream = "Dokploy/templates@6313a2e blueprints/portabase"
+
+[variables]
+main_domain = "${domain}"
+postgres_password = "${password:32}"
+project_secret = "${password:64}"
+
+[config.env]
+DATABASE_URL = "postgresql://portabase:${postgres_password}@db:5432/portabase?schema=public"
+LOG_LEVEL = "info"
+POSTGRES_DB = "portabase"
+POSTGRES_PASSWORD = "${postgres_password}"
+POSTGRES_USER = "portabase"
+PROJECT_SECRET = "${project_secret}"
+PROJECT_URL = "https://${main_domain}"
+TZ = "Europe/Paris"
+
+[[config.domains]]
+serviceName = "portabase"
+port = 80
+host = "${main_domain}"

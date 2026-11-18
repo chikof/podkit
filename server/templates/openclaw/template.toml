@@ -1,0 +1,30 @@
+id = "openclaw"
+name = "OpenClaw"
+description = "Personal AI assistant with a gateway for chat apps and tools. Link a podkit model to the application and OpenClaw talks to it through OPENAI_BASE_URL and OPENAI_API_KEY."
+category = "ai"
+tags = ["ai", "agents", "assistant", "chatbot"]
+version = "2026.2.6"
+logo = "@openclaw"
+website = "https://openclaw.ai"
+docs = "https://docs.openclaw.ai"
+source = "https://github.com/openclaw/openclaw"
+gateway = true
+
+[requires]
+ram_mb = 2048
+
+[variables]
+main_domain = "${domain}"
+gateway_token = "${password:32}"
+auth_username = { type = "string", default = "admin", label = "Username", description = "Login of the web interface" }
+auth_password = { type = "string", label = "Password", description = "Password of the web interface", secret = true }
+
+[config.env]
+AUTH_USERNAME = "${auth_username}"
+AUTH_PASSWORD = "${auth_password}"
+OPENCLAW_GATEWAY_TOKEN = "${gateway_token}"
+
+[[config.domains]]
+serviceName = "openclaw"
+port = 8080
+host = "${main_domain}"

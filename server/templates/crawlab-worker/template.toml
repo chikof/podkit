@@ -1,0 +1,26 @@
+id = "crawlab-worker"
+name = "Crawlab (Worker)"
+description = "Crawlab worker node for distributed web crawling. Connects to an existing Crawlab master node via gRPC."
+category = "other"
+tags = [
+    "crawler",
+    "scraping",
+    "distributed",
+    "self-hosted",
+]
+version = "latest"
+logo = "@mono-crawlab-worker"
+website = "https://crawlab.cn"
+docs = "https://docs.crawlab.cn"
+source = "https://github.com/crawlab-team/crawlab"
+upstream = "Dokploy/templates@6313a2e blueprints/crawlab-worker"
+
+[variables]
+CPU_LIMIT = "0.8"
+MASTER_FILER_URL = "http://<master_node_ip>:8080/api/filer"
+MASTER_GRPC_ADDRESS = "<master_node_ip>:9666"
+
+[config.env]
+CPU_LIMIT = "${CPU_LIMIT}"
+MASTER_FILER_URL = "${MASTER_FILER_URL}"
+MASTER_GRPC_ADDRESS = "${MASTER_GRPC_ADDRESS}"

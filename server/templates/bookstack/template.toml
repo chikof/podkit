@@ -1,0 +1,29 @@
+id = "bookstack"
+name = "BookStack"
+description = "BookStack is a wiki platform for organizing documentation."
+category = "productivity"
+tags = [
+    "documentation",
+    "self-hosted",
+]
+version = "24.12.1"
+logo = "logo.svg"
+website = "https://www.bookstackapp.com"
+docs = "https://www.bookstackapp.com/docs"
+source = "https://github.com/BookStackApp/BookStack"
+upstream = "Dokploy/templates@6313a2e blueprints/bookstack"
+
+[variables]
+app_key = "${password:32}"
+db_password = "${password:16}"
+main_domain = "${domain}"
+
+[config.env]
+APP_KEY = "${app_key}"
+DB_PASSWORD = "${db_password}"
+DOMAIN = "${main_domain}"
+
+[[config.domains]]
+serviceName = "bookstack"
+port = 80
+host = "${main_domain}"
