@@ -44,7 +44,17 @@ pub struct CreateApplicationRequest {
 	pub name: String,
 	pub slug: String,
 	pub server_id: ServerId,
+	/// Git source; mutually exclusive with `image`.
+	#[serde(default)]
 	pub repo_url: String,
+	/// Registry image source (`traefik/whoami:v1`); mutually exclusive with `repo_url`.
+	#[serde(default)]
+	pub image: Option<String>,
+	/// Write-only registry credentials for a private `image`.
+	#[serde(default)]
+	pub registry_username: Option<String>,
+	#[serde(default)]
+	pub registry_password: Option<String>,
 	#[serde(default = "default_git_ref")]
 	pub git_ref: String,
 	/// SSH private key (PEM) for `ssh://`/scp-form repo URLs. Plaintext on the
@@ -74,7 +84,15 @@ pub struct CreateApplicationRequest {
 pub struct UpdateApplicationRequest {
 	pub name: String,
 	pub slug: String,
+	#[serde(default)]
 	pub repo_url: String,
+	#[serde(default)]
+	pub image: Option<String>,
+	/// Omitted or empty keeps the stored registry credentials.
+	#[serde(default)]
+	pub registry_username: Option<String>,
+	#[serde(default)]
+	pub registry_password: Option<String>,
 	#[serde(default = "default_git_ref")]
 	pub git_ref: String,
 	/// Omitted or empty leaves the stored deploy key untouched (it's
@@ -97,7 +115,7 @@ pub struct UpdateApplicationRequest {
 	pub cpu_limit: Option<f64>,
 }
 
-/// Never carries `deploy_key` or `git_token`.
+/// Never carries `deploy_key`, `git_token` or registry credentials.
 #[derive(Serialize)]
 pub struct ApplicationResponse {
 	pub id: ApplicationId,
@@ -105,7 +123,12 @@ pub struct ApplicationResponse {
 	pub server_id: ServerId,
 	pub name: String,
 	pub slug: String,
-	pub repo_url: String,
+	/// `git` or `image`.
+	pub source_kind: String,
+	pub repo_url: Option<String>,
+	pub image: Option<String>,
+	/// Whether registry credentials are stored; they never leave the server.
+	pub has_registry_auth: bool,
 	pub git_ref: String,
 	pub build_strategy: String,
 	pub dockerfile_path: String,
@@ -133,7 +156,10 @@ impl From<&ApplicationView> for ApplicationResponse {
 			server_id: app.server_id,
 			name: app.name.clone(),
 			slug: app.slug.clone(),
+			source_kind: app.source_kind.as_str().to_string(),
 			repo_url: app.repo_url.clone(),
+			image: app.image.clone(),
+			has_registry_auth: app.has_registry_auth,
 			git_ref: app.git_ref.clone(),
 			build_strategy: app.build_strategy.as_str().to_string(),
 			dockerfile_path: app.dockerfile_path.clone(),
@@ -165,6 +191,9 @@ pub async fn create(
 			name: body.name,
 			slug: body.slug,
 			repo_url: body.repo_url,
+			image: body.image,
+			registry_username: body.registry_username,
+			registry_password: body.registry_password,
 			git_ref: body.git_ref,
 			deploy_key: body.deploy_key,
 			git_token: body.git_token,
@@ -213,6 +242,9 @@ pub async fn update(
 			name: body.name,
 			slug: body.slug,
 			repo_url: body.repo_url,
+			image: body.image,
+			registry_username: body.registry_username,
+			registry_password: body.registry_password,
 			git_ref: body.git_ref,
 			deploy_key: body.deploy_key,
 			git_token: body.git_token,

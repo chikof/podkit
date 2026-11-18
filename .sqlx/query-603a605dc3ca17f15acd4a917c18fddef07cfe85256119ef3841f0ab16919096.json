@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT a.id AS \"id: ApplicationId\", a.project_id AS \"project_id: ProjectId\",\n\t\t\t\ta.server_id AS \"server_id: ServerId\", a.name, a.slug, a.repo_url, a.git_ref,\n\t\t\t\ta.deploy_key, a.git_token, a.build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\ta.dockerfile_path, a.container_port, a.webhook_secret, a.memory_limit_mb,\n\t\t\t\ta.cpu_limit\n\t\t\tFROM applications a\n\t\t\tJOIN projects p ON p.id = a.project_id\n\t\t\tWHERE a.id = $3 AND a.project_id = $2 AND p.team_id = $1\n\t\t",
+  "query": "\n\t\t\tUPDATE applications\n\t\t\tSET name = $2, slug = $3, repo_url = $4, git_ref = $5,\n\t\t\t\tdeploy_key = COALESCE($6, deploy_key), git_token = COALESCE($7, git_token),\n\t\t\t\tbuild_strategy = $8, dockerfile_path = $9, container_port = $10,\n\t\t\t\tmemory_limit_mb = $11, cpu_limit = $12, image = $13,\n\t\t\t\tregistry_auth = COALESCE($14, registry_auth), updated_at = NOW()\n\t\t\tWHERE id = $1\n\t\t\tRETURNING\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key, git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t",
   "describe": {
     "columns": [
       {
@@ -82,6 +82,39 @@
       },
       {
         "ordinal": 7,
+        "name": "source_kind: SourceKind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "source_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "image",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "image"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "registry_auth",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "registry_auth"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
         "name": "deploy_key",
         "type_info": "Bytea",
         "origin": {
@@ -92,7 +125,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 11,
         "name": "git_token",
         "type_info": "Bytea",
         "origin": {
@@ -103,7 +136,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 12,
         "name": "build_strategy: BuildStrategy",
         "type_info": "Varchar",
         "origin": {
@@ -114,7 +147,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 13,
         "name": "dockerfile_path",
         "type_info": "Varchar",
         "origin": {
@@ -125,7 +158,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 14,
         "name": "container_port",
         "type_info": "Int4",
         "origin": {
@@ -136,7 +169,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 15,
         "name": "webhook_secret",
         "type_info": "Bytea",
         "origin": {
@@ -147,7 +180,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 16,
         "name": "memory_limit_mb",
         "type_info": "Int4",
         "origin": {
@@ -158,7 +191,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 17,
         "name": "cpu_limit",
         "type_info": "Float4",
         "origin": {
@@ -172,8 +205,19 @@
     "parameters": {
       "Left": [
         "Int8",
-        "Int8",
-        "Int8"
+        "Varchar",
+        "Varchar",
+        "Text",
+        "Varchar",
+        "Bytea",
+        "Bytea",
+        "Varchar",
+        "Varchar",
+        "Int4",
+        "Int4",
+        "Float4",
+        "Text",
+        "Bytea"
       ]
     },
     "nullable": [
@@ -182,8 +226,11 @@
       false,
       false,
       false,
+      true,
       false,
       false,
+      true,
+      true,
       true,
       true,
       false,
@@ -194,5 +241,5 @@
       true
     ]
   },
-  "hash": "b42dc7e1458372c8095896b1a65df74490241bd8a283b82e6631428ceda73781"
+  "hash": "603a605dc3ca17f15acd4a917c18fddef07cfe85256119ef3841f0ab16919096"
 }

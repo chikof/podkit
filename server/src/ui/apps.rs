@@ -146,6 +146,9 @@ impl AppSignals {
 			name: self.name.clone(),
 			slug: self.slug.trim().to_owned(),
 			repo_url: self.repo_url.trim().to_owned(),
+			image: None,
+			registry_username: None,
+			registry_password: None,
 			git_ref: or(&self.git_ref, "main"),
 			deploy_key: secret(&self.deploy_key),
 			git_token: secret(self.git_token.trim()),
@@ -437,7 +440,7 @@ fn header_card(s: &AppState, app: &ApplicationView) -> Markup {
 		div id="app-header" class="flex flex-col gap-1" {
 			h1 class="text-xl font-semibold" { (app.name) }
 			a class="text-sm text-muted-foreground hover:underline" href=(link) target="_blank" rel="noopener noreferrer" { (link) }
-			p class="text-sm text-muted-foreground break-all" { (app.repo_url) "@" (app.git_ref) }
+			p class="text-sm text-muted-foreground break-all" { @if let Some(image) = &app.image { (image) } @else { (app.repo_url.as_deref().unwrap_or_default()) "@" (app.git_ref) } }
 		}
 	}
 }
@@ -534,7 +537,7 @@ async fn overview(
 					@if let Some(status) = app.latest { (status_badge(status)) } @else { span class="text-muted-foreground" { "Not deployed yet" } }
 				}))
 				(detail("Server", &html! { (app.server_name) }))
-				(detail("Repository", &html! { (app.repo_url) }))
+				(detail(if app.image.is_some() { "Image" } else { "Repository" }, &html! { (app.image.as_deref().or(app.repo_url.as_deref()).unwrap_or_default()) }))
 				(detail("Ref", &html! { (app.git_ref) }))
 				(detail("Build", &html! {
 					@match app.build_strategy {

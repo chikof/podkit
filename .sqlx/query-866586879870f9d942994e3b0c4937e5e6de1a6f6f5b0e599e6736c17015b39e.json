@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tdeploy_key, git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t\tFROM applications WHERE project_id = $1 ORDER BY id\n\t\t",
+  "query": "\n\t\t\tSELECT a.id AS \"id: ApplicationId\", a.project_id AS \"project_id: ProjectId\",\n\t\t\t\ta.server_id AS \"server_id: ServerId\", a.name, a.slug, a.repo_url, a.git_ref,\n\t\t\t\ta.source_kind AS \"source_kind: SourceKind\", a.image, a.registry_auth,\n\t\t\t\ta.deploy_key, a.git_token, a.build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\ta.dockerfile_path, a.container_port, a.webhook_secret, a.memory_limit_mb,\n\t\t\t\ta.cpu_limit\n\t\t\tFROM applications a\n\t\t\tJOIN projects p ON p.id = a.project_id\n\t\t\tWHERE a.id = $3 AND a.project_id = $2 AND p.team_id = $1\n\t\t",
   "describe": {
     "columns": [
       {
@@ -82,6 +82,39 @@
       },
       {
         "ordinal": 7,
+        "name": "source_kind: SourceKind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "source_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "image",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "image"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "registry_auth",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "registry_auth"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
         "name": "deploy_key",
         "type_info": "Bytea",
         "origin": {
@@ -92,7 +125,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 11,
         "name": "git_token",
         "type_info": "Bytea",
         "origin": {
@@ -103,7 +136,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 12,
         "name": "build_strategy: BuildStrategy",
         "type_info": "Varchar",
         "origin": {
@@ -114,7 +147,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 13,
         "name": "dockerfile_path",
         "type_info": "Varchar",
         "origin": {
@@ -125,7 +158,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 14,
         "name": "container_port",
         "type_info": "Int4",
         "origin": {
@@ -136,7 +169,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 15,
         "name": "webhook_secret",
         "type_info": "Bytea",
         "origin": {
@@ -147,7 +180,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 16,
         "name": "memory_limit_mb",
         "type_info": "Int4",
         "origin": {
@@ -158,7 +191,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 17,
         "name": "cpu_limit",
         "type_info": "Float4",
         "origin": {
@@ -171,6 +204,8 @@
     ],
     "parameters": {
       "Left": [
+        "Int8",
+        "Int8",
         "Int8"
       ]
     },
@@ -180,8 +215,11 @@
       false,
       false,
       false,
+      true,
       false,
       false,
+      true,
+      true,
       true,
       true,
       false,
@@ -192,5 +230,5 @@
       true
     ]
   },
-  "hash": "3c10ac145b5a9545796bd702691f1ae48e88ffad5ba94734bb022019047c3d6f"
+  "hash": "866586879870f9d942994e3b0c4937e5e6de1a6f6f5b0e599e6736c17015b39e"
 }
