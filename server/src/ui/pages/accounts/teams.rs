@@ -8,12 +8,12 @@ use datastar::axum::ReadSignals;
 use maud::{Markup, html};
 use serde::Deserialize;
 
-use super::components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
-use super::extract::UiUser;
-use super::layout::{self, form_error};
-use super::{error, sse};
 use crate::state::AppState;
 use crate::teams::service;
+use crate::ui::components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
+use crate::ui::extract::UiUser;
+use crate::ui::layout::{self, form_error};
+use crate::ui::{error, sse};
 
 pub fn router() -> Router<AppState> {
 	Router::new().route("/teams/new", get(new_page).post(create))

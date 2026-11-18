@@ -15,15 +15,6 @@ use maud::{Markup, html};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::components::{
-	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, card, card_content, card_header,
-};
-use super::databases::{Tab, database_url, load, shell, when};
-use super::extract::TeamCtx;
-use super::layout::{app_page, form_error};
-use super::sse::js_string;
-use super::status::{Status, poll, status_badge};
-use super::{error, sse};
 use crate::auth::permission::{Action, Resource};
 use crate::backups::service::{self as backups, Entry, Overview};
 use crate::backups::targets::service::{self as targets, CreateInput};
@@ -31,6 +22,15 @@ use crate::backups::{BackupStatus, BackupTarget};
 use crate::error::ServerError;
 use crate::ids::{BackupId, BackupTargetId, DatabaseId, ProjectId, TeamId};
 use crate::state::AppState;
+use crate::ui::components::{
+	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, card, card_content, card_header,
+};
+use crate::ui::extract::TeamCtx;
+use crate::ui::layout::{app_page, form_error};
+use crate::ui::pages::projects::databases::{Tab, database_url, load, shell, when};
+use crate::ui::sse::js_string;
+use crate::ui::status::{Status, poll, status_badge};
+use crate::ui::{error, sse};
 
 pub fn router() -> Router<AppState> {
 	Router::new()

@@ -10,15 +10,15 @@ use maud::{Markup, html};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
-use super::extract::TeamCtx;
-use super::layout::{Crumb, app_page, form_error};
-use super::{error, sse};
 use crate::auth::permission::{Action, Resource};
 use crate::error::AppResult;
 use crate::ids::{RoleId, TeamId, UserId};
 use crate::members::service::{self, MemberDetail, Role};
 use crate::state::AppState;
+use crate::ui::components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
+use crate::ui::extract::TeamCtx;
+use crate::ui::layout::{Crumb, app_page, form_error};
+use crate::ui::{error, sse};
 
 pub fn router() -> Router<AppState> {
 	Router::new()

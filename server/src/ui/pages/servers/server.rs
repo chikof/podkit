@@ -13,14 +13,6 @@ use maud::{Markup, html};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::components::{
-	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, Tone, card, card_content, card_header,
-};
-use super::extract::TeamCtx;
-use super::layout::{Crumb, app_page, form_error};
-use super::live::{job_log, log_view};
-use super::status::{Status, poll, status_badge};
-use super::{error, sse};
 use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ServerId, TeamId};
@@ -28,6 +20,14 @@ use crate::jobs::{Job, JobStatus};
 use crate::servers::service::{self, DEFAULT_PODMAN_SOCKET_PATH, DEFAULT_SSH_PORT, NewServer};
 use crate::servers::{Server, host_key_fingerprint};
 use crate::state::AppState;
+use crate::ui::components::{
+	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, Tone, card, card_content, card_header,
+};
+use crate::ui::extract::TeamCtx;
+use crate::ui::layout::{Crumb, app_page, form_error};
+use crate::ui::live::{job_log, log_view};
+use crate::ui::status::{Status, poll, status_badge};
+use crate::ui::{error, sse};
 
 const LOG_ID: &str = "bootstrap-log";
 

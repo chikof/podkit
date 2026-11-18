@@ -12,12 +12,12 @@ use serde::Deserialize;
 use serde_json::json;
 use tower_cookies::Cookies;
 
-use super::components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
-use super::layout::{self, form_error};
-use super::{error, sse};
 use crate::auth::{self, Credentials, service};
 use crate::error::ServerError;
 use crate::state::AppState;
+use crate::ui::components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
+use crate::ui::layout::{self, form_error};
+use crate::ui::{error, sse};
 
 pub fn router() -> Router<AppState> {
 	Router::new().route("/register", get(page).post(register))

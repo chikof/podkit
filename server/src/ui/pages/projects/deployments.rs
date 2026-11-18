@@ -18,17 +18,19 @@ use serde_json::json;
 use time::OffsetDateTime;
 
 use super::apps::{Tab, app_url, load, shell};
-use super::components::{BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, card, card_content, card_header};
-use super::extract::TeamCtx;
-use super::live::{container_log, job_log, log_view};
-use super::status::{Status, poll, status_badge};
-use super::{error, sse};
 use crate::applications::service::ApplicationView;
 use crate::auth::permission::{Action, Resource};
 use crate::deployments::service::{self, DeploymentView, Trigger};
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, DeploymentId, ProjectId, TeamId};
 use crate::state::AppState;
+use crate::ui::components::{
+	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, card, card_content, card_header,
+};
+use crate::ui::extract::TeamCtx;
+use crate::ui::live::{container_log, job_log, log_view};
+use crate::ui::status::{Status, poll, status_badge};
+use crate::ui::{error, sse};
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/apps/{app_id}";
 

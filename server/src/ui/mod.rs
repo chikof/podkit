@@ -33,13 +33,8 @@ use crate::auth::{self, Credentials, SessionToken};
 use crate::error::ServerError;
 use crate::state::AppState;
 
-mod app_config;
-mod apps;
 mod assets;
-mod backups;
 mod components;
-mod databases;
-mod deployments;
 mod error;
 mod extract;
 mod gallery;
@@ -47,15 +42,10 @@ mod layout;
 // Used by the pages of cards 05-09; until then only tests call them.
 #[allow(dead_code)]
 mod live;
-mod members;
-mod models;
-mod projects;
-mod register;
-mod servers;
+mod pages;
 mod sse;
 #[allow(dead_code)]
 mod status;
-mod teams;
 #[cfg(test)]
 mod testing;
 mod theme;
@@ -86,20 +76,16 @@ pub fn router() -> Router<AppState> {
 		.route("/logout", post(logout))
 		.route(DATASTAR_PATH, get(datastar_js))
 		.route("/static/app.css", get(app_css))
-		.merge(teams::router())
 		.merge(assets::router())
+		.merge(pages::accounts::router())
+		.merge(pages::projects::router())
+		.merge(pages::models::router())
+		.merge(pages::backups::router())
+		.merge(pages::servers::router())
+		.merge(pages::settings::router())
+		.merge(pages::search::router())
 		.merge(theme::router())
 		.merge(gallery::router())
-		.merge(projects::router())
-		.merge(models::router())
-		.merge(apps::router())
-		.merge(deployments::router())
-		.merge(app_config::router())
-		.merge(databases::router())
-		.merge(backups::router())
-		.merge(servers::router())
-		.merge(members::router())
-		.merge(register::router())
 		.merge(test_routes())
 		.layer(middleware::from_fn(origin_guard))
 		.layer(middleware::from_fn(theme::scope))
@@ -188,7 +174,9 @@ async fn index(State(s): State<AppState>, user: UiUser) -> Response {
 			None => layout::bare_page(
 				Some(&user.name),
 				"Create a team",
-				&teams::create_form("You aren't in a team yet. Create one to get started."),
+				&pages::accounts::create_form(
+					"You aren't in a team yet. Create one to get started.",
+				),
 			)
 			.into_response(),
 		},

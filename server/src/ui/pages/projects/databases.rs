@@ -17,16 +17,6 @@ use serde::{Deserialize, Deserializer};
 use serde_json::{Value, json};
 use time::OffsetDateTime;
 
-use super::components::{
-	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, TAB, TAB_ACTIVE, card, card_content,
-	card_header,
-};
-use super::extract::TeamCtx;
-use super::layout::{Crumb, app_page, form_error};
-use super::live::{container_log, job_log, log_view};
-use super::sse::js_string;
-use super::status::{Status, poll, status_badge};
-use super::{error, sse};
 use crate::auth::permission::{Action, Resource};
 use crate::databases::service::{self, ConnectionInfo, CreateInput, DatabaseDetail, SettingsInput};
 use crate::databases::{Database, DatabaseStatus, EngineKind};
@@ -37,6 +27,16 @@ use crate::projects;
 use crate::projects::Project;
 use crate::servers::ServerStatus;
 use crate::state::AppState;
+use crate::ui::components::{
+	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, TAB, TAB_ACTIVE, card, card_content,
+	card_header,
+};
+use crate::ui::extract::TeamCtx;
+use crate::ui::layout::{Crumb, app_page, form_error};
+use crate::ui::live::{container_log, job_log, log_view};
+use crate::ui::sse::js_string;
+use crate::ui::status::{Status, poll, status_badge};
+use crate::ui::{error, sse};
 
 pub fn router() -> Router<AppState> {
 	Router::new()
@@ -158,7 +158,7 @@ fn parse_engine(raw: &str) -> Result<EngineKind, ServerError> {
 }
 
 /// `2026-11-18 03:00 UTC`.
-pub(super) fn when(t: OffsetDateTime) -> String {
+pub(in crate::ui) fn when(t: OffsetDateTime) -> String {
 	format!(
 		"{:04}-{:02}-{:02} {:02}:{:02} UTC",
 		t.year(),
@@ -441,7 +441,7 @@ async fn create(
 // --- overview -----------------------------------------------------------------
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Tab {
+pub(in crate::ui) enum Tab {
 	Overview,
 	Logs,
 	Backups,
@@ -473,7 +473,7 @@ fn tabs(ctx: &TeamCtx, database: &Database, active: Tab) -> Markup {
 	}
 }
 
-pub(super) fn shell(
+pub(in crate::ui) fn shell(
 	ctx: &TeamCtx,
 	project: &Project,
 	d: &DatabaseDetail,
@@ -500,7 +500,7 @@ pub(super) fn shell(
 	app_page(ctx, &title, &crumbs(ctx, project, &database.name), &body)
 }
 
-pub(super) async fn load(
+pub(in crate::ui) async fn load(
 	s: &AppState,
 	ctx: &TeamCtx,
 	project: ProjectId,

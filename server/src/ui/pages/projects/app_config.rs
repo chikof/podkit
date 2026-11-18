@@ -17,12 +17,6 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::apps::{self, Tab};
-use super::components::{
-	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, TEXTAREA, card, card_content, card_header,
-};
-use super::extract::TeamCtx;
-use super::layout::form_error;
-use super::{error, sse};
 use crate::applications::service::ApplicationView;
 use crate::auth::permission::{Action, Resource};
 use crate::domains::Domain;
@@ -32,6 +26,12 @@ use crate::error::ServerError;
 use crate::ids::{ApplicationId, DomainId, EnvVarId, ProjectId, TeamId, VolumeId};
 use crate::projects::Project;
 use crate::state::AppState;
+use crate::ui::components::{
+	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, TEXTAREA, card, card_content, card_header,
+};
+use crate::ui::extract::TeamCtx;
+use crate::ui::layout::form_error;
+use crate::ui::{error, sse};
 use crate::volumes::Volume;
 use crate::volumes::service as volumes;
 

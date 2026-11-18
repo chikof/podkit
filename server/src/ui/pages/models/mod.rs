@@ -10,12 +10,12 @@
 use axum::Router;
 use maud::{Markup, html};
 
-use super::components::Tone;
-use super::extract::TeamCtx;
-use super::layout::Crumb;
 use crate::catalog::fit::{Fit, FitKind};
 use crate::ids::{ModelFileId, ModelId, ProjectId, TeamId};
 use crate::state::AppState;
+use crate::ui::components::Tone;
+use crate::ui::extract::TeamCtx;
+use crate::ui::layout::Crumb;
 
 mod catalog;
 mod detail;

@@ -15,14 +15,6 @@ use maud::{Markup, html};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::components::{
-	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, TAB, TAB_ACTIVE, TEXTAREA, card,
-	card_content, card_header,
-};
-use super::extract::TeamCtx;
-use super::layout::{Crumb, app_page, form_error};
-use super::status::{Status, status_badge};
-use super::{error, sse};
 use crate::applications::BuildStrategy;
 use crate::applications::service::{self, AppInput, ApplicationView, Created};
 use crate::auth::permission::{Action, Resource};
@@ -32,6 +24,14 @@ use crate::projects;
 use crate::projects::Project;
 use crate::servers::{Server, ServerStatus};
 use crate::state::AppState;
+use crate::ui::components::{
+	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, TAB, TAB_ACTIVE, TEXTAREA, card,
+	card_content, card_header,
+};
+use crate::ui::extract::TeamCtx;
+use crate::ui::layout::{Crumb, app_page, form_error};
+use crate::ui::status::{Status, status_badge};
+use crate::ui::{error, sse};
 
 pub fn router() -> Router<AppState> {
 	Router::new()

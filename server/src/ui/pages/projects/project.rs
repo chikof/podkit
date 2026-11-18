@@ -10,19 +10,20 @@ use maud::{Markup, html};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::components::{
-	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, card, card_content, card_header,
-};
-use super::extract::TeamCtx;
-use super::layout::{Crumb, app_page, form_error};
-use super::status::status_badge;
-use super::{apps, databases, error, sse};
+use super::{apps, databases};
 use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ProjectId, TeamId};
 use crate::projects::Project;
 use crate::projects::service::{self, AppRow, ProjectDetail, ProjectSummary};
 use crate::state::AppState;
+use crate::ui::components::{
+	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, card, card_content, card_header,
+};
+use crate::ui::extract::TeamCtx;
+use crate::ui::layout::{Crumb, app_page, form_error};
+use crate::ui::status::status_badge;
+use crate::ui::{error, sse};
 
 pub fn router() -> Router<AppState> {
 	Router::new()
