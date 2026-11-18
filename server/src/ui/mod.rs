@@ -5,6 +5,13 @@
 //! Handlers here never touch the database or RBAC: they call each slice's
 //! `service` module, which authorizes, scopes and validates.
 
+// Page handlers return the error page as `Err(Response)`; boxing it everywhere
+// would only add noise.
+#![allow(
+	clippy::result_large_err,
+	reason = "the Err is the HTTP response a handler sends back"
+)]
+
 use std::sync::LazyLock;
 
 use axum::{
