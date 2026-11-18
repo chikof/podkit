@@ -5,6 +5,8 @@ section_models() {
 	expect_page "/teams/$TEAM/models/catalog?size=tiny" "Qwen3 4B"
 	expect_page "/teams/$TEAM/models/catalog?tab=advanced" "Search Hugging Face"
 	expect_page "/teams/$TEAM/models/catalog/qwen3-4b" "Overrides"
+	expect_page "/teams/$TEAM/models/catalog/qwen3-4b?dialog=1" "setup-body"
+	expect_page "/teams/$TEAM/models/catalog?tier=s" "S tier"
 	expect_page "/teams/$TEAM/models/settings" "Hugging Face token"
 	expect_page "/teams/$TEAM/models/catalog/no-such-model" "Not found" 404
 	expect_page "/teams/0/models" "Not found" 404

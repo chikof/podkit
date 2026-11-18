@@ -23,8 +23,8 @@ use crate::models::engines;
 use crate::state::AppState;
 use crate::ui::components::{
 	BUTTON_OUTLINE, INPUT, LABEL, LogoSize, SELECT, Size, TabItem, Tone, Variant, badge,
-	button_class, card, card_content, card_section, chip, chip_group, empty_state, icon, link_card,
-	logo, tabs,
+	button_class, card, card_content, card_section, chip, chip_group, empty_state, icon, logo,
+	tabs,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -331,27 +331,32 @@ fn model_card(ctx: &TeamCtx, view: &View, model: &Model, hardware: Option<&Hardw
 		params_text(model.params_b, model.active_params_b),
 		model.license
 	);
-	link_card(
-		&href,
-		&family_logo(&model.family, LogoSize::Md),
-		&model.name,
-		Some(&description),
-		Some(&html! {
-			div class="flex w-full flex-col gap-2" {
-				div class="flex flex-wrap items-center gap-1.5" {
-					@if let Some(fit) = &fit { (fit_badge(fit)) } @else { span class="text-xs text-muted-foreground" { "No server picked" } }
-					(badge(Tone::Neutral, size_label(model.size_class)))
-					@for tag in &model.tags { (badge(Tone::Neutral, tag_label(*tag))) }
+	// The same card as `link_card` (one link stretched over it) with a footer under the
+	// logo row: the fit, what would be downloaded, and the button.
+	html! {
+		article class="ui-card ui-link-card flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-xs" {
+			div class="ui-link-card-body" {
+				(family_logo(&model.family, LogoSize::Md))
+				div class="flex min-w-0 flex-1 flex-col gap-1" {
+					h3 class="truncate text-sm leading-tight font-semibold" {
+						a href=(href) class="ui-link-card-link outline-hidden" { (model.name) }
+					}
+					p class="line-clamp-2 text-sm text-muted-foreground" { (description) }
 				}
+			}
+			div class="flex flex-wrap items-center gap-1.5" {
+				@if let Some(fit) = &fit { (fit_badge(fit)) } @else { span class="text-xs text-muted-foreground" { "No server picked" } }
+				(badge(Tone::Neutral, size_label(model.size_class)))
+				@for tag in &model.tags { (badge(Tone::Neutral, tag_label(*tag))) }
+			}
+			div class="mt-auto flex flex-wrap items-center justify-between gap-2" {
 				p class="text-xs text-muted-foreground" {
 					(recipe.quant) " · " (engines::spec(engine).label) " · " (human_bytes(recipe.total_bytes))
 				}
-				div class="flex" {
-					a class={ (button_class(Variant::Outline, Size::Sm)) " ui-setup" } href=(href) { "Set up" }
-				}
+				a class={ (button_class(Variant::Outline, Size::Sm)) " ui-setup" } href=(href) { "Set up" }
 			}
-		}),
-	)
+		}
+	}
 }
 
 fn tier_sections(ctx: &TeamCtx, view: &View, hardware: Option<&Hardware>) -> Markup {
@@ -414,7 +419,11 @@ fn huggingface_tab(ctx: &TeamCtx, view: &View) -> Markup {
 		"evt.preventDefault(); @get({})",
 		js_string(&with_query(
 			&format!("{}/search", catalog_url(ctx.team.id)),
-			&view.carry().into_iter().take(1).collect::<Vec<_>>()
+			&view
+				.server
+				.map(|s| format!("server={s}"))
+				.into_iter()
+				.collect::<Vec<_>>()
 		))
 	);
 	card(&html! {

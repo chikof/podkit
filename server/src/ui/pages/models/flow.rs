@@ -26,8 +26,8 @@ use crate::models::service::{self as models_service, CreateModel};
 use crate::projects;
 use crate::state::AppState;
 use crate::ui::components::{
-	Current, INPUT, LABEL, LogoSize, SELECT, Size, Variant, button_class, card, card_content,
-	card_section, icon, logo, stepper,
+	BUTTON_DANGER, Current, INPUT, LABEL, LogoSize, SELECT, Size, Variant, button_class, card,
+	card_content, card_section, icon, logo, stepper,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -329,7 +329,7 @@ async fn region(
 								button type="button" class=(button_class(Variant::Default, Size::Md)) "data-on:click"={ "@post(" (js_string(&format!("{base}/retry{}", defaults.query()))) ")" } { (icon("refresh-cw")) "Retry" }
 							}
 							@if can_delete && !file.status.in_flight() {
-								button type="button" class=(button_class(Variant::Destructive, Size::Md)) "data-on:click"={ "@post(" (js_string(&format!("{base}/delete"))) ")" } { (icon("trash-2")) "Delete files" }
+								button type="button" class=(BUTTON_DANGER) "data-on:click"={ "@post(" (js_string(&format!("{base}/delete"))) ")" } { (icon("trash-2")) "Delete files" }
 							}
 						}
 					}

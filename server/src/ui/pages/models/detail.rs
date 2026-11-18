@@ -14,7 +14,7 @@ use maud::{Markup, html};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::{crumbs, human_bytes, model_url, models_url, playground};
+use super::{human_bytes, model_url, models_url, playground};
 use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, ModelId, ProjectId, TeamId};
@@ -483,10 +483,19 @@ async fn page(
 		}
 	};
 	let name = model.name.clone();
+	let team = ctx.team.id;
+	let project_crumb = project_row.project.name.clone();
 	Ok(app_page(
 		&ctx,
 		&name,
-		&crumbs(&ctx, vec![(name.as_str(), None)]),
+		&[
+			("Projects", Some(format!("/teams/{team}/projects"))),
+			(
+				project_crumb.as_str(),
+				Some(format!("/teams/{team}/projects/{project}")),
+			),
+			(name.as_str(), None),
+		],
 		&body,
 	)
 	.into_response())
