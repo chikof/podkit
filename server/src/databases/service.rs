@@ -13,11 +13,13 @@ use super::{
 };
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
-use crate::ids::{BackupTargetId, DatabaseId, JobId, ProjectId, ServerId, TeamId, UserId};
+use crate::ids::{
+	BackupTargetId, DatabaseId, EnvironmentId, JobId, ProjectId, ServerId, TeamId, UserId,
+};
 use crate::jobs::{self, JobKind, JobStatus};
 use crate::servers::{self, Server};
 use crate::state::AppState;
-use crate::{backups, databases, db, scope};
+use crate::{backups, databases, db, environments, scope};
 
 const MAX_TAIL: u32 = 5000;
 const DEFAULT_BACKUP_KEEP: i32 = 7;
@@ -30,6 +32,8 @@ pub struct CreateInput {
 	pub public_port: Option<i32>,
 	pub memory_limit_mb: Option<i32>,
 	pub cpu_limit: Option<f64>,
+	/// The project's first environment when `None`.
+	pub environment_id: Option<EnvironmentId>,
 }
 
 /// Replaces every editable setting; omitted fields become null (`backup_keep`
@@ -244,6 +248,8 @@ pub async fn create(
 ) -> AppResult<Database> {
 	authorize(&s.db, user, team, Action::Create, Resource::Database).await?;
 	scope::project(&s.db, team, project).await?;
+	let environment =
+		environments::service::resolve(&s.db, team, project, body.environment_id).await?;
 	let server = scope::server(&s.db, team, body.server_id).await?;
 
 	if body.name.trim().is_empty() || body.name.len() > 60 {
@@ -268,6 +274,7 @@ pub async fn create(
 		NewDatabase {
 			id: DatabaseId::generate(),
 			project_id: project,
+			environment_id: environment,
 			server_id: server.id,
 			name: body.name,
 			engine: body.engine,
@@ -291,16 +298,19 @@ pub async fn create(
 	Ok(database)
 }
 
-/// Lists a project's databases; needs `read database`.
+/// Lists the databases of one environment of a project, the first when
+/// `environment` is `None`; needs `read database`.
 pub async fn list(
 	db: &PgPool,
 	user: UserId,
 	team: TeamId,
 	project: ProjectId,
+	environment: Option<EnvironmentId>,
 ) -> AppResult<Vec<Database>> {
 	authorize(db, user, team, Action::Read, Resource::Database).await?;
 	scope::project(db, team, project).await?;
-	Ok(databases::list_by_project(db, project).await?)
+	let environment = environments::service::resolve(db, team, project, environment).await?;
+	Ok(databases::list_by_environment(db, environment).await?)
 }
 
 /// One database without its credentials; needs `read database`.

@@ -11,8 +11,9 @@ use super::service::{self, Connection, CreateInput, SettingsInput};
 use super::{Database, DatabaseStatus, EngineKind};
 use crate::applications::routes::log_events;
 use crate::auth::AuthUser;
+use crate::environments::EnvironmentFilter;
 use crate::error::AppResult;
-use crate::ids::{BackupTargetId, DatabaseId, ProjectId, ServerId, TeamId};
+use crate::ids::{BackupTargetId, DatabaseId, EnvironmentId, ProjectId, ServerId, TeamId};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -35,6 +36,8 @@ struct CreateDatabaseRequest {
 	public_port: Option<i32>,
 	memory_limit_mb: Option<i32>,
 	cpu_limit: Option<f64>,
+	#[serde(default)]
+	environment_id: Option<EnvironmentId>,
 }
 
 /// Replaces every editable setting; omitted fields become null (`backup_keep`
@@ -77,6 +80,7 @@ fn default_follow() -> bool {
 struct DatabaseResponse {
 	id: DatabaseId,
 	project_id: ProjectId,
+	environment_id: EnvironmentId,
 	server_id: ServerId,
 	name: String,
 	engine: EngineKind,
@@ -101,6 +105,7 @@ impl From<&Database> for DatabaseResponse {
 		Self {
 			id: d.id,
 			project_id: d.project_id,
+			environment_id: d.environment_id,
 			server_id: d.server_id,
 			name: d.name.clone(),
 			engine: d.engine,
@@ -141,6 +146,7 @@ async fn create(
 		public_port: body.public_port,
 		memory_limit_mb: body.memory_limit_mb,
 		cpu_limit: body.cpu_limit,
+		environment_id: body.environment_id,
 	};
 	let database = service::create(&s, user.id, team, project, input).await?;
 	Ok(accepted(&database))
@@ -152,8 +158,9 @@ async fn list(
 	State(s): State<AppState>,
 	user: AuthUser,
 	Path((team, project)): Path<(TeamId, ProjectId)>,
+	Query(filter): Query<EnvironmentFilter>,
 ) -> AppResult<Json<Vec<DatabaseResponse>>> {
-	let rows = service::list(&s.db, user.id, team, project).await?;
+	let rows = service::list(&s.db, user.id, team, project, filter.environment_id).await?;
 	Ok(Json(rows.iter().map(DatabaseResponse::from).collect()))
 }
 

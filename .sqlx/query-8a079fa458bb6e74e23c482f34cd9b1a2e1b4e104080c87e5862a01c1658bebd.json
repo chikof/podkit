@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id: DatabaseId\", project_id AS \"project_id: ProjectId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, engine AS \"engine: EngineKind\", version,\n\t\t\t\tcredentials, public_port, memory_limit_mb, cpu_limit,\n\t\t\t\tstatus AS \"status: DatabaseStatus\", status_message, container_id,\n\t\t\t\tbackup_target_id AS \"backup_target_id: BackupTargetId\", backup_schedule,\n\t\t\t\tbackup_keep, backup_next_run_at\n\t\t\tFROM databases WHERE project_id = $1 ORDER BY id\n\t\t",
+  "query": "\n\t\t\tSELECT d.id AS \"id: DatabaseId\", d.project_id AS \"project_id: ProjectId\", d.environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\td.server_id AS \"server_id: ServerId\", d.name, d.engine AS \"engine: EngineKind\",\n\t\t\t\td.version, d.credentials, d.public_port, d.memory_limit_mb, d.cpu_limit,\n\t\t\t\td.status AS \"status: DatabaseStatus\", d.status_message, d.container_id,\n\t\t\t\td.backup_target_id AS \"backup_target_id: BackupTargetId\", d.backup_schedule,\n\t\t\t\td.backup_keep, d.backup_next_run_at\n\t\t\tFROM databases d\n\t\t\tJOIN projects p ON p.id = d.project_id\n\t\t\tWHERE d.id = $3 AND d.project_id = $2 AND p.team_id = $1\n\t\t",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "environment_id: EnvironmentId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "environment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "server_id: ServerId",
         "type_info": "Int8",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "name",
         "type_info": "Varchar",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "engine: EngineKind",
         "type_info": "Varchar",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "version",
         "type_info": "Varchar",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "credentials",
         "type_info": "Bytea",
         "origin": {
@@ -81,7 +92,7 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "public_port",
         "type_info": "Int4",
         "origin": {
@@ -92,7 +103,7 @@
         }
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "memory_limit_mb",
         "type_info": "Int4",
         "origin": {
@@ -103,7 +114,7 @@
         }
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "cpu_limit",
         "type_info": "Float4",
         "origin": {
@@ -114,7 +125,7 @@
         }
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "status: DatabaseStatus",
         "type_info": "Varchar",
         "origin": {
@@ -125,7 +136,7 @@
         }
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "status_message",
         "type_info": "Text",
         "origin": {
@@ -136,7 +147,7 @@
         }
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "container_id",
         "type_info": "Varchar",
         "origin": {
@@ -147,7 +158,7 @@
         }
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "backup_target_id: BackupTargetId",
         "type_info": "Int8",
         "origin": {
@@ -158,7 +169,7 @@
         }
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "backup_schedule",
         "type_info": "Varchar",
         "origin": {
@@ -169,7 +180,7 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "backup_keep",
         "type_info": "Int4",
         "origin": {
@@ -180,7 +191,7 @@
         }
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "backup_next_run_at",
         "type_info": "Timestamptz",
         "origin": {
@@ -193,10 +204,13 @@
     ],
     "parameters": {
       "Left": [
+        "Int8",
+        "Int8",
         "Int8"
       ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -216,5 +230,5 @@
       true
     ]
   },
-  "hash": "1cff66fb1421c944ec783f27426892a11a7dbc68121905c4715d565f2bde6e35"
+  "hash": "8a079fa458bb6e74e23c482f34cd9b1a2e1b4e104080c87e5862a01c1658bebd"
 }

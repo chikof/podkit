@@ -462,13 +462,14 @@ mod tests {
 	use time::OffsetDateTime;
 
 	use super::*;
-	use crate::ids::{ModelFileId, ProjectId, ServerId};
+	use crate::ids::{EnvironmentId, ModelFileId, ProjectId, ServerId};
 	use crate::models::EngineKind;
 
 	fn model(engine: EngineKind, gpu: bool) -> Model {
 		Model {
 			id: ModelId(7),
 			project_id: ProjectId(1),
+			environment_id: EnvironmentId(1),
 			server_id: ServerId(2),
 			model_files_id: ModelFileId(3),
 			name: "Qwen".to_owned(),

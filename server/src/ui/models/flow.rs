@@ -573,6 +573,7 @@ async fn start(
 				image: None,
 				port: None,
 				memory_limit_mb: None,
+				environment_id: None,
 			},
 		)
 		.await?;

@@ -7,8 +7,11 @@ use sqlx::PgPool;
 use crate::applications::{Application, BuildStrategy};
 use crate::backups::BackupTarget;
 use crate::databases::{Database, DatabaseStatus, EngineKind};
+use crate::environments::Environment;
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, BackupTargetId, DatabaseId, ProjectId, ServerId, TeamId};
+use crate::ids::{
+	ApplicationId, BackupTargetId, DatabaseId, EnvironmentId, ProjectId, ServerId, TeamId,
+};
 use crate::projects::Project;
 use crate::servers::{Server, ServerStatus};
 
@@ -28,6 +31,30 @@ pub async fn project(db: &PgPool, team: TeamId, id: ProjectId) -> AppResult<Proj
 	.ok_or(ServerError::ProjectNotFound)
 }
 
+pub async fn environment(
+	db: &PgPool,
+	team: TeamId,
+	project: ProjectId,
+	id: EnvironmentId,
+) -> AppResult<Environment> {
+	sqlx::query_as!(
+		Environment,
+		r#"
+			SELECT e.id AS "id: EnvironmentId", e.project_id AS "project_id: ProjectId",
+				e.name, e.slug, e.position, e.created_at
+			FROM environments e
+			JOIN projects p ON p.id = e.project_id
+			WHERE e.id = $3 AND e.project_id = $2 AND p.team_id = $1
+		"#,
+		team as TeamId,
+		project as ProjectId,
+		id as EnvironmentId
+	)
+	.fetch_optional(db)
+	.await?
+	.ok_or(ServerError::EnvironmentNotFound)
+}
+
 pub async fn application(
 	db: &PgPool,
 	team: TeamId,
@@ -37,7 +64,7 @@ pub async fn application(
 	sqlx::query_as!(
 		Application,
 		r#"
-			SELECT a.id AS "id: ApplicationId", a.project_id AS "project_id: ProjectId",
+			SELECT a.id AS "id: ApplicationId", a.project_id AS "project_id: ProjectId", a.environment_id AS "environment_id: EnvironmentId",
 				a.server_id AS "server_id: ServerId", a.name, a.slug, a.repo_url, a.git_ref,
 				a.deploy_key, a.git_token, a.build_strategy AS "build_strategy: BuildStrategy",
 				a.dockerfile_path, a.container_port, a.webhook_secret, a.memory_limit_mb,
@@ -84,7 +111,7 @@ pub async fn database(
 	sqlx::query_as!(
 		Database,
 		r#"
-			SELECT d.id AS "id: DatabaseId", d.project_id AS "project_id: ProjectId",
+			SELECT d.id AS "id: DatabaseId", d.project_id AS "project_id: ProjectId", d.environment_id AS "environment_id: EnvironmentId",
 				d.server_id AS "server_id: ServerId", d.name, d.engine AS "engine: EngineKind",
 				d.version, d.credentials, d.public_port, d.memory_limit_mb, d.cpu_limit,
 				d.status AS "status: DatabaseStatus", d.status_message, d.container_id,

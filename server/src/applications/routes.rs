@@ -14,8 +14,9 @@ use tracing::warn;
 use super::service::{self, AppInput, ApplicationView};
 use crate::auth::AuthUser;
 use crate::deployments::{self, DeploymentResponse};
+use crate::environments::EnvironmentFilter;
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, ProjectId, ServerId, TeamId};
+use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId, TeamId};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -64,6 +65,9 @@ pub struct CreateApplicationRequest {
 	pub memory_limit_mb: Option<i32>,
 	#[serde(default)]
 	pub cpu_limit: Option<f64>,
+	/// The project's first environment when omitted.
+	#[serde(default)]
+	pub environment_id: Option<EnvironmentId>,
 }
 
 /// Same shape as `CreateApplicationRequest` minus `server_id` (moving an
@@ -102,6 +106,7 @@ pub struct UpdateApplicationRequest {
 pub struct ApplicationResponse {
 	pub id: ApplicationId,
 	pub project_id: ProjectId,
+	pub environment_id: EnvironmentId,
 	pub server_id: ServerId,
 	pub name: String,
 	pub slug: String,
@@ -130,6 +135,7 @@ impl From<&ApplicationView> for ApplicationResponse {
 		Self {
 			id: app.id,
 			project_id: app.project_id,
+			environment_id: app.environment_id,
 			server_id: app.server_id,
 			name: app.name.clone(),
 			slug: app.slug.clone(),
@@ -173,6 +179,7 @@ pub async fn create(
 			container_port: body.container_port,
 			memory_limit_mb: body.memory_limit_mb,
 			cpu_limit: body.cpu_limit,
+			environment_id: body.environment_id,
 		},
 	)
 	.await?;
@@ -187,8 +194,9 @@ pub async fn list(
 	State(s): State<AppState>,
 	user: AuthUser,
 	Path((team, project)): Path<(TeamId, ProjectId)>,
+	Query(filter): Query<EnvironmentFilter>,
 ) -> AppResult<Json<Vec<ApplicationResponse>>> {
-	let apps = service::list(&s.db, user.id, team, project).await?;
+	let apps = service::list(&s.db, user.id, team, project, filter.environment_id).await?;
 	Ok(Json(apps.iter().map(ApplicationResponse::from).collect()))
 }
 
@@ -221,6 +229,7 @@ pub async fn update(
 			container_port: body.container_port,
 			memory_limit_mb: body.memory_limit_mb,
 			cpu_limit: body.cpu_limit,
+			environment_id: None,
 		},
 	)
 	.await?;

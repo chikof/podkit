@@ -266,7 +266,7 @@ async fn rows_poll(
 	ctx: TeamCtx,
 	Path((_, project)): Path<(TeamId, ProjectId)>,
 ) -> Response {
-	match service::list(&s.db, ctx.user.id, ctx.team.id, project).await {
+	match service::list(&s.db, ctx.user.id, ctx.team.id, project, None).await {
 		Ok(rows) => {
 			let rows: Vec<service::Row> = rows.iter().map(service::Row::from).collect();
 			sse::patch(&project_rows(&ctx, project, &rows)).into_response()
@@ -304,6 +304,7 @@ impl CreateSignals {
 			public_port: number(&self.public_port, "Public port")?,
 			memory_limit_mb: number(&self.memory_limit_mb, "Memory limit")?,
 			cpu_limit: number(&self.cpu_limit, "CPU limit")?,
+			environment_id: None,
 		})
 	}
 }

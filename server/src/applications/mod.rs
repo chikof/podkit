@@ -1,7 +1,7 @@
 //! Applications: a git repo built and run as a container on one of the
 //! team's servers.
 
-use crate::ids::{ApplicationId, ProjectId, ServerId};
+use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId};
 use crate::servers::Server;
 
 pub mod routes;
@@ -43,6 +43,7 @@ impl BuildStrategy {
 pub struct Application {
 	pub id: ApplicationId,
 	pub project_id: ProjectId,
+	pub environment_id: EnvironmentId,
 	pub server_id: ServerId,
 	pub name: String,
 	/// Unique per server, not just per project; the generated subdomain is
@@ -72,6 +73,8 @@ pub struct Application {
 pub struct NewApplication {
 	pub id: ApplicationId,
 	pub project_id: ProjectId,
+	/// Must belong to `project_id`; the composite foreign key enforces it.
+	pub environment_id: EnvironmentId,
 	pub server_id: ServerId,
 	pub name: String,
 	pub slug: String,
@@ -114,11 +117,11 @@ pub async fn insert(
 		Application,
 		r#"
 			INSERT INTO applications
-				(id, project_id, server_id, name, slug, repo_url, git_ref, deploy_key, git_token,
+				(id, project_id, environment_id, server_id, name, slug, repo_url, git_ref, deploy_key, git_token,
 				 build_strategy, dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			VALUES ($1, $2, $16, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 			RETURNING
-				id AS "id: ApplicationId", project_id AS "project_id: ProjectId",
+				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
@@ -138,6 +141,7 @@ pub async fn insert(
 		new.webhook_secret,
 		new.memory_limit_mb,
 		new.cpu_limit,
+		new.environment_id as EnvironmentId,
 	)
 	.fetch_one(db)
 	.await
@@ -159,7 +163,7 @@ pub async fn update(
 				memory_limit_mb = $11, cpu_limit = $12, updated_at = NOW()
 			WHERE id = $1
 			RETURNING
-				id AS "id: ApplicationId", project_id AS "project_id: ProjectId",
+				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
@@ -191,7 +195,7 @@ pub async fn find_by_id(
 		Application,
 		r#"
 			SELECT
-				id AS "id: ApplicationId", project_id AS "project_id: ProjectId",
+				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
@@ -211,13 +215,33 @@ pub async fn list_by_project(
 		Application,
 		r#"
 			SELECT
-				id AS "id: ApplicationId", project_id AS "project_id: ProjectId",
+				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 			FROM applications WHERE project_id = $1 ORDER BY id
 		"#,
 		project_id as ProjectId,
+	)
+	.fetch_all(db)
+	.await
+}
+
+pub async fn list_by_environment(
+	db: impl sqlx::PgExecutor<'_>,
+	environment: EnvironmentId,
+) -> Result<Vec<Application>, sqlx::Error> {
+	sqlx::query_as!(
+		Application,
+		r#"
+			SELECT
+				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
+				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
+				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
+				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
+			FROM applications WHERE environment_id = $1 ORDER BY id
+		"#,
+		environment as EnvironmentId,
 	)
 	.fetch_all(db)
 	.await

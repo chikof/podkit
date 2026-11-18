@@ -154,6 +154,7 @@ impl AppSignals {
 			container_port,
 			memory_limit_mb: optional(&self.memory_limit_mb, "Memory limit")?,
 			cpu_limit: optional(&self.cpu_limit, "CPU limit")?,
+			environment_id: None,
 		})
 	}
 }
