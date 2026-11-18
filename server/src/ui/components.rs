@@ -24,6 +24,7 @@ mod empty_state;
 mod field;
 mod icon;
 mod kbd;
+mod log_viewer;
 mod logo;
 mod menu;
 mod skeleton;
@@ -52,6 +53,7 @@ pub use field::{
 };
 pub use icon::{icon, icon_with};
 pub use kbd::{kbd, kbd_combo};
+pub use log_viewer::log_viewer;
 pub use logo::{LogoSize, logo};
 pub use menu::{MENU_ITEM, MENU_ITEM_DANGER, dropdown_menu, menu_label, menu_link, menu_separator};
 pub use skeleton::skeleton;

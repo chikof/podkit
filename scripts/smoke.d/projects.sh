@@ -31,14 +31,14 @@ section_applications() {
 	expect_page "$base/apps/$app" "Smoke app"
 	expect_page "$base/apps/$app" "$slug"
 	expect_absent "$secret" BEGIN "smoke-key-material" "Webhook secret"
-	expect_page "$base/apps/$app/settings" "Save changes"
+	expect_page "$base/apps/$app" "Save changes"
 	expect_absent "$secret" BEGIN "smoke-key-material"
-	expect_page "$base/apps/$app/settings" "A deploy key is stored."
+	expect_page "$base/apps/$app" "A deploy key is stored."
 
 	# Blank credentials keep the stored key; a bad URL is an inline message.
 	ui_post "$base/apps/$app/settings" "$(jq '.name = "Smoke app 2" | .deploy_key = ""' <<<"$form")"
 	grep -qF 'Settings saved' "$BODY" || fail "save: no toast: $(head -c 300 "$BODY")"
-	expect_page "$base/apps/$app/settings" "A deploy key is stored."
+	expect_page "$base/apps/$app" "A deploy key is stored."
 	ui_post "$base/apps/$app/settings" "$(jq '.repo_url = "nope"' <<<"$form")"
 	grep -qF 'invalid repo_url' "$BODY" || fail "save: bad URL not reported inline"
 	echo "ok   settings save keeps credentials, validation is inline"

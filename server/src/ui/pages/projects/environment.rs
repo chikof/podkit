@@ -17,7 +17,6 @@ use serde_json::json;
 use time::OffsetDateTime;
 use tower_cookies::Cookies;
 
-use super::apps::{app_url, public_link};
 use super::cards::{in_flight, relative_time, resource_logo, status_line};
 use super::picker;
 use crate::auth::permission::{Action, Resource};
@@ -32,6 +31,7 @@ use crate::ui::components::{
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page, form_error};
+use crate::ui::pages::apps::{app_url, public_link};
 use crate::ui::sse::js_string;
 use crate::ui::status::poll;
 use crate::ui::{error, shell, sse};

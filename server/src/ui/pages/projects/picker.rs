@@ -15,10 +15,6 @@ use crate::ui::extract::TeamCtx;
 
 pub const DIALOG_ID: &str = "create-resource";
 
-/// TODO(B2): flip to `true` once the image-based application API (and its create page)
-/// exists. Until then the option stays out of the picker rather than leading nowhere.
-const DOCKER_IMAGE_READY: bool = false;
-
 /// TODO(F8): the compose and template pages. Until they exist the two options show as
 /// "Soon" and are not links. F8 sets these to the routes it adds.
 const COMPOSE_HREF: Option<&str> = None;
@@ -103,14 +99,12 @@ fn groups<'a>(
 			mark: Mark::Icon("git-branch"),
 			href: Some(format!("{base}/apps/new?{q}")),
 		});
-		if DOCKER_IMAGE_READY {
-			apps.push(Choice {
-				title: "Docker image",
-				description: "Run an image from a registry.",
-				mark: Mark::Logo("docker"),
-				href: Some(format!("{base}/apps/new?{q}&source=image")),
-			});
-		}
+		apps.push(Choice {
+			title: "Docker image",
+			description: "Run an image from a registry.",
+			mark: Mark::Logo("docker"),
+			href: Some(format!("{base}/apps/new?{q}&source=image")),
+		});
 	}
 	out.push(("Application", apps));
 

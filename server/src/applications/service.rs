@@ -492,6 +492,27 @@ pub async fn update(
 	Ok(ApplicationView::new(&updated, &server, None))
 }
 
+/// Replaces the webhook secret and returns the new one in plaintext: the only time it is
+/// ever shown. Whatever used the old secret stops working at once. Needs `update
+/// application`; another team's application is `ApplicationNotFound`.
+pub async fn rotate_webhook_secret(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	id: ApplicationId,
+) -> AppResult<String> {
+	authorize(&s.db, user, team, Action::Update, Resource::Application).await?;
+	let app = scope::application(&s.db, team, project, id).await?;
+	let plain = crypto::generate_token(24);
+	let sealed = s
+		.secrets
+		.encrypt(&plain)
+		.map_err(|e| ServerError::Validation(format!("failed to encrypt webhook secret: {e}")))?;
+	super::set_webhook_secret(&s.db, app.id, &sealed).await?;
+	Ok(plain)
+}
+
 /// Deletes an application; needs `delete application`. Containers, volumes
 /// and images on the server are removed best-effort first: the row is the
 /// source of truth, so a failure there never blocks the delete.

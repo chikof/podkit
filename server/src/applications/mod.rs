@@ -289,6 +289,22 @@ pub async fn delete(db: impl sqlx::PgExecutor<'_>, id: ApplicationId) -> Result<
 	Ok(())
 }
 
+/// Stores a new (already encrypted) webhook secret.
+pub async fn set_webhook_secret(
+	db: impl sqlx::PgExecutor<'_>,
+	id: ApplicationId,
+	sealed: &[u8],
+) -> Result<(), sqlx::Error> {
+	sqlx::query!(
+		"UPDATE applications SET webhook_secret = $2 WHERE id = $1",
+		id as ApplicationId,
+		sealed
+	)
+	.execute(db)
+	.await?;
+	Ok(())
+}
+
 /// Derives the zero-config public hostname for an app on `server`, via
 /// sslip.io wildcard DNS. We don't own a wildcard domain ourselves in v1,
 /// so this is the workaround.

@@ -80,6 +80,7 @@ pub fn router() -> Router<AppState> {
 		.merge(assets::router())
 		.merge(pages::accounts::router())
 		.merge(pages::projects::router())
+		.merge(pages::apps::router())
 		.merge(pages::models::router())
 		.merge(pages::backups::router())
 		.merge(pages::servers::router())

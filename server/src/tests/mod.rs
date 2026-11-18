@@ -1,3 +1,4 @@
+pub mod apps;
 pub mod dbs;
 pub mod grid;
 mod tenancy;

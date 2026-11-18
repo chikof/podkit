@@ -897,5 +897,9 @@ async fn the_picker_routes_each_kind_to_its_create_flow(db: PgPool) {
 	assert_contains(main, "Template");
 	assert_contains(main, "Soon");
 	assert_contains(main, "aria-disabled=\"true\"");
-	assert_not_contains(main, "Docker image");
+	assert_contains(main, "Docker image");
+	assert_contains(
+		main,
+		&format!("{base}/apps/new?environment={prod}&amp;source=image"),
+	);
 }

@@ -39,7 +39,7 @@ pub fn logo_row(logos: &[ResourceLogo]) -> Markup {
 	}
 }
 
-const fn dot_class(tone: Tone) -> &'static str {
+pub const fn dot_class(tone: Tone) -> &'static str {
 	match tone {
 		Tone::Neutral => "ui-dot ui-dot-neutral",
 		Tone::Progress => "ui-dot ui-dot-progress",

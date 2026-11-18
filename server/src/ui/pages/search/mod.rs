@@ -190,7 +190,7 @@ fn entry(team: TeamId, hit: &Hit) -> Entry {
 		),
 		(Kind::Application, Some(project)) => (
 			"rocket",
-			projects::app_url(team, project, ApplicationId(hit.id)),
+			crate::ui::pages::apps::app_url(team, project, ApplicationId(hit.id)),
 		),
 		(Kind::Database, Some(project)) => (
 			"database",

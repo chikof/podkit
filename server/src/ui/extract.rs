@@ -13,7 +13,7 @@ use crate::auth::permission::{self, Permissions};
 use crate::auth::{SessionToken, session, users};
 use crate::environments::{self, Environment};
 use crate::error::ServerError;
-use crate::ids::{EnvironmentId, ProjectId, TeamId, UserId};
+use crate::ids::{ApplicationId, EnvironmentId, ProjectId, TeamId, UserId};
 use crate::projects::{self, Project};
 use crate::state::AppState;
 use crate::teams::{self, Team};
@@ -116,6 +116,7 @@ impl ProjectScope {
 		team: TeamId,
 		project: Option<ProjectId>,
 		env_slug: Option<&str>,
+		app: Option<ApplicationId>,
 	) -> Option<Self> {
 		// Datastar fragments (polls, previews) never render the header.
 		if !is_navigation(&parts.method) || parts.headers.contains_key("datastar-request") {
@@ -142,10 +143,19 @@ impl ProjectScope {
 			.ok()?;
 		// The path names the environment (`/projects/{p}/{env_slug}`) on an environment's
 		// own page; `?environment=<id>` picks it on the project's other pages.
+		// An application's pages sit in the environment the application lives in.
+		let app_environment = match (app, wanted) {
+			(Some(app), None) => crate::scope::application(&state.db, team, project_id, app)
+				.await
+				.ok()
+				.map(|a| a.environment_id),
+			_ => None,
+		};
 		let environment = environments
 			.iter()
 			.find(|e| env_slug.is_some_and(|slug| e.slug == slug))
 			.or_else(|| environments.iter().find(|e| Some(e.id) == wanted))
+			.or_else(|| environments.iter().find(|e| Some(e.id) == app_environment))
 			.or_else(|| environments.first())?
 			.clone();
 		Some(Self {
@@ -169,7 +179,7 @@ impl FromRequestParts<AppState> for TeamCtx {
 			error::respond(&parts.method, Some(user), &e)
 		};
 
-		let (team_id, project_id, env_slug) =
+		let (team_id, project_id, env_slug, app_id) =
 			match RawPathParams::from_request_parts(parts, state).await {
 				Ok(params) => {
 					let id = |name: &str| {
@@ -182,9 +192,14 @@ impl FromRequestParts<AppState> for TeamCtx {
 						.iter()
 						.find(|(k, _)| *k == "env_slug")
 						.map(|(_, v)| v.to_owned());
-					(id("team_id"), id("project_id").map(ProjectId), slug)
+					(
+						id("team_id"),
+						id("project_id").map(ProjectId),
+						slug,
+						id("app_id").map(ApplicationId),
+					)
 				}
-				Err(_) => (None, None, None),
+				Err(_) => (None, None, None, None),
 			};
 		let Some(team_id) = team_id.map(TeamId) else {
 			return Err(fail(parts, &user, ServerError::NotFound));
@@ -211,6 +226,7 @@ impl FromRequestParts<AppState> for TeamCtx {
 			team_id,
 			project_id,
 			env_slug.as_deref(),
+			app_id,
 		)
 		.await;
 

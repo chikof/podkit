@@ -6,6 +6,7 @@
 //! line here and one `.merge(pages::<area>::router())` line in `ui/mod.rs`.
 
 pub mod accounts;
+pub mod apps;
 pub mod backups;
 pub mod models;
 pub mod projects;

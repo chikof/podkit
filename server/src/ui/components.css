@@ -1389,6 +1389,73 @@ html {
 	outline-offset: 2px;
 }
 
+/* ---- Application page ------------------------------------------------------------------ */
+
+.ui-app-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+/* Restart and Stop are also menu entries; each shows only where the other does not. The
+   two-class selectors beat the button utilities, which come later in the stylesheet. */
+.ui-menu-item.ui-app-collapsed {
+	display: none;
+}
+
+@media (max-width: 40rem) {
+	.ui-app-actions .ui-app-secondary {
+		display: none;
+	}
+
+	.ui-menu-item.ui-app-collapsed {
+		display: flex;
+	}
+}
+
+/* The deployment history: a rail with the status dot of each deployment as its node. */
+.ui-timeline {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.ui-timeline-item {
+	position: relative;
+	padding-block: 0 1.25rem;
+	padding-inline-start: 1.75rem;
+}
+
+.ui-timeline-item:last-child {
+	padding-block-end: 0;
+}
+
+.ui-timeline-item::before {
+	content: "";
+	position: absolute;
+	inset-block: 1rem -0.25rem;
+	inset-inline-start: 0.1875rem;
+	width: 1px;
+	background-color: var(--border);
+}
+
+.ui-timeline-item:last-child::before {
+	display: none;
+}
+
+.ui-timeline-node {
+	position: absolute;
+	inset-block-start: 0.4375rem;
+	inset-inline-start: 0;
+	display: inline-flex;
+}
+
+/* A danger zone is an ordinary card with a warmer edge. */
+.ui-danger-zone > .ui-card {
+	border-color: color-mix(in oklab, var(--destructive) 45%, var(--border));
+}
+
 /* ---- Projects grid, environment view, create-resource picker -------------------------- */
 
 /* The card menu sits above the link that stretches over the card, and so do any other
