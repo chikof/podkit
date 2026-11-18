@@ -35,12 +35,14 @@ use crate::state::AppState;
 
 mod app_config;
 mod apps;
+mod assets;
 mod backups;
 mod components;
 mod databases;
 mod deployments;
 mod error;
 mod extract;
+mod gallery;
 mod layout;
 // Used by the pages of cards 05-09; until then only tests call them.
 #[allow(dead_code)]
@@ -56,6 +58,7 @@ mod status;
 mod teams;
 #[cfg(test)]
 mod testing;
+mod theme;
 
 use components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
 use extract::UiUser;
@@ -84,6 +87,9 @@ pub fn router() -> Router<AppState> {
 		.route(DATASTAR_PATH, get(datastar_js))
 		.route("/static/app.css", get(app_css))
 		.merge(teams::router())
+		.merge(assets::router())
+		.merge(theme::router())
+		.merge(gallery::router())
 		.merge(projects::router())
 		.merge(models::router())
 		.merge(apps::router())
@@ -96,6 +102,7 @@ pub fn router() -> Router<AppState> {
 		.merge(register::router())
 		.merge(test_routes())
 		.layer(middleware::from_fn(origin_guard))
+		.layer(middleware::from_fn(theme::scope))
 }
 
 #[cfg(test)]

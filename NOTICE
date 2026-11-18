@@ -1,0 +1,23 @@
+podkit bundles the third-party assets below. They are served from this
+server's own origin; nothing is loaded from a CDN.
+
+Geist Sans and Geist Mono (server/static/fonts/)
+  Copyright (c) 2023 Vercel, in collaboration with basement.studio.
+  SIL Open Font License 1.1: server/static/fonts/OFL.txt
+  https://github.com/vercel/geist-font
+
+Lucide icons (server/static/icons.svg)
+  Copyright (c) 2026 Lucide Icons and Contributors.
+  ISC License: server/static/LICENSE-lucide.txt
+  https://lucide.dev
+
+Simple Icons (server/static/logos.svg)
+  Released under CC0-1.0: https://github.com/simple-icons/simple-icons
+  The marks are trademarks of their owners and appear only to identify
+  the software they stand for.
+
+Datastar (server/static/datastar-1.0.5.js)
+  MIT License. https://data-star.dev
+
+Parts of the UI components are adapted from Topcoat UI (MIT):
+  https://github.com/tokio-rs/topcoat

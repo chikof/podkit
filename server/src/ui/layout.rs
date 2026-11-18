@@ -3,9 +3,10 @@
 
 use maud::{DOCTYPE, Markup, html};
 
-use super::components::BUTTON_OUTLINE;
+use super::assets::{FONT_SANS_HREF, PODKIT_JS_HREF};
+use super::components::{BUTTON_OUTLINE, theme_toggle, toast_region};
 use super::extract::TeamCtx;
-use super::{APP_CSS_HREF, DATASTAR_PATH};
+use super::{APP_CSS_HREF, DATASTAR_PATH, theme};
 use crate::auth::permission::{Action, Resource};
 
 /// One breadcrumb: a label and, for every crumb but the last, where it links.
@@ -13,19 +14,23 @@ pub type Crumb<'a> = (&'a str, Option<String>);
 
 /// A complete HTML document with no chrome (login page, error fallback).
 pub fn document(title: &str, body: &Markup) -> Markup {
+	let theme = theme::current();
 	html! {
 		(DOCTYPE)
-		html lang="en" {
+		html lang="en" class=[theme.html_class()] {
 			head {
 				meta charset="utf-8";
 				meta name="viewport" content="width=device-width, initial-scale=1";
+				meta name="color-scheme" content=(theme.color_scheme());
 				title { (title) " · podkit" }
-				script type="module" src=(DATASTAR_PATH) {}
+				link rel="preload" href=(FONT_SANS_HREF) "as"="font" type="font/woff2" crossorigin;
 				link rel="stylesheet" href=(*APP_CSS_HREF);
+				script type="module" src=(DATASTAR_PATH) {}
+				script type="module" src=(*PODKIT_JS_HREF) {}
 			}
 			body class="min-h-screen font-sans" {
 				(body)
-				div id="toasts" class="pointer-events-none fixed right-4 bottom-4 z-50 flex flex-col gap-2" {}
+				(toast_region())
 			}
 		}
 	}
@@ -56,6 +61,7 @@ pub fn bare_page(user: Option<&str>, title: &str, body: &Markup) -> Markup {
 				@if let Some(name) = user {
 					div class="flex items-center gap-3" {
 						span class="text-sm text-muted-foreground" { (name) }
+						(theme_toggle())
 						(sign_out())
 					}
 				}
@@ -120,6 +126,7 @@ pub fn app_page(ctx: &TeamCtx, title: &str, breadcrumbs: &[Crumb<'_>], body: &Ma
 				}
 				div class="flex items-center gap-3" {
 					span class="hidden text-sm text-muted-foreground md:inline" { (ctx.user.name) }
+					(theme_toggle())
 					(sign_out())
 				}
 			}
