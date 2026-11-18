@@ -15,10 +15,19 @@ use tower::ServiceExt;
 use crate::agents::AgentPool;
 use crate::jobs::worker::Jobs;
 use crate::logs::LogHub;
-use crate::state::{AppState, Config};
+use crate::state::{AppState, Config, Registration};
 
 pub async fn app(db: PgPool) -> Router {
 	crate::routes::routes(state(db)).await.unwrap()
+}
+
+/// Like [`app`], with another registration policy (tests default to `Open`).
+pub async fn app_with_registration(db: PgPool, registration: Registration) -> Router {
+	let mut state = state(db);
+	let mut config = (*state.config).clone();
+	config.registration = registration;
+	state.config = Arc::new(config);
+	crate::routes::routes(state).await.unwrap()
 }
 
 /// A full `AppState` over `db` with a throwaway data dir and no live agent.
@@ -46,6 +55,7 @@ pub fn state(db: PgPool) -> AppState {
 			model_ready_interval: std::time::Duration::from_millis(20),
 			local_agent_socket,
 			data_dir,
+			registration: Registration::Open,
 		}),
 	}
 }
@@ -112,6 +122,39 @@ pub async fn count(db: &PgPool, table: &str) -> i64 {
 		.fetch_one(db)
 		.await
 		.unwrap()
+}
+
+/// The id of the user called `name`.
+pub async fn user_id(db: &PgPool, name: &str) -> i64 {
+	sqlx::query_scalar("SELECT id FROM users WHERE name = $1")
+		.bind(name)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// The id of the role the user called `name` holds in `team`.
+pub async fn member_role(db: &PgPool, team: i64, name: &str) -> i64 {
+	sqlx::query_scalar(
+		"SELECT m.role_id FROM team_members m JOIN users u ON u.id = m.user_id
+		 WHERE m.team_id = $1 AND u.name = $2",
+	)
+	.bind(team)
+	.bind(name)
+	.fetch_one(db)
+	.await
+	.unwrap()
+}
+
+/// Defines a role owned by `team`.
+pub async fn team_role(db: &PgPool, id: i64, team: i64, name: &str) {
+	sqlx::query("INSERT INTO roles (id, team_id, name, is_default) VALUES ($1, $2, $3, FALSE)")
+		.bind(id)
+		.bind(team)
+		.bind(name)
+		.execute(db)
+		.await
+		.unwrap();
 }
 
 /// The id of the project with `slug`.

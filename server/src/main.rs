@@ -156,7 +156,12 @@ fn resolve_config(config: &ServerConfig) -> AppResult<Config> {
 			.map(PathBuf::from)
 			.unwrap_or_default(),
 	};
+	let registration = config
+		.registration
+		.parse()
+		.map_err(ServerError::Validation)?;
 	Ok(Config {
+		registration,
 		ingress_port: u16::try_from(config.ingress_port).unwrap_or(80),
 		https_port: u16::try_from(config.https_port).unwrap_or(443),
 		acme_email: config.acme_email.clone(),

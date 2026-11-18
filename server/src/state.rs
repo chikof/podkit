@@ -10,6 +10,33 @@ use crate::agents::AgentPool;
 use crate::jobs::worker::Jobs;
 use crate::logs::LogHub;
 
+/// Who may sign up through `POST /auth/register` and `/register`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Registration {
+	/// Only while no account exists yet: the first user becomes the admin.
+	#[default]
+	FirstUser,
+	/// Anyone may create an account.
+	Open,
+	/// Nobody may.
+	Closed,
+}
+
+impl std::str::FromStr for Registration {
+	type Err = String;
+
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		match s.trim().to_ascii_lowercase().as_str() {
+			"first-user" => Ok(Self::FirstUser),
+			"open" => Ok(Self::Open),
+			"closed" => Ok(Self::Closed),
+			other => Err(format!(
+				"invalid registration policy {other:?}; use first-user, open or closed"
+			)),
+		}
+	}
+}
+
 /// Resolved runtime configuration routes and background tasks need.
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -31,6 +58,8 @@ pub struct Config {
 	pub model_ready_timeout: Option<std::time::Duration>,
 	/// Pause between readiness probes of a starting model.
 	pub model_ready_interval: std::time::Duration,
+	/// Who may create an account.
+	pub registration: Registration,
 }
 
 #[derive(Clone)]

@@ -69,6 +69,12 @@ pub struct ServerConfig {
 	/// defaults to `https://huggingface.co`.
 	#[config(env = "HF_ENDPOINT")]
 	pub hf_endpoint: Option<String>,
+
+	/// Who may create an account: `first-user` (only while no account
+	/// exists; the default, for a homelab where the first user is the
+	/// admin), `open` (anyone; for a hosted instance) or `closed` (nobody).
+	#[config(env = "REGISTRATION", default = "first-user")]
+	pub registration: String,
 }
 
 impl ServerConfig {

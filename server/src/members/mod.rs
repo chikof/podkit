@@ -1,6 +1,7 @@
 //! Team membership and roles. Which role a member holds decides what they may do.
 
 mod routes;
+pub mod service;
 
 pub use routes::router;
 

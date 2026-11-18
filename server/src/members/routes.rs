@@ -4,10 +4,9 @@ use axum::routing::{get, patch};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
-use super::{MemberDetail, Role};
-use crate::auth::permission::{Action, Resource, authorize};
-use crate::auth::{AuthUser, users};
-use crate::error::{AppResult, ServerError};
+use super::{MemberDetail, Role, service};
+use crate::auth::AuthUser;
+use crate::error::AppResult;
 use crate::ids::{RoleId, TeamId, UserId};
 use crate::state::AppState;
 
@@ -84,19 +83,7 @@ async fn add(
 	Path(team): Path<TeamId>,
 	Json(body): Json<AddMemberRequest>,
 ) -> AppResult<Json<AddedMemberResponse>> {
-	authorize(&s.db, user.id, team, Action::Create, Resource::Membership).await?;
-
-	let invitee = users::find_by_email(&s.db, &body.email)
-		.await?
-		.ok_or_else(|| ServerError::Validation("no user with that email".to_string()))?;
-
-	super::ensure_assignable(&s.db, team, body.role_id).await?;
-
-	if super::find(&s.db, team, invitee.id).await?.is_some() {
-		return Err(ServerError::AlreadyMember);
-	}
-
-	let member = super::insert(&s.db, team, invitee.id, body.role_id).await?;
+	let member = service::add(&s.db, user.id, team, &body.email, body.role_id).await?;
 
 	Ok(Json(AddedMemberResponse {
 		user_id: member.user_id,
@@ -109,9 +96,7 @@ async fn list(
 	user: AuthUser,
 	Path(team): Path<TeamId>,
 ) -> AppResult<Json<Vec<MemberResponse>>> {
-	authorize(&s.db, user.id, team, Action::Read, Resource::Membership).await?;
-
-	let members = super::list_details(&s.db, team).await?;
+	let members = service::list(&s.db, user.id, team).await?;
 	Ok(Json(members.iter().map(MemberResponse::from).collect()))
 }
 
@@ -121,16 +106,7 @@ async fn update_role(
 	Path((team, member_user)): Path<(TeamId, UserId)>,
 	Json(body): Json<UpdateRoleRequest>,
 ) -> AppResult<StatusCode> {
-	authorize(&s.db, user.id, team, Action::Update, Resource::Membership).await?;
-
-	let member = super::find(&s.db, team, member_user)
-		.await?
-		.ok_or_else(|| ServerError::Validation("member not found".to_string()))?;
-
-	super::ensure_assignable(&s.db, team, body.role_id).await?;
-
-	super::set_role(&s.db, team, member.user_id, body.role_id).await?;
-
+	service::update_role(&s.db, user.id, team, member_user, body.role_id).await?;
 	Ok(StatusCode::NO_CONTENT)
 }
 
@@ -142,8 +118,6 @@ async fn list_roles(
 	user: AuthUser,
 	Path(team): Path<TeamId>,
 ) -> AppResult<Json<Vec<RoleResponse>>> {
-	authorize(&s.db, user.id, team, Action::Read, Resource::Role).await?;
-
-	let roles = super::list_roles(&s.db, team).await?;
+	let roles = service::roles(&s.db, user.id, team).await?;
 	Ok(Json(roles.iter().map(RoleResponse::from).collect()))
 }

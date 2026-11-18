@@ -4,3 +4,6 @@ host = "0.0.0.0"
 port = 8080
 ingress_port = 80
 https_port = 443
+# Who may create an account: "first-user" (only while no account exists, so the
+# first user is the admin), "open" (anyone, for a hosted instance) or "closed".
+registration = "first-user"

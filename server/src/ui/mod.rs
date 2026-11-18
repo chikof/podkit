@@ -38,8 +38,10 @@ mod layout;
 // Used by the pages of cards 05-09; until then only tests call them.
 #[allow(dead_code)]
 mod live;
+mod members;
 mod models;
 mod projects;
+mod register;
 mod servers;
 mod sse;
 #[allow(dead_code)]
@@ -83,6 +85,8 @@ pub fn router() -> Router<AppState> {
 		.merge(databases::router())
 		.merge(backups::router())
 		.merge(servers::router())
+		.merge(members::router())
+		.merge(register::router())
 		.merge(test_routes())
 		.layer(middleware::from_fn(origin_guard))
 }
@@ -183,7 +187,11 @@ struct LoginQuery {
 	next: Option<String>,
 }
 
-async fn login_page(Query(query): Query<LoginQuery>) -> Markup {
+async fn login_page(State(s): State<AppState>, Query(query): Query<LoginQuery>) -> Markup {
+	// A failed lookup hides the link: better no link than one that 403s.
+	let can_register = auth::service::registration_allowed(&s.db, s.config.registration)
+		.await
+		.unwrap_or(false);
 	let next = safe_next(query.next.as_deref().unwrap_or("/"));
 	let signals = format!(
 		"{{email: '', password: '', next: {}, _error: ''}}",
@@ -210,6 +218,9 @@ async fn login_page(Query(query): Query<LoginQuery>) -> Markup {
 								"This connection isn't encrypted, so your password and session travel in plain text. Use HTTPS when podkit is reachable from other machines."
 							}
 							button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Sign in" }
+							@if can_register {
+								a class="text-sm text-muted-foreground hover:underline" href="/register" { "No account yet? Create one" }
+							}
 						}
 					}))
 				}))
