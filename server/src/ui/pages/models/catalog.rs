@@ -1,8 +1,9 @@
-//! `/teams/{t}/models/catalog`: model cards by tier with a server's fit on
-//! each, the recipes of one model, and the Hugging Face search.
+//! `/teams/{t}/models/catalog`: logo cards by tier with a server's fit on each, filters by
+//! size, tier and tag, and the Hugging Face search in a second tab. A card's "Set up" opens
+//! the create dialog (see `setup`); the card's own link is the same flow as a page.
 
 use axum::Router;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use datastar::axum::ReadSignals;
@@ -10,18 +11,20 @@ use maud::{Markup, html};
 use proto::Hardware;
 use serde::Deserialize;
 
-use super::{catalog_url, crumbs, fit_badge, human_bytes, models_url, params_text};
+use super::{
+	Target, catalog_url, crumbs, family_logo, fit_badge, human_bytes, models_url, params_text,
+};
 use crate::auth::permission::{Action, Resource};
 use crate::catalog::search::Hit;
 use crate::catalog::service::{self as catalog_service, TeamServer};
 use crate::catalog::{self, Model, Recipe, SizeClass, Tag, Tier, suggest};
-use crate::error::ServerError;
 use crate::ids::{ServerId, TeamId};
 use crate::models::engines;
-use crate::projects;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, INPUT, LABEL, Tone, card, card_content, card_header,
+	BUTTON_OUTLINE, INPUT, LABEL, LogoSize, SELECT, Size, TabItem, Tone, Variant, badge,
+	button_class, card, card_content, card_section, chip, chip_group, empty_state, icon, link_card,
+	logo, tabs,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -32,24 +35,32 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.route("/teams/{team_id}/models/catalog", get(page))
 		.route("/teams/{team_id}/models/catalog/search", get(search))
-		.route("/teams/{team_id}/models/catalog/{catalog_id}", get(setup))
 }
 
 #[derive(Debug, Default, Deserialize)]
-struct CatalogQuery {
-	server: Option<String>,
-	size: Option<String>,
-	tag: Option<String>,
-	tab: Option<String>,
+pub(super) struct CatalogQuery {
+	pub server: Option<String>,
+	pub size: Option<String>,
+	pub tag: Option<String>,
+	pub tier: Option<String>,
+	pub tab: Option<String>,
+	pub project: Option<String>,
+	pub environment: Option<String>,
+	/// `1`: the answer is the create dialog's content, not a page.
+	pub dialog: Option<String>,
+	/// The dialog step to open on.
+	pub step: Option<String>,
 }
 
 /// What the page filters and rates against, kept so links can carry it on.
 #[derive(Debug, Clone, Default)]
-struct View {
-	server: Option<ServerId>,
-	size: Option<SizeClass>,
-	tag: Option<Tag>,
-	advanced: bool,
+pub(super) struct View {
+	pub server: Option<ServerId>,
+	pub size: Option<SizeClass>,
+	pub tag: Option<Tag>,
+	pub tier: Option<Tier>,
+	pub hugging_face: bool,
+	pub target: Target,
 }
 
 fn parse_size(s: &str) -> Option<SizeClass> {
@@ -106,7 +117,7 @@ fn tag_key(t: Tag) -> &'static str {
 	}
 }
 
-fn tag_label(t: Tag) -> &'static str {
+pub(super) fn tag_label(t: Tag) -> &'static str {
 	match t {
 		Tag::Coding => "Coding",
 		Tag::Reasoning => "Reasoning",
@@ -114,7 +125,28 @@ fn tag_label(t: Tag) -> &'static str {
 	}
 }
 
-fn tier_label(t: Option<Tier>) -> &'static str {
+fn parse_tier(s: &str) -> Option<Tier> {
+	match s {
+		"s" => Some(Tier::S),
+		"a" => Some(Tier::A),
+		"b" => Some(Tier::B),
+		"c" => Some(Tier::C),
+		"d" => Some(Tier::D),
+		_ => None,
+	}
+}
+
+fn tier_key(t: Tier) -> &'static str {
+	match t {
+		Tier::S => "s",
+		Tier::A => "a",
+		Tier::B => "b",
+		Tier::C => "c",
+		Tier::D => "d",
+	}
+}
+
+pub(super) fn tier_label(t: Option<Tier>) -> &'static str {
 	match t {
 		Some(Tier::S) => "S tier",
 		Some(Tier::A) => "A tier",
@@ -135,7 +167,7 @@ const TIERS: [Option<Tier>; 6] = [
 ];
 
 impl View {
-	fn from_query(q: &CatalogQuery, servers: &[TeamServer]) -> Self {
+	pub fn from_query(q: &CatalogQuery, servers: &[TeamServer]) -> Self {
 		let requested = q
 			.server
 			.as_deref()
@@ -149,12 +181,17 @@ impl View {
 			server,
 			size: q.size.as_deref().and_then(parse_size),
 			tag: q.tag.as_deref().and_then(parse_tag),
-			advanced: q.tab.as_deref() == Some("advanced"),
+			tier: q.tier.as_deref().and_then(parse_tier),
+			hugging_face: matches!(q.tab.as_deref(), Some("huggingface" | "hf" | "advanced")),
+			target: Target {
+				project: q.project.clone(),
+				environment: q.environment.clone(),
+			},
 		}
 	}
 
 	/// The catalog URL with this view's filters, `tweak` changing some.
-	fn url(&self, team: TeamId, tweak: impl FnOnce(&mut Self)) -> String {
+	pub fn url(&self, team: TeamId, tweak: impl FnOnce(&mut Self)) -> String {
 		let mut v = self.clone();
 		tweak(&mut v);
 		let mut parts = Vec::new();
@@ -167,17 +204,28 @@ impl View {
 		if let Some(tag) = v.tag {
 			parts.push(format!("tag={}", tag_key(tag)));
 		}
-		if v.advanced {
-			parts.push("tab=advanced".to_owned());
+		if let Some(tier) = v.tier {
+			parts.push(format!("tier={}", tier_key(tier)));
 		}
-		if parts.is_empty() {
-			catalog_url(team)
-		} else {
-			format!("{}?{}", catalog_url(team), parts.join("&"))
+		if v.hugging_face {
+			parts.push("tab=huggingface".to_owned());
 		}
+		parts.extend(v.target.pairs());
+		with_query(&catalog_url(team), &parts)
 	}
 
-	fn hardware<'a>(&self, servers: &'a [TeamServer]) -> Option<&'a Hardware> {
+	/// The part of a query that follows a model into its set-up page: server, project,
+	/// environment.
+	pub fn carry(&self) -> Vec<String> {
+		let mut parts = Vec::new();
+		if let Some(server) = self.server {
+			parts.push(format!("server={server}"));
+		}
+		parts.extend(self.target.pairs());
+		parts
+	}
+
+	pub fn hardware<'a>(&self, servers: &'a [TeamServer]) -> Option<&'a Hardware> {
 		let id = self.server?;
 		servers
 			.iter()
@@ -186,36 +234,38 @@ impl View {
 	}
 }
 
-const CHIP: &str = "inline-flex h-8 items-center rounded-full border border-border px-3 text-sm font-medium hover:bg-foreground/5";
-const CHIP_ON: &str = "inline-flex h-8 items-center rounded-full border border-transparent bg-primary px-3 text-sm font-medium text-primary-foreground";
-
-fn chip(label: &str, href: &str, on: bool) -> Markup {
-	html! {
-		a class=(if on { CHIP_ON } else { CHIP }) href=(href) aria-current=[on.then_some("true")] { (label) }
+/// `base`, then `?a&b` when there are parts.
+pub(super) fn with_query(base: &str, parts: &[String]) -> String {
+	if parts.is_empty() {
+		base.to_owned()
+	} else {
+		format!("{base}?{}", parts.join("&"))
 	}
 }
 
-fn server_select(ctx: &TeamCtx, view: &View, servers: &[TeamServer]) -> Markup {
-	let prefix = view.url(ctx.team.id, |v| v.server = None);
-	let joiner = if prefix.contains('?') {
-		"&server="
-	} else {
-		"?server="
+fn server_form(ctx: &TeamCtx, view: &View, servers: &[TeamServer]) -> Markup {
+	let hidden = |name: &str, value: Option<String>| {
+		html! { @if let Some(value) = value { input type="hidden" name=(name) value=(value); } }
 	};
-	let on_change = format!(
-		"window.location.assign({} + el.value)",
-		js_string(&format!("{prefix}{joiner}"))
-	);
 	html! {
-		label class=(LABEL) {
-			"Rate models against"
-			select class=(INPUT) "data-on:change"=(on_change) {
-				@for s in servers {
-					option value=(s.id.0) selected[view.server == Some(s.id)] {
-						(s.name) @if s.hardware.is_none() { " (hardware not reported yet)" }
+		form method="get" action=(catalog_url(ctx.team.id)) class="flex flex-wrap items-end gap-3" {
+			(hidden("size", view.size.map(|s| size_key(s).to_owned())))
+			(hidden("tag", view.tag.map(|t| tag_key(t).to_owned())))
+			(hidden("tier", view.tier.map(|t| tier_key(t).to_owned())))
+			(hidden("tab", view.hugging_face.then(|| "huggingface".to_owned())))
+			(hidden("project", view.target.project_id().map(|p| p.to_string())))
+			(hidden("environment", view.target.environment_id().map(|e| e.to_string())))
+			label class={ (LABEL) " w-full max-w-sm" } {
+				"Rate models against"
+				select class=(SELECT) name="server" "data-on:change"="el.form.requestSubmit()" {
+					@for s in servers {
+						option value=(s.id.0) selected[view.server == Some(s.id)] {
+							(s.name) @if s.hardware.is_none() { " (hardware not reported yet)" }
+						}
 					}
 				}
 			}
+			noscript { button type="submit" class=(BUTTON_OUTLINE) { "Apply" } }
 		}
 	}
 }
@@ -224,31 +274,24 @@ fn filters(ctx: &TeamCtx, view: &View) -> Markup {
 	let team = ctx.team.id;
 	html! {
 		div class="flex flex-col gap-3" {
-			div class="flex flex-wrap items-center gap-2" {
-				span class="w-12 text-sm text-muted-foreground" { "Size" }
-				(chip("All", &view.url(team, |v| v.size = None), view.size.is_none()))
+			(chip_group("Size", &html! {
+				(chip("All", &view.url(team, |v| v.size = None), view.size.is_none(), None))
 				@for size in [SizeClass::Tiny, SizeClass::Small, SizeClass::Medium, SizeClass::Large] {
-					a class=(if view.size == Some(size) { CHIP_ON } else { CHIP })
-						href=(view.url(team, |v| v.size = Some(size))) title=(size_hint(size)) { (size_label(size)) }
+					(chip(size_label(size), &view.url(team, |v| v.size = Some(size)), view.size == Some(size), Some(size_hint(size))))
 				}
-			}
-			div class="flex flex-wrap items-center gap-2" {
-				span class="w-12 text-sm text-muted-foreground" { "Tag" }
-				(chip("All", &view.url(team, |v| v.tag = None), view.tag.is_none()))
+			}))
+			(chip_group("Tier", &html! {
+				(chip("All", &view.url(team, |v| v.tier = None), view.tier.is_none(), None))
+				@for tier in [Tier::S, Tier::A, Tier::B, Tier::C, Tier::D] {
+					(chip(tier_key(tier).to_uppercase().as_str(), &view.url(team, |v| v.tier = Some(tier)), view.tier == Some(tier), Some(tier_label(Some(tier)))))
+				}
+			}))
+			(chip_group("Tag", &html! {
+				(chip("All", &view.url(team, |v| v.tag = None), view.tag.is_none(), None))
 				@for tag in [Tag::Coding, Tag::Reasoning, Tag::Vision] {
-					(chip(tag_label(tag), &view.url(team, |v| v.tag = Some(tag)), view.tag == Some(tag)))
+					(chip(tag_label(tag), &view.url(team, |v| v.tag = Some(tag)), view.tag == Some(tag), None))
 				}
-			}
-		}
-	}
-}
-
-fn tabs(ctx: &TeamCtx, view: &View) -> Markup {
-	let team = ctx.team.id;
-	html! {
-		div class="flex gap-2" {
-			(chip("Catalog", &view.url(team, |v| v.advanced = false), !view.advanced))
-			(chip("Advanced", &view.url(team, |v| v.advanced = true), view.advanced))
+			}))
 		}
 	}
 }
@@ -270,45 +313,45 @@ fn card_recipe(
 	(recipe, None)
 }
 
+/// The link to a model's set-up, which also opens the dialog when script runs.
+fn setup_href(ctx: &TeamCtx, view: &View, model: &Model) -> String {
+	with_query(
+		&format!("{}/{}", catalog_url(ctx.team.id), model.id),
+		&view.carry(),
+	)
+}
+
 fn model_card(ctx: &TeamCtx, view: &View, model: &Model, hardware: Option<&Hardware>) -> Markup {
 	let (recipe, fit) = card_recipe(model, hardware);
 	let engine = fit.as_ref().and_then(|f| f.engine).unwrap_or(recipe.engine);
-	let href = format!(
-		"{}/{}{}",
-		catalog_url(ctx.team.id),
-		model.id,
-		view.server
-			.map_or(String::new(), |s| format!("?server={s}"))
+	let href = setup_href(ctx, view, model);
+	let description = format!(
+		"{} · {} · {}",
+		model.family,
+		params_text(model.params_b, model.active_params_b),
+		model.license
 	);
-	html! {
-		div class="flex flex-col justify-between gap-4 rounded-xl border border-border bg-card p-4 text-card-foreground" {
-			div class="flex flex-col gap-2" {
-				div class="flex items-start justify-between gap-2" {
-					a class="font-semibold hover:underline" href=(href) { (model.name) }
-					span class=(Tone::Neutral.badge_class()) { (size_label(model.size_class)) }
+	link_card(
+		&href,
+		&family_logo(&model.family, LogoSize::Md),
+		&model.name,
+		Some(&description),
+		Some(&html! {
+			div class="flex w-full flex-col gap-2" {
+				div class="flex flex-wrap items-center gap-1.5" {
+					@if let Some(fit) = &fit { (fit_badge(fit)) } @else { span class="text-xs text-muted-foreground" { "No server picked" } }
+					(badge(Tone::Neutral, size_label(model.size_class)))
+					@for tag in &model.tags { (badge(Tone::Neutral, tag_label(*tag))) }
 				}
-				p class="text-xs text-muted-foreground" {
-					(model.family) " · " (params_text(model.params_b, model.active_params_b)) " · " (model.license)
-				}
-				@if !model.tags.is_empty() {
-					div class="flex flex-wrap gap-1" {
-						@for tag in &model.tags {
-							span class=(Tone::Neutral.badge_class()) { (tag_label(*tag)) }
-						}
-					}
-				}
-			}
-			div class="flex flex-col gap-2" {
 				p class="text-xs text-muted-foreground" {
 					(recipe.quant) " · " (engines::spec(engine).label) " · " (human_bytes(recipe.total_bytes))
 				}
-				div class="flex items-center justify-between gap-2" {
-					@if let Some(fit) = &fit { (fit_badge(fit)) } @else { span class="text-xs text-muted-foreground" { "No server picked" } }
-					a class=(BUTTON_OUTLINE) href=(href) { "Set up" }
+				div class="flex" {
+					a class={ (button_class(Variant::Outline, Size::Sm)) " ui-setup" } href=(href) { "Set up" }
 				}
 			}
-		}
-	}
+		}),
+	)
 }
 
 fn tier_sections(ctx: &TeamCtx, view: &View, hardware: Option<&Hardware>) -> Markup {
@@ -316,18 +359,32 @@ fn tier_sections(ctx: &TeamCtx, view: &View, hardware: Option<&Hardware>) -> Mar
 		.iter()
 		.filter(|m| view.size.is_none_or(|s| m.size_class == s))
 		.filter(|m| view.tag.is_none_or(|t| m.tags.contains(&t)))
+		.filter(|m| view.tier.is_none_or(|t| m.tier == Some(t)))
 		.collect();
+	// A click on a card or its button opens the create dialog; with a modifier key, or
+	// without script, the link is the same flow as a page.
+	let open = "const a = evt.target.closest('a.ui-link-card-link, a.ui-setup'); \
+		if (a && evt.button === 0 && !evt.metaKey && !evt.ctrlKey && !evt.shiftKey) { \
+		evt.preventDefault(); const h = a.getAttribute('href'); \
+		@get(h + (h.includes('?') ? '&' : '?') + 'dialog=1') }";
 	html! {
-		@if shown.is_empty() {
-			p class="text-sm text-muted-foreground" { "No model matches these filters." }
-		}
-		@for tier in TIERS {
-			@let in_tier: Vec<&&Model> = shown.iter().filter(|m| m.tier == tier).collect();
-			@if !in_tier.is_empty() {
-				section class="flex flex-col gap-3" {
-					h2 class="text-sm font-semibold text-muted-foreground" { (tier_label(tier)) " · " (in_tier.len()) }
-					div class="grid grid-cols-1 gap-4 sm:grid-cols-2" {
-						@for model in in_tier { (model_card(ctx, view, model, hardware)) }
+		div class="flex flex-col gap-8" "data-on:click"=(open) {
+			@if shown.is_empty() {
+				(empty_state(
+					"search",
+					"No model matches these filters",
+					Some("Widen the size, tier or tag."),
+					Some(&html! { a class=(button_class(Variant::Outline, Size::Md)) href=(view.url(ctx.team.id, |v| { v.size = None; v.tag = None; v.tier = None; })) { "Clear the filters" } }),
+				))
+			}
+			@for tier in TIERS {
+				@let in_tier: Vec<&&Model> = shown.iter().filter(|m| m.tier == tier).collect();
+				@if !in_tier.is_empty() {
+					section class="flex flex-col gap-3" {
+						h2 class="text-sm font-semibold text-muted-foreground" { (tier_label(tier)) " · " (in_tier.len()) }
+						div class="ui-card-grid" {
+							@for model in in_tier { (model_card(ctx, view, model, hardware)) }
+						}
 					}
 				}
 			}
@@ -335,18 +392,33 @@ fn tier_sections(ctx: &TeamCtx, view: &View, hardware: Option<&Hardware>) -> Mar
 	}
 }
 
-fn advanced_tab(ctx: &TeamCtx, view: &View) -> Markup {
+/// The create dialog's frame. Its content arrives with the click that opens it.
+fn setup_dialog() -> Markup {
+	html! {
+		dialog id="setup-dialog" class="ui-dialog ui-dialog-wide" closedby="closerequest"
+			aria-label="Set up a model" aria-labelledby="setup-title" {
+			div id="setup-body" class="p-6" {
+				p class="text-sm text-muted-foreground" { "Loading…" }
+			}
+			form method="dialog" class="absolute top-3 right-3" {
+				button class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-hidden hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50" aria-label="Close" {
+					(icon("x"))
+				}
+			}
+		}
+	}
+}
+
+fn huggingface_tab(ctx: &TeamCtx, view: &View) -> Markup {
 	let search = format!(
 		"evt.preventDefault(); @get({})",
-		js_string(&format!(
-			"{}/search{}",
-			catalog_url(ctx.team.id),
-			view.server
-				.map_or(String::new(), |s| format!("?server={s}"))
+		js_string(&with_query(
+			&format!("{}/search", catalog_url(ctx.team.id)),
+			&view.carry().into_iter().take(1).collect::<Vec<_>>()
 		))
 	);
 	card(&html! {
-		(card_header("Search Hugging Face", Some("Any repo with GGUF files. Pick a quantization and podkit rates it against the server like a catalog model.")))
+		(card_section("Search Hugging Face", Some("Any repo with GGUF files. Pick a quantization and podkit rates it against the server like a catalog model."), None))
 		(card_content(&html! {
 			form class="flex flex-col gap-4" "data-on:submit"=(search) {
 				label class=(LABEL) {
@@ -355,7 +427,7 @@ fn advanced_tab(ctx: &TeamCtx, view: &View) -> Markup {
 				}
 				(form_error())
 				div {
-					button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Search" }
+					button type="submit" class=(button_class(Variant::Default, Size::Md)) "data-indicator:_busy" "data-attr:disabled"="$_busy" { (icon("search")) "Search" }
 				}
 			}
 			div id="hf-results" class="mt-4" {}
@@ -378,26 +450,37 @@ async fn page(
 		"{{q: '', hfRepo: '', hfPath: '', hfSelection: '', hfEngine: '', server: {}, _error: ''}}",
 		js_string(&view.server.map_or(String::new(), |s| s.to_string()))
 	);
+	let catalog_tab = view.url(ctx.team.id, |v| v.hugging_face = false);
+	let hf_tab = view.url(ctx.team.id, |v| v.hugging_face = true);
 	let body = html! {
-		div class="flex flex-col gap-6" data-signals=(signals) {
-			div class="flex flex-wrap items-center justify-between gap-3" {
-				h1 class="text-xl font-semibold" { "Model catalog" }
-				a class=(BUTTON_OUTLINE) href=(models_url(ctx.team.id)) { "Your models" }
+		div class="ui-wide flex flex-col gap-6" data-signals=(signals) {
+			div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3" {
+				div class="flex flex-col gap-1" {
+					h1 class="text-2xl font-semibold tracking-tight" { "Model catalog" }
+					p class="max-w-2xl text-sm text-muted-foreground" {
+						"Models chiko has run and ranked, rated against one of your servers. Pick one to download its weights and serve it."
+					}
+				}
+				a class=(button_class(Variant::Outline, Size::Md)) href=(models_url(ctx.team.id)) { "Your models" }
 			}
-			(tabs(&ctx, &view))
+			(tabs("Catalog sections", &[
+				TabItem { label: "Catalog", href: &catalog_tab, current: !view.hugging_face },
+				TabItem { label: "Hugging Face", href: &hf_tab, current: view.hugging_face },
+			]))
 			@if servers.is_empty() {
 				p class="text-sm text-muted-foreground" { "This team has no server yet. Add one to see which models fit." }
 			} @else {
-				(server_select(&ctx, &view, &servers))
+				(server_form(&ctx, &view, &servers))
 				@if hardware.is_none() {
 					p class="text-sm text-muted-foreground" { "This server hasn't reported its hardware yet, so fit can't be rated. Try again in a minute." }
 				}
 			}
-			@if view.advanced {
-				(advanced_tab(&ctx, &view))
+			@if view.hugging_face {
+				(huggingface_tab(&ctx, &view))
 			} @else {
 				(filters(&ctx, &view))
 				(tier_sections(&ctx, &view, hardware))
+				(setup_dialog())
 			}
 		}
 	};
@@ -418,15 +501,18 @@ fn hit_rows(ctx: &TeamCtx, hits: &[Hit], can_download: bool) -> Markup {
 				p class="text-sm text-muted-foreground" { "No repo with GGUF files matches that." }
 			}
 			@for hit in hits {
-				div class="flex flex-col gap-2 rounded-lg border border-border p-3" {
-					div class="flex flex-wrap items-baseline justify-between gap-2" {
-						strong class="break-all" { (hit.repo) }
+				div class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4" {
+					div class="flex flex-wrap items-center justify-between gap-2" {
+						div class="flex min-w-0 items-center gap-3" {
+							(logo("huggingface", LogoSize::Sm))
+							strong class="text-sm break-all" { (hit.repo) }
+						}
 						span class="text-xs text-muted-foreground" { (hit.downloads) " downloads · " (hit.likes) " likes" }
 					}
 					@if let Some(err) = &hit.error {
 						p class="text-sm text-muted-foreground" { "Can't list the files: " (err) }
 					}
-					ul {
+					ul class="flex flex-col" {
 						@for v in &hit.variants {
 							li class="flex flex-wrap items-center justify-between gap-2 border-t border-border py-2 text-sm first:border-t-0" {
 								span { (v.quant) " · " (human_bytes(v.total_bytes))
@@ -436,9 +522,9 @@ fn hit_rows(ctx: &TeamCtx, hits: &[Hit], can_download: bool) -> Markup {
 									@if can_download {
 										@let selection = serde_json::to_string(&v.selection).unwrap_or_default();
 										@let engine = v.fit.as_ref().and_then(|f| f.engine).map_or(String::new(), |e| serde_json::to_value(e).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default());
-										button type="button" class=(BUTTON_OUTLINE)
+										button type="button" class=(button_class(Variant::Outline, Size::Sm))
 											data-repo=(hit.repo) data-path=(v.model_path) data-selection=(selection) data-engine=(engine)
-											"data-on:click"={ "$hfRepo = el.dataset.repo; $hfPath = el.dataset.path; $hfSelection = el.dataset.selection; $hfEngine = el.dataset.engine; " (download) } { "Download" }
+											"data-on:click"={ "$hfRepo = el.dataset.repo; $hfPath = el.dataset.path; $hfSelection = el.dataset.selection; $hfEngine = el.dataset.engine; " (download) } { (icon("download")) "Download" }
 									}
 								}
 							}
@@ -493,156 +579,5 @@ async fn search(
 				.into_response()
 		}
 		Err(e) => error::action(&e),
-	}
-}
-
-/// The set-up page of one catalog model.
-async fn setup(
-	State(s): State<AppState>,
-	ctx: TeamCtx,
-	Path((_, catalog_id)): Path<(TeamId, String)>,
-	Query(q): Query<CatalogQuery>,
-) -> Result<Response, Response> {
-	let model = catalog::model(&catalog_id)
-		.ok_or_else(|| error::page(&ctx, &ServerError::ModelNotFound))?;
-	let servers = catalog_service::team_servers(&s, ctx.user.id, ctx.team.id)
-		.await
-		.map_err(|e| error::page(&ctx, &e))?;
-	let view = View::from_query(&q, &servers);
-	let hardware = view.hardware(&servers);
-	let projects = projects::service::list(&s.db, ctx.user.id, ctx.team.id)
-		.await
-		.map_err(|e| error::page(&ctx, &e))?;
-
-	let rated: Vec<(Recipe, Option<crate::catalog::Fit>)> = match hardware {
-		Some(hw) => suggest(hw, model)
-			.into_iter()
-			.map(|(r, f)| (r, Some(f)))
-			.collect(),
-		None => model.recipes.iter().cloned().map(|r| (r, None)).collect(),
-	};
-	let first = rated.first().map(|(r, _)| r.id.clone()).unwrap_or_default();
-	let can_download = ctx.perms.can(Action::Create, Resource::ModelFile)
-		&& ctx.perms.can(Action::Create, Resource::Model);
-	let signals = format!(
-		"{{catalog: {}, recipe: {}, server: {}, project: {}, name: {}, served: '', ctx: '8192', _error: ''}}",
-		js_string(&model.id),
-		js_string(&first),
-		js_string(&view.server.map_or(String::new(), |s| s.to_string())),
-		js_string(
-			&projects
-				.first()
-				.map_or(String::new(), |p| p.project.id.to_string())
-		),
-		js_string(&model.name),
-	);
-	let post = format!(
-		"evt.preventDefault(); @post({})",
-		js_string(&format!("{}/downloads/recipe", models_url(ctx.team.id)))
-	);
-	let back = view.url(ctx.team.id, |_| {});
-	let server_prefix = format!("{}/{}?server=", catalog_url(ctx.team.id), model.id);
-
-	let body = html! {
-		div class="flex flex-col gap-6" data-signals=(signals) {
-			div class="flex flex-col gap-1" {
-				h1 class="text-xl font-semibold" { (model.name) }
-				p class="text-sm text-muted-foreground" {
-					(model.family) " · " (params_text(model.params_b, model.active_params_b)) " · " (model.license) " · " (tier_label(model.tier))
-				}
-			}
-			@if servers.is_empty() {
-				p class="text-sm text-muted-foreground" { "This team has no server yet." }
-			} @else {
-				label class=(LABEL) {
-					"Server"
-					select class=(INPUT) "data-on:change"={ "window.location.assign(" (js_string(&server_prefix)) " + el.value)" } {
-						@for srv in &servers {
-							option value=(srv.id.0) selected[view.server == Some(srv.id)] { (srv.name) }
-						}
-					}
-				}
-			}
-			form class="flex flex-col gap-6" "data-on:submit"=(post) {
-				(card(&html! {
-					(card_header("Recipe", Some("What to download and how to run it. Best fit first.")))
-					(card_content(&html! {
-						ul class="flex flex-col gap-3" {
-							@for (recipe, fit) in &rated { (recipe_row(recipe, fit.as_ref())) }
-						}
-					}))
-				}))
-				(overrides_card(&projects))
-				(form_error())
-				div class="flex gap-3" {
-					@if can_download {
-						button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy || !$server" { "Download" }
-					}
-					a class=(BUTTON_OUTLINE) href=(back) { "Back to the catalog" }
-				}
-			}
-		}
-	};
-	Ok(app_page(
-		&ctx,
-		&model.name,
-		&crumbs(
-			&ctx,
-			vec![("Catalog", Some(back)), (model.name.as_str(), None)],
-		),
-		&body,
-	)
-	.into_response())
-}
-
-fn overrides_card(projects: &[crate::projects::service::ProjectSummary]) -> Markup {
-	card(&html! {
-		(card_header("Overrides", Some("Optional. The defaults are fine for most models.")))
-		(card_content(&html! {
-			div class="flex flex-col gap-4" {
-				label class=(LABEL) {
-					"Project"
-					select class=(INPUT) required "data-bind:project" {
-						@for p in projects { option value=(p.project.id.0) { (p.project.name) } }
-					}
-				}
-				label class=(LABEL) {
-					"Name"
-					input class=(INPUT) type="text" required maxlength="60" "data-bind:name";
-				}
-				label class=(LABEL) {
-					"Name clients send as `model` (optional)"
-					input class=(INPUT) type="text" maxlength="100" placeholder="defaults to the slug" "data-bind:served";
-				}
-				label class=(LABEL) {
-					"Context size (tokens)"
-					input class=(INPUT) type="number" min="256" max="1048576" "data-bind:ctx";
-				}
-			}
-		}))
-	})
-}
-
-fn recipe_row(recipe: &Recipe, fit: Option<&crate::catalog::Fit>) -> Markup {
-	let engine = fit.and_then(|f| f.engine).unwrap_or(recipe.engine);
-	html! {
-		li {
-			label class="flex cursor-pointer flex-col gap-2 rounded-lg border border-border p-3 text-sm hover:bg-foreground/5" {
-				div class="flex flex-wrap items-center justify-between gap-2" {
-					span class="flex items-center gap-2 font-medium" {
-						input type="radio" name="recipe" value=(recipe.id) "data-bind:recipe";
-						(recipe.quant) " · " (engines::spec(engine).label)
-					}
-					@if let Some(fit) = fit { (fit_badge(fit)) }
-				}
-				p class="text-muted-foreground" {
-					"Download " (human_bytes(recipe.total_bytes))
-					" · needs about " (human_bytes(recipe.est_ram_mb.max(recipe.est_vram_mb) * (1 << 20)))
-					@if recipe.verified { " · verified on podkit" }
-				}
-				@if let Some(fit) = fit { p class="text-muted-foreground" { (fit.explanation) } }
-				@if let Some(note) = &recipe.note { p class="text-muted-foreground" { (note) } }
-			}
-		}
 	}
 }

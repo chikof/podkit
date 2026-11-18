@@ -53,6 +53,14 @@ pub fn redirect(url: &str) -> Events {
 	Events(vec![ExecuteScript::new(script).write_as_axum_sse_event()])
 }
 
+/// Runs `js` in the page, for what a patch cannot do (opening a modal dialog). Never build
+/// `js` from user data; quote values with [`js_string`].
+pub fn script(js: &str) -> Events {
+	Events(vec![
+		ExecuteScript::new(js.to_owned()).write_as_axum_sse_event(),
+	])
+}
+
 /// Reloads the current page, for an action that changes what most of it shows.
 pub fn reload() -> Events {
 	Events(vec![

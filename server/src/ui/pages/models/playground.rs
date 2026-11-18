@@ -1,6 +1,11 @@
-//! The playground: a chat box on a model's page. The answer streams from the
-//! gateway through the agent and is appended token by token. Every token is
-//! model output, so it only ever goes through maud's escaping.
+//! The playground: a chat box on a model's page. The answer streams from the gateway
+//! through the agent and is appended token by token. Every token is model output, so it only
+//! ever goes through maud's escaping.
+//!
+//! Screen readers: the thread is a plain container, not a live region, so no token is
+//! announced. A visually hidden `role="status"` element says "The model is responding" when
+//! a turn starts and "Answer complete, N tokens" when it ends: two announcements per turn.
+//! The speaker labels ("You", "Model") are text in the DOM, not CSS generated content.
 
 use std::convert::Infallible;
 use std::fmt::Write as _;
@@ -27,7 +32,9 @@ use crate::ids::{ModelId, ProjectId, TeamId};
 use crate::links::playground::{self as chat_service, ChatEvent, Message};
 use crate::models::{Model, ModelStatus};
 use crate::state::AppState;
-use crate::ui::components::{BUTTON, INPUT, card, card_content, card_header};
+use crate::ui::components::{
+	Size, TEXTAREA, Variant, button_class, card, card_content, card_section, empty_state,
+};
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::form_error;
@@ -40,20 +47,29 @@ pub fn router() -> Router<AppState> {
 	)
 }
 
+/// Enter sends, Shift+Enter adds a line. While an input method is composing (Japanese,
+/// Chinese, Korean), Enter confirms the candidate and must not send: `isComposing`, plus
+/// the legacy `keyCode` 229 that Safari reports for the confirming keydown.
+const ENTER_SENDS: &str = "if (evt.key === 'Enter' && !evt.shiftKey) { evt.preventDefault(); \
+	if (!evt.isComposing && evt.keyCode !== 229 && !$_busy) el.form.requestSubmit() }";
+
+/// The announcement element. Patched twice per turn, never per token.
+fn live(text: &str) -> Markup {
+	html! { p id="pg-live" class="ui-visually-hidden" role="status" { (text) } }
+}
+
 /// The chat box, shown to someone who may use the model once it runs.
-pub fn chat_card(ctx: &TeamCtx, model: &Model) -> Markup {
+pub fn chat_panel(ctx: &TeamCtx, model: &Model) -> Markup {
 	if !ctx.perms.can(Action::Update, Resource::Model) {
 		return html! {};
 	}
 	if model.status != ModelStatus::Running {
-		return html! {
-			(card(&html! {
-				(card_header("Playground", None))
-				(card_content(&html! {
-					p class="text-sm text-muted-foreground" { "Start the model to chat with it." }
-				}))
-			}))
-		};
+		return empty_state(
+			"bot",
+			"The model is not running",
+			Some("Start the model to chat with it."),
+			None,
+		);
 	}
 	let post = format!(
 		"evt.preventDefault(); $prompt.trim() && @post({})",
@@ -63,17 +79,22 @@ pub fn chat_card(ctx: &TeamCtx, model: &Model) -> Markup {
 		))
 	);
 	card(&html! {
-		(card_header("Playground", Some("Chats through the gateway with a key of its own, so it shows up in the usage table as Playground. Nothing is saved.")))
+		(card_section("Playground", Some("Chats through the gateway with a key of its own, so it shows up in the usage table as Playground. Nothing is saved."), None))
 		(card_content(&html! {
 			div class="flex flex-col gap-4" data-signals="{prompt: '', chat: []}" {
-				div id="pg-thread" class="flex flex-col gap-3" {}
+				div id="pg-thread" class="ui-chat-thread flex flex-col gap-4" {}
+				(live(""))
 				form class="flex flex-col gap-3" "data-on:submit"=(post) {
-					textarea class=(INPUT) rows="3" required maxlength="8000" placeholder="Say something" aria-label="Message"
-						"data-bind:prompt" "data-on:keydown"="(evt.metaKey || evt.ctrlKey) && evt.key === 'Enter' && el.form.requestSubmit()" {}
+					label for="pg-input" class="text-sm leading-none font-medium" { "Message" }
+					textarea id="pg-input" name="message" class=(TEXTAREA) rows="3" required maxlength="8000"
+						placeholder="Say something" aria-describedby="pg-hint"
+						"data-bind:prompt" "data-on:keydown"=(ENTER_SENDS) {}
+					p id="pg-hint" class="text-xs text-muted-foreground" { "Enter sends. Shift+Enter adds a line." }
 					(form_error())
 					div class="flex flex-wrap items-center gap-3" {
-						button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Send" }
-						button type="button" class="text-sm text-muted-foreground hover:underline" "data-on:click"="$chat = []; document.getElementById('pg-thread').replaceChildren(); document.getElementById('pg-stats').textContent = ''" { "Clear" }
+						button type="submit" class=(button_class(Variant::Default, Size::Md)) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Send" }
+						button type="button" class=(button_class(Variant::Ghost, Size::Md))
+							"data-on:click"="$chat = []; document.getElementById('pg-thread').replaceChildren(); document.getElementById('pg-stats').textContent = ''; document.getElementById('pg-live').textContent = ''" { "Clear" }
 						span id="pg-stats" class="text-xs text-muted-foreground" {}
 					}
 				}
@@ -117,6 +138,10 @@ fn append(selector: &str, markup: &Markup) -> Event {
 		.write_as_axum_sse_event()
 }
 
+fn patch(markup: &Markup) -> Event {
+	PatchElements::new(markup.0.clone()).write_as_axum_sse_event()
+}
+
 fn signals(value: &serde_json::Value) -> Event {
 	// `<` and `>` as \u escapes: the same JSON, and nothing that looks like markup.
 	let json = value
@@ -130,18 +155,21 @@ impl Run {
 	fn opening(&self) -> Vec<Event> {
 		let n = self.turn;
 		let markup = html! {
-			div class="flex flex-col gap-1 rounded-lg border border-border p-3 text-sm" {
-				span class="text-xs font-medium text-muted-foreground" { "You" }
-				p class="break-words whitespace-pre-wrap" { (self.prompt) }
-			}
-			div class="flex flex-col gap-1 rounded-lg bg-foreground/5 p-3 text-sm" {
-				span class="text-xs font-medium text-muted-foreground" { "Model" }
-				p id={ "pg-think-" (n) } class="break-words whitespace-pre-wrap text-muted-foreground italic empty:hidden" {}
-				p id={ "pg-ans-" (n) } class="break-words whitespace-pre-wrap" {}
+			article class="flex flex-col gap-2" aria-label={ "Exchange " (n + 1) } {
+				div class="ui-chat-user flex flex-col gap-1 p-3 text-sm" {
+					span class="text-xs font-medium text-muted-foreground" { "You" }
+					p class="break-words whitespace-pre-wrap" { (self.prompt) }
+				}
+				div class="ui-chat-model flex flex-col gap-1 p-3 text-sm" {
+					span class="text-xs font-medium text-muted-foreground" { "Model" }
+					p id={ "pg-think-" (n) } class="ui-chat-thinking break-words whitespace-pre-wrap text-muted-foreground italic" {}
+					p id={ "pg-ans-" (n) } class="break-words whitespace-pre-wrap" {}
+				}
 			}
 		};
 		vec![
 			append("#pg-thread", &markup),
+			patch(&live("The model is responding.")),
 			signals(&json!({ "prompt": "", "_error": "" })),
 		]
 	}
@@ -211,10 +239,15 @@ impl Run {
 			});
 			out.push(signals(&json!({ "chat": chat })));
 		}
-		let stats = html! {
-			span id="pg-stats" class="text-xs text-muted-foreground" { (self.stats()) }
-		};
-		out.push(PatchElements::new(stats.0).write_as_axum_sse_event());
+		let stats = self.stats();
+		out.push(patch(&html! {
+			span id="pg-stats" class="text-xs text-muted-foreground" { (stats) }
+		}));
+		out.push(patch(&live(&if self.failed {
+			"The answer failed. The message is in the thread.".to_owned()
+		} else {
+			format!("Answer complete. {stats}")
+		})));
 		out
 	}
 }

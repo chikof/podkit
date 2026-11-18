@@ -268,6 +268,39 @@ async fn the_catalog_groups_cards_by_tier_and_filters_by_size_and_tag(db: PgPool
 		);
 	}
 	assert_contains(&tiny, "aria-current=\"true\"");
+
+	// The tier filter narrows to one tier and keeps the others' cards out.
+	let (_, s_tier) = s.get(&format!("{list}?tier=s")).await;
+	for model in catalog::models() {
+		let href = format!("/catalog/{}?server={server}\"", model.id);
+		assert_eq!(
+			s_tier.contains(&href),
+			model.tier == Some(catalog::Tier::S),
+			"{} under tier=s",
+			model.id
+		);
+	}
+	assert_contains(&s_tier, "S tier · ");
+	assert_not_contains(&s_tier, "A tier · ");
+
+	// Each card opens the create dialog, whose frame is on the page.
+	assert_contains(&body, "id=\"setup-dialog\"");
+	assert_contains(&body, "a.ui-link-card-link, a.ui-setup");
+}
+
+#[db_test]
+async fn the_hugging_face_search_sits_in_its_own_tab(db: PgPool) {
+	let s = Setup::new(db.clone()).await;
+	let list = format!("/teams/{}/models/catalog", s.team);
+	for tab in ["huggingface", "advanced"] {
+		let (status, body) = s.get(&format!("{list}?tab={tab}")).await;
+		assert_eq!(status, StatusCode::OK);
+		assert_contains(&body, "Search Hugging Face");
+		assert_not_contains(&body, "id=\"setup-dialog\"");
+	}
+	let (_, catalog_tab) = s.get(&list).await;
+	assert_not_contains(&catalog_tab, "Search Hugging Face");
+	assert_contains(&catalog_tab, "aria-label=\"Catalog sections\"");
 }
 
 #[db_test]
@@ -399,7 +432,8 @@ async fn download_then_start_runs_the_whole_create_flow(db: PgPool) {
 	let (status, page) = s.get(&page_url).await;
 	assert_eq!(status, StatusCode::OK);
 	assert_contains(&page, "Queued");
-	assert_contains(&page, "role=\"progressbar\"");
+	assert_contains(&page, "<progress class=\"ui-progress\"");
+	assert_contains(&page, "aria-current=\"step\"");
 	assert_contains(&page, "data-on-interval__duration.3s");
 	assert_contains(&page, "/log");
 	assert_not_contains(&page, "Start the model");
@@ -493,16 +527,30 @@ async fn the_model_page_shows_how_it_runs_and_its_actions(db: PgPool) {
 	assert_contains(&page, "4096 tokens");
 	assert_contains(&page, "Stop");
 	assert_contains(&page, "Restart");
-	assert_contains(&page, "Remove");
 	assert_contains(&page, "Playground");
-	assert_contains(&page, "/logs");
 	assert_not_contains(&page, "data-on-interval");
+	// The header names the model, its status and the project; the tabs are links.
+	assert_contains(&page, "aria-label=\"Model sections\"");
+	for tab in ["playground", "links", "usage", "logs", "advanced"] {
+		assert_contains(&page, &format!("?tab={tab}\""));
+	}
+
+	// Removing is on the Advanced tab, behind a confirmation dialog; the log on its tab.
+	let (_, advanced) = s.get(&format!("{}?tab=advanced", s.model_url(model))).await;
+	assert_contains(&advanced, "Remove");
+	assert_contains(&advanced, "id=\"remove-dialog\"");
+	assert_contains(&advanced, &format!("{}/remove", s.model_url(model)));
+	let (_, logs) = s.get(&format!("{}?tab=logs", s.model_url(model))).await;
+	assert_contains(&logs, "/logs");
 
 	// Stopped: no chat. Starting: polls, with a hint.
 	crate::tests::set_model_status(&db, model, "stopped", None).await;
 	let (_, page) = s.get(&s.model_url(model)).await;
 	assert_contains(&page, "Stopped");
-	assert_contains(&page, "Start the model to chat with it.");
+	let (_, chat) = s
+		.get(&format!("{}?tab=playground", s.model_url(model)))
+		.await;
+	assert_contains(&chat, "Start the model to chat with it.");
 	crate::tests::set_model_status(&db, model, "starting", None).await;
 	let status_url = format!("{}/status?logs=1", s.model_url(model));
 	let (_, fragment) = s.get(&status_url).await;
@@ -579,7 +627,7 @@ async fn linking_previews_five_variables_with_the_key_masked(db: PgPool) {
 		urlencode(&json!({ "linkApp": "5001" }).to_string())
 	);
 
-	let (_, page) = s.get(&url).await;
+	let (_, page) = s.get(&format!("{url}?tab=links")).await;
 	assert_contains(&page, "Link an application");
 	assert_contains(&page, "Storefront");
 	assert_contains(&page, "No application uses this model yet.");
@@ -617,7 +665,7 @@ async fn linking_previews_five_variables_with_the_key_masked(db: PgPool) {
 
 	// The real key is nowhere in what the page or the actions sent.
 	let key = gateway_key(&s, 5001).await;
-	let (_, page) = s.get(&url).await;
+	let (_, page) = s.get(&format!("{url}?tab=links")).await;
 	let (_, preview_again) = s.get(&preview_url).await;
 	for text in [&page, &linked, &preview, &preview_again] {
 		assert_not_contains(text, &key);
@@ -642,9 +690,23 @@ async fn the_playground_escapes_model_output_and_shows_speed_and_usage(db: PgPoo
 		" and <img src=x onerror=alert(2)>".to_owned(),
 	];
 
-	let (_, page) = s.get(&url).await;
+	let (_, page) = s.get(&format!("{url}?tab=playground")).await;
 	assert_contains(&page, "Playground");
 	assert_contains(&page, "pg-thread");
+	// Enter sends, but not while an input method is composing (the IME-safe handler), and
+	// the thread is not a live region: only the status element announces, so no token is.
+	assert_contains(&page, "evt.isComposing");
+	assert_contains(&page, "evt.keyCode !== 229");
+	assert_contains(&page, "evt.key === 'Enter' &amp;&amp; !evt.shiftKey");
+	assert_contains(
+		&page,
+		"id=\"pg-live\" class=\"ui-visually-hidden\" role=\"status\"",
+	);
+	let thread = page.split("id=\"pg-thread\"").nth(1).unwrap();
+	let thread_tag = &thread[..thread.find('>').unwrap()];
+	assert_not_contains(thread_tag, "aria-live");
+	assert_not_contains(thread_tag, "role=");
+	assert_contains(&page, "<label for=\"pg-input\"");
 
 	let body = s
 		.post(
@@ -661,6 +723,14 @@ async fn the_playground_escapes_model_output_and_shows_speed_and_usage(db: PgPoo
 	assert_contains(&body, "pg-ans-0");
 	assert_contains(&body, "11 tokens");
 	assert_contains(&body, "5 in, 11 out");
+	// Two announcements per turn (starting, finished), none per token, and the speaker
+	// labels are text in the DOM.
+	assert_eq!(body.matches("id=\"pg-live\"").count(), 2, "{body}");
+	assert_contains(&body, "The model is responding.");
+	assert_contains(&body, "Answer complete.");
+	assert_contains(&body, ">You</span>");
+	assert_contains(&body, ">Model</span>");
+	assert_not_contains(&body, "aria-live");
 	// The exchange comes back as the conversation to send next time.
 	assert_contains(&body, "\"chat\"");
 	assert_contains(&body, "assistant");
@@ -839,9 +909,21 @@ async fn another_teams_model_pages_are_the_404_page(db: PgPool) {
 		format!("/teams/{}/models/settings", s.team),
 		format!("/teams/{}/models/downloads/{file}", s.team),
 		s.model_url(model),
-		// Bob's own team, Alice's ids.
+		format!("{}?tab=links", s.model_url(model)),
+		format!("{}?tab=usage", s.model_url(model)),
+		format!("{}?tab=advanced", s.model_url(model)),
+		format!("{}?tab=logs", s.model_url(model)),
+		format!("{}?tab=playground", s.model_url(model)),
 		format!("/teams/{bob_team}/models/downloads/{file}"),
 		format!("/teams/{bob_team}/projects/{}/models/{model}", s.project),
+		format!(
+			"/teams/{bob_team}/projects/{}/models/{model}?tab=links",
+			s.project
+		),
+		format!(
+			"/teams/{bob_team}/projects/{}/models/{model}?tab=advanced",
+			s.project
+		),
 	] {
 		let (st, _, body) = get_html(&s.app, &uri, Some(&bob)).await;
 		assert_eq!(st, StatusCode::NOT_FOUND, "{uri}");
@@ -926,8 +1008,28 @@ async fn a_read_only_member_sees_no_actions_and_forged_posts_fail(db: PgPool) {
 		"/chat",
 		"Link an application",
 		"Send",
+		"Remove",
+		"?tab=playground",
 	] {
 		assert_not_contains(&page, hidden);
+	}
+	// None of it on the other tabs either; the playground tab is not even offered.
+	for tab in ["links", "usage", "logs", "advanced", "playground"] {
+		let (st, _, body) = get_html(&s.app, &format!("{url}?tab={tab}"), Some(&carol)).await;
+		assert_eq!(st, StatusCode::OK, "{tab}");
+		assert_contains(&body, "Qwen chat");
+		for hidden in [
+			"/stop",
+			"/restart",
+			"/remove",
+			"/chat",
+			"Link an application",
+			"Send",
+			"Remove model",
+			"?tab=playground",
+		] {
+			assert_not_contains(&body, hidden);
+		}
 	}
 
 	let (_, _, body) = get_html(
@@ -937,7 +1039,20 @@ async fn a_read_only_member_sees_no_actions_and_forged_posts_fail(db: PgPool) {
 	)
 	.await;
 	assert_contains(&body, "Qwen3 4B");
-	assert_not_contains(&body, ">Download</button>");
+	assert_not_contains(&body, "Download</button>");
+	let (_, owner_setup) = s
+		.get(&format!("/teams/{}/models/catalog/qwen3-4b", s.team))
+		.await;
+	assert_contains(&owner_setup, "Download</button>");
+	// The dialog's content is withheld the same way.
+	let (_, _, dialog) = get_html(
+		&s.app,
+		&format!("/teams/{}/models/catalog/qwen3-4b?dialog=1", s.team),
+		Some(&carol),
+	)
+	.await;
+	assert_contains(&dialog, "setup-body");
+	assert_not_contains(&dialog, "Download</button>");
 	let (_, _, settings) = get_html(
 		&s.app,
 		&format!("/teams/{}/models/settings", s.team),
@@ -1001,7 +1116,7 @@ async fn usage_shows_each_key_over_24_hours_and_7_days(db: PgPool) {
 	let (_, model) = s.running_model().await;
 	seed_app_and_database(&db, s.team, s.project).await;
 	let url = s.model_url(model);
-	let (_, page) = s.get(&url).await;
+	let (_, page) = s.get(&format!("{url}?tab=usage")).await;
 	assert_contains(&page, "Nothing has used this model in the last 7 days.");
 
 	s.post(
@@ -1035,15 +1150,141 @@ async fn usage_shows_each_key_over_24_hours_and_7_days(db: PgPool) {
 	)
 	.await;
 
-	let (_, page) = s.get(&url).await;
+	let (_, page) = s.get(&format!("{url}?tab=usage")).await;
 	assert_contains(&page, "Storefront");
 	assert_contains(&page, "Playground");
 	assert_contains(&page, "Removed key");
 	// Storefront: 3 requests and 100 / 40 tokens in 24 h, 7 requests and 110 / 45 in 7 d.
-	assert_contains(&page, "<td class=\"py-2 pr-4\">3</td>");
+	assert_contains(&page, "<td data-label=\"Requests 24 h\">3</td>");
 	assert_contains(&page, "100 / 40");
 	assert_contains(&page, "110 / 45");
 	assert_not_contains(&page, "123456789");
+}
+
+#[db_test]
+async fn the_create_dialog_is_one_stepped_form_and_the_page_is_its_fallback(db: PgPool) {
+	let s = Setup::new(db.clone()).await;
+	let server = server_id(&db, s.team).await;
+	let base = format!("/teams/{}/models/catalog/qwen3-4b", s.team);
+
+	// A Datastar patch, not a page: the form with its four steps, the stepper bound to the
+	// `step` signal, opened on the step asked for, and the script that opens the dialog.
+	let (status, dialog) = s
+		.get(&format!("{base}?server={server}&dialog=1&step=3"))
+		.await;
+	assert_eq!(status, StatusCode::OK);
+	assert_not_contains(&dialog, "<!DOCTYPE");
+	assert_contains(&dialog, "id=\"setup-body\"");
+	for n in 1..=4 {
+		assert_contains(&dialog, &format!("id=\"setup-step-{n}\""));
+		assert_contains(&dialog, &format!("$step == {n}"));
+	}
+	assert_contains(&dialog, "step: 3");
+	assert_contains(&dialog, "data-attr:aria-current");
+	assert_contains(&dialog, "Set up Qwen3 4B");
+	assert_contains(&dialog, "Download</button>");
+	assert_contains(&dialog, "showModal()");
+	// Changing the server asks for the recipe step again with the new server.
+	assert_contains(&dialog, "dialog=1&amp;step=3");
+	for (recipe, fit) in suggest(&chikos_box(), catalog::model("qwen3-4b").unwrap()) {
+		assert_contains(&dialog, &recipe.quant);
+		assert_contains(&dialog, &esc(&fit.explanation));
+	}
+
+	// The same set-up as a page works without script: every part, no step logic.
+	let (status, page) = s.get(&format!("{base}?server={server}")).await;
+	assert_eq!(status, StatusCode::OK);
+	assert_not_contains(&page, "$step ==");
+	assert_contains(&page, "name=\"server\"");
+	assert_contains(&page, "Recipe");
+	assert_contains(&page, "Overrides");
+	assert_contains(&page, "Back to the catalog");
+
+	// A model that is not in the catalog is an error in place, not a page inside the dialog.
+	let (_, missing) = s
+		.get(&format!(
+			"/teams/{}/models/catalog/no-such-model?dialog=1",
+			s.team
+		))
+		.await;
+	assert_not_contains(&missing, "<!DOCTYPE");
+}
+
+#[db_test]
+async fn the_target_environment_follows_the_flow_into_the_model(db: PgPool) {
+	use crate::tests::models_env::{add_environment, newest_model_environment};
+
+	let s = Setup::new(db.clone()).await;
+	let server = server_id(&db, s.team).await;
+	let team = s.team;
+	let staging = add_environment(&db, s.project).await;
+
+	// The picker's link carries the project and environment to every card and the set-up.
+	let target = format!("project={}&environment={staging}", s.project);
+	let (_, list) = s
+		.get(&format!("/teams/{team}/models/catalog?{target}"))
+		.await;
+	assert_contains(
+		&list,
+		&format!(
+			"/catalog/qwen3-4b?server={server}&amp;project={}&amp;environment={staging}\"",
+			s.project
+		),
+	);
+	let (_, setup) = s
+		.get(&format!(
+			"/teams/{team}/models/catalog/qwen3-4b?server={server}&{target}"
+		))
+		.await;
+	assert_contains(&setup, &format!("environment: '{staging}'"));
+	assert_contains(&setup, &format!("project: '{}'", s.project));
+
+	let body = s
+		.post(
+			&format!("/teams/{team}/models/downloads/recipe"),
+			&json!({
+				"catalog": "qwen3-4b", "recipe": "q4-k-m", "server": server.to_string(),
+				"project": s.project.to_string(), "environment": staging.to_string(),
+				"name": "Staged", "served": "", "ctx": "4096",
+			}),
+		)
+		.await;
+	assert_contains(&body, &format!("environment={staging}"));
+	let file = file_id_in(&body);
+	set_file_status(&db, file, "ready", 2_497_280_256).await;
+
+	// The start form is filled with it, and the model is made there.
+	let query = body[body.find('?').unwrap()..body.rfind('\'').unwrap()].to_owned();
+	let (_, ready) = s
+		.get(&format!(
+			"/teams/{team}/models/downloads/{file}/progress{query}"
+		))
+		.await;
+	assert_contains(&ready, &format!("environment: '{staging}'"));
+
+	let bad = s
+		.post(
+			&format!("/teams/{team}/models/downloads/{file}/start"),
+			&json!({
+				"project": s.project.to_string(), "environment": "abc", "name": "x",
+				"engine": "llama_cuda",
+			}),
+		)
+		.await;
+	assert_contains(&bad, "That environment doesn't exist.");
+	assert_eq!(count(&db, "models").await, 0);
+
+	s.post(
+		&format!("/teams/{team}/models/downloads/{file}/start"),
+		&json!({
+			"project": s.project.to_string(), "environment": staging.to_string(),
+			"name": "Staged", "engine": "llama_cuda", "path": "Qwen3-4B-Q4_K_M.gguf",
+			"ctx": "4096",
+		}),
+	)
+	.await;
+	assert_eq!(count(&db, "models").await, 1);
+	assert_eq!(newest_model_environment(&db).await, staging);
 }
 
 #[test]
