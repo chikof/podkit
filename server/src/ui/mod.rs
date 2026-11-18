@@ -28,7 +28,9 @@ use crate::state::AppState;
 
 mod app_config;
 mod apps;
+mod backups;
 mod components;
+mod databases;
 mod deployments;
 mod error;
 mod extract;
@@ -77,6 +79,8 @@ pub fn router() -> Router<AppState> {
 		.merge(apps::router())
 		.merge(deployments::router())
 		.merge(app_config::router())
+		.merge(databases::router())
+		.merge(backups::router())
 		.merge(test_routes())
 		.layer(middleware::from_fn(origin_guard))
 }

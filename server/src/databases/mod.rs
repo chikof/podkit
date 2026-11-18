@@ -4,6 +4,7 @@
 pub mod engines;
 mod routes;
 pub mod run;
+pub mod service;
 
 use crypto::age::SecretBox;
 use proto::Engine;

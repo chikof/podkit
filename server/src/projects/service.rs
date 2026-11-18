@@ -27,13 +27,6 @@ pub struct ProjectSummary {
 	pub databases: i64,
 }
 
-/// One line of the project overview. Carries no secrets.
-#[derive(Debug, Clone)]
-pub struct ResourceRow {
-	pub name: String,
-	pub detail: String,
-}
-
 /// One application of the project overview. Carries no secrets.
 #[derive(Debug, Clone)]
 pub struct AppRow {
@@ -49,7 +42,9 @@ pub struct AppRow {
 pub struct ProjectDetail {
 	pub project: Project,
 	pub applications: Vec<AppRow>,
-	pub databases: Vec<ResourceRow>,
+	pub databases: Vec<databases::service::Row>,
+	/// Empty when the caller can't `read model`.
+	pub models: Vec<crate::models::Model>,
 }
 
 /// Creates a project; the caller must hold `create project` on the team.
@@ -97,7 +92,7 @@ pub async fn find(db: &PgPool, user: UserId, team: TeamId, id: ProjectId) -> App
 	scope::project(db, team, id).await
 }
 
-/// One project and its applications and databases; needs `read project`.
+/// One project and its applications, databases and models; needs `read project`.
 /// A project of another team is `ProjectNotFound`.
 pub async fn get(
 	db: &PgPool,
@@ -129,16 +124,23 @@ pub async fn get(
 	let databases = databases::list_by_project(db, project.id)
 		.await?
 		.into_iter()
-		.map(|d| ResourceRow {
-			name: d.name,
-			detail: format!("{:?} {}", d.engine, d.version).to_lowercase(),
-		})
+		.map(|d| databases::service::Row::from(&d))
 		.collect();
+
+	let models = if authorize(db, user, team, Action::Read, Resource::Model)
+		.await
+		.is_ok()
+	{
+		crate::models::list_by_project(db, project.id).await?
+	} else {
+		Vec::new()
+	};
 
 	Ok(ProjectDetail {
 		project,
 		applications,
 		databases,
+		models,
 	})
 }
 

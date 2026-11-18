@@ -16,7 +16,7 @@ use super::components::{
 use super::extract::TeamCtx;
 use super::layout::{Crumb, app_page, form_error};
 use super::status::status_badge;
-use super::{apps, error, sse};
+use super::{apps, databases, error, sse};
 use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ProjectId, TeamId};
@@ -213,26 +213,6 @@ async fn remove(
 	}
 }
 
-fn resource_rows(title: &str, empty: &str, rows: &[service::ResourceRow]) -> Markup {
-	card(&html! {
-		(card_header(title, None))
-		(card_content(&html! {
-			@if rows.is_empty() {
-				p class="text-sm text-muted-foreground" { (empty) }
-			} @else {
-				ul {
-					@for row in rows {
-						li class="flex items-baseline justify-between border-t border-border py-3 text-sm first:border-t-0" {
-							strong { (row.name) }
-							span class="text-muted-foreground" { (row.detail) }
-						}
-					}
-				}
-			}
-		}))
-	})
-}
-
 fn application_rows(ctx: &TeamCtx, s: &AppState, project: &Project, rows: &[AppRow]) -> Markup {
 	let can_create = ctx.perms.can(Action::Create, Resource::Application);
 	card(&html! {
@@ -265,6 +245,31 @@ fn application_rows(ctx: &TeamCtx, s: &AppState, project: &Project, rows: &[AppR
 	})
 }
 
+/// The project's models, linking to each model page. Hidden without `read model`.
+fn models_card(ctx: &TeamCtx, rows: &[crate::models::Model]) -> Markup {
+	if !ctx.perms.can(Action::Read, Resource::Model) {
+		return html! {};
+	}
+	card(&html! {
+		(card_header("Models", None))
+		(card_content(&html! {
+			@if rows.is_empty() {
+				p class="text-sm text-muted-foreground" { "No models yet." }
+			} @else {
+				ul {
+					@for m in rows {
+						li class="flex items-center justify-between gap-3 border-t border-border py-3 text-sm first:border-t-0" {
+							a class="font-medium hover:underline"
+								href={ "/teams/" (ctx.team.id) "/projects/" (m.project_id) "/models/" (m.id) } { (m.name) }
+							(status_badge(m.status))
+						}
+					}
+				}
+			}
+		}))
+	})
+}
+
 async fn overview(
 	State(s): State<AppState>,
 	ctx: TeamCtx,
@@ -274,6 +279,7 @@ async fn overview(
 		project,
 		applications,
 		databases,
+		models,
 	} = service::get(&s.db, ctx.user.id, ctx.team.id, project)
 		.await
 		.map_err(|e| error::page(&ctx, &e))?;
@@ -286,7 +292,8 @@ async fn overview(
 			p class="text-sm text-muted-foreground" { (project.slug) }
 		}
 		(application_rows(&ctx, &s, &project, &applications))
-		(resource_rows("Databases", "No databases yet.", &databases))
+		(databases::project_card(&ctx, project.id, &databases))
+		(models_card(&ctx, &models))
 	};
 	Ok(app_page(&ctx, &project.name, &crumbs, &body))
 }
@@ -594,7 +601,9 @@ mod tests {
 		assert_contains(&body, "Storefront");
 		assert_contains(&body, "storefront");
 		assert_contains(&body, "orders");
-		assert_contains(&body, "postgres 17");
+		assert_contains(&body, "PostgreSQL 17");
+		assert_contains(&body, "/databases/6001");
+		assert_contains(&body, "Pending");
 
 		let (_, _, body) = get_html(&app, &format!("/teams/{team}/projects"), Some(&cookie)).await;
 		assert_contains(&body, "1 application");
