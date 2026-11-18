@@ -156,7 +156,7 @@ fn tile(
 				(card_logo(card))
 				div class="flex min-w-0 flex-1 flex-col gap-1" {
 					div class="flex items-center justify-between gap-2" {
-						h3 class="min-w-0 truncate text-sm leading-tight font-semibold" {
+						h2 class="min-w-0 truncate text-sm leading-tight font-semibold" {
 							a href=(href) class="ui-link-card-link outline-hidden" { (card.name) }
 						}
 						span class="shrink-0" { (badge(Tone::Neutral, card.kind.label())) }

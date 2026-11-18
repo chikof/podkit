@@ -15,7 +15,7 @@ use crate::error::AppResult;
 use crate::ids::{RoleId, TeamId, UserId};
 use crate::members::service::{self, MemberDetail, Role};
 use crate::state::AppState;
-use crate::ui::components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
+use crate::ui::components::{BUTTON, INPUT, LABEL, card, card_content, card_heading};
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page, form_error};
 use crate::ui::{error, sse};
@@ -93,7 +93,7 @@ fn member_list(ctx: &TeamCtx, data: &Data) -> Markup {
 fn add_card(ctx: &TeamCtx, data: &Data) -> Markup {
 	let post = format!("evt.preventDefault(); @post('{}')", base(ctx.team.id));
 	card(&html! {
-		(card_header("Add a member", Some("The person needs a podkit account already. Use the email they signed up with.")))
+		(card_heading("Add a member", Some("The person needs a podkit account already. Use the email they signed up with.")))
 		(card_content(&html! {
 			form class="flex flex-col gap-4" "data-on:submit"=(post) {
 				label class=(LABEL) {
@@ -118,7 +118,7 @@ fn add_card(ctx: &TeamCtx, data: &Data) -> Markup {
 
 fn roles_card(data: &Data) -> Markup {
 	card(&html! {
-		(card_header("Roles", Some("What each role is called and who owns it. Roles are read-only here.")))
+		(card_heading("Roles", Some("What each role is called and who owns it. Roles are read-only here.")))
 		(card_content(&html! {
 			table class="w-full text-left text-sm" {
 				thead {
@@ -164,7 +164,7 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 		div class="flex flex-col gap-6" data-signals=(signals) {
 			(crate::ui::pages::settings::settings_tabs(&ctx))
 			(card(&html! {
-				(card_header("Members", Some("Everyone who can work in this team.")))
+				(card_heading("Members", Some("Everyone who can work in this team.")))
 				(card_content(&html! {
 					(member_list(&ctx, &data))
 					div class="mt-3" { (form_error()) }

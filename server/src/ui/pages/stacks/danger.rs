@@ -15,7 +15,7 @@ use crate::ids::{ProjectId, StackId, TeamId};
 use crate::stacks::service;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, CHECKBOX, INPUT, LABEL, card, card_content, card_header,
+	BUTTON_DANGER, CHECKBOX, INPUT, LABEL, card, card_content, card_heading,
 };
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
@@ -40,7 +40,7 @@ pub(super) async fn page(
 	let content = html! {
 		div class="flex flex-col gap-6" data-signals=(signals.to_string()) {
 			(card(&html! {
-				(card_header("Remove this stack", Some("Stops and removes every container and the stack's private network.")))
+				(card_heading("Remove this stack", Some("Stops and removes every container and the stack's private network.")))
 				(card_content(&html! {
 					form class="flex max-w-xl flex-col gap-4" "data-on:submit"=(post) {
 						label class="flex cursor-pointer items-start gap-3 text-sm" {

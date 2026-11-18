@@ -15,7 +15,7 @@ use crate::jobs::JobStatus;
 use crate::stacks::service;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_OUTLINE, SELECT, Tone, badge, card, card_content, card_header, empty_state,
+	BUTTON_OUTLINE, SELECT, Tone, badge, card, card_content, card_heading, empty_state,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::live::{container_log, job_log, log_view};
@@ -55,7 +55,7 @@ pub(super) fn job_card(ctx: &TeamCtx, l: &Loaded) -> Markup {
 			@match l.detail.job {
 				Some(_) => {
 					(card(&html! {
-						(card_header("Latest deployment", Some("Deploy, stop, restart and remove each run as a job; this is the newest one.")))
+						(card_heading("Latest deployment", Some("Deploy, stop, restart and remove each run as a job; this is the newest one.")))
 						(card_content(&html! {
 							div class="flex flex-col gap-4" {
 								(job_status_line(l))
@@ -150,7 +150,7 @@ pub(super) async fn logs(
 		.or_else(|| running.first().copied());
 	let (tail, follow) = (params.tail(), params.follow());
 	let content = card(&html! {
-		(card_header("Logs", Some("Output of one service's container.")))
+		(card_heading("Logs", Some("Output of one service's container.")))
 		(card_content(&html! {
 			@if let Some(service) = chosen {
 				div class="flex flex-col gap-4" {

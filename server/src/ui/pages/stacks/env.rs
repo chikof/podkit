@@ -15,7 +15,7 @@ use crate::ids::{ProjectId, StackId, TeamId};
 use crate::stacks::service::{self, UpdateInput};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, INPUT, LABEL, Size, Variant, button_class, card, card_content, card_header, icon,
+	BUTTON, INPUT, LABEL, Size, Variant, button_class, card, card_content, card_heading, icon,
 };
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
@@ -42,7 +42,7 @@ pub(super) async fn page(
 		div class="flex flex-col gap-6" data-signals=(signals.to_string()) {
 			@if !l.detail.missing_vars.is_empty() && can_update {
 				(card(&html! {
-					(card_header("Missing variables", Some("The compose file uses these and the stack does not set them.")))
+					(card_heading("Missing variables", Some("The compose file uses these and the stack does not set them.")))
 					(card_content(&html! {
 						ul class="flex flex-wrap gap-2" {
 							@for name in &l.detail.missing_vars {
@@ -58,7 +58,7 @@ pub(super) async fn page(
 				}))
 			}
 			(card(&html! {
-				(card_header("Variables", Some("Values are encrypted and never shown again. Set a name again to replace its value. Changes apply on the next deploy.")))
+				(card_heading("Variables", Some("Values are encrypted and never shown again. Set a name again to replace its value. Changes apply on the next deploy.")))
 				(card_content(&html! {
 					@if keys.is_empty() {
 						p class="text-sm text-muted-foreground" { "No variables set." }
@@ -82,7 +82,7 @@ pub(super) async fn page(
 			}))
 			@if can_update {
 				(card(&html! {
-					(card_header("Set a variable", None))
+					(card_heading("Set a variable", None))
 					(card_content(&html! {
 						form class="flex flex-col gap-4" "data-on:submit"=(set) {
 							div class="grid grid-cols-1 gap-4 sm:grid-cols-2" {

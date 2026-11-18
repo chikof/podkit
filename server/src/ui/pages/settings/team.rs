@@ -14,7 +14,7 @@ use super::frame::settings_page;
 use crate::auth::permission::{Action, Resource};
 use crate::state::AppState;
 use crate::teams::service;
-use crate::ui::components::{BUTTON, INPUT, LABEL, Tone, card, card_content, card_header};
+use crate::ui::components::{BUTTON, INPUT, LABEL, Tone, card, card_content, card_heading};
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::form_error;
 use crate::ui::sse::js_string;
@@ -31,7 +31,7 @@ async fn page(ctx: TeamCtx) -> Markup {
 	let content = html! {
 		div class="flex flex-col gap-6" data-signals=(signals) {
 			(card(&html! {
-				(card_header("Team name", Some("Shown in the sidebar and the team switcher.")))
+				(card_heading("Team name", Some("Shown in the sidebar and the team switcher.")))
 				(card_content(&html! {
 					@if can_rename {
 						form class="flex max-w-md flex-col gap-4" "data-on:submit"={ "evt.preventDefault(); @post(" (js_string(&url)) ")" } {
@@ -51,7 +51,7 @@ async fn page(ctx: TeamCtx) -> Markup {
 				}))
 			}))
 			(card(&html! {
-				(card_header("Team slug", Some("The short name the team was created with. It does not change.")))
+				(card_heading("Team slug", Some("The short name the team was created with. It does not change.")))
 				(card_content(&html! {
 					p class="font-mono text-sm" { (ctx.team.slug) }
 				}))

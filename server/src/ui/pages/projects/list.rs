@@ -129,7 +129,7 @@ fn project_card(
 		article class="ui-card ui-link-card flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-xs" data-project=(card.project.id) {
 			div class="flex items-start justify-between gap-3" {
 				div class="flex min-w-0 flex-col gap-1" {
-					h3 class="truncate text-base leading-tight font-semibold" {
+					h2 class="truncate text-base leading-tight font-semibold" {
 						a href=(href) class="ui-link-card-link outline-hidden" { (card.project.name) }
 					}
 					p class="truncate font-mono text-xs text-muted-foreground" { (card.project.slug) }

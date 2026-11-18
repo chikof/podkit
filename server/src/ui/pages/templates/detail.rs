@@ -17,7 +17,7 @@ use crate::projects::{self, Project};
 use crate::state::AppState;
 use crate::templates::{self, Loaded, VariableInfo};
 use crate::ui::components::{
-	LogoSize, Priority, Size, Tone, Variant, badge, button_class, card, card_content, card_header,
+	LogoSize, Priority, Size, Tone, Variant, badge, button_class, card, card_content, card_heading,
 	icon, image_logo, table,
 };
 use crate::ui::error;
@@ -63,7 +63,7 @@ fn services_card(l: &Loaded) -> Markup {
 		})
 		.collect();
 	card(&html! {
-		(card_header("Services", Some("What runs when you deploy it. Images come from public registries.")))
+		(card_heading("Services", Some("What runs when you deploy it. Images come from public registries.")))
 		(card_content(&table(
 			"tpl-services",
 			"Services of this template",
@@ -82,7 +82,7 @@ fn requirements_card(l: &Loaded) -> Markup {
 		.count();
 	let volumes = l.services.iter().any(|s| s.volumes);
 	card(&html! {
-		(card_header("Requirements", None))
+		(card_heading("Requirements", None))
 		(card_content(&html! {
 			ul class="flex flex-col gap-2 text-sm" {
 				li class="flex items-start gap-2" {
@@ -172,7 +172,7 @@ fn variables_card(vars: &[VariableInfo]) -> Markup {
 	let asked: Vec<&VariableInfo> = vars.iter().filter(|v| v.kind != "generated").collect();
 	let generated: Vec<&VariableInfo> = vars.iter().filter(|v| v.kind == "generated").collect();
 	card(&html! {
-		(card_header("Variables", Some("What you can set when you deploy. The rest podkit makes for you.")))
+		(card_heading("Variables", Some("What you can set when you deploy. The rest podkit makes for you.")))
 		(card_content(&html! {
 			@if vars.is_empty() {
 				p class="text-sm text-muted-foreground" { "Nothing to fill in. It deploys as it is." }
@@ -278,7 +278,7 @@ async fn render(
 			(requirements_card(l))
 			@if !l.warnings.is_empty() {
 				(card(&html! {
-					(card_header("Notes on this template", Some("podkit adjusts or ignores these compose settings when it deploys it.")))
+					(card_heading("Notes on this template", Some("podkit adjusts or ignores these compose settings when it deploys it.")))
 					(card_content(&html! {
 						ul class="flex list-disc flex-col gap-1 pl-5 text-sm text-muted-foreground" {
 							@for w in &l.warnings { li { (w) } }

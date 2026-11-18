@@ -338,7 +338,7 @@ fn model_card(ctx: &TeamCtx, view: &View, model: &Model, hardware: Option<&Hardw
 			div class="ui-link-card-body" {
 				(family_logo(&model.family, LogoSize::Md))
 				div class="flex min-w-0 flex-1 flex-col gap-1" {
-					h3 class="truncate text-sm leading-tight font-semibold" {
+					h2 class="truncate text-sm leading-tight font-semibold" {
 						a href=(href) class="ui-link-card-link outline-hidden" { (model.name) }
 					}
 					p class="line-clamp-2 text-sm text-muted-foreground" { (description) }

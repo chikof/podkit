@@ -47,8 +47,8 @@ pub use button::{
 	link_button,
 };
 pub use card::{
-	card, card_content, card_description, card_footer, card_header, card_section, card_title,
-	link_card,
+	card, card_content, card_description, card_footer, card_header, card_heading, card_section,
+	card_title, link_card,
 };
 pub use chip::{chip, chip_group};
 pub use dialog::{Dismiss, dialog, dialog_cancel, dialog_open_button};

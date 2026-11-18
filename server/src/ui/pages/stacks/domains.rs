@@ -21,7 +21,7 @@ use crate::stacks::service;
 use crate::stacks::{ServiceStatus, StackService};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, INPUT, Size, Variant, button_class, card, card_content, card_header, empty_state, icon,
+	BUTTON, INPUT, Size, Variant, button_class, card, card_content, card_heading, empty_state, icon,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::sse::{self, js_string};
@@ -55,7 +55,7 @@ pub(super) async fn page(
 	let content = html! {
 		div class="flex flex-col gap-6" data-signals=(signals.to_string()) {
 			(card(&html! {
-				(card_header("Domains", Some("Route a hostname to a service. It starts answering after the next deploy.")))
+				(card_heading("Domains", Some("Route a hostname to a service. It starts answering after the next deploy.")))
 				(card_content(&html! {
 					@if list.is_empty() {
 						(empty_state("globe", "No services", Some("The compose file defines none."), None))

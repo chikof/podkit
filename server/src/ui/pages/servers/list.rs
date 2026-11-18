@@ -92,7 +92,7 @@ fn server_card(ctx: &TeamCtx, server: &Server, points: &[ServerPoint], now: i64)
 			div class="ui-link-card-body" {
 				(logo(&server.name, LogoSize::Md))
 				div class="flex min-w-0 flex-1 flex-col gap-1" {
-					h3 class="truncate text-sm leading-tight font-semibold" {
+					h2 class="truncate text-sm leading-tight font-semibold" {
 						a href=(detail_url(ctx.team.id, server.id)) class="ui-link-card-link outline-hidden" { (server.name) }
 					}
 					p class="truncate text-sm text-muted-foreground" {

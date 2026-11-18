@@ -7,7 +7,7 @@ use maud::{Markup, html};
 
 use super::frame::settings_page;
 use crate::state::AppState;
-use crate::ui::components::{card, card_content, card_header, icon};
+use crate::ui::components::{card, card_content, card_heading, icon};
 use crate::ui::extract::TeamCtx;
 use crate::ui::theme::{self, Theme};
 
@@ -33,7 +33,7 @@ async fn page(ctx: TeamCtx) -> Markup {
 	};
 	let content = html! {
 		(card(&html! {
-			(card_header("Theme", Some("Dark is the default. System follows your device. The choice is kept in this browser.")))
+			(card_heading("Theme", Some("Dark is the default. System follows your device. The choice is kept in this browser.")))
 			(card_content(&html! {
 				form method="post" action="/theme" class="grid gap-3 sm:grid-cols-3" {
 					(option(Theme::System, "System", "Match the device setting.", "monitor"))
@@ -43,7 +43,7 @@ async fn page(ctx: TeamCtx) -> Markup {
 			}))
 		}))
 		(card(&html! {
-			(card_header("Sidebar", Some("Fold it to icons for more room.")))
+			(card_heading("Sidebar", Some("Fold it to icons for more room.")))
 			(card_content(&html! {
 				p class="text-sm text-muted-foreground" {
 					"Use the panel button at the left of the header. podkit remembers it in this browser."

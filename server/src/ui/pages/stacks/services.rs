@@ -13,7 +13,7 @@ use crate::ids::{ProjectId, StackId, TeamId};
 use crate::stacks::{ServiceStatus, StackService, StackStatus};
 use crate::state::AppState;
 use crate::ui::components::{
-	Size, Variant, button_class, card, card_content, card_header, empty_state, icon, table,
+	Size, Variant, button_class, card, card_content, card_heading, empty_state, icon, table,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::sse::{self, js_string};
@@ -90,7 +90,7 @@ pub(super) fn services_card(s: &AppState, ctx: &TeamCtx, l: &Loaded) -> Markup {
 	html! {
 		div id="stack-services" {
 			(card(&html! {
-				(card_header("Services", Some("One container per service, on this stack's private network.")))
+				(card_heading("Services", Some("One container per service, on this stack's private network.")))
 				(card_content(&html! {
 					@if services.is_empty() {
 						(empty_state("layers", "No services", Some("The compose file defines none."), None))

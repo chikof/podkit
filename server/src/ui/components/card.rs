@@ -28,6 +28,12 @@ pub fn card_header(title: &str, description: Option<&str>) -> Markup {
 	}
 }
 
+/// Like `card_header` for a card inside a page that already has its `<h1>`: the title is
+/// an `<h2>`, so the outline has no second `<h1>` and no skipped level.
+pub fn card_heading(title: &str, description: Option<&str>) -> Markup {
+	card_section(title, description, None)
+}
+
 /// Like `card_header` with an `<h2>` and an optional action (a button or menu) at the
 /// end, which wraps below the text when the card is narrow.
 pub fn card_section(title: &str, description: Option<&str>, action: Option<&Markup>) -> Markup {
@@ -82,7 +88,7 @@ pub fn link_card(
 			div class="ui-link-card-body" {
 				(logo)
 				div class="flex min-w-0 flex-1 flex-col gap-1" {
-					h3 class="truncate text-sm leading-tight font-semibold" {
+					h2 class="truncate text-sm leading-tight font-semibold" {
 						a href=(href) class="ui-link-card-link outline-hidden" { (title) }
 					}
 					@if let Some(description) = description {
@@ -144,7 +150,15 @@ mod tests {
 		assert_eq!(html.matches("<a ").count(), 1, "{html}");
 		assert!(html.contains("ui-link-card-link"), "{html}");
 		assert!(html.contains("Billing &lt;db&gt;"), "{html}");
-		assert!(html.contains("<h3 "), "{html}");
+		assert!(html.contains("<h2 "), "{html}");
+	}
+
+	#[test]
+	fn a_card_heading_is_an_h2_so_a_page_keeps_one_h1() {
+		let html = card_heading("Members", Some("Everyone")).into_string();
+		assert!(html.contains("<h2 "), "{html}");
+		assert!(!html.contains("<h1"), "{html}");
+		assert!(card_header("Sign in", None).into_string().contains("<h1 "));
 	}
 
 	#[test]

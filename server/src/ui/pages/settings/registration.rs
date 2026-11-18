@@ -11,7 +11,7 @@ use maud::{Markup, html};
 use super::frame::settings_page;
 use crate::auth::service::registration_allowed;
 use crate::state::{AppState, Registration};
-use crate::ui::components::{Tone, badge, card, card_content, card_header};
+use crate::ui::components::{Tone, badge, card, card_content, card_heading};
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
 
@@ -50,7 +50,7 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 	let (name, tone, value, text) = describe(policy);
 	let content = html! {
 		(card(&html! {
-			(card_header("Sign-ups on this instance", Some("Who may create an account.")))
+			(card_heading("Sign-ups on this instance", Some("Who may create an account.")))
 			(card_content(&html! {
 				div class="flex flex-col gap-4" {
 					div class="flex items-center gap-3" {

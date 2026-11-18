@@ -15,7 +15,7 @@ use crate::auth::permission::{Action, Resource};
 use crate::ids::{ProjectId, StackId, TeamId};
 use crate::stacks::service::{self, UpdateInput};
 use crate::state::AppState;
-use crate::ui::components::{BUTTON, TEXTAREA, card, card_content, card_header};
+use crate::ui::components::{BUTTON, TEXTAREA, card, card_content, card_heading};
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::form_error;
 use crate::ui::{error, sse};
@@ -48,7 +48,7 @@ fn content(ctx: &TeamCtx, l: &Loaded) -> Markup {
 	html! {
 		div class="flex flex-col gap-6" data-signals=(signals.to_string()) {
 			(card(&html! {
-				(card_header("Compose file", Some(if can_update {
+				(card_heading("Compose file", Some(if can_update {
 					"Edit and save. podkit checks the whole file first and refuses a change it could not deploy."
 				} else {
 					"The file this stack runs."
@@ -76,7 +76,7 @@ fn content(ctx: &TeamCtx, l: &Loaded) -> Markup {
 			}))
 			@if !l.detail.warnings.is_empty() {
 				(card(&html! {
-					(card_header("Notes", Some("podkit ignores or adjusts these settings when it deploys.")))
+					(card_heading("Notes", Some("podkit ignores or adjusts these settings when it deploys.")))
 					(card_content(&html! {
 						ul class="flex list-disc flex-col gap-1 pl-5 text-sm text-muted-foreground" {
 							@for w in &l.detail.warnings {

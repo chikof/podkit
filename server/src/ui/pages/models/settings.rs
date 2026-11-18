@@ -13,7 +13,7 @@ use crate::auth::permission::{Action, Resource};
 use crate::model_files::token;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_DANGER, INPUT, LABEL, Tone, card, card_content, card_header,
+	BUTTON, BUTTON_DANGER, INPUT, LABEL, Tone, card, card_content, card_heading,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -72,7 +72,7 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Response, Respo
 			h1 class="text-xl font-semibold" { "Model settings" }
 			(crate::ui::pages::settings::settings_tabs(&ctx))
 			(card(&html! {
-				(card_header("Hugging Face token", Some("Needed for gated models and to avoid rate limits. It is stored encrypted, sent only to the downloader, and can't be read back.")))
+				(card_heading("Hugging Face token", Some("Needed for gated models and to avoid rate limits. It is stored encrypted, sent only to the downloader, and can't be read back.")))
 				(card_content(&status_region(&ctx, configured)))
 			}))
 		}
