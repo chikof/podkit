@@ -8,7 +8,7 @@ use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use bollard::container::LogOutput;
 use bollard::models::ContainerSummaryStateEnum;
@@ -33,6 +33,7 @@ const DEFAULT_PREFIX: &str = "podkit-";
 pub fn router(ctx: Arc<Ctx>) -> Router {
 	Router::new()
 		.route("/v1/health", get(health))
+		.route("/v1/hardware", get(hardware))
 		.route("/v1/deploy", post(deploy_route))
 		.route("/v1/containers", get(list_containers))
 		.route("/v1/containers/{id}/start", post(start_container))
@@ -43,6 +44,11 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/backups/dump", post(backup_dump))
 		.route("/v1/backups/upload", post(backup_upload))
 		.route("/v1/backups/restore", post(backup_restore))
+		.route("/v1/model-downloads", post(model_download_route))
+		.route("/v1/probes", post(probe_route))
+		.route("/v1/gateway/config", put(gateway_config))
+		.route("/v1/gateway/usage/drain", post(gateway_drain))
+		.route("/v1/gateway/chat", post(gateway_chat))
 		.with_state(ctx)
 }
 
@@ -136,6 +142,12 @@ async fn health(State(ctx): State<Arc<Ctx>>) -> Result<Json<Health>, ApiError> {
 		version: env!("CARGO_PKG_VERSION").to_string(),
 		podman_version,
 	}))
+}
+
+/// Never fails: parts the host cannot report are empty.
+async fn hardware(State(ctx): State<Arc<Ctx>>) -> Json<proto::Hardware> {
+	let graph_root = ctx.podman().graph_root().await.ok().flatten();
+	Json(crate::hardware::collect(graph_root.as_deref(), &ctx.data_dir).await)
 }
 
 async fn deploy_route(State(ctx): State<Arc<Ctx>>, Json(spec): Json<DeploySpec>) -> Response {
@@ -357,6 +369,25 @@ async fn delete_volume(
 	}
 }
 
+async fn probe_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::ProbeRequest>,
+) -> Result<Json<proto::ProbeResponse>, ApiError> {
+	check_ref(&req.container_id)?;
+	crate::probe::validate(&req).map_err(|m| ApiError::new(StatusCode::BAD_REQUEST, m))?;
+	crate::probe::run(&ctx.podman(), &req)
+		.await
+		.map(Json)
+		.map_err(|m| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, m))
+}
+
+async fn model_download_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::ModelDownloadRequest>,
+) -> Response {
+	ndjson(move |tx| crate::model_download::run(ctx, req, tx))
+}
+
 async fn backup_dump(State(ctx): State<Arc<Ctx>>, Json(req): Json<DumpRequest>) -> Response {
 	ndjson(move |tx| backup::dump(ctx, req, tx))
 }
@@ -367,4 +398,29 @@ async fn backup_upload(State(ctx): State<Arc<Ctx>>, Json(req): Json<UploadReques
 
 async fn backup_restore(State(ctx): State<Arc<Ctx>>, Json(req): Json<RestoreRequest>) -> Response {
 	ndjson(move |tx| backup::restore(ctx, req, tx))
+}
+
+async fn gateway_config(
+	State(ctx): State<Arc<Ctx>>,
+	Json(config): Json<proto::GatewayConfig>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+	crate::gateway::sidecar::apply(&ctx.podman(), &ctx.supervisor, &ctx.data_dir, &config)
+		.await
+		.map(|()| Json(serde_json::json!({})))
+		.map_err(|m| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, m))
+}
+
+async fn gateway_drain(State(ctx): State<Arc<Ctx>>) -> Json<Vec<proto::GatewayUsage>> {
+	Json(crate::gateway::sidecar::drain_usage(&crate::gateway::sidecar::dir(&ctx.data_dir)).await)
+}
+
+async fn gateway_chat(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::GatewayChatRequest>,
+) -> Response {
+	if let Err(message) = crate::gateway::chat::validate(&req) {
+		return ApiError::new(StatusCode::BAD_REQUEST, message).into_response();
+	}
+	let podman = ctx.podman();
+	ndjson(move |tx| crate::gateway::chat::run(podman, req, tx))
 }

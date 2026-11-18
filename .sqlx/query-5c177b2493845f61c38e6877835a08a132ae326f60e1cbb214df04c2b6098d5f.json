@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT id AS \"id: ServerId\", team_id AS \"team_id: TeamId\", name, hostname, ssh_port,\n\t\t\t\tssh_user, ssh_private_key, podman_socket_path, is_local,\n\t\t\t\tstatus AS \"status: ServerStatus\", host_key, agent_socket_path, agent_version,\n\t\t\t\tarch, status_message\n\t\t\tFROM servers\n\t\t\tWHERE status = 'active' OR is_local OR (status = 'unreachable' AND agent_version IS NOT NULL)\n\t\t",
+  "query": "\n\t\t\tSELECT id AS \"id: ServerId\", team_id AS \"team_id: TeamId\", name, hostname, ssh_port,\n\t\t\t\tssh_user, ssh_private_key, podman_socket_path, is_local,\n\t\t\t\tstatus AS \"status: ServerStatus\", host_key, agent_socket_path, agent_version,\n\t\t\t\tarch, status_message,\n\t\t\t\thardware AS \"hardware?: sqlx::types::Json<proto::Hardware>\", hardware_at\n\t\t\tFROM servers\n\t\t\tWHERE team_id = $1\n\t\t",
   "describe": {
     "columns": [
       {
@@ -167,10 +167,34 @@
             "name": "status_message"
           }
         }
+      },
+      {
+        "ordinal": 15,
+        "name": "hardware?: sqlx::types::Json<proto::Hardware>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "hardware"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "hardware_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "hardware_at"
+          }
+        }
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Int8"
+      ]
     },
     "nullable": [
       false,
@@ -187,8 +211,10 @@
       true,
       true,
       true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "ea40f5c009b2c3595bdefe3aba503e2fb9fb65861fdf851ad453d67e978e2060"
+  "hash": "5c177b2493845f61c38e6877835a08a132ae326f60e1cbb214df04c2b6098d5f"
 }

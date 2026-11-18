@@ -1,0 +1,3 @@
+[spike:llama-cpu] image ghcr.io/ggml-org/llama.cpp:server (837 MB), feed=mount, port 18570
+[spike:llama-cpu] ready in 1.136s
+[spike:llama-cpu] model id: /models/Qwen3-4B-Q4_K_M.gguf

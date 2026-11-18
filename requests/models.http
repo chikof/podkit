@@ -1,0 +1,70 @@
+### ListModelEngines
+# @name ListModelEngines
+# note: the engine templates: accepted formats, GPU need, port, pinned image.
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/models/engines
+Authorization: Bearer ***
+
+### CreateModel
+# @name CreateModel
+# @capture file-secret model.id = response.json.id
+# note: serves downloaded model files (status ready) on the files' server. 202 and
+# status "starting"; poll GET until "running". Refused with 400 and the numbers
+# when the engine does not take the files' format (GGUF on vLLM), a GPU engine has
+# no usable GPU on the server (no CDI spec), or the rough memory estimate exceeds
+# the server's RAM / VRAM. `model_path` is needed unless the download names one
+# .gguf file. `gpu` defaults to what the engine needs. `extra_args` are argv
+# elements, no shell. The engine is reachable only as http://model-<slug>:<port>/v1
+# from other containers on the server's podkit network.
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/models
+Authorization: Bearer ***
+Content-Type: application/json
+
+{
+  "name": "Qwen3 4B",
+  "model_files_id": {{model_file.id}},
+  "engine": "llama_cpu",
+  "model_path": "Qwen3-4B-Q4_K_M.gguf",
+  "served_name": "qwen3-4b",
+  "context_size": 8192,
+  "extra_args": ["--threads", "8"]
+}
+
+### ListModels
+# @name ListModels
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/models
+Authorization: Bearer ***
+
+### GetModel
+# @name GetModel
+# note: status is starting, running, stopped, failed or removing. A model that never
+# loaded is failed with the engine's last log lines in `error`.
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/models/{{model.id}}
+Authorization: Bearer ***
+
+### StartModel
+# @name StartModel
+# note: only for a stopped or failed model; redeploys the container.
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/models/{{model.id}}/start
+Authorization: Bearer ***
+
+### StopModel
+# @name StopModel
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/models/{{model.id}}/stop
+Authorization: Bearer ***
+
+### RestartModel
+# @name RestartModel
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/models/{{model.id}}/restart
+Authorization: Bearer ***
+
+### ModelLogs
+# @name ModelLogs
+# note: server-sent events, `event: log`. ?tail= (max 5000) and ?follow=false.
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/models/{{model.id}}/logs?tail=100
+Authorization: Bearer ***
+
+### DeleteModel
+# @name DeleteModel
+# note: removes the container (and Ollama's state volume); the downloaded files stay.
+DELETE {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/models/{{model.id}}
+Authorization: Bearer ***

@@ -20,6 +20,8 @@ use super::tunnel::SshTunnel;
 use crate::error::ServerError;
 
 const HEALTH_TIMEOUT: Duration = Duration::from_secs(5);
+/// `df` and `nvidia-smi` may each take a few seconds on a busy host.
+const HARDWARE_TIMEOUT: Duration = Duration::from_secs(20);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const MAX_LINE_BYTES: usize = 1024 * 1024;
 const MAX_ERROR_BODY_BYTES: usize = 64 * 1024;
@@ -42,6 +44,13 @@ impl AgentClient {
 	/// `AgentUnavailable` if the agent cannot be reached or answers badly.
 	pub async fn health(&self) -> Result<proto::Health, ServerError> {
 		self.json_within(HEALTH_TIMEOUT, Method::GET, "/v1/health", None::<&()>)
+			.await
+	}
+
+	/// # Errors
+	/// See [`AgentClient::health`].
+	pub async fn hardware(&self) -> Result<proto::Hardware, ServerError> {
+		self.json_within(HARDWARE_TIMEOUT, Method::GET, "/v1/hardware", None::<&()>)
 			.await
 	}
 

@@ -8,9 +8,9 @@ use bollard::Docker;
 use bollard::container::LogOutput;
 use bollard::models::{
 	ContainerCreateBody, ContainerInspectResponse, ContainerSummary, CreateImageInfo,
-	EndpointSettings, EventMessage, HostConfig, HostConfigLogConfig, ImageInspect, ImageSummary,
-	NetworkCreateRequest, NetworkingConfig, PortBinding, RestartPolicy, RestartPolicyNameEnum,
-	VolumeCreateRequest,
+	DeviceMapping, EndpointSettings, EventMessage, HostConfig, HostConfigLogConfig, ImageInspect,
+	ImageSummary, NetworkCreateRequest, NetworkingConfig, PortBinding, RestartPolicy,
+	RestartPolicyNameEnum, VolumeCreateRequest,
 };
 use bollard::query_parameters::{
 	BuildImageOptions, CreateContainerOptions, CreateImageOptions, EventsOptions,
@@ -18,6 +18,7 @@ use bollard::query_parameters::{
 	RemoveContainerOptions, RemoveImageOptions, StartContainerOptions, StopContainerOptions,
 };
 use futures_util::{Stream, StreamExt};
+use proto::{GpuDevices, GpuRequest, GpuVendor};
 
 /// Per-request timeout of the Podman client. It bounds the wait for response
 /// headers only; streamed bodies (builds, logs, events) run untimed.
@@ -82,6 +83,71 @@ pub struct ContainerSpec {
 	pub memory_bytes: Option<i64>,
 	/// CPU limit in cores.
 	pub cpu_cores: Option<f64>,
+	/// GPUs to pass through.
+	pub gpus: Option<GpuRequest>,
+	/// Replaces the image entrypoint.
+	pub entrypoint: Option<Vec<String>>,
+	/// `/dev/shm` size in bytes.
+	pub shm_bytes: Option<i64>,
+	/// Seconds between SIGTERM and SIGKILL on stop.
+	pub stop_timeout_s: Option<u32>,
+}
+
+/// Device mappings for a GPU request: the CDI-name variant for NVIDIA
+/// (`docs/spikes/gpu-cdi.md`), `/dev/kfd` plus `/dev/dri` for AMD.
+///
+/// # Errors
+/// The request is empty or not expressible for the vendor.
+pub fn gpu_devices(request: &GpuRequest) -> Result<Vec<DeviceMapping>, String> {
+	let device = |path: String| DeviceMapping {
+		path_on_host: Some(path),
+		..Default::default()
+	};
+	let check_ids = |ids: &[String]| -> Result<(), String> {
+		if ids.is_empty() {
+			return Err("gpu id list is empty".to_string());
+		}
+		match ids.iter().find(|id| !valid_gpu_id(id)) {
+			Some(bad) => Err(format!("invalid gpu id {bad:?}")),
+			None => Ok(()),
+		}
+	};
+	match (request.vendor, &request.devices) {
+		(GpuVendor::Nvidia, GpuDevices::All) => Ok(vec![device("nvidia.com/gpu=all".to_string())]),
+		(GpuVendor::Nvidia, GpuDevices::Count(0)) => {
+			Err("gpu count must be at least 1".to_string())
+		}
+		(GpuVendor::Nvidia, GpuDevices::Count(n)) => Ok((0..*n)
+			.map(|i| device(format!("nvidia.com/gpu={i}")))
+			.collect()),
+		(GpuVendor::Nvidia, GpuDevices::Ids(ids)) => {
+			check_ids(ids)?;
+			Ok(ids
+				.iter()
+				.map(|id| device(format!("nvidia.com/gpu={id}")))
+				.collect())
+		}
+		(GpuVendor::Amd, GpuDevices::All) => Ok(vec![
+			device("/dev/kfd".to_string()),
+			device("/dev/dri".to_string()),
+		]),
+		(GpuVendor::Amd, GpuDevices::Ids(ids)) => {
+			check_ids(ids)?;
+			let mut devices = vec![device("/dev/kfd".to_string())];
+			devices.extend(ids.iter().map(|id| device(format!("/dev/dri/{id}"))));
+			Ok(devices)
+		}
+		(GpuVendor::Amd, GpuDevices::Count(_)) => {
+			Err("AMD gpus are requested as all or by render node id".to_string())
+		}
+	}
+}
+
+fn valid_gpu_id(id: &str) -> bool {
+	!id.is_empty()
+		&& id
+			.bytes()
+			.all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
 }
 
 /// Handle on one server's Podman.
@@ -122,6 +188,14 @@ impl Podman {
 	/// Podman is unreachable.
 	pub async fn version(&self) -> Result<String, PodmanError> {
 		Ok(self.docker.version().await?.version.unwrap_or_default())
+	}
+
+	/// Podman's storage root (images and volumes live below it), when it says.
+	///
+	/// # Errors
+	/// Podman is unreachable.
+	pub async fn graph_root(&self) -> Result<Option<String>, PodmanError> {
+		Ok(self.docker.info().await?.docker_root_dir)
 	}
 
 	/// Creates the network unless it exists.
@@ -329,6 +403,13 @@ impl Podman {
 		#[allow(clippy::cast_possible_truncation)]
 		let nano_cpus = spec.cpu_cores.map(|cores| (cores * 1_000_000_000.0) as i64);
 
+		let devices = spec
+			.gpus
+			.as_ref()
+			.map(gpu_devices)
+			.transpose()
+			.map_err(PodmanError::Build)?;
+
 		let response = self
 			.docker
 			.create_container(
@@ -339,12 +420,16 @@ impl Podman {
 				ContainerCreateBody {
 					image: Some(spec.image),
 					cmd: spec.command,
+					entrypoint: spec.entrypoint,
+					stop_timeout: spec.stop_timeout_s.map(i64::from),
 					env: (!spec.env.is_empty())
 						.then(|| spec.env.iter().map(|(k, v)| format!("{k}={v}")).collect()),
 					exposed_ports,
 					labels: (!spec.labels.is_empty()).then(|| spec.labels.into_iter().collect()),
 					networking_config,
 					host_config: Some(HostConfig {
+						devices,
+						shm_size: spec.shm_bytes,
 						port_bindings,
 						binds: (!spec.binds.is_empty()).then_some(spec.binds),
 						memory: spec.memory_bytes,
@@ -562,6 +647,65 @@ fn current_uid() -> u32 {
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	fn paths(request: &GpuRequest) -> Result<Vec<String>, String> {
+		gpu_devices(request).map(|d| d.into_iter().map(|m| m.path_on_host.unwrap()).collect())
+	}
+
+	fn req(vendor: GpuVendor, devices: GpuDevices) -> GpuRequest {
+		GpuRequest { vendor, devices }
+	}
+
+	#[test]
+	fn gpu_nvidia_maps_to_cdi_names() {
+		assert_eq!(
+			paths(&req(GpuVendor::Nvidia, GpuDevices::All)).unwrap(),
+			["nvidia.com/gpu=all"]
+		);
+		assert_eq!(
+			paths(&req(GpuVendor::Nvidia, GpuDevices::Count(2))).unwrap(),
+			["nvidia.com/gpu=0", "nvidia.com/gpu=1"]
+		);
+		assert_eq!(
+			paths(&req(
+				GpuVendor::Nvidia,
+				GpuDevices::Ids(vec!["1".into(), "GPU-abc-123".into()])
+			))
+			.unwrap(),
+			["nvidia.com/gpu=1", "nvidia.com/gpu=GPU-abc-123"]
+		);
+	}
+
+	#[test]
+	fn gpu_amd_maps_to_kfd_and_dri() {
+		assert_eq!(
+			paths(&req(GpuVendor::Amd, GpuDevices::All)).unwrap(),
+			["/dev/kfd", "/dev/dri"]
+		);
+		assert_eq!(
+			paths(&req(
+				GpuVendor::Amd,
+				GpuDevices::Ids(vec!["renderD128".into()])
+			))
+			.unwrap(),
+			["/dev/kfd", "/dev/dri/renderD128"]
+		);
+		assert!(paths(&req(GpuVendor::Amd, GpuDevices::Count(1))).is_err());
+	}
+
+	#[test]
+	fn gpu_rejects_empty_and_hostile_requests() {
+		assert!(paths(&req(GpuVendor::Nvidia, GpuDevices::Count(0))).is_err());
+		assert!(paths(&req(GpuVendor::Nvidia, GpuDevices::Ids(vec![]))).is_err());
+		for bad in ["", "../x", "a=b", "0 /dev/mem"] {
+			for vendor in [GpuVendor::Nvidia, GpuVendor::Amd] {
+				assert!(
+					paths(&req(vendor, GpuDevices::Ids(vec![bad.into()]))).is_err(),
+					"{bad:?}"
+				);
+			}
+		}
+	}
 
 	#[test]
 	fn split_reference_cases() {

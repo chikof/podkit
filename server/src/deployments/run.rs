@@ -19,7 +19,7 @@ use crate::jobs::{Job, JobFailure};
 use crate::logs::JobLog;
 use crate::servers::Server;
 use crate::state::AppState;
-use crate::{deployments, domains, env_vars, scope, volumes};
+use crate::{deployments, domains, env_vars, links, scope, volumes};
 
 const LOST_CONNECTION: &str = "lost connection to server agent";
 
@@ -117,7 +117,7 @@ pub async fn run(
 				return Ok(());
 			}
 			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),
-			Some(Ok(Event::DumpWritten { .. } | Event::Done)) => {}
+			Some(Ok(Event::DumpWritten { .. } | Event::Progress { .. } | Event::Done)) => {}
 			Some(Err(e)) => {
 				warn!(deployment = deployment.id.0, "deploy stream failed: {e}");
 				return Err(failed(LOST_CONNECTION));
@@ -205,6 +205,7 @@ async fn build_spec(
 		.map(|v| VolumeMount {
 			name: v.name,
 			path: v.mount_path,
+			read_only: false,
 		})
 		.collect::<Vec<_>>();
 	// A volume can only be mounted by one container at a time.
@@ -233,6 +234,10 @@ async fn build_spec(
 			.map(|mb| i64::from(mb) * 1024 * 1024),
 		cpu_cores: application.cpu_limit.map(f64::from),
 		strategy,
+		gpus: None,
+		entrypoint: None,
+		shm_bytes: None,
+		stop_timeout_s: None,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,
@@ -289,6 +294,16 @@ async fn load_env(
 		})?;
 		env.push((row.key, value));
 	}
+	// The gateway's variables are podkit's to set: they win over a user's of the same name.
+	let gateway = links::env(state, application.id).await.map_err(|e| {
+		tracing::error!(
+			application = application.id.0,
+			"failed to load gateway env: {e}"
+		);
+		failed("failed to load the application's model links")
+	})?;
+	env.retain(|(key, _)| !gateway.iter().any(|(g, _)| g == key));
+	env.extend(gateway);
 	Ok(env)
 }
 

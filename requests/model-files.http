@@ -1,0 +1,73 @@
+### SetHuggingFaceToken
+# @name SetHuggingFaceToken
+# note: write-only. The token is stored encrypted and used for gated repos;
+# GET only ever answers {"configured": bool}. Needs update on model_file.
+PUT {{base.url}}/api/v1/teams/{{team.id}}/huggingface-token
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+{
+  "token": "hf_xxx"
+}
+
+### HuggingFaceTokenStatus
+# @name HuggingFaceTokenStatus
+GET {{base.url}}/api/v1/teams/{{team.id}}/huggingface-token
+Authorization: Bearer {{auth.token}}
+
+### DeleteHuggingFaceToken
+# @name DeleteHuggingFaceToken
+DELETE {{base.url}}/api/v1/teams/{{team.id}}/huggingface-token
+Authorization: Bearer {{auth.token}}
+
+### CreateModelFile
+# @name CreateModelFile
+# @capture file-secret model_file.id = response.json.id
+# note: lists the repo's files on Hugging Face, applies the selection (include
+# globs and/or exact files; neither means the whole repo) and refuses with 400
+# when the files plus 10% headroom exceed the server's free disk, or when the
+# repo is gated ("gated model: accept the license on huggingface.co and add an
+# HF token"). Otherwise the download is queued: status queued, downloading,
+# ready or failed. 409 when the same files are already downloaded there.
+POST {{base.url}}/api/v1/teams/{{team.id}}/model-files
+Authorization: Bearer {{auth.token}}
+Content-Type: application/json
+
+{
+  "server_id": {{server.id}},
+  "repo": "ggml-org/tiny-llamas",
+  "revision": "main",
+  "files": ["stories260K.gguf"]
+}
+
+### ListModelFiles
+# @name ListModelFiles
+GET {{base.url}}/api/v1/teams/{{team.id}}/model-files
+Authorization: Bearer {{auth.token}}
+
+### GetModelFile
+# @name GetModelFile
+# note: poll this for downloaded_bytes / total_bytes. Done when
+#   jq -e '.status=="ready" and .downloaded_bytes==.total_bytes'
+GET {{base.url}}/api/v1/teams/{{team.id}}/model-files/{{model_file.id}}
+Authorization: Bearer {{auth.token}}
+
+### RetryModelFile
+# @name RetryModelFile
+# note: only for a failed download. The volume keeps what was fetched, so it
+# resumes. The size check runs again for what is still missing.
+POST {{base.url}}/api/v1/teams/{{team.id}}/model-files/{{model_file.id}}/retry
+Authorization: Bearer {{auth.token}}
+
+### CancelModelFile
+# @name CancelModelFile
+# note: stops a queued or running download; the partial files stay.
+POST {{base.url}}/api/v1/teams/{{team.id}}/model-files/{{model_file.id}}/cancel
+Authorization: Bearer {{auth.token}}
+
+### DeleteModelFile
+# @name DeleteModelFile
+# note: removes the volume and its files. 409 while downloading or while an
+# engine still mounts the volume.
+DELETE {{base.url}}/api/v1/teams/{{team.id}}/model-files/{{model_file.id}}
+Authorization: Bearer {{auth.token}}

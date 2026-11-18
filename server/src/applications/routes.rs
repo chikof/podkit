@@ -509,8 +509,8 @@ pub fn log_events(
 					() = shutdown.cancelled() => None,
 					next = events.next() => next,
 				};
-				match next {
-					Some(Ok(proto::Event::Log { stream, line })) => {
+				match agent_log_step(next) {
+					AgentLogStep::Line { stream, line } => {
 						let data =
 							serde_json::json!({ "stream": stream, "line": line }).to_string();
 						return Some((
@@ -518,21 +518,45 @@ pub fn log_events(
 							Some(events),
 						));
 					}
-					Some(Ok(proto::Event::Failed { message })) => {
-						warn!("container log stream failed: {message}");
-						break;
-					}
-					Some(Err(e)) => {
-						warn!("container log stream failed: {e}");
-						break;
-					}
-					Some(Ok(proto::Event::Done)) | None => break,
-					Some(Ok(_)) => {}
+					AgentLogStep::Skip => {}
+					AgentLogStep::End { .. } => break,
 				}
 			}
 			Some((Ok(SseEvent::default().event("end")), None))
 		}
 	})
+}
+
+/// What one item of an agent log stream means to a log viewer.
+pub(crate) enum AgentLogStep {
+	Line {
+		stream: proto::Stream,
+		line: String,
+	},
+	/// The stream is over; `failed` says whether it broke rather than finished.
+	End {
+		failed: bool,
+	},
+	/// An event that carries no log output.
+	Skip,
+}
+
+/// Maps one agent event to a [`AgentLogStep`], logging failures. Shared by the
+/// JSON/SSE endpoint and the web UI so both read the stream the same way.
+pub(crate) fn agent_log_step(next: Option<Result<proto::Event, ServerError>>) -> AgentLogStep {
+	match next {
+		Some(Ok(proto::Event::Log { stream, line })) => AgentLogStep::Line { stream, line },
+		Some(Ok(proto::Event::Failed { message })) => {
+			warn!("container log stream failed: {message}");
+			AgentLogStep::End { failed: true }
+		}
+		Some(Err(e)) => {
+			warn!("container log stream failed: {e}");
+			AgentLogStep::End { failed: true }
+		}
+		Some(Ok(proto::Event::Done)) | None => AgentLogStep::End { failed: false },
+		Some(Ok(_)) => AgentLogStep::Skip,
+	}
 }
 
 /// Brings a stopped (or crash-looped-out) application back up by

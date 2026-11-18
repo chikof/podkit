@@ -32,6 +32,14 @@ pub enum JobKind {
 	Backup,
 	/// `target_id` is a backup id, not a database id.
 	Restore,
+	/// `target_id` is a model file id.
+	ModelDownload,
+	/// `target_id` is a model id. Deploys the engine container and waits until it answers.
+	ModelStart,
+	/// `target_id` is a model id.
+	ModelStop,
+	/// `target_id` is a model id.
+	ModelRemove,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -127,6 +135,7 @@ pub async fn active_exists(
 /// Reflects a failed or cancelled job onto the row it was acting on. A
 /// missing row is ignored; database errors are logged, not returned, because
 /// callers are already on a failure path.
+#[allow(clippy::too_many_lines, reason = "one arm per job kind")]
 pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failure: &JobFailure) {
 	let result = match kind {
 		JobKind::Deploy => {
@@ -207,6 +216,38 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 			)
 			.bind(target_id)
 			.bind(message)
+			.execute(&state.db)
+			.await
+		}
+		// The volume keeps what was downloaded, so a retry resumes.
+		JobKind::ModelDownload => {
+			let message = match failure {
+				JobFailure::Cancelled => "cancelled",
+				JobFailure::Failed(m) => m.as_str(),
+			};
+			sqlx::query(
+				"UPDATE model_files SET status = 'failed', error = $2, updated_at = NOW()
+				WHERE id = $1 AND status IN ('queued', 'downloading')",
+			)
+			.bind(target_id)
+			.bind(message)
+			.execute(&state.db)
+			.await
+		}
+		// A failed removal leaves the row so it can be retried. A start or stop that
+		// fails after a removal was requested must not hide the removal.
+		JobKind::ModelStart | JobKind::ModelStop | JobKind::ModelRemove => {
+			let message = match failure {
+				JobFailure::Cancelled => "cancelled",
+				JobFailure::Failed(m) => m.as_str(),
+			};
+			sqlx::query(
+				"UPDATE models SET status = 'failed', error = $2, updated_at = NOW()
+				WHERE id = $1 AND ($3 OR status <> 'removing')",
+			)
+			.bind(target_id)
+			.bind(message)
+			.bind(kind == JobKind::ModelRemove)
 			.execute(&state.db)
 			.await
 		}

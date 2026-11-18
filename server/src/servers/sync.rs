@@ -67,6 +67,10 @@ async fn check(state: &AppState, server: &Server) {
 	if let Err(e) = super::mark_active(&state.db, server.id).await {
 		tracing::warn!(server = %server.id, error = %e, "status sync could not mark server active");
 	}
+	// Best effort: a failure here says nothing about reachability.
+	super::hardware::refresh(&state.db, server.id, &client).await;
+
+	crate::links::sync(state, server.id, &client).await;
 
 	if let Err(e) = mark_crashed(state, server.id, &client).await {
 		tracing::warn!(server = %server.id, error = %e, "status sync could not check containers");

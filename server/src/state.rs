@@ -25,6 +25,12 @@ pub struct Config {
 	pub local_agent_socket: PathBuf,
 	/// Directory holding `podkit-agent[-{arch}]` binaries for bootstrap.
 	pub agent_binaries_dir: PathBuf,
+	/// Base URL of the Hugging Face hub; tests point it at a local stub.
+	pub hf_endpoint: String,
+	/// Replaces the per-engine readiness timeout of model starts; tests shorten it.
+	pub model_ready_timeout: Option<std::time::Duration>,
+	/// Pause between readiness probes of a starting model.
+	pub model_ready_interval: std::time::Duration,
 }
 
 #[derive(Clone)]

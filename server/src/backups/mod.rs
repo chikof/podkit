@@ -486,7 +486,7 @@ async fn call(
 		};
 		match event {
 			Some(Ok(Event::Log { stream, line })) => log.push(stream, &line).await,
-			Some(Ok(Event::Phase { .. })) => {}
+			Some(Ok(Event::Phase { .. } | Event::Progress { .. })) => {}
 			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),
 			Some(Ok(terminal)) => return Ok(terminal),
 			Some(Err(e)) => {

@@ -1,31 +1,50 @@
 //! Server-rendered web UI. Pages are maud templates; Datastar adds
 //! interactivity over SSE. Requests authenticate with the `session` cookie
 //! that login sets, so the UI needs no CORS and holds no token in the browser.
+//!
+//! Handlers here never touch the database or RBAC: they call each slice's
+//! `service` module, which authorizes, scopes and validates.
 
-use std::convert::Infallible;
 use std::sync::LazyLock;
 
 use axum::{
 	Router,
-	extract::State,
-	http::{HeaderMap, header},
-	response::{IntoResponse, Redirect, Response, Sse, sse::Event},
+	extract::{Query, Request, State},
+	http::{HeaderMap, Method, StatusCode, header},
+	middleware::{self, Next},
+	response::{IntoResponse, Redirect, Response},
 	routing::{get, post},
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use datastar::{axum::ReadSignals, prelude::*};
-use maud::{DOCTYPE, Markup, html};
+use datastar::axum::ReadSignals;
+use maud::{Markup, html};
+use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use tower_cookies::Cookies;
 
-use crate::auth::{self, AuthUser, Credentials, SessionToken};
+use crate::auth::{self, Credentials, SessionToken};
 use crate::error::ServerError;
 use crate::state::AppState;
-use crate::teams;
 
 mod components;
+mod error;
+mod extract;
+mod layout;
+// Used by the pages of cards 05-09; until then only tests call them.
+#[allow(dead_code)]
+mod live;
+mod models;
+mod projects;
+mod sse;
+#[allow(dead_code)]
+mod status;
+mod teams;
+#[cfg(test)]
+mod testing;
 
-use components::{BUTTON, BUTTON_OUTLINE, INPUT, LABEL, card, card_content, card_header};
+use components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
+use extract::UiUser;
+use layout::form_error;
 
 /// Versioned so browsers can cache it forever; bump with the vendored file.
 const DATASTAR_PATH: &str = "/static/datastar-1.0.5.js";
@@ -49,22 +68,68 @@ pub fn router() -> Router<AppState> {
 		.route("/logout", post(logout))
 		.route(DATASTAR_PATH, get(datastar_js))
 		.route("/static/app.css", get(app_css))
+		.merge(teams::router())
+		.merge(projects::router())
+		.merge(models::router())
+		.merge(test_routes())
+		.layer(middleware::from_fn(origin_guard))
 }
 
-fn layout(title: &str, body: &Markup) -> Markup {
-	html! {
-		(DOCTYPE)
-		html lang="en" {
-			head {
-				meta charset="utf-8";
-				meta name="viewport" content="width=device-width, initial-scale=1";
-				title { (title) " · podkit" }
-				script type="module" src=(DATASTAR_PATH) {}
-				link rel="stylesheet" href=(*APP_CSS_HREF);
-			}
-			body class="min-h-screen font-sans" { (body) }
-		}
+#[cfg(test)]
+fn test_routes() -> Router<AppState> {
+	live::test_router()
+}
+
+#[cfg(not(test))]
+fn test_routes() -> Router<AppState> {
+	Router::new()
+}
+
+/// Refuses a state-changing request whose `Origin` is not this site. The
+/// expected site is `X-Forwarded-Host` when a proxy sets it, else `Host`, so
+/// it works over plain HTTP. A request with no `Origin` (curl, not a browser
+/// form) passes unless the browser says it came from another site.
+async fn origin_guard(req: Request, next: Next) -> Response {
+	let safe = matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS);
+	if safe || same_origin(req.headers()) {
+		next.run(req).await
+	} else {
+		(StatusCode::FORBIDDEN, "cross-origin request refused").into_response()
 	}
+}
+
+fn same_origin(headers: &HeaderMap) -> bool {
+	let Some(origin) = headers.get(header::ORIGIN) else {
+		return !headers
+			.get("sec-fetch-site")
+			.and_then(|v| v.to_str().ok())
+			.is_some_and(|site| site == "cross-site" || site == "same-site");
+	};
+	let Some(authority) = origin
+		.to_str()
+		.ok()
+		.and_then(|o| o.split_once("://"))
+		.map(|(_, authority)| authority)
+	else {
+		return false;
+	};
+	let host = headers
+		.get("x-forwarded-host")
+		.or_else(|| headers.get(header::HOST))
+		.and_then(|h| h.to_str().ok())
+		.and_then(|h| h.split(',').next())
+		.map(str::trim);
+	host.is_some_and(|host| host.eq_ignore_ascii_case(authority))
+}
+
+/// Where sign-in may send the browser afterwards: a path on this site, never
+/// another origin (`//host`, `/\host`, `https://host`).
+fn safe_next(next: &str) -> &str {
+	let ok = next.starts_with('/')
+		&& !next.starts_with("//")
+		&& !next.contains('\\')
+		&& !next.chars().any(char::is_control);
+	if ok { next } else { "/" }
 }
 
 fn immutable(content_type: &'static str, body: &'static str) -> impl IntoResponse {
@@ -85,58 +150,37 @@ async fn app_css() -> impl IntoResponse {
 	immutable("text/css; charset=utf-8", APP_CSS)
 }
 
-async fn index(State(s): State<AppState>, user: Result<AuthUser, ServerError>) -> Response {
-	let user = match user {
-		Ok(user) => user,
-		Err(ServerError::MissingToken | ServerError::InvalidToken) => {
-			return Redirect::to("/login").into_response();
-		}
-		Err(e) => return e.into_response(),
-	};
-	let teams = match teams::list_for_user(&s.db, user.id).await {
-		Ok(teams) => teams,
-		Err(e) => return ServerError::from(e).into_response(),
-	};
-
-	layout(
-		"Teams",
-		&html! {
-			header class="flex items-center justify-between border-b border-border bg-card px-6 py-3" {
-				span class="font-semibold" { "podkit" }
-				form method="post" action="/logout" {
-					button type="submit" class=(BUTTON_OUTLINE) { "Sign out" }
-				}
-			}
-			main class="mx-auto max-w-3xl px-6 py-8" {
-				(card(&html! {
-					(card_header("Teams", Some("Teams you are a member of.")))
-					(card_content(&html! {
-						@if teams.is_empty() {
-							p class="text-sm text-muted-foreground" { "You are not a member of any team yet." }
-						} @else {
-							// Not `divide-y`: encre-css 0.21.1 puts that border below each row.
-							ul {
-								@for team in &teams {
-									li class="flex items-baseline justify-between border-t border-border py-3 text-sm first:border-t-0" {
-										strong { (team.name) }
-										span class="text-muted-foreground" { (team.slug) }
-									}
-								}
-							}
-						}
-					}))
-				}))
-			}
+/// A signed-in user goes to their first team; with none they create one.
+async fn index(State(s): State<AppState>, user: UiUser) -> Response {
+	match crate::teams::list_for_user(&s.db, user.id).await {
+		Ok(teams) => match teams.first() {
+			Some(team) => Redirect::to(&format!("/teams/{}/projects", team.id)).into_response(),
+			None => layout::bare_page(
+				Some(&user.name),
+				"Create a team",
+				&teams::create_form("You aren't in a team yet. Create one to get started."),
+			)
+			.into_response(),
 		},
-	)
-	.into_response()
+		Err(e) => error::bare(Some(&user), &e.into()),
+	}
 }
 
-async fn login_page() -> Markup {
-	layout(
+#[derive(Deserialize)]
+struct LoginQuery {
+	next: Option<String>,
+}
+
+async fn login_page(Query(query): Query<LoginQuery>) -> Markup {
+	let next = safe_next(query.next.as_deref().unwrap_or("/"));
+	let signals = format!(
+		"{{email: '', password: '', next: {}, _error: ''}}",
+		sse::js_string(next)
+	);
+	layout::document(
 		"Sign in",
 		&html! {
-			main class="mx-auto mt-16 max-w-sm px-6" data-signals="{email: '', password: '', _error: ''}" {
+			main class="mx-auto mt-16 max-w-sm px-6" data-signals=(signals) {
 				(card(&html! {
 					(card_header("Sign in to podkit", Some("Use the email and password of your podkit account.")))
 					(card_content(&html! {
@@ -149,7 +193,7 @@ async fn login_page() -> Markup {
 								"Password"
 								input class=(INPUT) type="password" autocomplete="current-password" required "data-bind:password";
 							}
-							p class="text-sm text-destructive" role="alert" "data-show"="$_error" "data-text"="$_error" {}
+							(form_error())
 							p class="text-sm text-muted-foreground" "data-show"="!window.isSecureContext" style="display: none" {
 								"This connection isn't encrypted, so your password and session travel in plain text. Use HTTPS when podkit is reachable from other machines."
 							}
@@ -162,33 +206,29 @@ async fn login_page() -> Markup {
 	)
 }
 
-fn one_event(event: Event) -> Response {
-	Sse::new(futures_util::stream::once(async move {
-		Ok::<_, Infallible>(event)
-	}))
-	.into_response()
+#[derive(Deserialize)]
+struct LoginSignals {
+	#[serde(flatten)]
+	credentials: Credentials,
+	#[serde(default)]
+	next: String,
 }
 
 async fn login(
 	State(s): State<AppState>,
 	cookies: Cookies,
 	headers: HeaderMap,
-	ReadSignals(credentials): ReadSignals<Credentials>,
+	ReadSignals(signals): ReadSignals<LoginSignals>,
 ) -> Response {
-	let message = match auth::log_in(&s, &cookies, &headers, credentials).await {
-		Ok(_) => {
-			return one_event(
-				ExecuteScript::new("window.location.assign('/')").write_as_axum_sse_event(),
-			);
-		}
+	let message = match auth::log_in(&s, &cookies, &headers, signals.credentials).await {
+		Ok(_) => return sse::redirect(safe_next(&signals.next)).into_response(),
 		Err(ServerError::InvalidCredentials) => "Wrong email or password.",
 		Err(e) => {
 			tracing::error!(error = %e, "ui login failed");
 			"Sign-in failed. Try again."
 		}
 	};
-	let signals = serde_json::json!({ "_error": message, "password": "" });
-	one_event(PatchSignals::new(signals.to_string()).write_as_axum_sse_event())
+	sse::signals(&serde_json::json!({ "_error": message, "password": "" })).into_response()
 }
 
 async fn logout(
@@ -206,63 +246,37 @@ async fn logout(
 
 #[cfg(test)]
 mod tests {
+	use crate::tests::{PgPool, db_test};
 	use axum::body::Body;
-	use axum::http::{HeaderMap, Request, StatusCode, header};
-	use sqlx::PgPool;
+	use axum::http::{Request, StatusCode, header};
+	use serde_json::json;
 	use tower::ServiceExt;
 
-	use super::Router;
-	use crate::tests::{app, user_with_team};
+	use super::testing::{
+		assert_contains, assert_not_contains, get_html, post_signals, send, ui_session,
+	};
+	use super::{safe_next, same_origin};
+	use crate::tests::{app, count, user_with_team};
 
-	async fn send(
-		app: &Router,
-		method: &str,
-		uri: &str,
-		cookie: Option<&str>,
-		signals: Option<&str>,
-	) -> (StatusCode, HeaderMap, String) {
-		let mut req = Request::builder().method(method).uri(uri);
-		if let Some(c) = cookie {
-			req = req.header(header::COOKIE, c);
-		}
-		let body = match signals {
-			Some(s) => {
-				req = req
-					.header(header::CONTENT_TYPE, "application/json")
-					.header("datastar-request", "true");
-				Body::from(s.to_owned())
-			}
-			None => Body::empty(),
-		};
-		let resp = app.clone().oneshot(req.body(body).unwrap()).await.unwrap();
-		let (parts, body) = resp.into_parts();
-		let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap();
-		(
-			parts.status,
-			parts.headers,
-			String::from_utf8(bytes.to_vec()).unwrap(),
-		)
-	}
-
-	#[sqlx::test]
-	async fn cookie_session_signs_in_lists_teams_and_signs_out(db: PgPool) {
+	#[db_test]
+	async fn cookie_session_signs_in_lands_on_its_team_and_signs_out(db: PgPool) {
 		let app = app(db).await;
-		user_with_team(&app, "alice").await;
+		let (_, team) = user_with_team(&app, "alice").await;
 
-		let (s, h, _) = send(&app, "GET", "/", None, None).await;
+		let (s, h, _) = get_html(&app, "/", None).await;
 		assert_eq!(s, StatusCode::SEE_OTHER);
 		assert_eq!(h[header::LOCATION], "/login");
 
 		let wrong = r#"{"email":"alice@example.com","password":"nope"}"#;
-		let (s, h, body) = send(&app, "POST", "/login", None, Some(wrong)).await;
+		let (s, h, body) = send(&app, "POST", "/login", None, Some(wrong), None).await;
 		assert_eq!(s, StatusCode::OK);
 		assert!(h.get(header::SET_COOKIE).is_none());
-		assert!(body.contains("Wrong email or password."), "{body}");
+		assert_contains(&body, "Wrong email or password.");
 
 		let right = r#"{"email":"alice@example.com","password":"correct horse battery"}"#;
-		let (s, h, body) = send(&app, "POST", "/login", None, Some(right)).await;
+		let (s, h, body) = send(&app, "POST", "/login", None, Some(right), None).await;
 		assert_eq!(s, StatusCode::OK);
-		assert!(body.contains("window.location.assign('/')"), "{body}");
+		assert_contains(&body, "window.location.assign('/')");
 		let set_cookie = h[header::SET_COOKIE].to_str().unwrap();
 		assert!(set_cookie.contains("HttpOnly") && set_cookie.contains("SameSite=Strict"));
 		assert!(
@@ -271,23 +285,29 @@ mod tests {
 		);
 		let cookie = set_cookie.split(';').next().unwrap().to_owned();
 
-		let (s, _, body) = send(&app, "GET", "/", Some(&cookie), None).await;
-		assert_eq!(s, StatusCode::OK);
-		assert!(body.contains("<strong>alice</strong>"), "{body}");
+		let (s, h, _) = get_html(&app, "/", Some(&cookie)).await;
+		assert_eq!(s, StatusCode::SEE_OTHER);
+		assert_eq!(
+			h[header::LOCATION],
+			format!("/teams/{team}/projects").as_str()
+		);
 
-		let (s, h, _) = send(&app, "POST", "/logout", Some(&cookie), None).await;
+		let (s, h, _) = send(&app, "POST", "/logout", Some(&cookie), None, None).await;
 		assert_eq!(s, StatusCode::SEE_OTHER);
 		assert_eq!(h[header::LOCATION], "/login");
 
-		let (s, _, _) = send(&app, "GET", "/", Some(&cookie), None).await;
+		let (s, _, _) = get_html(&app, "/", Some(&cookie)).await;
 		assert_eq!(
 			s,
 			StatusCode::SEE_OTHER,
 			"revoked session must not render the page"
 		);
+		let (s, h, _) = get_html(&app, &format!("/teams/{team}/projects"), Some(&cookie)).await;
+		assert_eq!(s, StatusCode::SEE_OTHER);
+		assert!(h[header::LOCATION].to_str().unwrap().starts_with("/login"));
 	}
 
-	#[sqlx::test]
+	#[db_test]
 	async fn session_cookie_is_secure_behind_an_https_proxy(db: PgPool) {
 		let app = app(db).await;
 		user_with_team(&app, "alice").await;
@@ -303,5 +323,116 @@ mod tests {
 		let resp = app.oneshot(req).await.unwrap();
 		let set_cookie = resp.headers()[header::SET_COOKIE].to_str().unwrap();
 		assert!(set_cookie.contains("Secure"), "{set_cookie}");
+	}
+
+	#[db_test]
+	async fn unauthenticated_page_redirects_to_login_with_next_and_sign_in_returns(db: PgPool) {
+		let app = app(db).await;
+		user_with_team(&app, "alice").await;
+
+		let (s, h, _) = get_html(&app, "/teams/1/projects", None).await;
+		assert_eq!(s, StatusCode::SEE_OTHER);
+		assert_eq!(h[header::LOCATION], "/login?next=%2Fteams%2F1%2Fprojects");
+
+		let (s, _, page) = get_html(&app, "/login?next=%2Fteams%2F1%2Fprojects", None).await;
+		assert_eq!(s, StatusCode::OK);
+		assert_contains(&page, "next: '/teams/1/projects'");
+
+		let creds = json!({
+			"email": "alice@example.com", "password": "correct horse battery",
+			"next": "/teams/1/projects",
+		});
+		let (_, _, body) = post_signals(&app, "/login", None, &creds).await;
+		assert_contains(&body, "window.location.assign('/teams/1/projects')");
+	}
+
+	#[db_test]
+	async fn sign_in_ignores_a_next_that_leaves_the_site(db: PgPool) {
+		let app = app(db).await;
+		user_with_team(&app, "alice").await;
+
+		for next in [
+			"//evil.example",
+			"https://evil.example",
+			"/\\evil.example",
+			"javascript:alert(1)",
+		] {
+			let creds = json!({
+				"email": "alice@example.com", "password": "correct horse battery", "next": next,
+			});
+			let (_, _, body) = post_signals(&app, "/login", None, &creds).await;
+			assert_contains(&body, "window.location.assign('/')");
+			assert_not_contains(&body, "evil");
+
+			let uri = format!(
+				"/login?next={}",
+				next.replace('/', "%2F").replace('\\', "%5C")
+			);
+			let (_, _, page) = get_html(&app, &uri, None).await;
+			assert_contains(&page, "next: '/'");
+			assert_not_contains(&page, "evil");
+		}
+	}
+
+	#[test]
+	fn safe_next_accepts_only_local_paths() {
+		assert_eq!(safe_next("/teams/1?a=b"), "/teams/1?a=b");
+		for bad in ["", "//x", "x", "http://x", "/\\x", "/a\nb"] {
+			assert_eq!(safe_next(bad), "/", "{bad:?}");
+		}
+	}
+
+	#[test]
+	fn same_origin_compares_origin_with_host_or_forwarded_host() {
+		let h = |pairs: &[(&str, &str)]| {
+			let mut m = axum::http::HeaderMap::new();
+			for (k, v) in pairs {
+				m.insert(
+					axum::http::HeaderName::from_bytes(k.as_bytes()).unwrap(),
+					v.parse().unwrap(),
+				);
+			}
+			m
+		};
+		assert!(same_origin(&h(&[
+			("origin", "http://a.test:8080"),
+			("host", "a.test:8080")
+		])));
+		assert!(!same_origin(&h(&[
+			("origin", "http://evil.example"),
+			("host", "a.test")
+		])));
+		assert!(!same_origin(&h(&[("origin", "null"), ("host", "a.test")])));
+		assert!(!same_origin(&h(&[("origin", "http://a.test")])));
+		assert!(same_origin(&h(&[
+			("origin", "https://pk.example"),
+			("host", "10.0.0.2:8080"),
+			("x-forwarded-host", "pk.example"),
+		])));
+		assert!(same_origin(&h(&[("host", "a.test")])));
+		assert!(!same_origin(&h(&[
+			("host", "a.test"),
+			("sec-fetch-site", "cross-site")
+		])));
+	}
+
+	#[db_test]
+	async fn a_cross_origin_post_is_refused_and_changes_nothing(db: PgPool) {
+		let app = app(db.clone()).await;
+		let (cookie, team) = ui_session(&app, "alice").await;
+
+		let evil = "http://evil.example";
+		let body = json!({ "name": "Evil", "slug": "evil" }).to_string();
+		for uri in [format!("/teams/{team}/projects"), "/teams/new".to_owned()] {
+			let (s, _, _) = send(&app, "POST", &uri, Some(&cookie), Some(&body), Some(evil)).await;
+			assert_eq!(s, StatusCode::FORBIDDEN, "{uri}");
+		}
+		let (s, _, _) = send(&app, "POST", "/logout", Some(&cookie), None, Some(evil)).await;
+		assert_eq!(s, StatusCode::FORBIDDEN);
+
+		assert_eq!(count(&db, "projects").await, 0);
+		assert_eq!(count(&db, "teams").await, 1);
+		let (s, _, _) = get_html(&app, &format!("/teams/{team}/projects"), Some(&cookie)).await;
+		assert_eq!(s, StatusCode::OK, "the session survives a refused logout");
 	}
 }

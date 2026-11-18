@@ -14,10 +14,17 @@ rollback, env vars, and resource limits. Each server runs `podkit-agent`,
 the only process that talks to Podman (it also restarts crashed containers,
 since Podman itself is daemonless). The control plane reaches the agent over
 a unix socket: an SSH tunnel with a pinned host key for remote servers,
-bootstrapped automatically via `POST /teams/{t}/servers`. A durable job
+bootstrapped automatically via `POST /api/v1/teams/{t}/servers`. A durable job
 queue drives deploys with live build logs over SSE. Data services include
 named volumes, one-click Postgres/MySQL/MongoDB/Redis, and scheduled S3
-backups with restore.
+backups with restore. Model weights from Hugging Face download into their own
+volumes (`/api/v1/teams/{t}/model-files`): the size is checked against the
+server's free disk before anything is queued, gated repos use a write-only
+team token, and an interrupted download resumes. A downloaded model runs as a
+one-click inference service (`/api/v1/teams/{t}/projects/{p}/models`) on
+llama.cpp, Ollama, vLLM, colibri or any image that serves `/v1`; it is
+reachable only as `model-<slug>` on the server's internal network and the
+create call refuses a format, GPU or memory size the server cannot take.
 
 ## Running it (dev)
 

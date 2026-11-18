@@ -23,6 +23,7 @@ mod agents;
 mod applications;
 mod auth;
 mod backups;
+mod catalog;
 mod config;
 mod databases;
 mod db;
@@ -32,9 +33,12 @@ mod env_vars;
 mod error;
 mod ids;
 mod jobs;
+mod links;
 mod logs;
 mod maintenance;
 mod members;
+mod model_files;
+mod models;
 mod projects;
 mod routes;
 mod scope;
@@ -159,6 +163,13 @@ fn resolve_config(config: &ServerConfig) -> AppResult<Config> {
 		data_dir,
 		local_agent_socket,
 		agent_binaries_dir,
+		hf_endpoint: config
+			.hf_endpoint
+			.as_deref()
+			.map_or("https://huggingface.co", |e| e.trim_end_matches('/'))
+			.to_owned(),
+		model_ready_timeout: None,
+		model_ready_interval: Duration::from_secs(3),
 	})
 }
 

@@ -1,5 +1,5 @@
 //! Backups of one database, under
-//! `/teams/{team}/projects/{project}/databases/{database}/backups`.
+//! `/api/v1/teams/{team}/projects/{project}/databases/{database}/backups`.
 
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;

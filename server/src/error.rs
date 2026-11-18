@@ -47,6 +47,11 @@ pub enum ServerError {
 	#[error("project not found")]
 	ProjectNotFound,
 
+	/// A page or resource that is not there or not visible to the caller;
+	/// used by the web UI for paths that name no specific resource.
+	#[error("not found")]
+	NotFound,
+
 	#[error("server not found")]
 	ServerNotFound,
 
@@ -73,6 +78,15 @@ pub enum ServerError {
 
 	#[error("backup target not found")]
 	BackupTargetNotFound,
+
+	#[error("model file not found")]
+	ModelFileNotFound,
+
+	#[error("model not found")]
+	ModelNotFound,
+
+	#[error("could not reach Hugging Face")]
+	HuggingFaceUnavailable,
 
 	#[error("that hostname is already routed to another application")]
 	DomainTaken,
@@ -120,6 +134,7 @@ impl ServerError {
 			| Self::Conflict(_)
 			| Self::ServerNotReady => StatusCode::CONFLICT,
 			Self::ProjectNotFound
+			| Self::NotFound
 			| Self::ServerNotFound
 			| Self::ApplicationNotFound
 			| Self::DeploymentNotFound
@@ -128,9 +143,11 @@ impl ServerError {
 			| Self::DatabaseNotFound
 			| Self::VolumeNotFound
 			| Self::BackupNotFound
-			| Self::BackupTargetNotFound => StatusCode::NOT_FOUND,
+			| Self::BackupTargetNotFound
+			| Self::ModelFileNotFound
+			| Self::ModelNotFound => StatusCode::NOT_FOUND,
 			Self::Forbidden => StatusCode::FORBIDDEN,
-			Self::AgentUnavailable => StatusCode::BAD_GATEWAY,
+			Self::AgentUnavailable | Self::HuggingFaceUnavailable => StatusCode::BAD_GATEWAY,
 		}
 	}
 }

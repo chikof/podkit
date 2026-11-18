@@ -9,7 +9,7 @@
 # {prefix}/{team id}/databases/{database id}/{backup id}.{sql.gz|archive.gz}.
 # The secret is stored encrypted and never returned. 409 when the team
 # already has a target with that name.
-POST {{base.url}}/teams/{{team.id}}/backup-targets
+POST {{base.url}}/api/v1/teams/{{team.id}}/backup-targets
 Authorization: Bearer {{auth.token}}
 Content-Type: application/json
 
@@ -26,14 +26,14 @@ Content-Type: application/json
 
 ### ListTargets
 # @name ListTargets
-GET {{base.url}}/teams/{{team.id}}/backup-targets
+GET {{base.url}}/api/v1/teams/{{team.id}}/backup-targets
 Authorization: Bearer {{auth.token}}
 
 ### DeleteTarget
 # @name DeleteTarget
 # note: databases using this target lose it (their schedule stops firing)
 # and existing backups can no longer be restored or deleted from storage.
-DELETE {{base.url}}/teams/{{team.id}}/backup-targets/{{backup_target.id}}
+DELETE {{base.url}}/api/v1/teams/{{team.id}}/backup-targets/{{backup_target.id}}
 Authorization: Bearer {{auth.token}}
 
 ### Backup
@@ -44,14 +44,14 @@ Authorization: Bearer {{auth.token}}
 # Returns 202 with status `queued`. Poll List for `succeeded` or `failed`
 # (read error). Scheduled backups appear in the same list with
 # triggered_by null.
-POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/backups
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/backups
 Authorization: Bearer {{auth.token}}
 
 ### List
 # @name List
 # note: newest first. ?limit= takes 1-200 (default 50); ?before=<backup id>
 # returns the next page.
-GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/backups
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/backups
 Authorization: Bearer {{auth.token}}
 
 ### Restore
@@ -60,12 +60,12 @@ Authorization: Bearer {{auth.token}}
 # `succeeded` and the database `running` (400 otherwise). Returns 202;
 # a failure shows up as `restore failed: ...` in the database's
 # status_message.
-POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/backups/{{backup.id}}/restore
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/backups/{{backup.id}}/restore
 Authorization: Bearer {{auth.token}}
 
 ### Delete
 # @name Delete
 # note: removes the object from the bucket, then the row. 409 while the
 # backup is still queued or running.
-DELETE {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/backups/{{backup.id}}
+DELETE {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/databases/{{database.id}}/backups/{{backup.id}}
 Authorization: Bearer {{auth.token}}

@@ -3,17 +3,17 @@
 # @capture file-secret deployment.id = response.json.id
 # Queues a Deploy job and returns immediately with status "queued". Poll
 # Get below for progress, or follow BuildLogs.
-POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments
 Authorization: Bearer {{auth.token}}
 
 ### List
 # @name List
-GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments
 Authorization: Bearer {{auth.token}}
 
 ### Get
 # @name Get
-GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}
 Authorization: Bearer {{auth.token}}
 
 ### Rollback
@@ -21,14 +21,14 @@ Authorization: Bearer {{auth.token}}
 # Redeploys an earlier deployment's already-built image — no rebuild,
 # same zero-downtime swap. Set deployment.id below to the target to roll
 # back to (e.g. capture it from an earlier List response).
-POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/rollback
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/rollback
 Authorization: Bearer {{auth.token}}
 
 ### Cancel
 # @name Cancel
 # Cancels a deployment that is still queued or in progress. 202 with the
 # deployment; 400 "deployment is not in progress" once it has finished.
-POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/cancel
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/cancel
 Authorization: Bearer {{auth.token}}
 
 ### BuildLogs
@@ -37,6 +37,6 @@ Authorization: Bearer {{auth.token}}
 # `event: log` lines (data is {"seq","ts","stream","line"}), replayed from
 # the start and then live, ending with `event: end`. Runtime logs of the
 # running container are GET .../applications/{id}/logs.
-GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/build-logs
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/deployments/{{deployment.id}}/build-logs
 Authorization: Bearer {{auth.token}}
 Accept: text/event-stream

@@ -1,7 +1,7 @@
 ### Set (create or update)
 # @name Set
 # @capture file-secret envvar.id = response.json.id
-POST {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/env-vars
+POST {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/env-vars
 Authorization: Bearer {{auth.token}}
 Content-Type: application/json
 
@@ -12,10 +12,10 @@ Content-Type: application/json
 
 ### List (values redacted)
 # @name List
-GET {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/env-vars
+GET {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/env-vars
 Authorization: Bearer {{auth.token}}
 
 ### Delete
 # @name Delete
-DELETE {{base.url}}/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/env-vars/{{envvar.id}}
+DELETE {{base.url}}/api/v1/teams/{{team.id}}/projects/{{project.id}}/applications/{{application.id}}/env-vars/{{envvar.id}}
 Authorization: Bearer {{auth.token}}

@@ -13,7 +13,7 @@ async fn other_team_cannot_reach_resources(db: PgPool) {
 	let (s, project) = call(
 		&app,
 		"POST",
-		&format!("/teams/{a_team}/projects"),
+		&format!("/api/v1/teams/{a_team}/projects"),
 		Some(a_token.as_str()),
 		Some(json!({ "name": "web", "slug": "web" })),
 	)
@@ -24,7 +24,7 @@ async fn other_team_cannot_reach_resources(db: PgPool) {
 	let (s, servers) = call(
 		&app,
 		"GET",
-		&format!("/teams/{a_team}/servers"),
+		&format!("/api/v1/teams/{a_team}/servers"),
 		Some(a_token.as_str()),
 		None,
 	)
@@ -35,7 +35,7 @@ async fn other_team_cannot_reach_resources(db: PgPool) {
 	let (s, application) = call(
 		&app,
 		"POST",
-		&format!("/teams/{a_team}/projects/{a_project}/applications"),
+		&format!("/api/v1/teams/{a_team}/projects/{a_project}/applications"),
 		Some(a_token.as_str()),
 		Some(json!({
 			"name": "whoami",
@@ -58,7 +58,7 @@ async fn other_team_cannot_reach_resources(db: PgPool) {
 		.await
 		.unwrap();
 
-	let app_path = format!("/teams/{b_team}/projects/{a_project}/applications/{a_app}");
+	let app_path = format!("/api/v1/teams/{b_team}/projects/{a_project}/applications/{a_app}");
 
 	let (s, _) = call(
 		&app,
@@ -112,7 +112,7 @@ async fn other_team_cannot_reach_resources(db: PgPool) {
 	.execute(&db)
 	.await
 	.unwrap();
-	let db_path = format!("/teams/{b_team}/projects/{a_project}/databases/{a_db}");
+	let db_path = format!("/api/v1/teams/{b_team}/projects/{a_project}/databases/{a_db}");
 
 	let (s, _) = call(&app, "GET", &db_path, Some(b_token.as_str()), None).await;
 	assert_eq!(s, StatusCode::NOT_FOUND, "cross-team database GET");

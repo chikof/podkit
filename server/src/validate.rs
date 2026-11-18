@@ -29,6 +29,17 @@ pub fn hostname(s: &str) -> bool {
 	labels >= 2 && last.bytes().all(|c| c.is_ascii_lowercase())
 }
 
+/// A URL-safe identifier: 1-60 chars of `[a-z0-9-]`, not starting or ending
+/// with `-`.
+pub fn slug(s: &str) -> bool {
+	let b = s.as_bytes();
+	(1..=60).contains(&b.len())
+		&& b[0] != b'-'
+		&& b[b.len() - 1] != b'-'
+		&& b.iter()
+			.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-')
+}
+
 /// A hostname or a literal IP address.
 pub fn server_host(s: &str) -> bool {
 	hostname(s) || s.parse::<IpAddr>().is_ok()
@@ -90,6 +101,26 @@ mod tests {
 		for (input, want) in cases {
 			assert_eq!(f(input), *want, "{name}({input:?})");
 		}
+	}
+
+	#[test]
+	fn slug_cases() {
+		let long = "a".repeat(61);
+		check(
+			"slug",
+			slug,
+			&[
+				("web", true),
+				("my-app-2", true),
+				("", false),
+				("-a", false),
+				("a-", false),
+				("A", false),
+				("a b", false),
+				("a_b", false),
+				(long.as_str(), false),
+			],
+		);
 	}
 
 	#[test]
