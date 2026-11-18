@@ -42,8 +42,8 @@ section_templates() {
 	expect_body "/projects/$project/apps/" "POST $gallery/gotify/deploy"
 	target="$(grep -oE "assign\('[^']+" "$BODY" | head -1 | sed "s/assign('//")"
 	[[ -n "$target" ]] || fail "gotify deploy gave no redirect"
-	wait_for "$target" "Success" 900
 	local app_page="${target%%/deployments/*}"
+	wait_for "$app_page" "Running" 900
 
 	# Deploy a two-service template: a stack with two services running.
 	ui_post "$gallery/umami/deploy" "$(jq -n --arg p "$project" --arg e "$SMOKE_ENV" --arg s "$SMOKE_SERVER" \
