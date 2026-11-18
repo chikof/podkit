@@ -141,6 +141,34 @@ pub fn check(
 	Ok((compose, plan))
 }
 
+/// Checks a compose file as a new stack of `project` would be checked, creating
+/// nothing: the warnings and the variables it lacks when it would deploy, the offending keys when not. The
+/// web UI's validation panel. Caller must hold `create stack`.
+///
+/// # Errors
+/// `Unprocessable` listing each refused key with its service and path.
+pub async fn validate(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	yaml: &str,
+	env: &BTreeMap<String, String>,
+) -> AppResult<(Vec<Warning>, Vec<String>)> {
+	authorize(&s.db, user, team, Action::Create, Resource::Stack).await?;
+	scope::project(&s.db, team, project).await?;
+	validate_env(env)?;
+	let (compose, _) = check(
+		s,
+		StackId::generate(),
+		yaml,
+		env,
+		&BTreeMap::new(),
+		&BTreeMap::new(),
+	)?;
+	Ok((compose.warnings, compose.missing_vars.into_iter().collect()))
+}
+
 fn validate_name(name: &str) -> AppResult<String> {
 	let name = name.trim();
 	if name.is_empty() || name.chars().count() > 60 {

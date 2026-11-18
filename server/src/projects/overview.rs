@@ -17,6 +17,7 @@ use crate::environments::{self, Environment};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ApplicationId, EnvironmentId, ProjectId, TeamId, UserId};
 use crate::models::{self, EngineKind as ModelEngine, ModelStatus};
+use crate::stacks::{self, StackStatus};
 use crate::{scope, servers};
 
 /// The three kinds of thing an environment holds.
@@ -25,6 +26,7 @@ pub enum ResourceKind {
 	Application,
 	Database,
 	Model,
+	Stack,
 }
 
 impl ResourceKind {
@@ -34,6 +36,7 @@ impl ResourceKind {
 			Self::Application => "Application",
 			Self::Database => "Database",
 			Self::Model => "Model",
+			Self::Stack => "Stack",
 		}
 	}
 
@@ -44,12 +47,13 @@ impl ResourceKind {
 			Self::Application => "application",
 			Self::Database => "database",
 			Self::Model => "model",
+			Self::Stack => "stack",
 		}
 	}
 
 	#[must_use]
 	pub fn from_slug(slug: &str) -> Option<Self> {
-		[Self::Application, Self::Database, Self::Model]
+		[Self::Application, Self::Database, Self::Model, Self::Stack]
 			.into_iter()
 			.find(|k| k.slug() == slug)
 	}
@@ -63,6 +67,7 @@ pub enum ResourceStatus {
 	Deployment(DeploymentStatus),
 	Database(DatabaseStatus),
 	Model(ModelStatus),
+	Stack(StackStatus),
 }
 
 /// The mark to draw for a resource: `mark` is a name the logo component knows (`github`,
@@ -97,6 +102,8 @@ pub struct ResourceCard {
 	pub id: i64,
 	pub name: String,
 	pub mark: Option<&'static str>,
+	/// A template stack's own logo (a URL); it wins over `mark`.
+	pub logo_url: Option<String>,
 	/// A short line under the name: the repository, the engine and version.
 	pub detail: String,
 	/// An application's generated hostname.
@@ -288,7 +295,9 @@ pub async fn cards(db: &PgPool, user: UserId, team: TeamId) -> AppResult<Vec<Pro
 				a.project_id,
 				ResourceLogo {
 					kind: ResourceKind::Application,
-					mark: application_mark(&a.repo_url, a.build_strategy),
+					mark: a.repo_url.as_deref().map_or(Some("docker"), |repo| {
+						application_mark(repo, a.build_strategy)
+					}),
 					name: a.name,
 				},
 			);
@@ -393,6 +402,37 @@ async fn latest_deployments(
 		.collect())
 }
 
+/// The stacks of an environment as resource cards: a template stack carries the template's own
+/// logo, any other the Docker mark; the link goes to the first service's hostname.
+async fn stack_cards(db: &PgPool, environment: EnvironmentId) -> AppResult<Vec<ResourceCard>> {
+	let mut cards = Vec::new();
+	for st in stacks::list_by_environment(db, environment).await? {
+		let services = stacks::list_services(db, st.id).await?;
+		let host = services.iter().find_map(|svc| svc.domain.clone());
+		let logo_url = st
+			.source
+			.strip_prefix("template:")
+			.and_then(|rest| rest.split('@').next())
+			.and_then(crate::templates::find)
+			.map(crate::logos::template_url);
+		cards.push(ResourceCard {
+			kind: ResourceKind::Stack,
+			id: st.id.0,
+			mark: Some("docker"),
+			logo_url,
+			detail: match services.len() {
+				1 => "1 service".to_owned(),
+				n => format!("{n} services"),
+			},
+			host,
+			status: ResourceStatus::Stack(st.status),
+			changed_at: Some(st.updated_at),
+			name: st.name,
+		});
+	}
+	Ok(cards)
+}
+
 /// One environment of a project with its tabs and resource cards; needs `read project`.
 /// A project or environment of another team (or of another project) is a not-found error,
 /// and an unknown slug is `EnvironmentNotFound`.
@@ -423,11 +463,27 @@ pub async fn environment_view(
 				continue;
 			};
 			let latest = latest.iter().find(|l| l.application == app.id);
+			// A git application shows its host's mark and repository; an image application
+			// the registry's logo for its image (else Docker's) and the image itself.
+			let (mark, logo_url, detail) = match (&app.repo_url, &app.image) {
+				(Some(repo), _) => (
+					application_mark(repo, app.build_strategy),
+					None,
+					format!("{} · {}", repo_label(repo), app.git_ref),
+				),
+				(None, Some(image)) => (
+					Some("docker"),
+					crate::logos::for_image(image),
+					image.clone(),
+				),
+				(None, None) => (None, None, String::new()),
+			};
 			resources.push(ResourceCard {
 				kind: ResourceKind::Application,
 				id: app.id.0,
-				mark: application_mark(&app.repo_url, app.build_strategy),
-				detail: format!("{} · {}", repo_label(&app.repo_url), app.git_ref),
+				mark,
+				logo_url,
+				detail,
 				host: Some(applications::public_hostname(&app.slug, server)),
 				status: latest.map_or(ResourceStatus::NotDeployed, |l| {
 					ResourceStatus::Deployment(l.status)
@@ -443,6 +499,7 @@ pub async fn environment_view(
 				kind: ResourceKind::Database,
 				id: d.id.0,
 				mark: Some(database_mark(d.engine)),
+				logo_url: None,
 				detail: format!("{} {}", db_label(d.engine), d.version),
 				host: None,
 				status: ResourceStatus::Database(d.status),
@@ -457,6 +514,7 @@ pub async fn environment_view(
 				kind: ResourceKind::Model,
 				id: m.id.0,
 				mark: Some(model_mark(m.engine)),
+				logo_url: None,
 				detail: models::engines::spec(m.engine).label.to_owned(),
 				host: None,
 				status: ResourceStatus::Model(m.status),
@@ -464,6 +522,9 @@ pub async fn environment_view(
 				name: m.name,
 			});
 		}
+	}
+	if can(db, user, team, Resource::Stack).await {
+		resources.extend(stack_cards(db, environment.id).await?);
 	}
 
 	Ok(EnvironmentView {

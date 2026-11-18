@@ -4,8 +4,8 @@
 use maud::{Markup, html};
 use time::{OffsetDateTime, UtcOffset};
 
-use crate::projects::overview::{ResourceLogo, ResourceStatus};
-use crate::ui::components::{LogoSize, Tone, logo};
+use crate::projects::overview::{ResourceCard, ResourceLogo, ResourceStatus};
+use crate::ui::components::{LogoSize, Priority, Tone, image_logo, logo};
 use crate::ui::status::Status;
 
 /// How many logos a project card shows before "+N".
@@ -14,6 +14,14 @@ const LOGOS_SHOWN: usize = 5;
 /// The logo of a resource: its mark, or the monogram of its name.
 pub fn resource_logo(mark: Option<&str>, name: &str, size: LogoSize) -> Markup {
 	logo(mark.unwrap_or(name), size)
+}
+
+/// A resource card's logo: a template stack's own image, else its mark or monogram.
+pub fn card_logo(card: &ResourceCard) -> Markup {
+	match &card.logo_url {
+		Some(url) => image_logo(url, LogoSize::Md, Priority::Normal),
+		None => resource_logo(card.mark, &card.name, LogoSize::Md),
+	}
 }
 
 /// Up to five logos, one per resource, then "+N". The names are there for a screen reader,
@@ -55,6 +63,7 @@ fn parts(status: ResourceStatus) -> (&'static str, Tone, bool) {
 		ResourceStatus::Deployment(s) => (s.label(), s.tone(), s.in_flight()),
 		ResourceStatus::Database(s) => (s.label(), s.tone(), s.in_flight()),
 		ResourceStatus::Model(s) => (s.label(), s.tone(), s.in_flight()),
+		ResourceStatus::Stack(s) => (s.label(), s.tone(), s.in_flight()),
 	}
 }
 

@@ -27,9 +27,10 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-pub use registry::{Loaded, find, short_hash};
 #[cfg(test)]
-pub use registry::{load_all, search};
+pub use registry::load_all;
+pub use registry::{Loaded, find, search, short_hash};
+pub(crate) use routes::{VariableInfo, variables};
 pub use routes::{deploy_router, router};
 
 /// Categories the gallery groups templates by.

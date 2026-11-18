@@ -1,5 +1,6 @@
 pub mod dbs;
 pub mod grid;
+pub mod stacks_ui;
 mod tenancy;
 
 use std::sync::Arc;

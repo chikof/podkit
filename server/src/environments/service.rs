@@ -20,7 +20,14 @@ const MAX_NAME_LEN: usize = 60;
 
 /// Slugs the web UI keeps for its own pages under `/projects/{p}/`: an environment's page
 /// is `/projects/{p}/{slug}`, so these would shadow it.
-const RESERVED_SLUGS: &[&str] = &["apps", "databases", "models", "environments"];
+const RESERVED_SLUGS: &[&str] = &[
+	"apps",
+	"databases",
+	"models",
+	"environments",
+	"stacks",
+	"templates",
+];
 
 /// How many resources a refusal to delete names before saying "and N more".
 const LISTED: usize = 8;

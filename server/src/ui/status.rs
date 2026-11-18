@@ -15,6 +15,7 @@ use crate::deployments::DeploymentStatus;
 use crate::model_files::ModelFileStatus;
 use crate::models::ModelStatus;
 use crate::servers::ServerStatus;
+use crate::stacks::{ServiceStatus, StackStatus};
 
 pub trait Status: Copy {
 	fn label(self) -> &'static str;
@@ -188,6 +189,64 @@ impl Status for ModelFileStatus {
 		match self {
 			Self::Queued | Self::Downloading => true,
 			Self::Ready | Self::Failed => false,
+		}
+	}
+}
+
+impl Status for StackStatus {
+	fn label(self) -> &'static str {
+		match self {
+			Self::Pending => "Not deployed",
+			Self::Deploying => "Deploying",
+			Self::Running => "Running",
+			Self::Stopped => "Stopped",
+			Self::Failed => "Failed",
+			Self::Deleting => "Deleting",
+		}
+	}
+
+	fn tone(self) -> Tone {
+		match self {
+			Self::Pending | Self::Stopped => Tone::Neutral,
+			Self::Deploying => Tone::Progress,
+			Self::Running => Tone::Success,
+			Self::Failed => Tone::Danger,
+			Self::Deleting => Tone::Warning,
+		}
+	}
+
+	fn in_flight(self) -> bool {
+		match self {
+			Self::Deploying | Self::Deleting => true,
+			Self::Pending | Self::Running | Self::Stopped | Self::Failed => false,
+		}
+	}
+}
+
+impl Status for ServiceStatus {
+	fn label(self) -> &'static str {
+		match self {
+			Self::Pending => "Not deployed",
+			Self::Running => "Running",
+			Self::Stopped => "Stopped",
+			Self::Failed => "Failed",
+			Self::Removing => "Removing",
+		}
+	}
+
+	fn tone(self) -> Tone {
+		match self {
+			Self::Pending | Self::Stopped => Tone::Neutral,
+			Self::Running => Tone::Success,
+			Self::Failed => Tone::Danger,
+			Self::Removing => Tone::Warning,
+		}
+	}
+
+	fn in_flight(self) -> bool {
+		match self {
+			Self::Removing => true,
+			Self::Pending | Self::Running | Self::Stopped | Self::Failed => false,
 		}
 	}
 }

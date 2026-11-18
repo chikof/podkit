@@ -23,6 +23,7 @@ mod dialog;
 mod empty_state;
 mod field;
 mod icon;
+mod image_logo;
 mod kbd;
 mod logo;
 mod menu;
@@ -51,6 +52,7 @@ pub use field::{
 	select_field, switch_field, text_field, textarea_field,
 };
 pub use icon::{icon, icon_with};
+pub use image_logo::{Priority, image_logo};
 pub use kbd::{kbd, kbd_combo};
 pub use logo::{LogoSize, logo};
 pub use menu::{MENU_ITEM, MENU_ITEM_DANGER, dropdown_menu, menu_label, menu_link, menu_separator};

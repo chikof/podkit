@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key, git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t\tFROM applications WHERE project_id = $1 ORDER BY id\n\t\t",
+  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key, git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t\tFROM applications WHERE id = $1\n\t\t",
   "describe": {
     "columns": [
       {
@@ -240,5 +240,5 @@
       true
     ]
   },
-  "hash": "417382dfaaea98218651e5493c42f1ef46e3e886d3bf2005e7f9b31ed290aae5"
+  "hash": "921fe2b70ea8ba80ee876e857e71b5cee80c7894860b1ed0b8b879fc8978b54f"
 }

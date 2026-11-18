@@ -112,19 +112,19 @@ async fn list(_user: AuthUser, Query(query): Query<ListQuery>) -> AppResult<Json
 }
 
 #[derive(Serialize)]
-struct VariableInfo {
-	name: String,
+pub(crate) struct VariableInfo {
+	pub(crate) name: String,
 	/// `input` the user may answer, `domain` a hostname the user may replace,
 	/// `generated` made at deploy time and never shown.
-	kind: &'static str,
-	label: Option<String>,
-	description: Option<String>,
+	pub(crate) kind: &'static str,
+	pub(crate) label: Option<String>,
+	pub(crate) description: Option<String>,
 	/// Shown for inputs that are not secret.
-	default: Option<String>,
-	required: bool,
-	secret: bool,
+	pub(crate) default: Option<String>,
+	pub(crate) required: bool,
+	pub(crate) secret: bool,
 	/// Generated, and its value is shown once in the deploy response.
-	revealed: bool,
+	pub(crate) revealed: bool,
 }
 
 #[derive(Serialize)]
@@ -156,7 +156,7 @@ fn is_secret_expr(text: &str, template: &Template) -> bool {
 	})
 }
 
-fn variables(t: &Template) -> Vec<VariableInfo> {
+pub(crate) fn variables(t: &Template) -> Vec<VariableInfo> {
 	t.variables
 		.iter()
 		.map(|(name, v)| match v {
