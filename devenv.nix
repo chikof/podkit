@@ -3,15 +3,9 @@
     sqlx-cli
     resterm
     lazysql
-    sccache
     nixpacks
+    python3
   ];
-
-  env.RUSTC_WRAPPER = "${pkgs.sccache}/bin/sccache";
-
-  processes = {
-    sccache.exec = "sccache --start-server";
-  };
 
   dotenv.enable = true;
   languages.rust = {
