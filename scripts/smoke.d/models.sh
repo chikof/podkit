@@ -55,6 +55,9 @@ section_models() {
 	grep -q 'pg-ans-0' "$BODY" || fail "chat: no answer element: $(head -c 400 "$BODY")"
 	grep -Eq '[0-9]+ tokens' "$BODY" || fail "chat: no token count: $(head -c 400 "$BODY")"
 	echo "ok   POST chat ($(grep -Eo '[0-9]+ tokens[^<]*' "$BODY" | tail -n 1))"
+	grep -q 'class="ui-think"' "$BODY" || fail "chat: no thinking block"
+	expect_page "$page?tab=monitoring" "Metrics"
+	expect_page "$page/metrics?range=24h" "metrics-body"
 
 	if [[ -n "${PODKIT_SMOKE_KEEP:-}" ]]; then
 		echo "kept the model: $URL$page"

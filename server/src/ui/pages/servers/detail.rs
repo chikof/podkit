@@ -10,7 +10,7 @@ use maud::{Markup, html};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::{crumbs, detail_url, hardware_parts, host_port, list_url, local_badge, server_tabs};
+use super::{crumbs, detail_url, host_port, human_mb, list_url, local_badge, server_tabs};
 use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ServerId, TeamId};
@@ -19,8 +19,8 @@ use crate::servers::service;
 use crate::servers::{Server, host_key_fingerprint};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, BUTTON_OUTLINE, Dismiss, INPUT, LogoSize, card, card_content, card_section,
-	dialog, dialog_cancel, dialog_open_button, logo,
+	BUTTON_DANGER, BUTTON_OUTLINE, Dismiss, INPUT, LogoSize, dialog, dialog_cancel,
+	dialog_open_button, icon, logo,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -71,31 +71,106 @@ fn action_error(signal: &str) -> Markup {
 
 fn fact(label: &str, value: &Markup) -> Markup {
 	html! {
-		div class="flex flex-col gap-1 sm:flex-row sm:gap-4" {
-			dt class="w-40 shrink-0 text-muted-foreground" { (label) }
-			dd class="min-w-0 break-words" { (value) }
+		div class="ui-fact" {
+			dt { (label) }
+			dd { (value) }
 		}
 	}
 }
 
-/// Status, message and facts of one server; patched in place by the poll.
+/// One cell of the hardware strip: an icon, what it is, the figure and a line under it.
+struct HwCell {
+	icon: &'static str,
+	key: &'static str,
+	value: String,
+	sub: String,
+}
+
+/// The cells of the strip, from what the agent last reported. Empty until it has.
+fn hardware_cells(server: &Server) -> Vec<HwCell> {
+	let Some(hw) = server.hardware.as_ref().map(|h| &h.0) else {
+		return Vec::new();
+	};
+	let mut cells = Vec::new();
+	if hw.cpu.threads > 0 || !hw.cpu.model.is_empty() {
+		cells.push(HwCell {
+			icon: "cpu",
+			key: "CPU",
+			value: hw.cpu.model.clone(),
+			sub: format!("{} threads", hw.cpu.threads),
+		});
+	}
+	if hw.memory.total_mb > 0 {
+		cells.push(HwCell {
+			icon: "memory-stick",
+			key: "RAM",
+			value: human_mb(hw.memory.total_mb),
+			sub: format!("{} available", human_mb(hw.memory.available_mb)),
+		});
+	}
+	for gpu in &hw.gpus {
+		cells.push(HwCell {
+			icon: "zap",
+			key: "GPU",
+			value: gpu.name.clone(),
+			sub: match gpu.vram_used_mb {
+				Some(used) => format!("{} VRAM · {} in use", human_mb(gpu.vram_mb), human_mb(used)),
+				None => format!("{} VRAM", human_mb(gpu.vram_mb)),
+			},
+		});
+	}
+	if let Some(disk) = hw.disks.iter().max_by_key(|d| d.total_mb) {
+		cells.push(HwCell {
+			icon: "hard-drive",
+			key: "Disk",
+			value: human_mb(disk.total_mb),
+			sub: format!("{} free", human_mb(disk.free_mb)),
+		});
+	}
+	cells
+}
+
+/// The hardware strip: hairline cells, no cards.
+fn hardware_strip(server: &Server) -> Markup {
+	let cells = hardware_cells(server);
+	html! {
+		@if cells.is_empty() {
+			p class="ui-lede" { "Hardware not reported yet." }
+		} @else {
+			ul class="ui-hw" aria-label="Hardware" {
+				@for c in &cells {
+					li class="ui-hw-item" {
+						(icon(c.icon))
+						div class="ui-hw-text" {
+							p class="ui-hw-k" { (c.key) }
+							p class="ui-hw-v" title=(c.value) { (c.value) }
+							p class="ui-hw-s" { (c.sub) }
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+/// Status, message, hardware and facts of one server; patched in place by the poll.
 fn status_region(ctx: &TeamCtx, server: &Server, job: Option<&Job>) -> Markup {
 	let fingerprint = server.host_key.as_deref().and_then(host_key_fingerprint);
 	let url = format!("{}/status", detail_url(ctx.team.id, server.id));
 	let polling = server.status.in_flight() || job_in_flight(job);
-	let hardware = hardware_parts(server);
 	html! {
-		div id="server-status" class="flex flex-col gap-4" {
-			div class="flex flex-wrap items-center gap-2" {
+		div id="server-status" class="ui-stack" {
+			div class="ui-meta" {
 				(status_badge(server.status))
 				@if let Some(job) = job {
-					span class="text-sm text-muted-foreground" { "Bootstrap " (job_label(job.status)) }
+					span class="ui-lede" { "Bootstrap " (job_label(job.status)) }
 				}
 			}
 			@if let Some(message) = &server.status_message {
-				p class="text-sm text-destructive" { (message) }
+				p class="ui-err" { (message) }
 			}
-			dl class="flex flex-col gap-3 text-sm" {
+			(hardware_strip(server))
+			dl class="ui-facts" {
 				(fact("Address", &html! { (host_port(server)) }))
 				@if let Some(user) = &server.ssh_user {
 					(fact("SSH user", &html! { (user) }))
@@ -103,9 +178,6 @@ fn status_region(ctx: &TeamCtx, server: &Server, job: Option<&Job>) -> Markup {
 				(fact("Podman socket", &html! { span class="font-mono" { (server.podman_socket_path) } }))
 				(fact("Agent version", &html! { (server.agent_version.as_deref().unwrap_or("not installed yet")) }))
 				(fact("Architecture", &html! { (server.arch.as_deref().unwrap_or("unknown")) }))
-				(fact("Hardware", &html! {
-					@if hardware.is_empty() { "not reported yet" } @else { (hardware.join(" · ")) }
-				}))
 				@if !server.is_local {
 					(fact("Host key", &html! {
 						@if let Some(fp) = &fingerprint {
@@ -121,21 +193,18 @@ fn status_region(ctx: &TeamCtx, server: &Server, job: Option<&Job>) -> Markup {
 	}
 }
 
-/// Re-run, reset host key and delete. The last two open a confirm.
+/// Re-run, reset host key and delete: the page's actions. The last two open a confirm.
 fn actions(ctx: &TeamCtx, server: &Server, can_update: bool, can_delete: bool) -> Markup {
 	let base = detail_url(ctx.team.id, server.id);
 	let rerun = format!("@post('{base}/bootstrap')");
 	html! {
-		div class="flex flex-wrap items-center gap-3" {
-			@if can_update {
-				button type="button" class=(BUTTON_OUTLINE) "data-on:click"=(rerun) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Re-run bootstrap" }
-				(dialog_open_button(RESET_DIALOG, BUTTON_OUTLINE, &html! { "Reset host key and bootstrap" }))
-			}
-			@if can_delete {
-				(dialog_open_button(DELETE_DIALOG, BUTTON_DANGER, &html! { "Delete server" }))
-			}
+		@if can_update {
+			button type="button" class=(BUTTON_OUTLINE) "data-on:click"=(rerun) "data-indicator:_busy" "data-attr:disabled"="$_busy" { (icon("refresh-cw")) "Re-run bootstrap" }
+			(dialog_open_button(RESET_DIALOG, BUTTON_OUTLINE, &html! { (icon("key-round")) "Reset host key" }))
 		}
-		(form_error())
+		@if can_delete {
+			(dialog_open_button(DELETE_DIALOG, BUTTON_DANGER, &html! { (icon("trash-2")) "Delete server" }))
+		}
 	}
 }
 
@@ -186,14 +255,21 @@ fn delete_dialog(ctx: &TeamCtx, server: &Server) -> Markup {
 	)
 }
 
-/// The header every page of a server shares: logo, name, badges, the two tabs.
-pub(super) fn header(team: TeamId, server: &Server, monitoring: bool) -> Markup {
+/// The header every page of a server shares: logo, name, address, the page's actions and
+/// the two tabs.
+pub(super) fn header(team: TeamId, server: &Server, monitoring: bool, actions: &Markup) -> Markup {
 	html! {
-		div class="flex flex-col gap-4" {
-			div class="flex flex-wrap items-center gap-3" {
-				(logo(&server.name, LogoSize::Md))
-				h1 class="text-2xl font-semibold" { (server.name) }
-				@if server.is_local { (local_badge()) }
+		div class="ui-stack" {
+			header class="ui-page-head" {
+				div class="ui-head-id" {
+					(logo(&server.name, LogoSize::Lg))
+					div class="ui-page-title" {
+						p class="ui-eyebrow" { "Server · " (host_port(server)) }
+						h1 { (server.name) }
+					}
+					@if server.is_local { (local_badge()) }
+				}
+				div class="ui-page-actions" { (actions) }
 			}
 			(server_tabs(team, server.id, monitoring))
 		}
@@ -216,29 +292,20 @@ async fn detail(
 	let mut crumbs = crumbs(&ctx);
 	crumbs.push((server.name.as_str(), None));
 	let body = html! {
-		div class="mx-auto flex w-full max-w-4xl flex-col gap-6" data-signals="{confirm: '', _busy: false, _error: '', _delete_error: ''}" {
-			(header(ctx.team.id, server, false))
-			(card(&html! {
-				(card_section("Status", None, None))
-				(card_content(&status_region(&ctx, server, found.bootstrap.as_ref())))
-			}))
+		div class="ui-page-body" data-signals="{confirm: '', _busy: false, _error: '', _delete_error: ''}" {
+			(header(ctx.team.id, server, false, &actions(&ctx, server, can_update, can_delete)))
+			(form_error())
+			(status_region(&ctx, server, found.bootstrap.as_ref()))
 			@if !server.is_local {
-				(card(&html! {
-					(card_section("Bootstrap log", None, None))
-					(card_content(&html! {
-						@if found.bootstrap.is_some() {
-							(log_view(LOG_ID, &log_url))
-						} @else {
-							p class="text-sm text-muted-foreground" { "No bootstrap has run yet." }
-						}
-					}))
-				}))
-			}
-			@if can_update || can_delete {
-				(card(&html! {
-					(card_section("Bootstrap", Some("Reinstalls the agent and refreshes its service unit over SSH."), None))
-					(card_content(&actions(&ctx, server, can_update, can_delete)))
-				}))
+				section class="ui-stack" aria-labelledby="bootstrap-title" {
+					h2 id="bootstrap-title" class="ui-sec-h" { "Bootstrap log" }
+					@if found.bootstrap.is_some() {
+						p class="ui-lede" { "Re-running reinstalls the agent and refreshes its service unit over SSH." }
+						(log_view(LOG_ID, &log_url))
+					} @else {
+						p class="ui-lede" { "No bootstrap has run yet." }
+					}
+				}
 			}
 			@if can_update { (reset_dialog(&ctx, server)) }
 			@if can_delete { (delete_dialog(&ctx, server)) }

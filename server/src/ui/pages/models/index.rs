@@ -18,7 +18,7 @@ use crate::models::service as models_service;
 use crate::projects::overview::model_mark;
 use crate::state::AppState;
 use crate::ui::components::{
-	LogoSize, Size, Variant, button_class, empty_state, icon, link_card, logo, progress, table,
+	LogoSize, Size, Variant, button_class, empty_state, icon, logo, progress, table,
 };
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
@@ -67,23 +67,24 @@ fn model_cards(
 	project_names: &HashMap<ProjectId, String>,
 ) -> Markup {
 	html! {
-		div class="ui-card-grid" {
+		ul class="ui-rows ui-rows-3 ui-reveal" aria-label="Models" {
 			@for m in rows {
-				@let description = format!(
-					"{} · {}",
-					project_names.get(&m.project_id).map_or("", String::as_str),
-					m.served_name
-				);
-				(link_card(
-					&model_url(ctx.team.id, m.project_id, m.id),
-					&logo(model_mark(m.engine), LogoSize::Md),
-					&m.name,
-					Some(&description),
-					Some(&html! {
+				li class="ui-row" {
+					span class="ui-row-logo" { (logo(model_mark(m.engine), LogoSize::Md)) }
+					div class="ui-row-main" {
+						h3 class="ui-row-name" {
+							a href=(model_url(ctx.team.id, m.project_id, m.id)) class="ui-row-link" { (m.name) }
+						}
+						p class="ui-row-sub" {
+							(project_names.get(&m.project_id).map_or("", String::as_str))
+							" · " (m.served_name)
+						}
+					}
+					div class="ui-row-end" {
 						(status_badge(m.status))
-						span class="text-xs text-muted-foreground" { (engines::spec(m.engine).label) }
-					}),
-				))
+						span class="ui-row-sub" { (engines::spec(m.engine).label) }
+					}
+				}
 			}
 		}
 	}
@@ -136,15 +137,15 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Response, Respo
 	let can_download = ctx.perms.can(Action::Create, Resource::ModelFile);
 	let browse = html! { (icon("search")) "Browse the catalog" };
 	let body = html! {
-		div class="ui-wide flex flex-col gap-8" {
-			div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3" {
-				div class="flex flex-col gap-1" {
-					h1 class="text-2xl font-semibold tracking-tight" { "Models" }
-					p class="max-w-2xl text-sm text-muted-foreground" {
+		div class="ui-page-body" {
+			header class="ui-page-head" {
+				div class="ui-page-title" {
+					h1 { "Models" }
+					p class="ui-lede" {
 						"Inference engines running on your servers. Each one serves an OpenAI-compatible API to the applications you link it to."
 					}
 				}
-				div class="flex flex-wrap gap-2" {
+				div class="ui-page-actions" {
 					@if can_download {
 						a class=(button_class(Variant::Default, Size::Md)) href=(catalog_url(ctx.team.id)) { (browse) }
 					}
@@ -163,19 +164,19 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Response, Respo
 					}).as_ref(),
 				))
 			} @else {
-				section class="flex flex-col gap-3" aria-labelledby="models-heading" {
-					h2 id="models-heading" class="text-lg font-semibold" { "Your models" }
+				section class="ui-stack" aria-labelledby="models-heading" {
+					h2 id="models-heading" class="ui-sec-h" { "Your models" }
 					@if rows.is_empty() {
-						p class="text-sm text-muted-foreground" { "No model is set up yet. Downloaded weights below can start one." }
+						p class="ui-lede" { "No model is set up yet. Downloaded weights below can start one." }
 					} @else {
 						(model_cards(&ctx, &rows, &project_names))
 					}
 				}
-				section class="flex flex-col gap-3" aria-labelledby="downloads-heading" {
-					h2 id="downloads-heading" class="text-lg font-semibold" { "Downloads" }
-					p class="text-sm text-muted-foreground" { "Weights fetched from Hugging Face onto a server. A model serves one of these." }
+				section class="ui-stack" aria-labelledby="downloads-heading" {
+					h2 id="downloads-heading" class="ui-sec-h" { "Downloads" }
+					p class="ui-lede" { "Weights fetched from Hugging Face onto a server. A model serves one of these." }
 					@if files.is_empty() {
-						p class="text-sm text-muted-foreground" { "Nothing downloaded yet." }
+						p class="ui-lede" { "Nothing downloaded yet." }
 					} @else {
 						(downloads_table(&ctx, &files))
 					}

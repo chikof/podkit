@@ -19,6 +19,7 @@ use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, ModelId, ProjectId, TeamId};
 use crate::links::service::{self as links_service, ModelLinks};
+use crate::metrics::{Range, service as metrics_service};
 use crate::model_files::ModelFile;
 use crate::models::service::{self as models_service, LogSource};
 use crate::models::{Model, ModelStatus, engines};
@@ -26,9 +27,9 @@ use crate::projects;
 use crate::projects::overview::model_mark;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, BUTTON_OUTLINE, Dismiss, LABEL, LogoSize, SELECT, Size, TabItem, Tone, Variant,
-	badge, button_class, card, card_content, card_section, dialog, dialog_open_button, empty_state,
-	icon, logo, table, tabs,
+	BUTTON_DANGER, BUTTON_OUTLINE, Dismiss, LABEL, LogoSize, MetricsSection, SELECT, Size, TabItem,
+	Tone, Variant, badge, button_class, card, card_content, card_section, dialog,
+	dialog_open_button, empty_state, icon, logo, metrics_section, resource_charts, table, tabs,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -45,6 +46,7 @@ pub fn router() -> Router<AppState> {
 		.route(M, get(page))
 		.route(&format!("{M}/status"), get(status))
 		.route(&format!("{M}/logs"), get(logs))
+		.route(&format!("{M}/metrics"), get(metrics))
 		.route(&format!("{M}/start"), post(start))
 		.route(&format!("{M}/stop"), post(stop))
 		.route(&format!("{M}/restart"), post(restart))
@@ -62,6 +64,7 @@ fn url(ctx: &TeamCtx, project: ProjectId, model: ModelId, rest: &str) -> String 
 enum Tab {
 	General,
 	Playground,
+	Monitoring,
 	Links,
 	Usage,
 	Logs,
@@ -73,6 +76,7 @@ impl Tab {
 		match self {
 			Self::General => "general",
 			Self::Playground => "playground",
+			Self::Monitoring => "monitoring",
 			Self::Links => "links",
 			Self::Usage => "usage",
 			Self::Logs => "logs",
@@ -84,6 +88,7 @@ impl Tab {
 		match self {
 			Self::General => "General",
 			Self::Playground => "Playground",
+			Self::Monitoring => "Monitoring",
 			Self::Links => "Links",
 			Self::Usage => "Usage",
 			Self::Logs => "Logs",
@@ -94,6 +99,7 @@ impl Tab {
 	fn parse(s: Option<&str>) -> Self {
 		match s {
 			Some("playground") => Self::Playground,
+			Some("monitoring") => Self::Monitoring,
 			Some("links") => Self::Links,
 			Some("usage") => Self::Usage,
 			Some("logs") => Self::Logs,
@@ -121,7 +127,13 @@ fn visible_tabs(ctx: &TeamCtx) -> Vec<Tab> {
 	if ctx.perms.can(Action::Update, Resource::Model) {
 		tabs.push(Tab::Playground);
 	}
-	tabs.extend([Tab::Links, Tab::Usage, Tab::Logs, Tab::Advanced]);
+	tabs.extend([
+		Tab::Monitoring,
+		Tab::Links,
+		Tab::Usage,
+		Tab::Logs,
+		Tab::Advanced,
+	]);
 	tabs
 }
 
@@ -144,42 +156,43 @@ fn header(ctx: &TeamCtx, model: &Model, files: Option<&ModelFile>, project_name:
 		model.id,
 		&format!("/status?logs={}", u8::from(model.container_id.is_some())),
 	);
+	let spec = engines::spec(model.engine);
 	html! {
-		div id="model-status" class="flex flex-col gap-4" {
-			div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-4" {
-				div class="flex min-w-0 items-center gap-4" {
+		div id="model-status" class="ui-stack" {
+			header class="ui-page-head" {
+				div class="ui-head-id" {
 					(logo(model_mark(model.engine), LogoSize::Lg))
-					div class="flex min-w-0 flex-col gap-1.5" {
-						div class="flex flex-wrap items-center gap-x-3 gap-y-1" {
-							h1 class="min-w-0 truncate text-2xl font-semibold tracking-tight" { (model.name) }
-							(badge(Tone::Neutral, "Model"))
-							(status_badge(model.status))
-						}
-						p class="text-sm text-muted-foreground" {
-							(project_name)
+					div class="ui-page-title" {
+						p class="ui-eyebrow" { "AI model · " (project_name) }
+						h1 { (model.name) }
+						ul class="ui-chips" aria-label="Model details" {
+							li { (status_badge(model.status)) }
+							li { (badge(Tone::Neutral, spec.label)) }
 							@if let Some(f) = files {
-								" · " (f.repo) " · " (human_bytes(u64::try_from(f.total_bytes).unwrap_or(0)))
+								li { (badge(Tone::Neutral, &f.repo)) }
+								li { (badge(Tone::Neutral, &human_bytes(u64::try_from(f.total_bytes).unwrap_or(0)))) }
 							}
+							li { (badge(Tone::Neutral, &format!("{} context", model.context_size))) }
 						}
 						@if model.status == ModelStatus::Starting {
-							p class="text-sm text-muted-foreground" { "Loading the weights. Big models take a few minutes." }
+							p class="ui-lede" { "Loading the weights. Big models take a few minutes." }
 						}
 					}
 				}
 				@if can_update && !removing {
-					div class="flex flex-wrap gap-2" {
+					div class="ui-page-actions" {
 						@if matches!(model.status, ModelStatus::Stopped | ModelStatus::Failed) {
 							button type="button" class=(button_class(Variant::Default, Size::Md)) "data-on:click"=(post("start")) { (icon("play")) "Start" }
 						}
 						@if matches!(model.status, ModelStatus::Running | ModelStatus::Starting) {
-							button type="button" class=(button_class(Variant::Outline, Size::Md)) "data-on:click"=(post("stop")) { (icon("square")) "Stop" }
+							button type="button" class=(button_class(Variant::Outline, Size::Md)) "data-on:click"=(post("stop")) { (icon("power")) "Stop" }
 						}
 						button type="button" class=(button_class(Variant::Outline, Size::Md)) "data-on:click"=(post("restart")) { (icon("refresh-cw")) "Restart" }
 					}
 				}
 			}
 			@if let Some(err) = &model.error {
-				pre class="max-h-48 overflow-auto rounded-lg border border-border bg-card p-3 font-mono text-xs whitespace-pre-wrap text-destructive" role="alert" { (err) }
+				pre class="ui-errbox" role="alert" { (err) }
 			}
 			(poll(&poll_url, model.status.in_flight()))
 		}
@@ -191,11 +204,11 @@ fn header(ctx: &TeamCtx, model: &Model, files: Option<&ModelFile>, project_name:
 /// A label and its value, one per row; the value may be long (a URL, an image).
 fn facts(rows: &[(&str, Markup)]) -> Markup {
 	html! {
-		dl class="flex flex-col" {
+		dl class="ui-facts" {
 			@for (label, value) in rows {
-				div class="flex flex-wrap justify-between gap-x-6 gap-y-1 border-t border-border py-3 text-sm first:border-t-0 first:pt-0 last:pb-0" {
-					dt class="text-muted-foreground" { (label) }
-					dd class="min-w-0 break-all sm:text-right" { (value) }
+				div class="ui-fact" {
+					dt { (label) }
+					dd { (value) }
 				}
 			}
 		}
@@ -204,22 +217,27 @@ fn facts(rows: &[(&str, Markup)]) -> Markup {
 
 fn general_tab(model: &Model, files: Option<&ModelFile>) -> Markup {
 	let spec = engines::spec(model.engine);
-	card(&html! {
-		(card_section("How it runs", Some("What this model is served with. Other containers on the server reach it at the internal URL."), None))
-		(card_content(&facts(&[
-			("Engine", html! { (spec.label) }),
-			("Recipe", html! {
-				@if let Some(f) = files {
-					code { (f.repo) } " @ " code { (f.revision.chars().take(8).collect::<String>()) }
-					@if !model.model_path.is_empty() { " · " code { (model.model_path) } }
-				} @else { "The weights were removed." }
-			}),
-			("Served as", html! { code { (model.served_name) } }),
-			("Internal URL", html! { code { (model.internal_url()) } }),
-			("Context", html! { (model.context_size) " tokens" }),
-			("Runs on", html! { @if model.gpu { "GPU" } @else { "CPU" } }),
-		])))
-	})
+	html! {
+		section class="ui-stack" aria-labelledby="how-title" {
+			div {
+				h2 id="how-title" class="ui-sec-h" { "How it runs" }
+				p class="ui-lede" { "What this model is served with. Other containers on the server reach it at the internal URL." }
+			}
+			(facts(&[
+				("Engine", html! { (spec.label) }),
+				("Recipe", html! {
+					@if let Some(f) = files {
+						code { (f.repo) } " @ " code { (f.revision.chars().take(8).collect::<String>()) }
+						@if !model.model_path.is_empty() { " · " code { (model.model_path) } }
+					} @else { "The weights were removed." }
+				}),
+				("Served as", html! { code { (model.served_name) } }),
+				("Internal URL", html! { code { (model.internal_url()) } }),
+				("Context", html! { (model.context_size) " tokens" }),
+				("Runs on", html! { @if model.gpu { "GPU" } @else { "CPU" } }),
+			]))
+		}
+	}
 }
 
 fn advanced_tab(ctx: &TeamCtx, model: &Model) -> Markup {
@@ -404,6 +422,63 @@ fn usage_tab(rows: &[crate::links::KeyUsage]) -> Markup {
 #[derive(Deserialize)]
 struct PageQuery {
 	tab: Option<String>,
+	range: Option<String>,
+}
+
+fn now() -> i64 {
+	time::OffsetDateTime::now_utc().unix_timestamp()
+}
+
+/// An unknown or missing range is the default one, not an error: the link may be old.
+fn parse_range(range: Option<&str>) -> Range {
+	range.and_then(Range::parse).unwrap_or(Range::Hour)
+}
+
+#[derive(Deserialize)]
+struct MetricsQuery {
+	range: Option<String>,
+}
+
+/// The 30-second refresh of the Monitoring tab: the charts alone, as a Datastar patch.
+async fn metrics(
+	State(s): State<AppState>,
+	ctx: TeamCtx,
+	Path((_, project, model_id)): Ids,
+	Query(q): Query<MetricsQuery>,
+) -> Response {
+	let range = parse_range(q.range.as_deref());
+	match metrics_service::model(&s.db, ctx.user.id, ctx.team.id, project, model_id, range).await {
+		Ok(points) => sse::patch(&resource_charts(&points, range, now())).into_response(),
+		Err(e) => error::action(&e),
+	}
+}
+
+/// The Monitoring tab: CPU and memory of the model's container, over the chosen range.
+async fn monitoring_tab(
+	s: &AppState,
+	ctx: &TeamCtx,
+	project: ProjectId,
+	model_id: ModelId,
+	range: Option<&str>,
+) -> Result<Markup, ServerError> {
+	let range = parse_range(range);
+	let points =
+		metrics_service::model(&s.db, ctx.user.id, ctx.team.id, project, model_id, range).await?;
+	let page_url = format!(
+		"{}?tab=monitoring",
+		model_url(ctx.team.id, project, model_id)
+	);
+	let refresh_url = url(ctx, project, model_id, "/metrics");
+	let section = MetricsSection {
+		id: "metrics",
+		page_url: &page_url,
+		refresh_url: &refresh_url,
+		range,
+	};
+	Ok(metrics_section(
+		&section,
+		&resource_charts(&points, range, now()),
+	))
 }
 
 async fn page(
@@ -443,6 +518,9 @@ async fn page(
 	let content = match tab {
 		Tab::General => general_tab(&model, files.as_ref()),
 		Tab::Playground => playground::chat_panel(&ctx, &model),
+		Tab::Monitoring => monitoring_tab(&s, &ctx, project, model_id, q.range.as_deref())
+			.await
+			.map_err(|e| error::page(&ctx, &e))?,
 		Tab::Links => {
 			let links = if ctx.perms.can(Action::Read, Resource::Application) {
 				links_service::for_model(&s, ctx.user.id, ctx.team.id, project, model_id)
@@ -476,7 +554,7 @@ async fn page(
 		.collect();
 
 	let body = html! {
-		div class="ui-wide flex flex-col gap-6" data-signals="{linkApp: '', linkDefault: false, _error: ''}" {
+		div class="ui-page-body" data-signals="{linkApp: '', linkDefault: false, _error: ''}" {
 			(header(&ctx, &model, files.as_ref(), &project_row.project.name))
 			(tabs("Model sections", &items))
 			(content)

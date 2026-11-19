@@ -96,15 +96,15 @@ pub fn metrics_section(section: &MetricsSection<'_>, body: &Markup) -> Markup {
 			"data-signals"="{_tables: false}"
 			"data-on-interval__duration.30s"=(on_interval)
 			"data-on:visibilitychange__window"=(on_interval) {
-			div class="flex flex-wrap items-center justify-between gap-3" {
-				h2 id=(title_id) class="text-lg font-semibold" { "Metrics" }
-				div class="flex flex-wrap items-center gap-2" {
-					nav aria-label="Time range" class="flex items-center gap-1" {
+			div class="ui-range-bar" {
+				h2 id=(title_id) class="ui-sec-h" { "Metrics" }
+				div class="ui-range-tools" {
+					nav aria-label="Time range" class="ui-range" {
 						@for range in RANGES {
 							@if range == section.range {
-								a href=(with_range(section.page_url, range)) class=(button_class(Variant::Secondary, Size::Sm)) aria-current="true" { (range_value(range)) }
+								a href=(with_range(section.page_url, range)) class="ui-range-link" aria-current="true" { (range_value(range)) }
 							} @else {
-								a href=(with_range(section.page_url, range)) class=(button_class(Variant::Ghost, Size::Sm)) { (range_value(range)) }
+								a href=(with_range(section.page_url, range)) class="ui-range-link" { (range_value(range)) }
 							}
 						}
 					}
@@ -123,7 +123,6 @@ pub fn metrics_section(section: &MetricsSection<'_>, body: &Markup) -> Markup {
 /// CPU and memory of one resource: what every resource kind has. `now` is the end of the
 /// window, in unix seconds.
 // For the application, database, model and stack pages (cards F4, F5, F7, F8).
-#[allow(dead_code, reason = "embedded by the resource pages of later cards")]
 #[must_use]
 pub fn resource_charts(points: &[ResourcePoint], range: Range, now: i64) -> Markup {
 	let from = now - range.duration().whole_seconds();
