@@ -488,6 +488,7 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 .ui-caret { display: inline-block; width: 0.6ch; height: 1.1em; vertical-align: text-bottom; background-color: currentColor; animation: ui-caret 1s steps(1) infinite; }
 
 /* Charts: inline SVG with non-scaling strokes; the axis labels are HTML so they never stretch. */
+.ui-chart { display: flex; flex-direction: column; }
 .ui-chart-plot { position: relative; height: var(--chart-h, 140px); }
 .ui-chart-plot > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .ui-chart-plot svg * { vector-effect: non-scaling-stroke; }

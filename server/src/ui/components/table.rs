@@ -82,6 +82,22 @@ mod tests {
 	}
 
 	#[test]
+	fn a_column_without_a_name_has_no_label_for_the_stacked_layout() {
+		let html = table(
+			"t",
+			"T",
+			&["Name", "Role", ""],
+			&[vec![html! { "a" }, html! { "Owner" }, html! { "menu" }]],
+		)
+		.into_string();
+		assert!(
+			html.contains("<td data-label=\"Role\">Owner</td>"),
+			"{html}"
+		);
+		assert!(html.contains("<td>menu</td>"), "{html}");
+	}
+
+	#[test]
 	fn cells_given_as_text_are_escaped() {
 		let html = table("t", "<script>", &["<h>"], &[vec![html! { "<b>x</b>" }]]).into_string();
 		assert!(!html.contains("<script>"), "{html}");

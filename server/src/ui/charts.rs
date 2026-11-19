@@ -21,12 +21,14 @@ use maud::{Markup, html};
 
 use super::components::table;
 
-const WIDTH: f64 = 480.0;
-const HEIGHT: f64 = 200.0;
-const LEFT: f64 = 52.0;
-const RIGHT: f64 = 10.0;
-const TOP: f64 = 10.0;
-const BOTTOM: f64 = 22.0;
+// The plot fills the whole viewBox and is stretched to its box (`preserveAspectRatio="none"`);
+// strokes are `non-scaling-stroke` and the axis labels are HTML, so nothing is distorted.
+const WIDTH: f64 = 600.0;
+const HEIGHT: f64 = 160.0;
+const LEFT: f64 = 0.0;
+const RIGHT: f64 = 0.0;
+const TOP: f64 = 0.0;
+const BOTTOM: f64 = 0.0;
 /// Rows in the data table; the readings are thinned evenly to this many.
 const TABLE_ROWS: usize = 30;
 /// A hole wider than this many usual steps breaks the line.
@@ -460,34 +462,40 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 		})
 		.clamp(1.0, plot_width);
 	html! {
-		svg viewBox={ "0 0 " (WIDTH) " " (HEIGHT) } class="h-auto w-full max-w-xl overflow-visible" role="img"
-			aria-labelledby={ (figure_id) "-title" } aria-describedby={ (figure_id) "-summary" } {
-			@for tick in &ticks {
-				line x1=(LEFT) x2=(WIDTH - RIGHT) y1=(num(plot.y(*tick))) y2=(num(plot.y(*tick))) class="stroke-border" stroke-width="1" {}
-				text x=(LEFT - 6.0) y=(num(plot.y(*tick) + 4.0)) text-anchor="end" class="fill-muted-foreground text-xs" { (format_value(chart.unit, *tick)) }
-			}
-			@for (i, t) in x_ticks.iter().enumerate() {
-				text x=(num(plot.x(*t))) y=(HEIGHT - 6.0)
-					text-anchor=(if i == 0 { "start" } else if i == 4 { "end" } else { "middle" })
-					class="fill-muted-foreground text-xs" { (tick_label(*t, span)) }
-			}
-			line x1=(LEFT) x2=(WIDTH - RIGHT) y1=(base) y2=(base) class="stroke-border" stroke-width="1" {}
-			@for s in &chart.series {
-				@for run in segments(chart.xs, &s.values) {
-					@if run.len() > 1 {
-						path d=(area_path(&plot, &run)) class=(area_class(s.color)) stroke="none" {}
-						path d=(line_path(&plot, &run)) class=(stroke_class(s.color)) fill="none" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" {}
-					} @else {
-						circle cx=(num(plot.x(run[0].0))) cy=(num(plot.y(run[0].1))) r="2" class=(dot_class(s.color)) {}
+		div class="ui-chart" {
+			div class="ui-chart-plot" {
+				svg viewBox={ "0 0 " (WIDTH) " " (HEIGHT) } preserveAspectRatio="none" role="img"
+					aria-labelledby={ (figure_id) "-title" } aria-describedby={ (figure_id) "-summary" } {
+					@for tick in &ticks {
+						line x1=(LEFT) x2=(WIDTH - RIGHT) y1=(num(plot.y(*tick))) y2=(num(plot.y(*tick))) class="ui-chart-grid" {}
+					}
+					line x1=(LEFT) x2=(WIDTH - RIGHT) y1=(base) y2=(base) class="ui-chart-grid" {}
+					@for s in &chart.series {
+						@for run in segments(chart.xs, &s.values) {
+							@if run.len() > 1 {
+								path d=(area_path(&plot, &run)) class={ "ui-chart-area " (area_class(s.color)) } stroke="none" {}
+								path d=(line_path(&plot, &run)) class=(stroke_class(s.color)) fill="none" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" {}
+							} @else {
+								circle cx=(num(plot.x(run[0].0))) cy=(num(plot.y(run[0].1))) r="2" class=(dot_class(s.color)) {}
+							}
+						}
+					}
+					@for (i, t) in chart.xs.iter().enumerate() {
+						@let left = (plot.x(*t) - col / 2.0).max(LEFT);
+						@let right = (plot.x(*t) + col / 2.0).min(WIDTH - RIGHT);
+						rect x=(num(left)) y=(TOP) width=(num((right - left).max(1.0))) height=(base - TOP)
+							class="fill-transparent hover:fill-foreground/10" {
+							title { (hover_text(chart, i)) }
+						}
 					}
 				}
+				@for tick in &ticks {
+					span class="ui-chart-yl" style={ "--p:" (num((1.0 - tick / top) * 100.0)) } aria-hidden="true" { (format_value(chart.unit, *tick)) }
+				}
 			}
-			@for (i, t) in chart.xs.iter().enumerate() {
-				@let left = (plot.x(*t) - col / 2.0).max(LEFT);
-				@let right = (plot.x(*t) + col / 2.0).min(WIDTH - RIGHT);
-				rect x=(num(left)) y=(TOP) width=(num((right - left).max(1.0))) height=(base - TOP)
-					class="fill-transparent hover:fill-foreground/10" {
-					title { (hover_text(chart, i)) }
+			div class="ui-chart-xl" aria-hidden="true" {
+				@for t in &x_ticks {
+					span { (tick_label(*t, span)) }
 				}
 			}
 		}

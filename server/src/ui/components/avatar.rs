@@ -48,4 +48,30 @@ mod tests {
 		assert!(!html.contains("<script>"), "{html}");
 		assert!(html.contains("aria-label=\"&lt;script&gt;"), "{html}");
 	}
+
+	#[test]
+	fn the_tint_is_one_of_six_and_stable_per_name() {
+		let mut seen = std::collections::BTreeSet::new();
+		for name in ["a", "b", "c", "d", "e", "f", "Ada", "Grace Hopper"] {
+			let html = avatar(name).into_string();
+			assert_eq!(html, avatar(name).into_string());
+			let h: u8 = html
+				.split("data-h=\"")
+				.nth(1)
+				.and_then(|r| r.split('"').next())
+				.and_then(|n| n.parse().ok())
+				.unwrap_or(0);
+			assert!((1..=6).contains(&h), "{html}");
+			seen.insert(h);
+		}
+		// Consecutive single letters walk through all six tints.
+		assert!(seen.len() >= 6, "{seen:?}");
+	}
+
+	#[test]
+	fn a_nameless_avatar_falls_back_to_a_question_mark() {
+		let html = avatar("  ").into_string();
+		assert!(html.contains(">?</span>"), "{html}");
+		assert!(html.contains("data-h=\""), "{html}");
+	}
 }

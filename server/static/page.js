@@ -18,9 +18,8 @@
 	const at = (e) => (e.target instanceof Element ? e.target : null);
 	const triggerOf = (pop) => $(`[commandfor="${CSS.escape(pop.id)}"]`);
 
-	/* Without CSS anchor positioning the browser centers a popover. Put it under its trigger
-	   (above when there is no room), clamped to the viewport; the inline styles also switch the
-	   stylesheet's anchor rules off, so this is the same where the feature is forced off. */
+	/* Without CSS anchor positioning a popover is centered by the browser: put it under its
+	   trigger (above if no room), clamped to the viewport. */
 	const place = (pop, anchor, centered) => {
 		if (native.anchor || !anchor) return;
 		pop.style.cssText += ";position:fixed;position-area:none;position-try-fallbacks:none;inset:auto;margin:0";
@@ -31,9 +30,8 @@
 		pop.style.top = `${Math.max(8, below ? a.bottom + 6 : a.top - 6 - h)}px`;
 	};
 
-	/* Invoker commands (Baseline since Dec 2025). The native activation is cancelled, so a
-	   browser that has them cannot toggle twice. A popover that light dismissal just closed
-	   (pointerdown on its own trigger) stays closed. */
+	/* Invoker commands: native activation is cancelled so a browser that has them cannot toggle
+	   twice. A popover light dismissal just closed stays closed. */
 	let wasOpen = false, kb = false;
 	const dialogBack = new WeakMap();
 	d.addEventListener("pointerdown", (e) => {
@@ -59,8 +57,7 @@
 		if (back) setTimeout(() => d.activeElement === d.body && back.focus(), 0);
 	}, true);
 
-	/* `<dialog closedby="any">`: a click outside closes it. Press and release must both be
-	   outside, so a text selection that ends on the backdrop does not dismiss. */
+	/* `closedby="any"`: a click outside closes the dialog (press and release both outside). */
 	if (!native.closedby) {
 		let pressed = null;
 		const outside = (e, dlg) => {
@@ -155,7 +152,7 @@
 		});
 	}
 
-	/* Ctrl/Cmd+K opens the command palette, or closes it; another open dialog is left alone. */
+	/* Ctrl/Cmd+K toggles the command palette; another open dialog is left alone. */
 	addEventListener("keydown", (e) => {
 		const p = $("#palette");
 		if (!p || !(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== "k") return;
@@ -164,8 +161,7 @@
 		else if (!$("dialog[open]")) p.showModal();
 	});
 
-	/* Theme: the form posts the choice for the cookie; here the page changes at once, with no
-	   reload, and the pressed state follows. Without script the form still works. */
+	/* Theme: the form posts for the cookie; the page changes at once. Works without script too. */
 	d.addEventListener("submit", (e) => {
 		const form = at(e);
 		if (!form?.matches('form[action="/theme"]')) return;
