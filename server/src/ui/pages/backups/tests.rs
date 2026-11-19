@@ -204,13 +204,16 @@ async fn bad_target_input_is_an_inline_message_and_adds_nothing(db: PgPool) {
 		),
 		(
 			json!({ "name": "x", "endpoint": "nope" }),
-			"invalid endpoint",
+			"That endpoint isn't valid.",
 		),
 		(
 			json!({ "name": "x", "secret_access_key": "" }),
-			"invalid secret_access_key",
+			"That secret access key isn't valid.",
 		),
-		(json!({ "name": "x", "prefix": "../up" }), "invalid prefix"),
+		(
+			json!({ "name": "x", "prefix": "../up" }),
+			"That prefix isn't valid.",
+		),
 		(json!({ "name": "offsite" }), "already exists"),
 	] {
 		let body = f.post(&f.targets(), &form(extra)).await;
@@ -747,7 +750,7 @@ async fn testing_a_destination_says_what_the_storage_answered_and_stores_nothing
 	let body = f
 		.post(&test, &form(json!({ "secret_access_key": "" })))
 		.await;
-	assert_contains(&body, "invalid secret_access_key");
+	assert_contains(&body, "That secret access key isn't valid.");
 	assert_eq!(target_count(&db).await, 1);
 }
 

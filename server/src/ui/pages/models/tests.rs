@@ -873,7 +873,7 @@ async fn the_hugging_face_token_is_write_only(db: PgPool) {
 	assert_eq!(count(&db, "huggingface_tokens").await, 0);
 
 	let bad = post_token(&s.app, &s.cookie, s.team, "", "token=has%20space").await;
-	assert_contains(&bad, "invalid token");
+	assert_contains(&bad, "That token isn't valid.");
 }
 
 #[db_test]

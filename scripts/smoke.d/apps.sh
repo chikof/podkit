@@ -27,7 +27,7 @@ section_apps_image() {
 
 	expect_page "$base/apps/$app" "traefik/whoami:v1.10"
 	expect_absent "$pass" "$secret"
-	expect_page "$base/apps/$app" "Registry credentials are stored."
+	expect_page "$base/apps/$app/settings" "Registry credentials are stored."
 	for tab in env domains deployments logs volumes models webhooks advanced; do
 		expect_page "$base/apps/$app/$tab" "Smoke image app"
 		expect_absent "$pass" "$secret"
@@ -43,4 +43,11 @@ section_apps_image() {
 	ui_post "$base/apps/$app/delete" "$(jq -n --arg s "$slug" '{confirm: $s}')"
 	grep -qF "window.location.assign" "$BODY" || fail "delete: no redirect"
 	api DELETE "/api/v1/teams/$TEAM/projects/$project" >/dev/null 2>&1 || true
+}
+
+# The application and stack pages as one run: scripts/ui-smoke.sh apps.
+section_apps() {
+	section_apps_image
+	section_app_config
+	section_stacks
 }

@@ -31,6 +31,7 @@ use crate::ui::sse;
 use crate::ui::sse::js_string;
 
 mod advanced;
+pub mod chrome;
 mod create;
 mod deployments_tab;
 mod domains;
@@ -40,6 +41,7 @@ mod general;
 mod header;
 mod logs;
 mod models_tab;
+mod monitoring;
 mod volumes;
 mod webhooks;
 
@@ -57,6 +59,7 @@ pub fn router() -> Router<AppState> {
 		.merge(domains::router())
 		.merge(volumes::router())
 		.merge(models_tab::router())
+		.merge(monitoring::router())
 		.merge(webhooks::router())
 		.merge(advanced::router())
 }
@@ -113,55 +116,60 @@ fn crumbs<'a>(ctx: &TeamCtx, project: &'a Project, last: &'a str) -> Vec<Crumb<'
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tab {
-	General,
-	Env,
-	Domains,
 	Deployments,
 	Logs,
+	Env,
+	Domains,
 	Volumes,
 	Models,
 	Webhooks,
+	Monitoring,
+	Settings,
 	Advanced,
 }
 
 impl Tab {
-	const ALL: [Self; 9] = [
-		Self::General,
-		Self::Env,
-		Self::Domains,
+	const ALL: [Self; 10] = [
 		Self::Deployments,
 		Self::Logs,
+		Self::Env,
+		Self::Domains,
 		Self::Volumes,
 		Self::Models,
 		Self::Webhooks,
+		Self::Monitoring,
+		Self::Settings,
 		Self::Advanced,
 	];
 
 	const fn label(self) -> &'static str {
 		match self {
-			Self::General => "General",
-			Self::Env => "Environment",
-			Self::Domains => "Domains",
 			Self::Deployments => "Deployments",
 			Self::Logs => "Logs",
+			Self::Env => "Environment",
+			Self::Domains => "Domains",
 			Self::Volumes => "Volumes",
 			Self::Models => "Models",
 			Self::Webhooks => "Webhooks",
+			Self::Monitoring => "Monitoring",
+			Self::Settings => "Settings",
 			Self::Advanced => "Advanced",
 		}
 	}
 
-	/// The path under the application's page.
+	/// The path under the application's page. The application's own page is its
+	/// deployments, with the newest one's log beside them.
 	const fn path(self) -> &'static str {
 		match self {
-			Self::General => "",
+			Self::Deployments => "",
+			Self::Logs => "/logs",
 			Self::Env => "/env",
 			Self::Domains => "/domains",
-			Self::Deployments => "/deployments",
-			Self::Logs => "/logs",
 			Self::Volumes => "/volumes",
 			Self::Models => "/models",
 			Self::Webhooks => "/webhooks",
+			Self::Monitoring => "/monitoring",
+			Self::Settings => "/settings",
 			Self::Advanced => "/advanced",
 		}
 	}
@@ -170,12 +178,13 @@ impl Tab {
 	fn allowed(self, ctx: &TeamCtx) -> bool {
 		let can = |action, resource| ctx.perms.can(action, resource);
 		match self {
-			Self::General | Self::Logs => true,
+			Self::Settings | Self::Logs => true,
 			Self::Env => can(Action::Read, Resource::EnvVar),
 			Self::Domains => can(Action::Read, Resource::Domain),
 			Self::Deployments => can(Action::Read, Resource::Deployment),
 			Self::Volumes => can(Action::Read, Resource::Volume),
 			Self::Models => can(Action::Read, Resource::Model),
+			Self::Monitoring => can(Action::Read, Resource::Application),
 			Self::Webhooks => can(Action::Update, Resource::Application),
 			Self::Advanced => {
 				can(Action::Update, Resource::Application)
@@ -248,14 +257,14 @@ async fn page(
 	let rows = recent_deployments(s, ctx, app).await;
 	let body = html! {
 		div class="flex flex-col gap-6" data-signals="{_action_error: '', _acting: false, _rb: '', _close: '', confirm: '', _delete_error: ''}" {
-			(header::header(s, ctx, app, &rows))
+			(header::header(s, ctx, app, &rows).await)
 			(tab_row(ctx, app, active))
 			(content)
 			(header::dialogs(ctx, app))
 		}
 	};
 	let title = match active {
-		Tab::General => app.name.clone(),
+		Tab::Deployments => app.name.clone(),
 		tab => format!("{} · {}", tab.label(), app.name),
 	};
 	app_page(ctx, &title, &crumbs(ctx, project, &app.name), &body)

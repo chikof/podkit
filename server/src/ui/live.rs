@@ -40,6 +40,9 @@ enum Item {
 	Line {
 		stream: proto::Stream,
 		line: String,
+		/// Unix milliseconds when the source stamped it; `None` for a live container line,
+		/// which is stamped on arrival.
+		ts: Option<i64>,
 	},
 	/// Not part of the log itself: "N lines skipped", "log truncated".
 	Notice(String),
@@ -63,6 +66,7 @@ pub(crate) fn job_log(state: &AppState, job: Option<JobId>, target_id: &str) -> 
 						n if n <= MAX_REPLAY_LINES => vec![Item::Line {
 							stream: l.stream,
 							line: l.line,
+							ts: Some(l.ts),
 						}],
 						n if n == MAX_REPLAY_LINES + 1 => vec![Item::Notice(format!(
 							"log truncated: only the first {MAX_REPLAY_LINES} stored lines are shown"
@@ -73,6 +77,7 @@ pub(crate) fn job_log(state: &AppState, job: Option<JobId>, target_id: &str) -> 
 				Frame::Line(l) => vec![Item::Line {
 					stream: l.stream,
 					line: l.line,
+					ts: Some(l.ts),
 				}],
 				Frame::Lagged(n) => vec![Item::Notice(format!(
 					"{n} lines were skipped because the browser fell behind"
@@ -97,7 +102,12 @@ pub(crate) fn container_log(
 		loop {
 			match agent_log_step(events.next().await) {
 				AgentLogStep::Line { stream, line } => {
-					return Some((vec![Item::Line { stream, line }], Some(events)));
+					let item = Item::Line {
+						stream,
+						line,
+						ts: None,
+					};
+					return Some((vec![item], Some(events)));
 				}
 				AgentLogStep::Skip => {}
 				AgentLogStep::End { failed: false } => return None,
@@ -194,7 +204,7 @@ fn append_event(selector: &str, batch: &[Item]) -> Event {
 	let markup = html! {
 		@for item in batch {
 			(match item {
-				Item::Line { stream, line } => line_markup(*stream, line),
+				Item::Line { stream, line, ts } => line_markup(*stream, line, *ts),
 				Item::Notice(text) => notice_markup(text),
 			})
 		}
@@ -205,21 +215,88 @@ fn append_event(selector: &str, batch: &[Item]) -> Event {
 		.write_as_axum_sse_event()
 }
 
-/// One log line. Text goes through maud's escaping only.
-fn line_markup(stream: proto::Stream, line: &str) -> Markup {
-	match stream {
-		proto::Stream::Stdout => html! { div class="break-all whitespace-pre-wrap" { (line) } },
-		proto::Stream::Stderr => {
-			html! { div class="break-all whitespace-pre-wrap text-destructive" { (line) } }
-		}
-		proto::Stream::System => {
-			html! { div class="break-all whitespace-pre-wrap text-muted-foreground" { (line) } }
+/// The level a line is shown at (`data-lv`): what the colour and the filter chips key on.
+/// Podkit's own narration (the system stream) reads as a step; for the rest the words of the
+/// line decide, because a container writes plain progress to stderr as often as an error.
+fn level(stream: proto::Stream, line: &str) -> &'static str {
+	let lower = line.to_ascii_lowercase();
+	let has = |words: &[&str]| {
+		lower
+			.split(|c: char| !c.is_ascii_alphanumeric())
+			.any(|w| words.contains(&w))
+	};
+	if has(&[
+		"error",
+		"err",
+		"fatal",
+		"panic",
+		"failed",
+		"failure",
+		"exception",
+		"denied",
+		"oom",
+	]) {
+		"ERR"
+	} else if has(&["warn", "warning", "deprecated"]) {
+		"WARN"
+	} else if has(&["debug", "trace"]) {
+		"DEBUG"
+	} else if line.starts_with('\u{2713}')
+		|| lower.starts_with("successfully")
+		|| lower.contains("health check passed")
+	{
+		"OK"
+	} else if matches!(stream, proto::Stream::System)
+		|| lower.starts_with("step ")
+		|| (line.starts_with('[') && line.contains('/') && line.contains("] "))
+	{
+		"STEP"
+	} else {
+		"INFO"
+	}
+}
+
+/// `12:04:31` in UTC: no locale, no script, the same everywhere.
+fn clock(ts: Option<i64>) -> String {
+	let at = ts
+		.and_then(|ms| time::OffsetDateTime::from_unix_timestamp(ms.div_euclid(1000)).ok())
+		.unwrap_or_else(time::OffsetDateTime::now_utc);
+	format!("{:02}:{:02}:{:02}", at.hour(), at.minute(), at.second())
+}
+
+/// One log line: time, level and text. Text goes through maud's escaping only.
+fn line_markup(stream: proto::Stream, line: &str, ts: Option<i64>) -> Markup {
+	let lv = level(stream, line);
+	html! {
+		div class="ui-log-line" data-lv=(lv) {
+			span class="ui-log-ts" { (clock(ts)) }
+			span class="ui-log-lv" { (lv) }
+			span class="ui-log-tx" { (line) }
 		}
 	}
 }
 
 fn notice_markup(text: &str) -> Markup {
-	line_markup(proto::Stream::System, text)
+	html! {
+		div class="ui-log-line" data-lv="DEBUG" {
+			span class="ui-log-ts" { (clock(None)) }
+			span class="ui-log-lv" { "NOTE" }
+			span class="ui-log-tx" { (text) }
+		}
+	}
+}
+
+/// A line the page itself writes into the log when the stream cannot start (nothing is
+/// running, the agent is down): an error row like any other, so it is filtered and read the
+/// same way.
+pub(crate) fn error_line(text: &str) -> Markup {
+	html! {
+		div class="ui-log-line" data-lv="ERR" {
+			span class="ui-log-ts" { (clock(None)) }
+			span class="ui-log-lv" { "ERR" }
+			span class="ui-log-tx" { (text) }
+		}
+	}
 }
 
 /// A scrollable monospace log that starts streaming from `stream_url` as soon
@@ -333,15 +410,16 @@ mod tests {
 			.collect()
 	}
 
-	/// The text of each line div, in order, across all append patches.
+	/// The text of each line, in order, across all append patches (the `ui-log-tx` span).
 	fn lines(events: &[Sse]) -> Vec<String> {
 		events
 			.iter()
 			.filter(|e| e.is_append_to("#log"))
 			.flat_map(|e| {
 				let html = e.html();
-				html.split("</div>")
-					.filter_map(|d| d.split_once('>').map(|(_, text)| text.to_owned()))
+				html.split("class=\"ui-log-tx\">")
+					.skip(1)
+					.filter_map(|d| d.split_once("</span>").map(|(text, _)| text.to_owned()))
 					.collect::<Vec<_>>()
 			})
 			.collect()
@@ -384,15 +462,52 @@ mod tests {
 		assert_eq!(lines(&events), ["one", "two", "three", "four"]);
 		let html: String = events.iter().map(Sse::html).collect();
 		assert!(
-			html.contains(r#"<div class="break-all whitespace-pre-wrap">one</div>"#),
+			html.contains(r#"<div class="ui-log-line" data-lv="INFO">"#),
 			"{html}"
 		);
-		assert!(html.contains(r#"text-destructive">two</div>"#), "{html}");
-		assert!(
-			html.contains(r#"text-muted-foreground">three</div>"#),
-			"{html}"
-		);
+		// The system stream is podkit's own narration: a step.
+		assert!(html.contains(r#"data-lv="STEP"><span"#), "{html}");
 		assert!(ends_with_live_false(&events), "{events:?}");
+	}
+
+	#[test]
+	fn the_level_comes_from_the_words_of_the_line() {
+		use proto::Stream::{Stderr, Stdout, System};
+		for (stream, line, want) in [
+			(Stdout, "listening on :8080", "INFO"),
+			(Stderr, "listening on :8080", "INFO"),
+			(Stderr, "error: connection refused", "ERR"),
+			(Stdout, "npm ERR! code ELIFECYCLE", "ERR"),
+			(Stdout, "Build failed with 2 errors", "ERR"),
+			(Stdout, "warn: image is 2 MB", "WARN"),
+			(Stdout, "WARNING deprecated flag", "WARN"),
+			(Stdout, "debug: cache miss", "DEBUG"),
+			(Stdout, "\u{2713} Compiled successfully", "OK"),
+			(Stdout, "Health check passed (3/3)", "OK"),
+			(Stdout, "STEP 4/7: RUN pnpm build", "STEP"),
+			(Stdout, "[2/7] WORKDIR /app", "STEP"),
+			(System, "removing service db", "STEP"),
+			// A word inside a longer word is not the level.
+			(Stdout, "terror of the deep, warnings-as-docs", "INFO"),
+		] {
+			assert_eq!(level(stream, line), want, "{line}");
+		}
+	}
+
+	#[test]
+	fn a_line_carries_its_time_level_and_text_in_three_cells() {
+		let html =
+			line_markup(proto::Stream::Stdout, "error: <b>x</b>", Some(3_723_000)).into_string();
+		assert!(
+			html.contains(r#"<span class="ui-log-ts">01:02:03</span>"#),
+			"{html}"
+		);
+		assert!(
+			html.contains(r#"<span class="ui-log-lv">ERR</span>"#),
+			"{html}"
+		);
+		assert!(html.contains("error: &lt;b&gt;x&lt;/b&gt;"), "{html}");
+		assert!(!html.contains("<b>"), "{html}");
 	}
 
 	#[tokio::test]

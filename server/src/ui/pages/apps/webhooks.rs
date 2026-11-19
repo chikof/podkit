@@ -1,4 +1,5 @@
-//! The Webhooks tab: the URL a git provider calls to deploy on every push, and rotating its
+//! The Webhooks tab: the URL a git provider (or, for an image application, a registry or CI
+//! job) calls to deploy, and rotating its
 //! secret.
 //!
 //! The secret is shown once, in the response to the request that created or rotated it, and
@@ -14,6 +15,7 @@ use maud::{Markup, html};
 
 use super::create::copy_row;
 use super::{Tab, app_url, close_dialog, closer, forbid_unless_allowed, load, origin, page};
+use crate::applications::SourceKind;
 use crate::applications::service;
 use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::state::AppState;
@@ -62,17 +64,40 @@ async fn webhooks_page(
 	let base = app_url(ctx.team.id, project.id, app.id);
 	let url = format!("{}/webhooks/deploy/{}", origin(&headers), app.id);
 	let rotate = format!("@post({})", js_string(&format!("{base}/webhooks/rotate")));
+	// A git application is deployed by a push; an image application by a new image, pushed
+	// from a registry or a CI job. Neither is told about the other's world.
+	let git = app.source_kind == SourceKind::Git;
+	let (title, lead, caller) = if git {
+		(
+			"Deploy on push",
+			"Call this URL from your git provider and podkit deploys the application on every push.",
+			"Your git provider",
+		)
+	} else {
+		(
+			"Deploy on a new image",
+			"Call this URL after you push a new image, from your registry or a CI job, and podkit redeploys the application.",
+			"Whatever calls this URL",
+		)
+	};
+	let rotate_lead = format!(
+		"The current secret stops working at once. {caller} is refused until you give it the new one."
+	);
 	let content = html! {
 		div class="flex flex-col gap-6" data-signals="{_rotating: false, _error: ''}" {
 			(card(&html! {
-				(card_section("Deploy on push", Some("Call this URL from your git provider and podkit deploys the application on every push."), None))
+				(card_section(title, Some(lead), None))
 				(card_content(&html! {
 					div class="flex flex-col gap-4" {
 						(copy_row("Webhook URL", &url))
 						ul class="flex list-disc flex-col gap-1 pl-5 text-sm text-muted-foreground" {
-							li { "GitHub: add a webhook with content type " code class="font-mono" { "application/json" } " and the secret below." }
-							li { "GitLab: add a webhook and put the secret in " code class="font-mono" { "Secret token" } " (sent as " code class="font-mono" { "X-Gitlab-Token" } ")." }
-							li { "Anything else: send the secret in an " code class="font-mono" { "X-Webhook-Secret" } " header." }
+							@if git {
+								li { "GitHub: add a webhook with content type " code class="font-mono" { "application/json" } " and the secret below." }
+								li { "GitLab: add a webhook and put the secret in " code class="font-mono" { "Secret token" } " (sent as " code class="font-mono" { "X-Gitlab-Token" } ")." }
+								li { "Anything else: send the secret in an " code class="font-mono" { "X-Webhook-Secret" } " header." }
+							} @else {
+								li { "Send the secret in an " code class="font-mono" { "X-Webhook-Secret" } " header." }
+							}
 						}
 					}
 				}))
@@ -92,7 +117,7 @@ async fn webhooks_page(
 			(dialog(
 				"webhook-rotate",
 				"Rotate the webhook secret?",
-				Some("The current secret stops working at once. Your git provider is refused until you give it the new one."),
+				Some(rotate_lead.as_str()),
 				Dismiss::Esc,
 				&html! {
 					(closer("webhook-rotate"))

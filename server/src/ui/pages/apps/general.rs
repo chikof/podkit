@@ -4,7 +4,7 @@
 
 use axum::Router;
 use axum::extract::{Path, State};
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use datastar::axum::ReadSignals;
 use maud::{Markup, html};
@@ -30,26 +30,11 @@ use crate::ui::layout::form_error;
 use crate::ui::{error, sse};
 
 pub fn router() -> Router<AppState> {
-	Router::new()
-		.route(
-			"/teams/{team_id}/projects/{project_id}/apps/{app_id}",
-			get(general_page),
-		)
-		// The old Settings tab lives on as a redirect, for bookmarks.
-		.route(
-			"/teams/{team_id}/projects/{project_id}/apps/{app_id}/settings",
-			get(settings_redirect).post(save),
-		)
-}
-
-async fn settings_redirect(
-	State(s): State<AppState>,
-	ctx: TeamCtx,
-	Path((_, project, app)): Path<(TeamId, ProjectId, ApplicationId)>,
-) -> Result<Redirect, Response> {
-	// Load first: an application of another team is the 404 page, not a redirect.
-	let (project, app) = load(&s, &ctx, project, app).await?;
-	Ok(Redirect::to(&app_url(ctx.team.id, project.id, app.id)))
+	// The application's own page is its deployments; its configuration is this tab.
+	Router::new().route(
+		"/teams/{team_id}/projects/{project_id}/apps/{app_id}/settings",
+		get(general_page).post(save),
+	)
 }
 
 fn fact(label: &str, value: &Markup) -> Markup {
@@ -173,7 +158,7 @@ async fn general_page(
 	} else {
 		html! { div class="flex flex-col gap-6" { (summary(&app)) } }
 	};
-	Ok(page(&s, &ctx, &project, &app, Tab::General, &content).await)
+	Ok(page(&s, &ctx, &project, &app, Tab::Settings, &content).await)
 }
 
 async fn save(
@@ -194,7 +179,7 @@ async fn save(
 	match result {
 		Ok(updated) => {
 			let rows = super::recent_deployments(&s, &ctx, &updated).await;
-			sse::patch(&header(&s, &ctx, &updated, &rows))
+			sse::patch(&header(&s, &ctx, &updated, &rows).await)
 				.and(sse::patch(&deploy_key_hint(Some(&updated))))
 				.and(sse::patch(&git_token_hint(Some(&updated))))
 				.and(sse::patch(&registry_hint(Some(&updated))))

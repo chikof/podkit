@@ -10,20 +10,24 @@ use super::{project_url, stack_url};
 use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ProjectId, StackId, TeamId};
+use crate::metrics::service as metrics;
+use crate::metrics::{Range, ResourcePoint};
 use crate::projects::{self, Project};
 use crate::stacks::service::{self, StackDetail};
-use crate::stacks::{Stack, StackStatus};
+use crate::stacks::{ServiceStatus, Stack, StackStatus};
 use crate::state::AppState;
 use crate::templates;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, LogoSize, MENU_ITEM_DANGER, Priority, Size, TabItem, Variant,
-	button_class, dropdown_menu, icon, image_logo, logo, menu_link, menu_separator, tabs,
+	BUTTON, BUTTON_OUTLINE, BannerKind, LogoSize, MENU_ITEM_DANGER, Priority, Size, TabItem,
+	Variant, banner, button_class, dropdown_menu, icon, image_logo, logo, menu_link,
+	menu_separator, tabs,
 };
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page};
+use crate::ui::pages::apps::chrome;
 use crate::ui::sse::{self, js_string};
-use crate::ui::status::{Status, poll, status_badge};
+use crate::ui::status::{Status, poll};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Tab {
@@ -33,6 +37,7 @@ pub(super) enum Tab {
 	Domains,
 	Deployments,
 	Logs,
+	Monitoring,
 	Advanced,
 }
 
@@ -45,6 +50,7 @@ impl Tab {
 			Self::Domains => "Domains",
 			Self::Deployments => "Deployments",
 			Self::Logs => "Logs",
+			Self::Monitoring => "Monitoring",
 			Self::Advanced => "Advanced",
 		}
 	}
@@ -57,17 +63,19 @@ impl Tab {
 			Self::Domains => "/domains",
 			Self::Deployments => "/deployments",
 			Self::Logs => "/logs",
+			Self::Monitoring => "/monitoring",
 			Self::Advanced => "/advanced",
 		}
 	}
 
-	const ALL: [Self; 7] = [
+	const ALL: [Self; 8] = [
 		Self::Services,
 		Self::Compose,
 		Self::Environment,
 		Self::Domains,
 		Self::Deployments,
 		Self::Logs,
+		Self::Monitoring,
 		Self::Advanced,
 	];
 }
@@ -76,6 +84,8 @@ impl Tab {
 pub(super) struct Loaded {
 	pub project: Project,
 	pub detail: StackDetail,
+	/// The newest CPU and memory reading, for the figures under the head.
+	pub usage: Option<ResourcePoint>,
 }
 
 impl Loaded {
@@ -101,7 +111,15 @@ pub(super) async fn load(
 	let detail = service::detail(s, ctx.user.id, ctx.team.id, project.id, id)
 		.await
 		.map_err(fail)?;
-	Ok(Loaded { project, detail })
+	let usage = metrics::stack(&s.db, ctx.user.id, ctx.team.id, project.id, id, Range::Hour)
+		.await
+		.ok()
+		.and_then(|points| points.last().cloned());
+	Ok(Loaded {
+		project,
+		detail,
+		usage,
+	})
 }
 
 /// The id of the template a stack came from (`template:<id>@<version>`), if any.
@@ -141,6 +159,10 @@ pub(super) fn crumbs<'a>(ctx: &TeamCtx, project: &'a Project, last: &'a str) -> 
 	]
 }
 
+#[allow(
+	clippy::too_many_lines,
+	reason = "one markup block: the header is read top to bottom like the page it draws"
+)]
 fn header(ctx: &TeamCtx, l: &Loaded, tab: Tab) -> Markup {
 	let stack = l.stack();
 	let base = l.base(ctx.team.id);
@@ -157,56 +179,91 @@ fn header(ctx: &TeamCtx, l: &Loaded, tab: Tab) -> Markup {
 		}
 	);
 	let post = |action: &str| format!("@post({})", js_string(&format!("{base}{action}")));
+	let services = l
+		.detail
+		.services
+		.iter()
+		.filter(|svc| svc.status != ServiceStatus::Removing)
+		.count();
+	let running = l
+		.detail
+		.services
+		.iter()
+		.filter(|svc| svc.status == ServiceStatus::Running)
+		.count();
+	let live = status == StackStatus::Running;
+	let dash = || "\u{2014}".to_owned();
+	let figures = [
+		("Services", format!("{running} of {services} running")),
+		(
+			"CPU",
+			l.usage
+				.as_ref()
+				.and_then(|p| p.cpu)
+				.filter(|_| live)
+				.map_or_else(dash, |c| format!("{c:.1}%")),
+		),
+		(
+			"Memory",
+			l.usage
+				.as_ref()
+				.filter(|_| live)
+				.map_or_else(dash, |p| chrome::bytes(p.mem)),
+		),
+	];
 	html! {
-		div id="stack-header" class="flex flex-col gap-3" "data-signals"="{_action_error: '', _acting: false}" {
+		div id="stack-header" class="flex flex-col gap-5" "data-signals"="{_action_error: '', _acting: false}" {
 			(poll(&poll_url, status.in_flight()))
-			div class="flex flex-wrap items-start justify-between gap-4" {
-				div class="flex min-w-0 items-center gap-4" {
-					(mark(stack, LogoSize::Lg))
-					div class="flex min-w-0 flex-col gap-1" {
-						h1 class="truncate text-2xl font-semibold tracking-tight" { (stack.name) }
-						div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground" {
-							(status_badge(status))
-							span { (source_line(stack)) }
-						}
+			(chrome::head(
+				&mark(stack, LogoSize::Lg),
+				&html! { (icon("layers")) "Compose stack" },
+				&stack.name,
+				&html! {
+					(chrome::dot(chrome::stack_shape(status), status.label()))
+					span class="inline-flex items-center gap-2" {
+						(services) @if services == 1 { " service" } @else { " services" }
+						" \u{b7} " (source_line(stack))
 					}
-				}
-				@if can_update || can_delete {
-					div class="flex flex-wrap items-center gap-2" {
+				},
+				&html! {
+					div class="ui-app-actions" {
 						@if can_update {
 							button type="button" class=(BUTTON) disabled[busy]
 								"data-on:click"=(post("/deploy")) "data-indicator:_acting" "data-attr:disabled"="$_acting" {
-								(icon("rocket")) "Deploy"
+								(icon("rocket")) @if status == StackStatus::Pending { "Deploy" } @else { "Redeploy" }
 							}
 							button type="button" class=(BUTTON_OUTLINE) disabled[busy || status != StackStatus::Running]
 								"data-on:click"=(post("/stop")) "data-attr:disabled"="$_acting" {
 								(icon("square")) "Stop"
 							}
 						}
-						(dropdown_menu(
-							"stack-menu",
-							&button_class(Variant::Outline, Size::Icon),
-							&format!("More actions for {}", stack.name),
-							&icon("ellipsis"),
-							&html! {
-								(menu_link(&format!("{base}/compose"), &html! { (icon("file-text")) "Compose file" }))
-								(menu_link(&format!("{base}/logs"), &html! { (icon("terminal")) "Logs" }))
-								(menu_link(&format!("{base}/env"), &html! { (icon("key-round")) "Environment" }))
-								@if can_delete {
-									(menu_separator())
-									a href={ (base) "/advanced" } class=(MENU_ITEM_DANGER) { (icon("trash-2")) "Remove stack" }
-								}
-							},
-						))
+						@if can_update || can_delete {
+							(dropdown_menu(
+								"stack-menu",
+								&button_class(Variant::Outline, Size::Icon),
+								&format!("More actions for {}", stack.name),
+								&icon("ellipsis"),
+								&html! {
+									(menu_link(&format!("{base}/compose"), &html! { (icon("file-text")) "Compose file" }))
+									(menu_link(&format!("{base}/logs"), &html! { (icon("terminal")) "Logs" }))
+									(menu_link(&format!("{base}/env"), &html! { (icon("key-round")) "Environment" }))
+									@if can_delete {
+										(menu_separator())
+										a href={ (base) "/advanced" } class=(MENU_ITEM_DANGER) { (icon("trash-2")) "Remove stack" }
+									}
+								},
+							))
+						}
 					}
-				}
-			}
+				},
+			))
 			@if stack.status == StackStatus::Failed {
 				@if let Some(message) = &stack.status_message {
-					p class="text-sm text-destructive" role="alert" data-status-message { (message) }
+					div data-status-message { (banner(BannerKind::Error, Some("This stack failed."), message, None)) }
 				}
 			}
 			p class="text-sm text-destructive" role="alert" "data-show"="$_action_error" "data-text"="$_action_error" style="display: none" {}
+			(chrome::stats("Live figures", &figures))
 		}
 	}
 }

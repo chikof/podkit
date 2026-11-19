@@ -15,24 +15,26 @@ use crate::jobs::JobStatus;
 use crate::stacks::service;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_OUTLINE, SELECT, Tone, badge, card, card_content, card_heading, empty_state,
+	BUTTON_OUTLINE, SELECT, Status as Shape, card, card_content, card_heading, empty_state,
+	log_viewer_titled,
 };
 use crate::ui::extract::TeamCtx;
-use crate::ui::live::{container_log, job_log, log_view};
+use crate::ui::live::{container_log, error_line, job_log};
+use crate::ui::pages::apps::chrome;
 use crate::ui::{error, sse};
 
 /// The lines a Logs view may ask for.
 const TAILS: [u32; 3] = [200, 1000, 5000];
 
 fn job_badge(status: JobStatus) -> Markup {
-	let (tone, text) = match status {
-		JobStatus::Queued => (Tone::Neutral, "Queued"),
-		JobStatus::Running => (Tone::Progress, "Running"),
-		JobStatus::Succeeded => (Tone::Success, "Succeeded"),
-		JobStatus::Failed => (Tone::Danger, "Failed"),
-		JobStatus::Cancelled => (Tone::Neutral, "Cancelled"),
+	let (shape, text) = match status {
+		JobStatus::Queued => (Shape::Pending, "Queued"),
+		JobStatus::Running => (Shape::Building, "Running"),
+		JobStatus::Succeeded => (Shape::Running, "Succeeded"),
+		JobStatus::Failed => (Shape::Failed, "Failed"),
+		JobStatus::Cancelled => (Shape::Stopped, "Cancelled"),
 	};
-	badge(tone, text)
+	chrome::dot(shape, text)
 }
 
 /// The job's state, patched on its own while the stack is busy so the log stays put.
@@ -54,15 +56,15 @@ pub(super) fn job_card(ctx: &TeamCtx, l: &Loaded) -> Markup {
 		div id="stack-job" {
 			@match l.detail.job {
 				Some(_) => {
-					(card(&html! {
-						(card_heading("Latest deployment", Some("Deploy, stop, restart and remove each run as a job; this is the newest one.")))
-						(card_content(&html! {
-							div class="flex flex-col gap-4" {
-								(job_status_line(l))
-								(log_view("deploy-log", &format!("{base}/deployments/log")))
-							}
-						}))
-					}))
+					div class="flex flex-col gap-4" {
+						(job_status_line(l))
+						(log_viewer_titled(
+							"deploy-log",
+							"Deploy log",
+							&format!("{base}/deployments/log"),
+							Some(&html! { "Latest deployment" }),
+						))
+					}
 				}
 				None => {
 					(empty_state(
@@ -104,7 +106,7 @@ fn stream_failure(e: &crate::error::ServerError, target: &str) -> Response {
 	if status == StatusCode::NOT_FOUND || status == StatusCode::FORBIDDEN {
 		return status.into_response();
 	}
-	let line = html! { div class="break-all whitespace-pre-wrap text-destructive" { (error::message(e)) } };
+	let line = error_line(&error::message(e));
 	sse::patch_into(&format!("#{target}"), ElementPatchMode::Append, &line)
 		.and(sse::signals(&json!({ "_live": false })))
 		.into_response()
@@ -183,11 +185,16 @@ pub(super) async fn logs(
 						}
 						noscript { button type="submit" class=(BUTTON_OUTLINE) { "Apply" } }
 					}
-					(log_view("stack-log", &format!(
-						"{base}/logs/stream?service={}&tail={tail}&follow={}",
-						url::form_urlencoded::byte_serialize(service.as_bytes()).collect::<String>(),
-						u8::from(follow)
-					)))
+					(log_viewer_titled(
+						"stack-log",
+						"Service log",
+						&format!(
+							"{base}/logs/stream?service={}&tail={tail}&follow={}",
+							url::form_urlencoded::byte_serialize(service.as_bytes()).collect::<String>(),
+							u8::from(follow)
+						),
+						Some(&html! { "Service log " span class="ui-logbar-id" { (service) } }),
+					))
 				}
 			} @else {
 				div class="flex flex-col gap-2 py-6 text-center" {

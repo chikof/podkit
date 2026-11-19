@@ -489,7 +489,7 @@ async fn a_hostname_is_routed_to_a_service_and_can_be_removed(db: PgPool) {
 			&json!({ "h0": "", "h1": "not a host!", "p1": "80" }),
 		)
 		.await;
-	assert_contains(&bad, "invalid hostname");
+	assert_contains(&bad, "That hostname isn't valid.");
 	let bad_port = f
 		.post(
 			&format!("{url}/web"),

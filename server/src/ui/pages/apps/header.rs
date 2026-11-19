@@ -13,7 +13,7 @@ use axum::routing::{get, post};
 use maud::{Markup, html};
 use serde_json::json;
 
-use super::{AppPath, app_url, public_link};
+use super::{AppPath, app_url, chrome, public_link};
 use crate::applications::SourceKind;
 use crate::applications::service::{self, ApplicationView};
 use crate::auth::permission::{Action, Resource};
@@ -21,18 +21,20 @@ use crate::deployments::DeploymentStatus;
 use crate::deployments::service::{self as deployments, DeploymentView};
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, ProjectId, TeamId};
-use crate::projects::overview::{ResourceStatus, application_mark};
+use crate::metrics::service as metrics;
+use crate::metrics::{Range, ResourcePoint};
+use crate::projects::overview::application_mark;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, LogoSize, MENU_ITEM,
-	MENU_ITEM_DANGER, Size, Tone, Variant, badge, button_class, dialog, dropdown_menu, icon, logo,
-	menu_label, menu_separator,
+	BUTTON, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, Size,
+	Status as Shape, Variant, button_class, dialog, dropdown_menu, icon, logo, menu_label,
+	menu_separator,
 };
 use crate::ui::extract::TeamCtx;
-use crate::ui::pages::projects::cards::status_line;
 use crate::ui::sse::js_string;
 use crate::ui::status::{Status, poll};
 use crate::ui::{error, sse};
+use time::OffsetDateTime;
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/apps/{app_id}";
 
@@ -56,11 +58,6 @@ pub(super) fn fail(e: &ServerError) -> Response {
 
 pub(super) fn deployment_url(base: &str, id: crate::ids::DeploymentId) -> String {
 	format!("{base}/deployments/{id}")
-}
-
-fn status_of(app: &ApplicationView) -> ResourceStatus {
-	app.latest
-		.map_or(ResourceStatus::NotDeployed, ResourceStatus::Deployment)
 }
 
 // --- the header ---------------------------------------------------------------------------
@@ -101,10 +98,10 @@ fn actions(ctx: &TeamCtx, app: &ApplicationView, rollback_to: Option<&Deployment
 			}
 			@if can_stop {
 				@if running {
-					button type="button" class={ (BUTTON_DANGER) " ui-app-secondary" } "data-on:click"=(post("stop"))
+					button type="button" class={ (BUTTON_OUTLINE) " ui-app-secondary" } "data-on:click"=(post("stop"))
 						"data-attr:disabled"="$_acting" { (icon("square")) "Stop" }
 				} @else {
-					button type="button" class={ (BUTTON_DANGER) " ui-app-secondary" } disabled { (icon("square")) "Stop" }
+					button type="button" class={ (BUTTON_OUTLINE) " ui-app-secondary" } disabled { (icon("square")) "Stop" }
 				}
 			}
 			@if has_menu {
@@ -147,26 +144,42 @@ fn actions(ctx: &TeamCtx, app: &ApplicationView, rollback_to: Option<&Deployment
 	}
 }
 
-/// The type of the source, in words.
+/// The kind of the application, in words.
 fn source_label(app: &ApplicationView) -> &'static str {
 	match app.source_kind {
-		SourceKind::Git => "Git",
-		SourceKind::Image => "Docker image",
+		SourceKind::Git => "Git app",
+		SourceKind::Image => "Docker image app",
 	}
 }
 
-/// What the application is built from, as one line.
-pub(super) fn source_line(app: &ApplicationView) -> String {
-	match (&app.image, &app.repo_url) {
-		(Some(image), _) => image.clone(),
-		(None, Some(url)) => format!("{url}@{}", app.git_ref),
-		(None, None) => String::new(),
-	}
+/// The newest CPU and memory reading, for the figures under the head. Without one (nothing
+/// has run yet, or the sampler has not reached it) they read as a dash.
+async fn usage(s: &AppState, ctx: &TeamCtx, app: &ApplicationView) -> Option<ResourcePoint> {
+	metrics::application(
+		&s.db,
+		ctx.user.id,
+		ctx.team.id,
+		app.project_id,
+		app.id,
+		Range::Hour,
+	)
+	.await
+	.ok()
+	.and_then(|points| points.last().cloned())
+}
+
+/// How long the live deployment has been up: since it finished starting.
+fn uptime(rows: &[DeploymentView]) -> Option<String> {
+	let live = rows
+		.iter()
+		.find(|d| d.status == DeploymentStatus::Running)?;
+	let since = live.finished_at.or(live.started_at)?;
+	Some(chrome::span(OffsetDateTime::now_utc() - since))
 }
 
 /// `#app-header`: what polling and the actions re-render. `rows` are the newest deployments
-/// (newest first), for the Rollback entry.
-pub fn header(
+/// (newest first), for the Rollback entry and the uptime.
+pub async fn header(
 	s: &AppState,
 	ctx: &TeamCtx,
 	app: &ApplicationView,
@@ -177,32 +190,72 @@ pub fn header(
 	let busy = app.latest.is_some_and(Status::in_flight);
 	let mark = application_mark(app.repo_url.as_deref(), app.build_strategy);
 	let rollback_to = rows.iter().find(|d| d.can_rollback());
+	let point = usage(s, ctx, app).await;
+	let running = app.latest == Some(DeploymentStatus::Running);
+	let dash = || "\u{2014}".to_owned();
+	let figures = [
+		(
+			"CPU",
+			point
+				.as_ref()
+				.and_then(|p| p.cpu)
+				.filter(|_| running)
+				.map_or_else(dash, |c| format!("{c:.1}%")),
+		),
+		(
+			"Memory",
+			point
+				.as_ref()
+				.filter(|_| running)
+				.map_or_else(dash, |p| chrome::bytes(p.mem)),
+		),
+		(
+			"Uptime",
+			uptime(rows).filter(|_| running).unwrap_or_else(dash),
+		),
+		("Server", app.server_name.clone()),
+	];
+	let sha = rows
+		.iter()
+		.find(|d| d.status == DeploymentStatus::Running)
+		.and_then(|d| d.commit_sha.as_deref())
+		.map(|sha| sha.get(..7).unwrap_or(sha).to_owned());
+	let (word, shape) = app.latest.map_or(("Not deployed", Shape::Pending), |d| {
+		(d.label(), chrome::deployment_shape(d))
+	});
 	html! {
-		div id="app-header" class="flex flex-col gap-3" {
+		div id="app-header" class="flex flex-col gap-5" {
 			(poll(&format!("{base}/header"), busy))
-			div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-4" {
-				div class="flex min-w-0 items-center gap-4" {
-					(logo(mark.unwrap_or(&app.name), LogoSize::Lg))
-					div class="flex min-w-0 flex-col gap-1.5" {
-						div class="flex flex-wrap items-center gap-x-3 gap-y-1" {
-							h1 class="min-w-0 truncate text-2xl font-semibold tracking-tight" { (app.name) }
-							(badge(Tone::Neutral, "Application"))
-							(badge(Tone::Neutral, source_label(app)))
-						}
-						div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" {
-							(status_line(status_of(app)))
-							a href=(link) class="inline-flex min-w-0 items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
-								target="_blank" rel="noopener noreferrer" {
-								span class="truncate" { (link) }
-								(icon("external-link"))
+			(chrome::head(
+				&logo(mark.unwrap_or(&app.name), LogoSize::Lg),
+				&html! {
+					(icon(if app.source_kind == SourceKind::Git { "git-branch" } else { "container" }))
+					(source_label(app))
+				},
+				&app.name,
+				&html! {
+					(chrome::dot(shape, word))
+					a href=(link) class="ui-head-url" target="_blank" rel="noopener noreferrer" {
+						span class="truncate" { (link) }
+						(icon("external-link"))
+					}
+					@match app.source_kind {
+						SourceKind::Git => {
+							span class="ui-head-ref" {
+								(icon("git-branch"))
+								(app.git_ref)
+								@if let Some(sha) = &sha { " \u{b7} " (sha) }
 							}
 						}
-						p class="font-mono text-xs break-all text-muted-foreground" { (source_line(app)) }
+						SourceKind::Image => {
+							span class="ui-head-ref" { (app.image.as_deref().unwrap_or_default()) }
+						}
 					}
-				}
-				(actions(ctx, app, rollback_to))
-			}
+				},
+				&actions(ctx, app, rollback_to),
+			))
 			p class="text-sm text-destructive" role="alert" "data-show"="$_action_error" "data-text"="$_action_error" style="display: none" {}
+			(chrome::stats("Live figures", &figures))
 		}
 	}
 }
@@ -280,7 +333,7 @@ async fn fragment(State(s): State<AppState>, ctx: TeamCtx, path: AppPath) -> Res
 	match service::get(&s.db, ctx.user.id, ctx.team.id, project, app).await {
 		Ok(view) => {
 			let rows = super::recent_deployments(&s, &ctx, &view).await;
-			sse::patch(&header(&s, &ctx, &view, &rows)).into_response()
+			sse::patch(&header(&s, &ctx, &view, &rows).await).into_response()
 		}
 		Err(e) => error::page(&ctx, &e),
 	}

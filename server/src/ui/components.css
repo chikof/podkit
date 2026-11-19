@@ -1482,3 +1482,106 @@ a.ui-pick:focus-visible {
 	.ui-badge[data-flip], .ui-skeleton, .ui-res-skel { animation: none; }
 	.ui-res-status .ui-badge .ui-dot, .ui-res-link { transition: none; }
 }
+
+/* == apps: application and stack pages ================================================== */
+
+/* The head of a resource page: its mark, kind, name, status line and the actions. */
+.ui-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-5); }
+.ui-head-logo { flex-shrink: 0; }
+.ui-head-id { display: grid; flex: 1 1 15rem; gap: var(--s-2); min-width: 0; }
+.ui-head-id h1 { margin: 0; font-size: var(--fs-3xl); font-weight: var(--fw-bold); line-height: 1.15; overflow-wrap: anywhere; }
+.ui-eyebrow { display: flex; align-items: center; gap: var(--s-2); margin: 0; color: var(--subtle-foreground); font-size: var(--fs-xs); }
+.ui-head-sub { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); color: var(--muted-foreground); font-size: var(--fs-sm); }
+.ui-head-url { display: inline-flex; min-width: 0; align-items: center; gap: var(--s-2); color: var(--primary-text); text-decoration: none; }
+.ui-head-url > span { min-width: 0; }
+.ui-head-url:hover { text-decoration: underline; }
+.ui-head-ref { display: inline-flex; align-items: center; gap: var(--s-2); font-family: var(--font-mono); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.ui-head > .ui-app-actions { margin-inline-start: auto; }
+
+/* The row of live figures under the head. */
+.ui-stats { display: flex; flex-wrap: wrap; gap: var(--s-4) var(--s-8); margin: 0; padding-block: var(--s-4); border-block: var(--bw) solid var(--border); }
+.ui-stats dt { color: var(--subtle-foreground); font-size: var(--fs-xs); }
+.ui-stats dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-lg); font-weight: var(--fw-medium); overflow-wrap: anywhere; }
+
+/* The deployments: the history on the left, the log of the one being read on the right. */
+.ui-dep { display: grid; grid-template-columns: minmax(16rem, 0.8fr) minmax(0, 1.6fr); gap: var(--s-6); align-items: start; }
+.ui-dep-h { margin: 0 0 var(--s-4); font-size: var(--fs-lg); font-weight: var(--fw-bold); }
+.ui-dep-main { display: grid; gap: var(--s-4); min-width: 0; }
+.ui-tl-body { display: grid; gap: var(--s-1); min-width: 0; padding: var(--s-2) var(--s-3); margin: calc(var(--s-2) * -1) calc(var(--s-3) * -1); border-radius: var(--r-md); transition: background-color var(--dur-2) var(--ease-out); }
+.ui-timeline-item[data-current] .ui-tl-body { background-color: var(--secondary); }
+.ui-tl-title { margin: 0; font-size: var(--fs-sm); }
+.ui-tl-title a { color: var(--foreground); text-decoration: none; }
+.ui-tl-title a:hover { text-decoration: underline; }
+.ui-tl-title a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--r-sm); }
+.ui-tl-meta { margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); }
+.ui-tl-meta code { font-family: var(--font-mono); }
+.ui-tl-meta2 { display: flex; flex-wrap: wrap; gap: var(--s-4); margin: 0; color: var(--subtle-foreground); font-size: var(--fs-xs); }
+.ui-tl-meta2 time { margin-inline-start: auto; }
+.ui-tl-state { color: var(--st, var(--muted-foreground)); }
+.ui-tl-actions { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-2); }
+
+/* A few facts about the deployment being read. */
+.ui-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-6); margin: 0; }
+.ui-facts dt { color: var(--subtle-foreground); font-size: var(--fs-xs); }
+.ui-facts dd { margin: 0; font-size: var(--fs-sm); }
+.ui-facts code { font-family: var(--font-mono); }
+.ui-facts-act { margin-inline-start: auto; }
+
+/* The log viewer as one panel: a toolbar (title, live, follow, copy; then the level chips and
+   search) over the lines. Each line is a time, a level and the text. */
+.ui-logbox { min-width: 0; border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--log); overflow: clip; }
+.ui-logbar { display: grid; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-bottom: var(--bw) solid var(--border); }
+.ui-logbar-main { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-4); }
+.ui-logbar-title { margin: 0 auto 0 0; font-size: var(--fs-md); font-weight: var(--fw-bold); }
+.ui-logbar-id { color: var(--subtle-foreground); font-weight: var(--fw-regular); }
+.ui-logbar-live { display: inline-flex; align-items: center; gap: var(--s-2); color: var(--muted-foreground); font-size: var(--fs-xs); }
+.ui-logbar-end { display: flex; align-items: center; gap: var(--s-4); margin-inline-start: auto; }
+.ui-logbar-title + .ui-logbar-live + .ui-logbar-end { margin-inline-start: 0; }
+.ui-logbar-filter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.ui-logbar-search { flex: 1 1 10rem; max-width: 16rem; margin-inline-start: auto; }
+.ui-logbox > .ui-log { height: min(32rem, 60dvh); border: 0; border-radius: 0; background-color: transparent; }
+.ui-log-line:has(> .ui-log-ts) { display: grid; grid-template-columns: 8ch 5ch minmax(0, 1fr); gap: var(--s-3); color: var(--foreground); }
+.ui-log-ts { color: var(--subtle-foreground); }
+.ui-log-lv { font-weight: var(--fw-bold); }
+.ui-log-tx { overflow-wrap: anywhere; }
+.ui-log-line[data-lv="INFO"] > .ui-log-lv { color: var(--info); }
+.ui-log-line[data-lv="STEP"] > .ui-log-lv { color: var(--primary-text); }
+.ui-log-line[data-lv="WARN"] > .ui-log-lv { color: var(--warning); }
+.ui-log-line[data-lv="OK"] > .ui-log-lv { color: var(--success); }
+.ui-log-line[data-lv="DEBUG"] > .ui-log-lv, .ui-log-line[data-lv="DEBUG"] > .ui-log-tx { color: var(--muted-foreground); }
+.ui-log-line[data-lv="ERR"] > .ui-log-lv, .ui-log-line[data-lv="ERR"] > .ui-log-tx { color: var(--destructive); }
+
+@media (max-width: 900px) {
+	.ui-dep { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 760px) {
+	.ui-head-id h1 { font-size: var(--fs-2xl); }
+	.ui-head > .ui-app-actions { flex-basis: 100%; margin-inline-start: 0; }
+	.ui-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3) var(--s-5); }
+	.ui-logbar-search { max-width: none; flex-basis: 100%; }
+	.ui-log-line:has(> .ui-log-ts) { grid-template-columns: 5ch minmax(0, 1fr); }
+	.ui-log-ts { display: none; }
+	.ui-logbox > .ui-log { height: min(26rem, 52dvh); }
+}
+
+/* A service of a stack: its mark, name, image and, when it failed, why. */
+.ui-svc { display: flex; align-items: center; gap: var(--s-4); min-width: 0; }
+.ui-svc-id { display: grid; gap: 1px; min-width: 0; }
+.ui-svc-name { font-weight: var(--fw-medium); }
+.ui-svc-image { overflow: hidden; color: var(--muted-foreground); font-family: var(--font-mono); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
+.ui-svc-err { display: flex; align-items: flex-start; gap: var(--s-2); color: var(--destructive); font-size: var(--fs-xs); }
+.ui-svc-err > .ui-icon { margin-top: 0.15em; flex-shrink: 0; }
+.ui-svc-link { display: inline-flex; max-width: 100%; align-items: center; gap: var(--s-2); color: inherit; text-decoration: none; }
+.ui-svc-link:hover { text-decoration: underline; }
+.ui-svc-link > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container (min-width: 36rem) {
+	.ui-table-wrap .ui-svc { width: 100%; }
+	#stack-services-table tbody th { width: 100%; max-width: 0; }
+}
+
+/* A table that is the body of a card has no frame of its own: the card is the frame. */
+.ui-card-b:has(> .ui-table-wrap) { padding: 0; }
+.ui-card-b > .ui-table-wrap { border: 0; border-block-start: var(--bw) solid var(--border); border-radius: 0; }
+
+.ui-card-b:has(> .ui-table-wrap) > :not(.ui-table-wrap) { margin: var(--s-4) var(--card-pad); }

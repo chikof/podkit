@@ -39,7 +39,7 @@ fn apply_script() -> &'static str {
 
 fn copy_script(id: &str) -> String {
 	format!(
-		"const t = document.getElementById({}).innerText; const done = () => {{ $_copied = true; setTimeout(() => $_copied = false, 1600) }}; if (window.isSecureContext && navigator.clipboard) {{ navigator.clipboard.writeText(t).then(done) }} else {{ const a = document.createElement('textarea'); a.value = t; a.setAttribute('readonly', ''); a.style.position = 'fixed'; a.style.opacity = '0'; document.body.append(a); a.select(); document.execCommand('copy'); a.remove(); done() }}",
+		"const root = document.getElementById({}); const t = Array.from(root.children).filter(l => !l.hidden && getComputedStyle(l).display !== 'none').map(l => Array.from(l.children).map(c => c.textContent).join(' ') || l.textContent).join('\\n'); const done = () => {{ $_copied = true; setTimeout(() => $_copied = false, 1600) }}; if (window.isSecureContext && navigator.clipboard) {{ navigator.clipboard.writeText(t).then(done) }} else {{ const a = document.createElement('textarea'); a.value = t; a.setAttribute('readonly', ''); a.style.position = 'fixed'; a.style.opacity = '0'; document.body.append(a); a.select(); document.execCommand('copy'); a.remove(); done() }}",
 		js_string(id)
 	)
 }
@@ -59,6 +59,17 @@ fn filter_script(scroll_id: &str, level: Option<&str>) -> String {
 /// A viewer named `label` ("Build log") whose lines go into `#id` and come from
 /// `stream_url`, which must answer with `job_log` or `container_log` for the same `id`.
 pub fn log_viewer(id: &str, label: &str, stream_url: &str) -> Markup {
+	log_viewer_titled(id, label, stream_url, None)
+}
+
+/// [`log_viewer`] with a heading in its toolbar ("Build log #148"): the page's own title for
+/// the log, so the viewer reads as one panel rather than a toolbar over a box.
+pub fn log_viewer_titled(
+	id: &str,
+	label: &str,
+	stream_url: &str,
+	title: Option<&Markup>,
+) -> Markup {
 	let scroll_id = format!("{id}-scroll");
 	let search = format!(
 		"document.getElementById({})._apply()",
@@ -66,31 +77,40 @@ pub fn log_viewer(id: &str, label: &str, stream_url: &str) -> Markup {
 	);
 	let load = format!("@get({})", js_string(stream_url));
 	html! {
-		div class="flex flex-col gap-3" data-signals="{_live: true, _follow: true, _q: '', _copied: false}" {
-			div class="flex flex-wrap items-center gap-3" {
-				span class="inline-flex items-center gap-3 text-xs text-muted-foreground" role="status" {
-					span class="ui-dot ui-dot-progress" "data-class:ui-dot-progress"="$_live" "data-class:ui-dot-neutral"="!$_live" aria-hidden="true" {}
-					span "data-text"="$_live ? 'Live' : 'Ended'" { "Live" }
-				}
-				div class="flex flex-wrap items-center gap-2" role="group" aria-label="Show log levels" {
-					@for (word, level) in FILTERS {
-						button type="button" class="ui-chip" aria-pressed=(if level.is_none() { "true" } else { "false" })
-							"data-on:click"=(filter_script(&scroll_id, level)) { (word) }
+		div class="ui-logbox" data-signals="{_live: true, _follow: true, _q: '', _copied: false}" {
+			div class="ui-logbar" {
+				div class="ui-logbar-main" {
+					@if let Some(title) = title {
+						h2 class="ui-logbar-title" { (title) }
+					}
+					span class="ui-logbar-live" role="status" {
+						span class="ui-dot ui-dot-progress" "data-class:ui-dot-progress"="$_live" "data-class:ui-dot-neutral"="!$_live" aria-hidden="true" {}
+						span "data-text"="$_live ? 'Live' : 'Ended'" { "Live" }
+					}
+					div class="ui-logbar-end" {
+						label class="ui-check text-xs text-muted-foreground" {
+							input type="checkbox" class="ui-checkbox" "data-bind:_follow";
+							"Follow"
+						}
+						button type="button" class=(TOOL) "data-on:click"=(copy_script(id)) {
+							(icon("copy"))
+							span "data-text"="$_copied ? 'Copied' : 'Copy'" { "Copy" }
+						}
 					}
 				}
-				div class="ui-field-icon ml-auto min-w-40 flex-1 sm:max-w-64 sm:flex-none" {
-					(icon("search"))
-					input type="search" class=(SEARCH) autocomplete="off" placeholder="Search the log"
-						aria-label={ "Search the " (label.to_lowercase()) }
-						"data-bind:_q" "data-on:input__debounce.150ms"=(search);
-				}
-				label class="ui-check text-xs text-muted-foreground" {
-					input type="checkbox" class="ui-checkbox" "data-bind:_follow";
-					"Follow"
-				}
-				button type="button" class=(TOOL) "data-on:click"=(copy_script(id)) {
-					(icon("copy"))
-					span "data-text"="$_copied ? 'Copied' : 'Copy'" { "Copy" }
+				div class="ui-logbar-filter" {
+					div class="flex flex-wrap items-center gap-2" role="group" aria-label="Show log levels" {
+						@for (word, level) in FILTERS {
+							button type="button" class="ui-chip" aria-pressed=(if level.is_none() { "true" } else { "false" })
+								"data-on:click"=(filter_script(&scroll_id, level)) { (word) }
+						}
+					}
+					div class="ui-field-icon ui-logbar-search" {
+						(icon("search"))
+						input type="search" class=(SEARCH) autocomplete="off" placeholder="Search the log"
+							aria-label={ "Search the " (label.to_lowercase()) }
+							"data-bind:_q" "data-on:input__debounce.150ms"=(search);
+					}
 				}
 			}
 			div id=(scroll_id) class="ui-log" tabindex="0" role="region" aria-label=(label) "data-init"=(apply_script()) {

@@ -63,7 +63,7 @@ pub use field::{
 pub use icon::{icon, icon_with};
 pub use image_logo::{Priority, image_logo};
 pub use kbd::{kbd, kbd_combo};
-pub use log_viewer::log_viewer;
+pub use log_viewer::{log_viewer, log_viewer_titled};
 pub use logo::{LogoSize, logo};
 pub use menu::{MENU_ITEM, MENU_ITEM_DANGER, dropdown_menu, menu_label, menu_link, menu_separator};
 // `REFRESH_SECONDS` and `resource_charts` are for the application, database, model and stack

@@ -58,8 +58,68 @@ fn view(err: &ServerError) -> View {
 			status,
 			title: "Can't do that",
 			heading: "Can’t do that",
-			message: err.to_string(),
+			message: humanize(&err.to_string()),
 		},
+	}
+}
+
+/// The service layer names fields as the API does (`repo_url`, `git_token`); a person reads
+/// sentences. Known messages get their own wording and any other `invalid <field>` becomes
+/// "That <field> isn't valid.", so a raw field name never reaches the page. Anything else
+/// (the messages that are already sentences) passes through unchanged.
+fn humanize(raw: &str) -> String {
+	const KNOWN: [(&str, &str); 10] = [
+		(
+			"invalid repo_url",
+			"That repository URL isn't valid. Use an https:// URL, an ssh:// URL or a git@host:owner/repo.git address.",
+		),
+		(
+			"invalid dockerfile_path",
+			"That Dockerfile path isn't valid. Use a path inside the repository, like Dockerfile.",
+		),
+		(
+			"invalid image reference",
+			"That image reference isn't valid. Use name:tag, like ghcr.io/acme/web:1.2.",
+		),
+		(
+			"set either repo_url or image, not both",
+			"Choose a repository or an image, not both.",
+		),
+		(
+			"repo_url or image is required",
+			"Give a repository URL or a Docker image.",
+		),
+		(
+			"registry credentials only apply to image applications",
+			"Registry credentials only apply to applications that run an image.",
+		),
+		(
+			"deploy_key and git_token only apply to git applications",
+			"Deploy keys and access tokens only apply to applications built from a repository.",
+		),
+		(
+			"registry_username and registry_password go together",
+			"Give both a registry username and password, or neither.",
+		),
+		(
+			"deploy_key requires an ssh:// or scp-form repo_url, use git_token for https://",
+			"A deploy key needs an ssh:// or git@host:owner/repo.git address. For an https:// URL use an access token.",
+		),
+		(
+			"git_token requires an https:// repo_url, use deploy_key for ssh",
+			"An access token needs an https:// repository URL. For an ssh address use a deploy key.",
+		),
+	];
+	if let Some((_, text)) = KNOWN.iter().find(|(key, _)| *key == raw) {
+		return (*text).to_owned();
+	}
+	match raw.strip_prefix("invalid ") {
+		Some(field)
+			if !field.is_empty() && field.chars().all(|c| c.is_ascii_lowercase() || c == '_') =>
+		{
+			format!("That {} isn't valid.", field.replace('_', " "))
+		}
+		_ => raw.to_owned(),
 	}
 }
 
@@ -70,7 +130,7 @@ pub fn message(err: &ServerError) -> String {
 	match v.status {
 		StatusCode::NOT_FOUND => "That no longer exists.".to_owned(),
 		s if s.is_server_error() && s != StatusCode::BAD_GATEWAY => GENERIC.to_owned(),
-		_ => v.message,
+		_ => humanize(&v.message),
 	}
 }
 
@@ -182,5 +242,31 @@ mod tests {
 			"You don't have permission to do that."
 		);
 		assert_eq!(message(&ServerError::Internal), GENERIC);
+	}
+
+	#[test]
+	fn a_raw_field_name_never_reaches_the_person() {
+		let invalid = |m: &str| message(&ServerError::Validation(m.to_owned()));
+		let repo = invalid("invalid repo_url");
+		assert!(
+			repo.starts_with("That repository URL isn't valid."),
+			"{repo}"
+		);
+		assert!(!repo.contains("repo_url"), "{repo}");
+		// Any other `invalid <field>` is made into a sentence too.
+		assert_eq!(invalid("invalid ssh_user"), "That ssh user isn't valid.");
+		let key = invalid(
+			"deploy_key requires an ssh:// or scp-form repo_url, use git_token for https://",
+		);
+		assert!(
+			!key.contains("deploy_key") && !key.contains("repo_url"),
+			"{key}"
+		);
+		// A message that is already a sentence, or has more to say, is left alone.
+		assert_eq!(invalid("Name must be set."), "Name must be set.");
+		assert_eq!(
+			invalid("invalid model_path \"x\""),
+			"invalid model_path \"x\""
+		);
 	}
 }
