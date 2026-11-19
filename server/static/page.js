@@ -1,13 +1,5 @@
-/* page.js: the interaction layer of the design (Quiet). Dialogs, menus, tabs and tooltips are
-   native HTML (`commandfor`/`command`, `<dialog closedby>`, `[popover]`, `focusgroup`,
-   `popover=hint` + `interestfor`, CSS anchor positioning, radio `:has()` tabs). This file adds
-   only what a browser may still lack, each part feature-detected, plus a few touches that no
-   browser does: Ctrl/Cmd+K, a menu closing after its command, focus returning to where a dialog
-   was opened from, and a theme switch that does not reload the page.
-
-   Delete it and every page renders; menus and dialogs still open where the browser has the
-   features. In a debug build `?nofeature=invoker,closedby,interest,anchor,focusgroup` switches
-   the named features off, so each fallback can be tested in a browser that has them. */
+/* page.js: menus, tooltips, dialogs, Ctrl+K and theme on top of native HTML; each part feature-detected.
+   Debug builds: ?nofeature=invoker,closedby,interest,anchor,focusgroup forces the fallbacks. */
 (() => {
 	const d = document;
 	const $ = (s, r = d) => r.querySelector(s);
