@@ -9,9 +9,11 @@ use sha2::{Digest, Sha256};
 
 use crate::podman::{ContainerSpec, Podman, PodmanError};
 
-/// Podman network shared by Traefik and every routed container on a server.
-/// Routed containers publish no host ports; Traefik reaches them over this network.
+/// Podman network of the system containers: Traefik and the gateway sidecar.
+/// Apps, databases and models live on their environment's network instead.
 pub const NETWORK: &str = "podkit";
+/// Label naming the network Traefik reaches a routed container on.
+pub const NETWORK_LABEL: &str = "traefik.docker.network";
 
 /// Name of the Traefik container.
 pub const TRAEFIK_CONTAINER_NAME: &str = "podkit-traefik";
@@ -47,7 +49,7 @@ pub async fn ensure_traefik(
 			if !info.state.and_then(|s| s.running).unwrap_or(false) {
 				podman.start(TRAEFIK_CONTAINER_NAME).await?;
 			}
-			return Ok(());
+			return sync_networks(podman).await;
 		}
 		// Best effort: `remove` kills it anyway.
 		let _ = podman.stop(TRAEFIK_CONTAINER_NAME).await;
@@ -65,7 +67,6 @@ pub async fn ensure_traefik(
 		"--providers.docker=true".to_string(),
 		"--providers.docker.endpoint=unix:///var/run/docker.sock".to_string(),
 		"--providers.docker.exposedbydefault=false".to_string(),
-		format!("--providers.docker.network={NETWORK}"),
 		"--entrypoints.web.address=:80".to_string(),
 	];
 	let mut published_ports = vec![PublishedPort::tcp(ingress.http_port, 80)];
@@ -95,12 +96,82 @@ pub async fn ensure_traefik(
 			..Default::default()
 		})
 		.await?;
-	podman.start(TRAEFIK_CONTAINER_NAME).await
+	podman.start(TRAEFIK_CONTAINER_NAME).await?;
+	sync_networks(podman).await
+}
+
+/// Makes Traefik a member of exactly the networks that hold routed
+/// containers (those with a `traefik.docker.network` label), plus the system
+/// network. Idempotent; a missing Traefik is not an error.
+///
+/// # Errors
+/// Podman is unreachable or refuses a connect or disconnect.
+pub async fn sync_networks(podman: &Podman) -> Result<(), PodmanError> {
+	let Some(info) = podman.inspect(TRAEFIK_CONTAINER_NAME).await? else {
+		return Ok(());
+	};
+	let on: Vec<String> = info
+		.network_settings
+		.and_then(|n| n.networks)
+		.map(|n| n.into_keys().collect())
+		.unwrap_or_default();
+	let want = wanted_networks(
+		podman
+			.labeled_containers("traefik.enable=true")
+			.await?
+			.iter()
+			.filter_map(|c| {
+				let networks = c
+					.network_settings
+					.as_ref()
+					.and_then(|n| n.networks.as_ref())
+					.map(|n| n.keys().map(String::as_str).collect::<Vec<_>>())
+					.unwrap_or_default();
+				routed_network(c.labels.as_ref()?.get(NETWORK_LABEL), &networks)
+			}),
+	);
+	for name in &want {
+		if !on.contains(name) {
+			podman.create_network(name, false).await?;
+			podman
+				.connect_network(name, TRAEFIK_CONTAINER_NAME, &[])
+				.await?;
+		}
+	}
+	for name in &on {
+		if name != NETWORK && !want.contains(name) {
+			podman
+				.disconnect_network(name, TRAEFIK_CONTAINER_NAME)
+				.await?;
+		}
+	}
+	Ok(())
+}
+
+/// The network Traefik reaches a routed container on: the one its label
+/// names, else (a container deployed before the label existed) its
+/// environment network.
+fn routed_network(label: Option<&String>, networks: &[&str]) -> Option<String> {
+	label.cloned().or_else(|| {
+		networks
+			.iter()
+			.find(|n| n.starts_with(proto::ENV_NETWORK_PREFIX))
+			.map(|n| (*n).to_owned())
+	})
+}
+
+/// The networks Traefik should be on, given the network label of each routed
+/// container: the labelled ones other than the system network, deduplicated.
+fn wanted_networks(labels: impl Iterator<Item = String>) -> Vec<String> {
+	let mut out: Vec<String> = labels.filter(|n| n != NETWORK).collect();
+	out.sort();
+	out.dedup();
+	out
 }
 
 fn config_hash(ingress: &Ingress, podman_socket: &str) -> String {
 	let input = format!(
-		"{TRAEFIK_IMAGE}|{}|{}|{:?}|{podman_socket}",
+		"{TRAEFIK_IMAGE}|{}|{}|{:?}|{podman_socket}|per-network-routing",
 		ingress.http_port, ingress.https_port, ingress.acme_email
 	);
 	Sha256::digest(input.as_bytes())
@@ -210,6 +281,31 @@ mod tests {
 			"traefik.http.services.app-7.loadbalancer.server.port".to_string(),
 			"3000".to_string()
 		)));
+	}
+
+	#[test]
+	fn traefik_joins_only_the_networks_of_routed_containers() {
+		let want = wanted_networks(
+			["podkit-env-2", "podkit", "podkit-env-1", "podkit-env-2"]
+				.into_iter()
+				.map(String::from),
+		);
+		assert_eq!(want, ["podkit-env-1", "podkit-env-2"]);
+		assert!(wanted_networks(std::iter::empty()).is_empty());
+	}
+
+	#[test]
+	fn unlabelled_routed_containers_are_reached_on_their_environment_network() {
+		let label = "podkit-env-3".to_string();
+		assert_eq!(
+			routed_network(Some(&label), &["podkit-env-9"]).as_deref(),
+			Some("podkit-env-3")
+		);
+		assert_eq!(
+			routed_network(None, &["podkit", "podkit-env-9"]).as_deref(),
+			Some("podkit-env-9")
+		);
+		assert_eq!(routed_network(None, &["podkit"]), None);
 	}
 
 	#[test]

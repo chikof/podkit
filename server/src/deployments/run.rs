@@ -20,7 +20,7 @@ use crate::jobs::{Job, JobFailure};
 use crate::logs::JobLog;
 use crate::servers::Server;
 use crate::state::AppState;
-use crate::{deployments, domains, env_vars, links, scope, volumes};
+use crate::{deployments, domains, env_vars, links, networks, scope, volumes};
 
 const LOST_CONNECTION: &str = "lost connection to server agent";
 
@@ -225,6 +225,21 @@ async fn build_spec(
 		stop_timeout_s: None,
 		networks: Vec::new(),
 		options: proto::ContainerOptions::default(),
+		attach: networks::attach::for_resource(
+			&state.db,
+			networks::attach::Home {
+				kind: networks::ResourceKind::Application,
+				id: application.id.0,
+				environment: application.environment_id,
+				server: application.server_id,
+			},
+			&[],
+		)
+		.await
+		.map_err(|e| {
+			tracing::error!("failed to resolve networks: {e}");
+			failed("failed to resolve the application's networks")
+		})?,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,

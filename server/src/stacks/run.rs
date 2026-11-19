@@ -22,6 +22,7 @@ use crate::error::ServerError;
 use crate::ids::{StackId, StackServiceId};
 use crate::jobs::{Job, JobFailure, JobKind};
 use crate::logs::JobLog;
+use crate::networks;
 use crate::servers;
 use crate::stacks;
 use crate::state::AppState;
@@ -131,7 +132,7 @@ struct Ctx<'a> {
 
 impl Ctx<'_> {
 	/// Parses and translates the stack's current compose file and variables.
-	fn plan(&self, services: &[StackService]) -> Result<translate::Plan, JobFailure> {
+	async fn plan(&self, services: &[StackService]) -> Result<translate::Plan, JobFailure> {
 		let env = stacks::decrypt_env(&self.state.secrets, self.stack).map_err(|e| {
 			tracing::error!(stack = self.stack.id.0, "{e}");
 			failed("failed to read the stack's variables")
@@ -163,7 +164,7 @@ impl Ctx<'_> {
 				})
 			})
 			.collect();
-		translate::plan(
+		let mut plan = translate::plan(
 			&compose,
 			&Settings {
 				stack: self.stack.id.0,
@@ -175,7 +176,13 @@ impl Ctx<'_> {
 				domains: &domains,
 			},
 		)
-		.map_err(|issues| failed(describe(&issues)))
+		.map_err(|issues| failed(describe(&issues)))?;
+		// The stack's own network, plus the ones it was attached to.
+		let linked = networks::attach::stack_links(&self.state.db, self.stack.id)
+			.await
+			.map_err(|e| db_failure(&e))?;
+		translate::link_networks(&mut plan, &linked);
+		Ok(plan)
 	}
 
 	async fn services(&self) -> Result<Vec<StackService>, JobFailure> {
@@ -189,7 +196,7 @@ impl Ctx<'_> {
 			.await
 			.map_err(|e| db_failure(&e))?;
 		let rows = self.services().await?;
-		let plan = self.plan(&rows)?;
+		let plan = self.plan(&rows).await?;
 
 		// Services dropped from the compose file go first.
 		for row in rows.iter().filter(|r| r.status == ServiceStatus::Removing) {
@@ -449,7 +456,7 @@ impl Ctx<'_> {
 	/// Recreates one service from the stack's current configuration.
 	async fn restart(&self, log: &mut JobLog, service: &StackService) -> Result<(), JobFailure> {
 		let rows = self.services().await?;
-		let plan = self.plan(&rows)?;
+		let plan = self.plan(&rows).await?;
 		let planned = plan
 			.services
 			.iter()
@@ -467,7 +474,10 @@ impl Ctx<'_> {
 		// The volumes of the compose file as it is now. A volume dropped from
 		// the file earlier is not known any more and stays.
 		let volumes = if purge {
-			self.plan(&rows).map(|p| p.volumes).unwrap_or_default()
+			self.plan(&rows)
+				.await
+				.map(|p| p.volumes)
+				.unwrap_or_default()
 		} else {
 			Vec::new()
 		};

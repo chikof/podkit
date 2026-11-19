@@ -10,7 +10,9 @@ use maud::{Markup, html};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::{crumbs, detail_url, host_port, human_mb, list_url, local_badge, server_tabs};
+use super::{
+	ServerTab, crumbs, detail_url, host_port, human_mb, list_url, local_badge, server_tabs,
+};
 use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ServerId, TeamId};
@@ -257,7 +259,12 @@ fn delete_dialog(ctx: &TeamCtx, server: &Server) -> Markup {
 
 /// The header every page of a server shares: logo, name, address, the page's actions and
 /// the two tabs.
-pub(super) fn header(team: TeamId, server: &Server, monitoring: bool, actions: &Markup) -> Markup {
+pub(in crate::ui) fn header(
+	team: TeamId,
+	server: &Server,
+	tab: ServerTab,
+	actions: &Markup,
+) -> Markup {
 	html! {
 		div class="ui-stack" {
 			header class="ui-page-head" {
@@ -271,7 +278,7 @@ pub(super) fn header(team: TeamId, server: &Server, monitoring: bool, actions: &
 				}
 				div class="ui-page-actions" { (actions) }
 			}
-			(server_tabs(team, server.id, monitoring))
+			(server_tabs(team, server.id, tab))
 		}
 	}
 }
@@ -293,7 +300,7 @@ async fn detail(
 	crumbs.push((server.name.as_str(), None));
 	let body = html! {
 		div class="ui-page-body" data-signals="{confirm: '', _busy: false, _error: '', _delete_error: ''}" {
-			(header(ctx.team.id, server, false, &actions(&ctx, server, can_update, can_delete)))
+			(header(ctx.team.id, server, ServerTab::Overview, &actions(&ctx, server, can_update, can_delete)))
 			(form_error())
 			(status_region(&ctx, server, found.bootstrap.as_ref()))
 			@if !server.is_local {

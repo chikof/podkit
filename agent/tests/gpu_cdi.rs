@@ -180,6 +180,7 @@ async fn deploy_route_passes_the_gpu_through() {
 		stop_timeout_s: None,
 		networks: Vec::new(),
 		options: proto::ContainerOptions::default(),
+		attach: Vec::new(),
 	};
 	let body = reqwest::Client::new()
 		.post(format!("http://{addr}/v1/deploy"))

@@ -42,6 +42,7 @@ mod header;
 mod logs;
 mod models_tab;
 mod monitoring;
+mod networks_tab;
 mod volumes;
 mod webhooks;
 
@@ -59,6 +60,7 @@ pub fn router() -> Router<AppState> {
 		.merge(domains::router())
 		.merge(volumes::router())
 		.merge(models_tab::router())
+		.merge(networks_tab::router())
 		.merge(monitoring::router())
 		.merge(webhooks::router())
 		.merge(advanced::router())
@@ -122,6 +124,7 @@ enum Tab {
 	Domains,
 	Volumes,
 	Models,
+	Networks,
 	Webhooks,
 	Monitoring,
 	Settings,
@@ -129,13 +132,14 @@ enum Tab {
 }
 
 impl Tab {
-	const ALL: [Self; 10] = [
+	const ALL: [Self; 11] = [
 		Self::Deployments,
 		Self::Logs,
 		Self::Env,
 		Self::Domains,
 		Self::Volumes,
 		Self::Models,
+		Self::Networks,
 		Self::Webhooks,
 		Self::Monitoring,
 		Self::Settings,
@@ -150,6 +154,7 @@ impl Tab {
 			Self::Domains => "Domains",
 			Self::Volumes => "Volumes",
 			Self::Models => "Models",
+			Self::Networks => "Networks",
 			Self::Webhooks => "Webhooks",
 			Self::Monitoring => "Monitoring",
 			Self::Settings => "Settings",
@@ -167,6 +172,7 @@ impl Tab {
 			Self::Domains => "/domains",
 			Self::Volumes => "/volumes",
 			Self::Models => "/models",
+			Self::Networks => "/networks",
 			Self::Webhooks => "/webhooks",
 			Self::Monitoring => "/monitoring",
 			Self::Settings => "/settings",
@@ -184,7 +190,7 @@ impl Tab {
 			Self::Deployments => can(Action::Read, Resource::Deployment),
 			Self::Volumes => can(Action::Read, Resource::Volume),
 			Self::Models => can(Action::Read, Resource::Model),
-			Self::Monitoring => can(Action::Read, Resource::Application),
+			Self::Networks | Self::Monitoring => can(Action::Read, Resource::Application),
 			Self::Webhooks => can(Action::Update, Resource::Application),
 			Self::Advanced => {
 				can(Action::Update, Resource::Application)

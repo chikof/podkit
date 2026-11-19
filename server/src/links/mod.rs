@@ -358,12 +358,34 @@ pub async fn build_config(db: &PgPool, server: ServerId) -> Result<GatewayConfig
 			stream_usage: row.engine != EngineKind::Custom,
 		});
 	}
+	// The gateway sits on the network of every app that uses a model and of
+	// every model it serves, so `llm.podkit.internal` resolves for the apps
+	// and the models answer the gateway.
+	let environments: Vec<i64> = sqlx::query_scalar(
+		"SELECT a.environment_id FROM gateway_keys k
+			JOIN applications a ON a.id = k.application_id WHERE a.server_id = $1
+		UNION
+		SELECT m.environment_id FROM models m
+			WHERE m.server_id = $1 AND (
+				m.id IN (SELECT am.model_id FROM application_models am
+					JOIN applications a ON a.id = am.application_id WHERE a.server_id = $1)
+				OR m.id IN (SELECT model_id FROM playground_keys)
+			)
+		ORDER BY 1",
+	)
+	.bind(server)
+	.fetch_all(db)
+	.await?;
 	Ok(GatewayConfig {
 		keys: keys
 			.into_iter()
 			.map(|(key_hash, models)| GatewayKey { key_hash, models })
 			.collect(),
 		other_models,
+		networks: environments
+			.into_iter()
+			.map(|e| crate::networks::environment_podman_name(crate::ids::EnvironmentId(e)))
+			.collect(),
 	})
 }
 

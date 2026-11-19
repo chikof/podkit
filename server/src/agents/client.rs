@@ -87,6 +87,25 @@ impl AgentClient {
 		.await
 	}
 
+	/// Like [`AgentClient::send`], with a JSON request body.
+	///
+	/// # Errors
+	/// See [`AgentClient::json`].
+	pub async fn send_json(
+		&self,
+		method: Method,
+		path: &str,
+		body: &(impl Serialize + Sync),
+	) -> Result<(), ServerError> {
+		let body = encode(Some(body))?;
+		let request = self.request(method, path, body);
+		with_timeout(REQUEST_TIMEOUT, async {
+			let resp = ok_or_error(request?.await?).await?;
+			drain(resp).await
+		})
+		.await
+	}
+
 	/// Starts an NDJSON stream. There is no overall timeout: callers cancel by
 	/// dropping the stream, which closes the connection.
 	///

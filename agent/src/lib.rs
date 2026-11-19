@@ -6,6 +6,7 @@ pub mod gateway;
 pub mod hardware;
 pub mod ingress;
 pub mod model_download;
+pub mod networks;
 pub mod nixpacks;
 pub mod podman;
 pub mod probe;
