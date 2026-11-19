@@ -7,8 +7,8 @@ use axum::http::{StatusCode, header};
 use serde_json::{Value, json};
 
 use crate::tests::dbs::{
-	add_backup_target, add_job, backup_settings, database_environment, database_id, delete_jobs,
-	job_kinds, local_server, set_jobs, set_state, status_of,
+	add_backup_target, add_job, add_metric_sample, backup_settings, database_environment,
+	database_id, delete_jobs, job_kinds, local_server, set_jobs, set_state, status_of,
 };
 use crate::tests::grid::env_id;
 use crate::tests::{PgPool, app, call, count, db_test, user_with_team};
@@ -842,14 +842,7 @@ async fn the_monitoring_tab_charts_the_databases_own_samples_and_the_header_show
 	let id = f.create(&db, "orders", json!({})).await;
 	set_state(&db, id, "running", Some("c1")).await;
 	set_jobs(&db, id, "succeeded").await;
-	sqlx::query(
-		"INSERT INTO resource_metrics (kind, resource_id, at, rollup, cpu, mem) \
-		 VALUES ('database', $1, now(), false, 2.5, 123456789)",
-	)
-	.bind(id)
-	.execute(&db)
-	.await
-	.unwrap();
+	add_metric_sample(&db, id, 2.5, 123_456_789).await;
 
 	let tab = format!("{}/monitoring", f.url(id));
 	let (s, page) = f.get(&tab).await;

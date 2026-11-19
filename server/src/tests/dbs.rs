@@ -207,3 +207,17 @@ pub async fn database_environment(db: &PgPool, database: i64) -> i64 {
 		.await
 		.unwrap()
 }
+
+/// Records one live metrics sample for `database`.
+pub async fn add_metric_sample(db: &PgPool, database: i64, cpu: f64, mem: i64) {
+	sqlx::query(
+		"INSERT INTO resource_metrics (kind, resource_id, at, rollup, cpu, mem) \
+		 VALUES ('database', $1, now(), false, $2, $3)",
+	)
+	.bind(database)
+	.bind(cpu)
+	.bind(mem)
+	.execute(db)
+	.await
+	.unwrap();
+}
