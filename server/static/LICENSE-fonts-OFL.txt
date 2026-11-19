@@ -1,6 +1,7 @@
-Copyright (c) 2023 Vercel, in collaboration with basement.studio
+Hanken Grotesk: Copyright 2022 The Hanken Grotesk Project Authors (https://github.com/marcologous/hanken-design-system)
+Spline Sans Mono: Copyright 2020 The Spline Sans Project Authors (https://github.com/SorkinType/SplineSans)
 
-This Font Software is licensed under the SIL Open Font License, Version 1.1.
+These Font Software files are licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 http://scripts.sil.org/OFL
 

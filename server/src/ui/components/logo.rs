@@ -56,17 +56,29 @@ fn mark_for(name: &str) -> Option<String> {
 		.then(|| slug.to_owned())
 }
 
-/// The letter shown when there is no mark: the first letter or digit, upper-cased.
-fn monogram(name: &str) -> String {
-	name.chars()
-		.find(|c| c.is_alphanumeric())
-		.map_or_else(|| "?".to_owned(), |c| c.to_uppercase().collect())
+/// The letters shown when there is no mark: the first two letters or digits, the first
+/// upper-cased (`Pr`, `My`); `?` for a name with none.
+pub(super) fn monogram(name: &str) -> String {
+	let mut letters = name.chars().filter(|c| c.is_alphanumeric());
+	let Some(first) = letters.next() else {
+		return "?".to_owned();
+	};
+	let mut out: String = first.to_uppercase().collect();
+	out.extend(letters.next().into_iter().flat_map(char::to_lowercase));
+	out
+}
+
+/// The tint of a monogram or avatar, 1 to 6: `1 + (sum of the bytes of the name) mod 6`.
+/// Computed from the name alone, so a service keeps its color on every page and every load.
+pub(super) fn tint(name: &str) -> u8 {
+	let sum: u32 = name.trim().bytes().map(u32::from).sum();
+	u8::try_from(sum % 6).map_or(1, |n| n + 1)
 }
 
 pub fn logo(name: &str, size: LogoSize) -> Markup {
 	let Some(slug) = mark_for(name) else {
 		return html! {
-			span class=(size.class()) aria-hidden="true" data-logo="monogram" { (monogram(name)) }
+			span class=(size.class()) aria-hidden="true" data-logo="monogram" data-h=(tint(name)) { (monogram(name)) }
 		};
 	};
 	html! {
@@ -100,10 +112,28 @@ mod tests {
 	fn an_unknown_service_falls_back_to_a_monogram() {
 		let html = logo("zebra-db", LogoSize::Lg).into_string();
 		assert!(html.contains("data-logo=\"monogram\""), "{html}");
-		assert!(html.contains(">Z<"), "{html}");
+		assert!(html.contains(">Ze<"), "{html}");
 		assert!(!html.contains("<svg"), "{html}");
 		assert!(logo("", LogoSize::Sm).into_string().contains(">?<"));
 		assert!(logo("--x", LogoSize::Sm).into_string().contains(">X<"));
+		assert_eq!(monogram("my-app"), "My");
+		assert_eq!(monogram("élan"), "Él");
+	}
+
+	#[test]
+	fn the_tint_is_stable_and_between_one_and_six() {
+		// 'P' + 'r' = 80 + 114 = 194, 194 % 6 = 2, so tint 3 (the reference sheet's "Pr").
+		assert_eq!(tint("Pr"), 3);
+		assert_eq!(tint(" Pr "), 3, "the name is trimmed");
+		for name in ["", "a", "zebra-db", "Ünïcode", "x".repeat(500).as_str()] {
+			assert!((1..=6).contains(&tint(name)), "{name}");
+			assert_eq!(tint(name), tint(name));
+		}
+		let html = logo("zebra-db", LogoSize::Md).into_string();
+		assert!(
+			html.contains(&format!("data-h=\"{}\"", tint("zebra-db"))),
+			"{html}"
+		);
 	}
 
 	#[test]

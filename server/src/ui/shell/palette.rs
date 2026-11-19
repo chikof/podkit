@@ -1,6 +1,6 @@
 //! The command palette: a native modal `<dialog>` holding a combobox.
 //!
-//! Ctrl/⌘-K or the header's search button opens it. Typing sends the text to
+//! Ctrl/⌘-K (`page.js`) or the header's search button opens it. Typing sends the text to
 //! `GET /teams/{team}/search?q=` (debounced) and the answer, a Datastar patch, replaces
 //! the listbox. Focus stays in the input; the arrow keys move the selected option
 //! (`aria-activedescendant`), Enter opens it, Esc closes the dialog and focus goes back to
@@ -11,10 +11,6 @@ use maud::{Markup, html};
 use crate::ui::components::{icon, kbd};
 use crate::ui::extract::TeamCtx;
 use crate::ui::pages::search::{LIST_ID, defaults};
-
-/// The expression that opens or closes the palette from the keyboard. It leaves other
-/// open dialogs alone, so a confirmation is never buried.
-pub const HOTKEY: &str = "(evt.ctrlKey || evt.metaKey) && !evt.altKey && evt.key.toLowerCase() === 'k' && (evt.preventDefault(), document.getElementById('palette').open ? document.getElementById('palette').close() : document.querySelector('dialog[open]') || document.getElementById('palette').showModal())";
 
 pub fn dialog(ctx: &TeamCtx) -> Markup {
 	let on_input = format!(

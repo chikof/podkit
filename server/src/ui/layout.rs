@@ -2,7 +2,7 @@
 
 use maud::{DOCTYPE, Markup, html};
 
-use super::assets::{FONT_SANS_HREF, PODKIT_JS_HREF};
+use super::assets::{FONT_MONO_HREF, FONT_SANS_HREF, PAGE_JS_HREF, PODKIT_JS_HREF};
 use super::components::{BUTTON_OUTLINE, theme_toggle, toast, toast_region, toast_region_with};
 use super::extract::TeamCtx;
 use super::{APP_CSS_HREF, DATASTAR_PATH, shell, theme};
@@ -25,12 +25,18 @@ pub fn document_with_head(title: &str, head: &Markup, body: &Markup) -> Markup {
 				meta charset="utf-8";
 				meta name="viewport" content="width=device-width, initial-scale=1";
 				meta name="color-scheme" content=(theme.color_scheme());
+				@if cfg!(debug_assertions) {
+					// Lets `page.js` honor `?nofeature=` (forces its fallbacks) in a debug build only.
+					meta name="podkit-debug" content="1";
+				}
 				title { (title) " · podkit" }
 				link rel="preload" href=(FONT_SANS_HREF) "as"="font" type="font/woff2" crossorigin;
+				link rel="preload" href=(FONT_MONO_HREF) "as"="font" type="font/woff2" crossorigin;
 				link rel="stylesheet" href=(*APP_CSS_HREF);
 				(head)
 				script type="module" src=(DATASTAR_PATH) {}
 				script type="module" src=(*PODKIT_JS_HREF) {}
+				script type="module" src=(*PAGE_JS_HREF) {}
 			}
 			body class="min-h-screen font-sans" {
 				(body)

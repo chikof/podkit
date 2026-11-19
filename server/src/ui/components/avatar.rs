@@ -22,7 +22,7 @@ fn initials(name: &str) -> String {
 
 pub fn avatar(name: &str) -> Markup {
 	html! {
-		span class="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-muted text-xs font-medium text-muted-foreground select-none" role="img" aria-label=(name) {
+		span class="ui-avatar" data-h=(super::logo::tint(name)) role="img" aria-label=(name) {
 			(initials(name))
 		}
 	}

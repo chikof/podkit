@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Rebuilds the vendored UI assets under server/static from npm tarballs.
 
-    npm pack geist lucide-static simple-icons     # in an empty directory
+    npm pack @fontsource-variable/hanken-grotesk @fontsource-variable/spline-sans-mono \
+        lucide-static simple-icons                # in an empty directory
     scripts/vendor-ui-assets.py <that directory>
 
 Writes:
-  server/static/fonts/Geist-Variable.woff2, GeistMono-Variable.woff2   (OFL-1.1)
+  server/static/fonts/hanken-grotesk-var.woff2, spline-sans-mono-var.woff2   (OFL-1.1)
   server/static/icons.svg   sprite of the Lucide icons listed in ICONS   (ISC)
   server/static/logos.svg   sprite of the brand marks listed in LOGOS    (CC0)
 
@@ -73,8 +74,15 @@ def sprite(symbols: list[tuple[str, str, str]], header: str) -> str:
 def main() -> None:
     pkgs = unpack(Path(sys.argv[1]))
     (STATIC / "fonts").mkdir(parents=True, exist_ok=True)
-    shutil.copy(pkgs["geist"] / "dist/fonts/geist-sans/Geist-Variable.woff2", STATIC / "fonts")
-    shutil.copy(pkgs["geist"] / "dist/fonts/geist-mono/GeistMono-Variable.woff2", STATIC / "fonts")
+    # Latin subset only: Cyrillic, Greek and CJK names fall back to the system font.
+    shutil.copy(
+        pkgs["hanken-grotesk"] / "files/hanken-grotesk-latin-wght-normal.woff2",
+        STATIC / "fonts" / "hanken-grotesk-var.woff2",
+    )
+    shutil.copy(
+        pkgs["spline-sans-mono"] / "files/spline-sans-mono-latin-wght-normal.woff2",
+        STATIC / "fonts" / "spline-sans-mono-var.woff2",
+    )
 
     lucide = pkgs["lucide-static"]
     symbols = []

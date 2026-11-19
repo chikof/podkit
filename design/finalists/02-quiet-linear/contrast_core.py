@@ -10,7 +10,59 @@ import re, os, sys
 
 def _vars(block): return dict(re.findall(r'--([a-z0-9-]+)\s*:\s*([^;]+);', block))
 
+# ---- podkit's theme.css: shadcn names, oklch inside light-dark(), mapped back to Quiet's names ----
+PODKIT = {"bg": "background", "surface": "card", "surface-2": "secondary", "surface-3": "muted-strong",
+          "border": "border", "border-strong": "border-emphasis", "border-ui": "input",
+          "text": "foreground", "text-2": "muted-foreground", "text-3": "subtle-foreground",
+          "accent": "primary", "accent-hover": "primary-hover", "accent-ink": "primary-foreground",
+          "accent-soft": "primary-soft", "accent-text": "primary-text",
+          "ok": "success", "warn": "warning", "err": "destructive", "info": "info",
+          "ok-soft": "success-soft", "warn-soft": "warning-soft", "err-soft": "destructive-soft",
+          "info-soft": "info-soft", "err-ink": "destructive-foreground", "focus": "ring",
+          "overlay": "overlay", "grid": "grid", "log-bg": "log",
+          "skeleton-a": "skeleton-a", "skeleton-b": "skeleton-b",
+          **{f"chart-{i}": f"chart-{i}" for i in range(1, 7)}}
+
+def _gam(c):
+    c = max(0.0, min(1.0, c))
+    return 12.92 * c if c <= 0.0031308 else 1.055 * c ** (1 / 2.4) - 0.055
+
+def _oklch(v):
+    m = re.fullmatch(r'oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*(?:/\s*([\d.]+)%\s*)?\)', v.strip())
+    if not m: raise ValueError(f"not an oklch colour: {v!r}")
+    import math
+    L, C, H = float(m.group(1)), float(m.group(2)), float(m.group(3))
+    a, b = C * math.cos(math.radians(H)), C * math.sin(math.radians(H))
+    l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3
+    mm = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3
+    s = (L - 0.0894841775 * a - 1.2914855480 * b) ** 3
+    rgb = [round(_gam(x) * 255) for x in (4.0767416621 * l - 3.3077115913 * mm + 0.2309699292 * s,
+                                          -1.2684380046 * l + 2.6097574011 * mm - 0.3413193965 * s,
+                                          -0.0041960863 * l - 0.7034186147 * mm + 1.7076147010 * s)]
+    if m.group(4): return "rgb(%d %d %d / %s)" % (*rgb, float(m.group(4)) / 100)
+    return "#%02x%02x%02x" % tuple(rgb)
+
+def _split_ld(v):
+    m = re.fullmatch(r'light-dark\((.*)\)', v.strip())
+    if not m: raise ValueError(f"not light-dark(): {v!r}")
+    body, depth = m.group(1), 0
+    for i, ch in enumerate(body):
+        depth += ch == "("; depth -= ch == ")"
+        if ch == "," and depth == 0: return body[:i].strip(), body[i + 1:].strip()
+    raise ValueError(v)
+
+def load_podkit(path):
+    css = re.sub(r'/\*.*?\*/', '', open(path).read(), flags=re.S)
+    block = css.split(":root {", 1)[1].split("}", 1)[0]       # the colour block: the first :root
+    toks = dict(re.findall(r'--([a-z0-9-]+)\s*:\s*(light-dark\([^;]*\));', block))
+    out = {"dark": {}, "light": {}}
+    for q, p in PODKIT.items():
+        light, dark = _split_ld(toks[p])
+        out["light"][q], out["dark"][q] = _oklch(light), _oklch(dark)
+    return out
+
 def load(path):
+    if path.endswith("theme.css"): return load_podkit(path)
     css = re.sub(r'/\*.*?\*/', '', open(path).read(), flags=re.S)
     base, themes = {}, {"dark": {}, "light": {}}
     for m in re.finditer(r'([^{}]+)\{([^{}]*)\}', css):
@@ -90,8 +142,8 @@ def report(path, md=False):
         return "\n".join(o), bad, rows
     return None, bad, rows
 
-def main(here):
-    path = os.path.join(here, "tokens.css")
+def main(here, path=None):
+    path = path or os.path.join(here, "tokens.css")
     _, bad, rows = report(path)
     name = os.path.basename(here)
     for theme in ("dark", "light"):

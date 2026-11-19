@@ -1,4 +1,5 @@
-/* Design tokens for the web UI. The spec lives in docs/design/README.md.
+/* Design tokens for the web UI: "Quiet" (design/finalists/02-quiet-linear). The spec
+   lives in design/finalists/02-quiet-linear/README.md and IMPLEMENTATION.md.
 
    Components use only these semantic colors (`bg-primary`, `text-muted-foreground`,
    `border-border`, ...), so restyling means editing the values below. `build.rs`
@@ -6,89 +7,185 @@
    there becomes `bg-name`, `text-name`, ... with no other edit. Keep that block
    free of anything but color tokens, one per line.
 
-   The palette is shadcn/ui's "neutral" base (MIT), in oklch. Each color is written once
-   as `light-dark(<light>, <dark>)` and follows the used color scheme:
+   The names are shadcn/ui's (MIT); the values are Quiet's, in oklch, generated from
+   its `tokens.css`. Each color is written once as `light-dark(<light>, <dark>)` and
+   follows the used color scheme:
 
-     - no class on <html>: the system setting (dark when the system has no preference),
+     - no class on <html>: the system setting (`color-scheme: light dark`),
      - class="dark" or class="light": the user's choice. The server writes the class from
-       the `theme` cookie, so the first paint is already right. */
+       the `theme` cookie, so the first paint is already right.
+
+   Mapping from Quiet's names (IMPLEMENTATION.md section 1): background = bg,
+   foreground = text, card/popover = surface, primary = accent (the brand signal; its
+   text-sized twin is `primary-text`), secondary/muted = surface-2, muted-foreground = text-2,
+   subtle-foreground = text-3, accent = surface-3 (shadcn's `accent` is a hover wash),
+   destructive = err, success = ok, warning = warn, input = border-ui (the control
+   border, 3:1), ring = focus, border-emphasis = border-strong, log = log-bg.
+   `design/finalists/02-quiet-linear/contrast.py` audits this file. */
 
 @font-face {
-	font-family: "Geist";
+	font-family: "Hanken Grotesk";
 	font-style: normal;
 	font-weight: 100 900;
 	font-display: swap;
-	src: url("/static/fonts/Geist-Variable.woff2?v=1.9.2") format("woff2");
+	src: url("/static/fonts/hanken-grotesk-var.woff2?v=1") format("woff2");
 }
 
 @font-face {
-	font-family: "Geist Mono";
+	font-family: "Spline Sans Mono";
 	font-style: normal;
-	font-weight: 100 900;
+	font-weight: 300 700;
 	font-display: swap;
-	src: url("/static/fonts/GeistMono-Variable.woff2?v=1.9.2") format("woff2");
+	src: url("/static/fonts/spline-sans-mono-var.woff2?v=1") format("woff2");
 }
 
 :root {
-	--background: light-dark(oklch(1 0 0), oklch(0.145 0 0));
-	--foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
-	--card: light-dark(oklch(1 0 0), oklch(0.205 0 0));
-	--card-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
-	--popover: light-dark(oklch(1 0 0), oklch(0.205 0 0));
-	--popover-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
-	--primary: light-dark(oklch(0.205 0 0), oklch(0.922 0 0));
-	--primary-foreground: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
-	--secondary: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
-	--secondary-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
-	--muted: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
-	--muted-foreground: light-dark(oklch(0.5 0 0), oklch(0.708 0 0));
-	--accent: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
-	--accent-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
-	--destructive: light-dark(oklch(0.577 0.245 27.325), oklch(0.704 0.191 22.216));
-	--destructive-foreground: light-dark(oklch(0.985 0 0), oklch(0.145 0 0));
-	--success: light-dark(oklch(0.5 0.14 150), oklch(0.75 0.17 150));
-	--warning: light-dark(oklch(0.52 0.13 70), oklch(0.82 0.15 85));
-	--info: light-dark(oklch(0.5 0.17 255), oklch(0.74 0.12 250));
-	--border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 10%));
-	--input: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 15%));
-	--ring: light-dark(oklch(0.64 0 0), oklch(0.556 0 0));
-	--chart-1: light-dark(oklch(0.646 0.222 41.116), oklch(0.6 0.2 264));
-	--chart-2: light-dark(oklch(0.6 0.118 184.704), oklch(0.696 0.17 162.48));
-	--chart-3: light-dark(oklch(0.398 0.07 227.392), oklch(0.769 0.188 70.08));
-	--chart-4: light-dark(oklch(0.65 0.16 84), oklch(0.627 0.265 303.9));
-	--chart-5: light-dark(oklch(0.65 0.18 70), oklch(0.645 0.246 16.439));
-	--sidebar: light-dark(oklch(0.985 0 0), oklch(0.205 0 0));
-	--sidebar-foreground: light-dark(oklch(0.145 0 0), oklch(0.985 0 0));
-	--sidebar-primary: light-dark(oklch(0.205 0 0), oklch(0.488 0.243 264.376));
-	--sidebar-primary-foreground: light-dark(oklch(0.985 0 0), oklch(0.985 0 0));
-	--sidebar-accent: light-dark(oklch(0.97 0 0), oklch(0.269 0 0));
-	--sidebar-accent-foreground: light-dark(oklch(0.205 0 0), oklch(0.985 0 0));
-	--sidebar-border: light-dark(oklch(0.922 0 0), oklch(1 0 0 / 10%));
-	--sidebar-ring: light-dark(oklch(0.708 0 0), oklch(0.556 0 0));
-	color-scheme: dark;
+	--background: light-dark(oklch(0.988 0.001 0), oklch(0.172 0.003 0));
+	--foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
+	--card: light-dark(oklch(1 0 0), oklch(0.195 0.004 264.5));
+	--card-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
+	--popover: light-dark(oklch(1 0 0), oklch(0.195 0.004 264.5));
+	--popover-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
+	--primary: light-dark(oklch(0.509 0.105 235.2), oklch(0.741 0.104 234));
+	--primary-foreground: light-dark(oklch(1 0 0), oklch(0.183 0.026 234.6));
+	--secondary: light-dark(oklch(0.968 0.003 0), oklch(0.222 0.006 271.1));
+	--secondary-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
+	--muted: light-dark(oklch(0.968 0.003 0), oklch(0.222 0.006 271.1));
+	--muted-foreground: light-dark(oklch(0.462 0.016 276.7), oklch(0.72 0.01 279.6));
+	--accent: light-dark(oklch(0.941 0.005 286.3), oklch(0.257 0.008 274.7));
+	--accent-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
+	--destructive: light-dark(oklch(0.501 0.178 28.4), oklch(0.688 0.164 22.3));
+	--destructive-foreground: light-dark(oklch(1 0 0), oklch(0.172 0.003 0));
+	--success: light-dark(oklch(0.496 0.107 158.1), oklch(0.735 0.136 159.3));
+	--warning: light-dark(oklch(0.508 0.108 73.3), oklch(0.773 0.14 78.6));
+	--info: light-dark(oklch(0.515 0.188 260.8), oklch(0.729 0.14 258.1));
+	--border: light-dark(oklch(0.932 0.005 286.3), oklch(0.261 0.008 274.7));
+	--input: light-dark(oklch(0.624 0.009 278.5), oklch(0.529 0.009 278.5));
+	--ring: light-dark(oklch(0.509 0.105 235.2), oklch(0.787 0.09 232.6));
+	--chart-1: light-dark(oklch(0.509 0.105 235.2), oklch(0.741 0.104 234));
+	--chart-2: light-dark(oklch(0.496 0.107 158.1), oklch(0.735 0.136 159.3));
+	--chart-3: light-dark(oklch(0.578 0.125 69.8), oklch(0.773 0.14 78.6));
+	--chart-4: light-dark(oklch(0.514 0.177 292.1), oklch(0.747 0.121 297.6));
+	--chart-5: light-dark(oklch(0.542 0.186 27.4), oklch(0.688 0.164 22.3));
+	--chart-6: light-dark(oklch(0.539 0.091 187.9), oklch(0.789 0.104 186.7));
+	--sidebar: light-dark(oklch(1 0 0), oklch(0.195 0.004 264.5));
+	--sidebar-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
+	--sidebar-primary: light-dark(oklch(0.509 0.105 235.2), oklch(0.741 0.104 234));
+	--sidebar-primary-foreground: light-dark(oklch(1 0 0), oklch(0.183 0.026 234.6));
+	--sidebar-accent: light-dark(oklch(0.941 0.005 286.3), oklch(0.257 0.008 274.7));
+	--sidebar-accent-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
+	--sidebar-border: light-dark(oklch(0.932 0.005 286.3), oklch(0.261 0.008 274.7));
+	--sidebar-ring: light-dark(oklch(0.509 0.105 235.2), oklch(0.787 0.09 232.6));
+	--primary-text: light-dark(oklch(0.509 0.105 235.2), oklch(0.787 0.09 232.6));
+	--primary-hover: light-dark(oklch(0.442 0.091 235.3), oklch(0.795 0.087 233.9));
+	--primary-soft: light-dark(oklch(0.946 0.02 229), oklch(0.257 0.029 231.2));
+	--success-soft: light-dark(oklch(0.942 0.028 162.1), oklch(0.248 0.031 163.6));
+	--warning-soft: light-dark(oklch(0.945 0.039 87.6), oklch(0.256 0.032 86.2));
+	--destructive-soft: light-dark(oklch(0.928 0.03 22.8), oklch(0.235 0.036 20.1));
+	--info-soft: light-dark(oklch(0.935 0.025 261.1), oklch(0.25 0.051 262.5));
+	--muted-strong: light-dark(oklch(0.941 0.005 286.3), oklch(0.257 0.008 274.7));
+	--subtle-foreground: light-dark(oklch(0.527 0.019 278.2), oklch(0.656 0.016 281.8));
+	--border-emphasis: light-dark(oklch(0.841 0.011 280.4), oklch(0.349 0.011 271.1));
+	--log: light-dark(oklch(0.968 0.003 0), oklch(0.154 0.003 0));
+	--overlay: light-dark(oklch(0.202 0.016 273.9 / 35%), oklch(0.122 0.006 261.6 / 60%));
+	--grid: light-dark(oklch(0.944 0.005 286.3), oklch(0.236 0.008 274.6));
+	--skeleton-a: light-dark(oklch(0.944 0.005 286.3), oklch(0.222 0.006 271.1));
+	--skeleton-b: light-dark(oklch(0.908 0.008 286.2), oklch(0.273 0.007 274.7));
 }
 
-/* Non-color tokens. */
+/* Non-color tokens: type, spacing, radius, size, elevation and motion (README 2.3 to 2.6). */
 :root {
-	--radius: 0.625rem;
-	--font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
-	--font-mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-	--shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 5%);
-	--shadow-sm: 0 1px 3px 0 oklch(0 0 0 / 10%), 0 1px 2px -1px oklch(0 0 0 / 10%);
-	--shadow-md: 0 4px 6px -1px oklch(0 0 0 / 10%), 0 2px 4px -2px oklch(0 0 0 / 10%);
-	--shadow-lg: 0 10px 15px -3px oklch(0 0 0 / 15%), 0 4px 6px -4px oklch(0 0 0 / 15%);
+	--font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "Spline Sans Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+	--fs-xs: 11.5px;
+	--fs-sm: 12.5px;
+	--fs-md: 13.5px;
+	--fs-lg: 15px;
+	--fs-xl: 18px;
+	--fs-2xl: 22px;
+	--fs-3xl: 28px;
+	--fs-4xl: 38px;
+	--lh-body: 1.5;
+	--lh-heading: 1.2;
+	--fw-regular: 400;
+	--fw-medium: 500;
+	--fw-bold: 600;
+	--tracking-label: 0;
+
+	--s-1: 2px;
+	--s-2: 4px;
+	--s-3: 8px;
+	--s-4: 12px;
+	--s-5: 16px;
+	--s-6: 24px;
+	--s-7: 32px;
+	--s-8: 48px;
+
+	--r-sm: 4px;
+	--r-md: 6px;
+	--r-lg: 8px;
+	--r-pill: 999px;
+
+	--nav-w: 232px;
+	--ctl-h: 30px;
+	--page-max: 1080px;
+	--page-pad: var(--s-7);
+	--page-gap: var(--s-6);
+	--card-pad: var(--s-5);
+	--bw: 1px;
+	--icon-sw: 1.75;
+	--press-scale: 0.98;
+
+	--sh-1: 0 1px 0 oklch(1 0 0 / 2%) inset;
+	--sh-2: 0 4px 16px oklch(0 0 0 / 30%);
+	--sh-3: 0 16px 48px oklch(0 0 0 / 55%), 0 0 0 1px var(--border-emphasis);
+
+	--dur-1: 90ms;
+	--dur-2: 160ms;
+	--dur-3: 240ms;
+	--dur-vt: 180ms;
+	--ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--ease-spring: cubic-bezier(0.2, 0.8, 0.2, 1);
+	--stagger: 25ms;
+	--dlg-from: translateY(6px) scale(0.985);
+	--pop-from: translateY(-4px);
+	--toast-from: translateY(8px);
+	--reveal-from: translateY(4px);
+
+	/* Older names the pages still use; the Q2 to Q6 cards move off them. */
+	--radius: var(--r-lg);
+	--shadow-xs: var(--sh-1);
+	--shadow-sm: var(--sh-2);
+	--shadow-md: var(--sh-2);
+	--shadow-lg: var(--sh-3);
+	--duration-fast: var(--dur-1);
+	--duration-base: var(--dur-2);
+
+	/* Registry logos are drawn for a light page and some are black: they sit on this plate. */
 	--logo-plate: oklch(0.985 0 0);
-	--duration-fast: 120ms;
-	--duration-base: 200ms;
-	--ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* System setting: dark is the default, light only when the system asks for it.
-   An explicit class always wins. */
+/* Light shadows are softer: the surfaces already separate. Same three cases as the colors:
+   the system setting, and the two explicit classes. */
 @media (prefers-color-scheme: light) {
 	:root:not(.dark) {
-		color-scheme: light;
+		--sh-1: none;
+		--sh-2: 0 4px 16px oklch(0.2 0.02 270 / 8%);
+		--sh-3: 0 16px 48px oklch(0.2 0.02 270 / 18%), 0 0 0 1px var(--border);
 	}
+}
+
+:root.light {
+	--sh-1: none;
+	--sh-2: 0 4px 16px oklch(0.2 0.02 270 / 8%);
+	--sh-3: 0 16px 48px oklch(0.2 0.02 270 / 18%), 0 0 0 1px var(--border);
+}
+
+/* No class: follow the system. A class always wins. */
+:root {
+	color-scheme: light dark;
 }
 
 :root.light {
@@ -109,10 +206,20 @@ body {
 	background-color: var(--background);
 	color: var(--foreground);
 	font-family: var(--font-sans);
+	font-size: var(--fs-md);
+	line-height: var(--lh-body);
+	letter-spacing: -0.003em;
 	font-feature-settings: "calt", "kern";
+	text-wrap: pretty;
 	/* Not a class: encre-css 0.21.1 names this utility `antialised`. */
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3 {
+	letter-spacing: -0.012em;
 }
 
 ::selection {

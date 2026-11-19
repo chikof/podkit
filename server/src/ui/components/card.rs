@@ -2,14 +2,15 @@
 //! width it is given (container queries in `components.css`), so the same card works in a
 //! grid, a sidebar or a dialog.
 //!
-//! `card(&content)` wraps; build the inside from `card_header`, `card_content` and
-//! `card_footer`. `link_card` is the logo card: one resource, the whole card is the link.
+//! `card(&content)` wraps; build the inside from `card_header` (the `card-h` part),
+//! `card_content` (`card-b`) and `card_footer`. `link_card` is the logo card: one resource,
+//! the whole card is the link.
 
 use maud::{Markup, html};
 
 pub fn card(content: &Markup) -> Markup {
 	html! {
-		div class="ui-card flex flex-col gap-5 rounded-xl border border-border bg-card py-6 text-card-foreground shadow-xs" {
+		div class="ui-card" {
 			(content)
 		}
 	}
@@ -19,10 +20,12 @@ pub fn card(content: &Markup) -> Markup {
 /// page that already has one, use `card_section`.
 pub fn card_header(title: &str, description: Option<&str>) -> Markup {
 	html! {
-		div class="ui-card-header px-6" {
-			h1 class="text-base leading-none font-semibold" { (title) }
-			@if let Some(description) = description {
-				p class="text-sm text-muted-foreground" { (description) }
+		div class="ui-card-h" {
+			div {
+				h1 class="ui-card-title" { (title) }
+				@if let Some(description) = description {
+					p class="ui-card-sub" { (description) }
+				}
 			}
 		}
 	}
@@ -38,13 +41,15 @@ pub fn card_heading(title: &str, description: Option<&str>) -> Markup {
 /// end, which wraps below the text when the card is narrow.
 pub fn card_section(title: &str, description: Option<&str>, action: Option<&Markup>) -> Markup {
 	html! {
-		div class="ui-card-header px-6" {
-			h2 class="text-base leading-none font-semibold" { (title) }
-			@if let Some(description) = description {
-				p class="text-sm text-muted-foreground" { (description) }
+		div class="ui-card-h" {
+			div {
+				h2 class="ui-card-title" { (title) }
+				@if let Some(description) = description {
+					p class="ui-card-sub" { (description) }
+				}
 			}
 			@if let Some(action) = action {
-				div class="ui-card-action mt-1 flex items-center gap-2" { (action) }
+				div class="ui-card-action" { (action) }
 			}
 		}
 	}
@@ -52,21 +57,21 @@ pub fn card_section(title: &str, description: Option<&str>, action: Option<&Mark
 
 /// Just a title, for markup that composes its own header.
 pub fn card_title(title: &str) -> Markup {
-	html! { h2 class="text-base leading-none font-semibold" { (title) } }
+	html! { h2 class="ui-card-title" { (title) } }
 }
 
 pub fn card_description(text: &str) -> Markup {
-	html! { p class="text-sm text-muted-foreground" { (text) } }
+	html! { p class="ui-card-sub" { (text) } }
 }
 
 pub fn card_content(content: &Markup) -> Markup {
-	html! { div class="px-6" { (content) } }
+	html! { div class="ui-card-b" { (content) } }
 }
 
 /// Actions at the bottom of a card, aligned to the end.
 pub fn card_footer(content: &Markup) -> Markup {
 	html! {
-		div class="ui-card-footer flex items-center justify-end gap-2 border-t border-border px-6 pt-5" {
+		div class="ui-card-f" {
 			(content)
 		}
 	}
@@ -84,18 +89,18 @@ pub fn link_card(
 	meta: Option<&Markup>,
 ) -> Markup {
 	html! {
-		article class="ui-card ui-link-card rounded-xl border border-border bg-card p-5 text-card-foreground shadow-xs" {
+		article class="ui-card ui-link-card p-4" {
 			div class="ui-link-card-body" {
 				(logo)
 				div class="flex min-w-0 flex-1 flex-col gap-1" {
-					h2 class="truncate text-sm leading-tight font-semibold" {
+					h2 class="truncate text-base leading-tight font-semibold" {
 						a href=(href) class="ui-link-card-link outline-hidden" { (title) }
 					}
 					@if let Some(description) = description {
 						p class="line-clamp-2 text-sm text-muted-foreground" { (description) }
 					}
 					@if let Some(meta) = meta {
-						div class="mt-1 flex flex-wrap items-center gap-2" { (meta) }
+						div class="mt-1 flex flex-wrap items-center gap-3" { (meta) }
 					}
 				}
 			}
@@ -113,7 +118,9 @@ mod tests {
 		let inner =
 			html! { (card_header("<b>T</b>", Some("a & b"))) (card_content(&html! { "body" })) };
 		let html = card(&inner).into_string();
-		assert!(html.contains("ui-card "), "{html}");
+		assert!(html.starts_with("<div class=\"ui-card\">"), "{html}");
+		assert!(html.contains("ui-card-h"), "{html}");
+		assert!(html.contains("ui-card-b"), "{html}");
 		assert!(html.contains("&lt;b&gt;T&lt;/b&gt;"), "{html}");
 		assert!(html.contains("a &amp; b"), "{html}");
 		assert!(!html.contains("<b>"), "{html}");
@@ -134,7 +141,8 @@ mod tests {
 	#[test]
 	fn a_footer_aligns_actions_to_the_end() {
 		let html = card_footer(&html! { button { "Save" } }).into_string();
-		assert!(html.contains("justify-end"), "{html}");
+		assert!(html.contains("ui-card-f"), "{html}");
+		assert!(html.contains("Save"), "{html}");
 	}
 
 	#[test]

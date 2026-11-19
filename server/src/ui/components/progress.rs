@@ -8,9 +8,9 @@ use maud::{Markup, html};
 pub fn progress(label: &str, percent: u64, figures: &str) -> Markup {
 	let percent = percent.min(100);
 	html! {
-		div class="flex flex-col gap-1.5" {
+		div class="flex flex-col gap-2" {
 			progress class="ui-progress" max="100" value=(percent) aria-label=(label) {}
-			span class="text-xs text-muted-foreground" { (figures) }
+			span class="text-xs text-muted-foreground tabular-nums" { (figures) }
 		}
 	}
 }

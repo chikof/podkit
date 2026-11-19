@@ -38,15 +38,15 @@ pub fn toast(tone: Tone, title: &str, description: Option<&str>) -> Markup {
 	let (name, color) = tone_icon(tone);
 	let role = (tone == Tone::Danger).then_some("alert");
 	html! {
-		div class="ui-toast flex items-start gap-3 rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg" data-toast role=[role] {
+		div class="ui-toast" data-toast role=[role] {
 			(icon_with(name, color))
-			div class="flex min-w-0 flex-1 flex-col gap-1" {
-				p class="text-sm leading-none font-medium" { (title) }
+			div class="ui-toast-body" {
+				p class="ui-toast-title" { (title) }
 				@if let Some(description) = description {
-					p class="text-sm text-muted-foreground" { (description) }
+					p class="ui-toast-text" { (description) }
 				}
 			}
-			button type="button" aria-label="Dismiss" class="-m-1 inline-flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-hidden hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50" "data-on:click"="el.closest('[data-toast]').remove()" {
+			button type="button" aria-label="Dismiss" class="ui-toast-x" "data-on:click"="el.closest('[data-toast]').remove()" {
 				(icon_with("x", ""))
 			}
 		}

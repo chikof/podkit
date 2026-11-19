@@ -39,8 +39,7 @@ pub fn app_page(ctx: &TeamCtx, title: &str, breadcrumbs: &[Crumb<'_>], body: &Ma
 		&html! {
 			div class="ui-shell" data-collapsed[collapsed]
 				data-signals={ "{_collapsed: " (collapsed) "}" }
-				"data-attr:data-collapsed"="$_collapsed"
-				"data-on:keydown__window"=(palette::HOTKEY) {
+				"data-attr:data-collapsed"="$_collapsed" {
 				a href="#main" class="ui-skip" { "Skip to content" }
 				(sidebar::aside(ctx))
 				(sidebar::drawer(ctx))

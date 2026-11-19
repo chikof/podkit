@@ -3,7 +3,7 @@
 
 use maud::{Markup, html};
 
-const KEY: &str = "inline-flex h-5 min-w-5 items-center justify-center rounded-sm border border-border bg-muted px-1 font-mono text-xs font-medium text-muted-foreground";
+const KEY: &str = "ui-kbd";
 
 pub fn kbd(key: &str) -> Markup {
 	html! { kbd class=(KEY) { (key) } }

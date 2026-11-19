@@ -622,7 +622,7 @@ async fn a_resource_without_a_known_mark_gets_a_monogram(db: PgPool) {
 	)
 	.await;
 	assert_contains(page_main(&body), "data-logo=\"monogram\"");
-	assert_contains(page_main(&body), ">Z<");
+	assert_contains(page_main(&body), ">Ze<");
 }
 
 #[db_test]
