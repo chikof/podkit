@@ -341,10 +341,9 @@ async fn the_tab_lists_backups_with_size_who_and_the_error(db: PgPool) {
 		"1.5 MB",
 		"Failed",
 		"Back up now",
-		"Finished",
-		"data-label=\"By\"",
-		">alice<",
-		">Schedule<",
+		"data-label=\"Trigger\"",
+		"manual \u{b7} alice",
+		">scheduled<",
 	] {
 		assert_contains(&page, text);
 	}
@@ -612,6 +611,67 @@ async fn a_read_only_member_sees_history_but_no_actions(db: PgPool) {
 	}
 	assert_eq!(backup_count(&db, f.database).await, 1);
 	assert!(job_kinds(&db, 10).await.is_empty());
+}
+
+#[db_test]
+async fn saving_a_destination_patches_the_history_without_a_reload(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	crate::tests::dbs::clear_backup_target(&db, f.database).await;
+	let (_, page) = f.get(&f.base()).await;
+	assert_not_contains(&page, "Back up now");
+	assert_contains(&page, "configure a backup target first");
+	assert_contains(&page, "id=\"backup-section\"");
+	// The form posts to this tab's own route, which answers with the section.
+	assert_contains(&page, &format!("{}/settings", f.base()));
+
+	let signals = |target: &str| {
+		json!({
+			"backup_target_id": target, "backup_schedule": "", "backup_keep": "7",
+			"public_port": "", "memory_limit_mb": "", "cpu_limit": "",
+		})
+	};
+	let body = f
+		.post(
+			&format!("{}/settings", f.base()),
+			&signals(&f.target.to_string()),
+		)
+		.await;
+	assert_contains(&body, "datastar-patch-elements");
+	assert_contains(&body, "id=\"backup-section\"");
+	assert_contains(&body, "Back up now");
+	assert_not_contains(&body, "configure a backup target first");
+	assert_not_contains(&body, "window.location");
+	assert_contains(&body, "Schedule saved");
+	let (_, page) = f.get(&f.base()).await;
+	assert_contains(&page, "Back up now");
+
+	// Taking the destination away puts the reason back, again in place.
+	let body = f
+		.post(&format!("{}/settings", f.base()), &signals(""))
+		.await;
+	assert_contains(&body, "id=\"backup-section\"");
+	assert_contains(&body, "configure a backup target first");
+	assert_not_contains(&body, "Back up now");
+}
+
+#[db_test]
+async fn a_reader_cannot_save_the_schedule_with_a_forged_post(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	let reader = f.reader("rita").await;
+	let (_, _, body) = post_signals(
+		&f.app,
+		&format!("{}/settings", f.base()),
+		Some(&reader),
+		&json!({
+			"backup_target_id": "", "backup_schedule": "0 3 * * *", "backup_keep": "3",
+			"public_port": "", "memory_limit_mb": "", "cpu_limit": "",
+		}),
+	)
+	.await;
+	assert_contains(&body, "permission");
+	assert_not_contains(&body, "backup-section");
+	let (_, page) = f.get(&f.base()).await;
+	assert_not_contains(&page, "&quot;backup_schedule&quot;:&quot;0 3");
 }
 
 #[db_test]

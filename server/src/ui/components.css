@@ -1230,99 +1230,6 @@ a.ui-pick:focus-visible {
 	display: none;
 }
 
-/* ---- Template logos, gallery, stacks ------------------------------------------------- */
-
-/* Template gallery: a category list beside the results from lg up, a row of chips above them
-   below it. */
-.ui-tpl-layout {
-	display: grid;
-	gap: 1.5rem;
-}
-
-@media (min-width: 64rem) {
-	.ui-tpl-layout {
-		grid-template-columns: 12.5rem minmax(0, 1fr);
-		align-items: start;
-	}
-}
-
-.ui-tpl-cats {
-	display: flex;
-	gap: 0.5rem;
-	padding-bottom: 0.25rem;
-	overflow-x: auto;
-	scrollbar-width: thin;
-}
-
-@media (min-width: 64rem) {
-	.ui-tpl-cats {
-		position: sticky;
-		top: 1rem;
-		flex-direction: column;
-		gap: 0.125rem;
-		padding-bottom: 0;
-		overflow: visible;
-	}
-}
-
-.ui-tpl-cat {
-	display: flex;
-	flex-shrink: 0;
-	align-items: center;
-	justify-content: space-between;
-	gap: 0.75rem;
-	padding: 0.375rem 0.75rem;
-	border: 1px solid var(--border);
-	border-radius: var(--r-md);
-	color: var(--muted-foreground);
-	font-size: 0.875rem;
-	font-weight: 500;
-	text-decoration: none;
-	transition-property: background-color, color;
-	transition-duration: var(--dur-1);
-}
-
-@media (min-width: 64rem) {
-	.ui-tpl-cat {
-		border-color: transparent;
-	}
-}
-
-.ui-tpl-cat:hover {
-	background-color: var(--accent);
-	color: var(--accent-foreground);
-}
-
-.ui-tpl-cat[aria-current="page"] {
-	border-color: var(--border);
-	background-color: var(--accent);
-	color: var(--foreground);
-}
-
-.ui-tpl-cat:focus-visible {
-	outline: 2px solid var(--ring);
-	outline-offset: 2px;
-}
-
-@media (pointer: coarse) {
-	.ui-tpl-cat {
-		min-height: 2.75rem;
-	}
-}
-
-/* The catalog is long. Cards after the first screen are not laid out or painted until they
-   scroll near; `contain-intrinsic-size` reserves their height (the browser remembers the real
-   one once it has drawn them) so the scrollbar does not jump. Cards have one height by
-   design: a one-line title, a two-line description, one row of badges. */
-.ui-tpl-grid > .ui-link-card {
-	min-height: 9.5rem;
-}
-
-.ui-tpl-grid > :nth-child(n + 13) {
-	content-visibility: auto;
-	contain-intrinsic-size: auto 9.5rem;
-}
-
 /* == components, later additions ====================================================== */
 
 /* Segmented control: the theme toggle. */
@@ -1585,3 +1492,76 @@ a.ui-pick:focus-visible {
 .ui-card-b > .ui-table-wrap { border: 0; border-block-start: var(--bw) solid var(--border); border-radius: 0; }
 
 .ui-card-b:has(> .ui-table-wrap) > :not(.ui-table-wrap) { margin: var(--s-4) var(--card-pad); }
+
+/* == data: database tabs, backups, S3 destinations, template gallery ===================== */
+
+/* Two columns that stack under 900px: a card beside a card (credentials and the connection
+   string; the backups and their schedule). */
+.ui-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-5); align-items: start; }
+.ui-two-wide { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); }
+.ui-stack { display: grid; gap: var(--s-5); min-width: 0; }
+.ui-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-4); }
+.ui-card-note { color: var(--subtle-foreground); font-size: var(--fs-xs); }
+.ui-card-why { max-width: 18rem; margin: 0; text-align: end; }
+.ui-card > [role="alert"] { margin: var(--s-3) var(--card-pad) 0; }
+.ui-chips { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.ui-link { color: var(--primary-text); font-size: var(--fs-sm); font-weight: var(--fw-regular); text-decoration: none; }
+.ui-link:hover { text-decoration: underline; }
+.ui-button.ui-block { display: flex; width: 100%; justify-content: center; }
+.ui-stat-cell { display: grid; gap: var(--s-1); justify-items: start; }
+.ui-cell-err { margin: 0; color: var(--destructive); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+.ui-facts-col { display: grid; gap: var(--s-3); }
+.ui-mono { font-family: var(--font-mono); font-size: var(--fs-xs); }
+.ui-tpl-page, .ui-dests { display: grid; align-content: start; gap: var(--page-gap); min-width: 0; }
+
+@media (max-width: 900px) {
+	.ui-two, .ui-two-wide { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+	.ui-pair { grid-template-columns: minmax(0, 1fr); }
+	.ui-card-why { text-align: start; }
+}
+
+/* S3 destinations: one card each, the facts of the bucket under its name. */
+.ui-dest-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); gap: var(--s-4); }
+.ui-dest { display: grid; align-content: start; gap: var(--s-4); padding: var(--card-pad); }
+.ui-dest-head { display: flex; align-items: center; gap: var(--s-4); }
+.ui-dest-id { flex: 1; min-width: 0; }
+.ui-dest-id h2 { overflow: hidden; margin: 0; font-size: var(--fs-md); font-weight: var(--fw-bold); text-overflow: ellipsis; white-space: nowrap; }
+.ui-dest-id p { margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); }
+.ui-dest-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-2) var(--s-4); margin: 0; font-size: var(--fs-sm); }
+.ui-dest-facts dt { color: var(--subtle-foreground); }
+.ui-dest-facts dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+
+/* Template gallery: a search, a row of category chips, then the catalog as rows, two columns
+   from 52rem. Rows below the first screen are not laid out or painted until they scroll near;
+   `contain-intrinsic-size` reserves their height so the scrollbar does not jump (rows have one
+   height by design: a one-line name, a one-line description). */
+.ui-tpl-layout { display: grid; gap: var(--s-4); }
+.ui-tpl-search { display: block; }
+.ui-tpl-cats { display: flex; flex-wrap: wrap; gap: var(--s-1); }
+.ui-tpl-cats .ui-chip { background-color: transparent; }
+.ui-tpl-cats .ui-chip:hover { background-color: var(--accent); }
+.ui-tpl-cats .ui-chip[aria-current="page"] { background-color: var(--accent); color: var(--foreground); }
+.ui-tpl-cats .ui-chip:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ui-tpl-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 25rem), 1fr)); gap: 0 var(--s-6); margin: 0; padding: 0; list-style: none; }
+.ui-tpl-row { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto; align-items: center; gap: var(--s-4); padding: var(--s-3) var(--s-2); border: 0; border-bottom: var(--bw) solid var(--border); border-radius: 0; }
+.ui-tpl-row:hover { border-color: var(--border); background-color: var(--card); }
+.ui-tpl-main { min-width: 0; }
+.ui-tpl-main h2 { overflow: hidden; margin: 0; font-size: var(--fs-md); font-weight: var(--fw-bold); text-overflow: ellipsis; white-space: nowrap; }
+.ui-tpl-main p { overflow: hidden; margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); text-overflow: ellipsis; white-space: nowrap; }
+.ui-tpl-meta { display: grid; justify-items: end; color: var(--subtle-foreground); font-size: var(--fs-xs); }
+.ui-tpl-ver { font-family: var(--font-mono); }
+.ui-tpl-pager { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.ui-tpl-list > :nth-child(n + 13) { content-visibility: auto; contain-intrinsic-size: auto 3.75rem; }
+@media (max-width: 760px) {
+	.ui-tpl-cats { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: calc(var(--page-pad) * -1); padding-inline: var(--page-pad); }
+	.ui-tpl-row { grid-template-columns: 2.5rem minmax(0, 1fr); }
+	.ui-tpl-meta { grid-column: 2; display: flex; gap: var(--s-3); justify-content: start; margin-top: calc(var(--s-2) * -1); }
+}
+@media (pointer: coarse) {
+	.ui-tpl-cats .ui-chip { min-height: 2.75rem; }
+}
+
+/* The description of a template under its name, ahead of the version. */
+.ui-head-desc { flex-basis: 100%; max-width: 60ch; }

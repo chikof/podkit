@@ -74,5 +74,5 @@ async fn advanced_page(
 			}
 		}
 	};
-	Ok(page(&ctx, &project, &d, Tab::Advanced, &content))
+	Ok(page(&s, &ctx, &project, &d, Tab::Advanced, &content).await)
 }

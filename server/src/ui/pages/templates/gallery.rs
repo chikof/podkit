@@ -1,11 +1,12 @@
-//! The gallery: a grid of logo cards, searched on the server (debounced), grouped by a
-//! category list, paged. A Browse/Explore surface: the grid is the page.
+//! The gallery: the catalog as rows, searched on the server (debounced), grouped by a row of
+//! category chips, paged. An Explore surface: the list is the page.
 //!
-//! Performance with the whole catalog (480 templates): the server sends one page of 48
-//! cards at a time; cards below the first screen use `content-visibility: auto` with a
-//! reserved size (so scrolling never shifts the layout) and lazy-load their logos. The grid
-//! is keyboard-navigable: Tab reaches each card's link as usual and the arrow keys move
-//! between cards by their position (`podkit.js`, `data-grid-nav`).
+//! Performance with the whole catalog (480 templates): the server sends one page of 24 rows
+//! at a time, each row as little markup as can say who it is (logo, name, one line, category,
+//! version); rows below the first screen use `content-visibility: auto` with a reserved size
+//! (so scrolling never shifts the layout) and lazy-load their logos. The list is
+//! keyboard-navigable: Tab reaches each row's link as usual and the arrow keys move between
+//! rows by their position (`podkit.js`, `data-grid-nav`).
 
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
@@ -20,17 +21,17 @@ use crate::projects::{self, Project};
 use crate::state::AppState;
 use crate::templates::{self, CATEGORIES, Loaded};
 use crate::ui::components::{
-	INPUT, LogoSize, Priority, Size, Tone, Variant, badge, button_class, empty_state, icon,
-	image_logo, link_button, link_card,
+	INPUT, LogoSize, Priority, Size, Variant, button_class, empty_state, icon, image_logo,
+	link_button,
 };
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page};
 use crate::ui::sse::{self, js_string};
 
-/// Cards per page.
-const PAGE_SIZE: usize = 48;
-/// Cards that may be in the first screen; later ones are deferred.
+/// Rows per page: two columns of twelve.
+const PAGE_SIZE: usize = 24;
+/// Rows that may be in the first screen; later ones are deferred.
 pub(super) const FIRST_SCREEN: usize = 12;
 /// Longest search text read.
 const MAX_QUERY: usize = 100;
@@ -111,33 +112,36 @@ pub(super) fn detail_href(place: Place, id: &str) -> String {
 	}
 }
 
-fn card(place: Place, l: &Loaded, index: usize) -> Markup {
+/// `v2.9.1`; a version that is a word (`latest`) is left as it is.
+fn version_label(version: &str) -> String {
+	if version.starts_with(|c: char| c.is_ascii_digit()) {
+		format!("v{version}")
+	} else {
+		version.to_owned()
+	}
+}
+
+/// One template as one row: the whole row is the link (the name's `::after` covers it).
+fn row(place: Place, l: &Loaded, index: usize) -> Markup {
 	let t = &l.template;
 	let priority = if index < FIRST_SCREEN {
 		Priority::Normal
 	} else {
 		Priority::Low
 	};
-	let logo = image_logo(&crate::logos::template_url(l), LogoSize::Md, priority);
-	let meta = html! {
-		(badge(Tone::Neutral, category_label(&t.category)))
-		(badge(Tone::Neutral, if l.plain_app { "App" } else { "Stack" }))
-		@if !t.tags.is_empty() {
-			span class="truncate text-xs text-muted-foreground" {
-				@for (i, tag) in t.tags.iter().take(2).enumerate() {
-					@if i > 0 { " · " }
-					(tag)
-				}
+	html! {
+		li class="ui-link-card ui-tpl-row" {
+			(image_logo(&crate::logos::template_url(l), LogoSize::Md, priority))
+			div class="ui-tpl-main" {
+				h2 { a href=(detail_href(place, &t.id)) class="ui-link-card-link" { (t.name) } }
+				p { (t.description) }
+			}
+			div class="ui-tpl-meta" {
+				span { (category_label(&t.category)) }
+				@if !t.version.is_empty() { span class="ui-tpl-ver" { (version_label(&t.version)) } }
 			}
 		}
-	};
-	link_card(
-		&detail_href(place, &t.id),
-		&logo,
-		&t.name,
-		Some(&t.description),
-		Some(&meta),
-	)
+	}
 }
 
 fn category_nav(
@@ -150,28 +154,20 @@ fn category_nav(
 		category: None,
 		..view.clone()
 	};
-	// AI and Databases first: they are what most people come here for.
-	let mut order: Vec<&'static str> = vec!["ai", "database"];
-	for c in CATEGORIES {
-		if !order.contains(c) {
-			order.push(c);
-		}
-	}
 	html! {
 		nav aria-label="Categories" class="ui-tpl-cats" {
 			@let current = view.category.is_none();
-			a href=(href(place, &all_view, 1)) class="ui-tpl-cat" aria-current=[current.then_some("page")] {
+			a href=(href(place, &all_view, 1)) class="ui-chip" aria-current=[current.then_some("page")] {
 				span { "All" }
-				span class="text-xs text-muted-foreground" { (total) }
+				span class="ui-chip-n" { (total) }
 			}
-			@for category in order {
-				@let count = counts.iter().find(|(c, _)| *c == category).map_or(0, |(_, n)| *n);
-				@let current = view.category == Some(category);
-				@if count > 0 || current {
+			@for (category, count) in counts {
+				@let current = view.category == Some(*category);
+				@if *count > 0 || current {
 					a href=(href(place, &View { category: Some(category), ..view.clone() }, 1))
-						class="ui-tpl-cat" aria-current=[current.then_some("page")] {
+						class="ui-chip" aria-current=[current.then_some("page")] {
 						span { (category_label(category)) }
-						span class="text-xs text-muted-foreground" { (count) }
+						span class="ui-chip-n" { (count) }
 					}
 				}
 			}
@@ -182,13 +178,13 @@ fn category_nav(
 fn pager(place: Place, view: &View, page: usize, pages: usize) -> Markup {
 	html! {
 		@if pages > 1 {
-			nav aria-label="Pages" class="flex items-center justify-between gap-3" {
+			nav aria-label="Pages" class="ui-tpl-pager" {
 				@if page > 1 {
 					(link_button(Variant::Outline, Size::Md, &href(place, view, page - 1), &html! { (icon("chevron-left")) "Previous" }))
 				} @else {
 					span {}
 				}
-				span class="text-sm text-muted-foreground" { "Page " (page) " of " (pages) }
+				span class="ui-hint" { "Page " (page) " of " (pages) }
 				@if page < pages {
 					(link_button(Variant::Outline, Size::Md, &href(place, view, page + 1), &html! { "Next" (icon("chevron-right")) }))
 				} @else {
@@ -199,10 +195,45 @@ fn pager(place: Place, view: &View, page: usize, pages: usize) -> Markup {
 	}
 }
 
-/// The region that search and paging re-render: the category list and the results.
+/// The templates that match the search text, whatever their category.
+fn by_text(view: &View) -> Vec<&'static Loaded> {
+	templates::search((!view.q.is_empty()).then_some(view.q.as_str()), None)
+}
+
+fn in_category(view: &View, by_text: &[&'static Loaded]) -> Vec<&'static Loaded> {
+	by_text
+		.iter()
+		.copied()
+		.filter(|l| view.category.is_none_or(|c| l.template.category == c))
+		.collect()
+}
+
+fn page_of(view: &View, hits: usize) -> (usize, usize) {
+	let pages = hits.div_ceil(PAGE_SIZE).max(1);
+	(view.page.min(pages), pages)
+}
+
+/// The line under the title: how many are shown, and how many there are. It is its own
+/// region because the title is not part of what search re-renders.
+pub(super) fn count_line(view: &View) -> Markup {
+	let total = templates::search(None, None).len();
+	let hits = in_category(view, &by_text(view)).len();
+	let (page, _) = page_of(view, hits);
+	let shown = hits.saturating_sub((page - 1) * PAGE_SIZE).min(PAGE_SIZE);
+	let filtered = !view.q.is_empty() || view.category.is_some();
+	html! {
+		p id="tpl-count" class="ui-lede" aria-live="polite" {
+			(shown) @if shown == 1 { " template" } @else { " templates" } " shown"
+			@if filtered { " \u{b7} " (hits) " match" }
+			" \u{b7} " (total) " in the catalog"
+			@if let Some(c) = view.category { " \u{b7} in " strong { (category_label(c)) } }
+		}
+	}
+}
+
+/// The region that search and paging re-render: the category chips and the results.
 pub(super) fn browser(place: Place, view: &View) -> Markup {
-	let q = (!view.q.is_empty()).then_some(view.q.as_str());
-	let by_text = templates::search(q, None);
+	let by_text = by_text(view);
 	let counts: Vec<(&'static str, usize)> = CATEGORIES
 		.iter()
 		.copied()
@@ -213,42 +244,29 @@ pub(super) fn browser(place: Place, view: &View) -> Markup {
 			)
 		})
 		.collect();
-	let hits: Vec<&Loaded> = by_text
-		.iter()
-		.copied()
-		.filter(|l| view.category.is_none_or(|c| l.template.category == c))
-		.collect();
-	let pages = hits.len().div_ceil(PAGE_SIZE).max(1);
-	let page = view.page.min(pages);
+	let hits = in_category(view, &by_text);
+	let (page, pages) = page_of(view, hits.len());
 	let shown = hits.iter().skip((page - 1) * PAGE_SIZE).take(PAGE_SIZE);
-	let filtered = q.is_some() || view.category.is_some();
 	let clear = View::default();
 	html! {
 		div id="tpl-browser" class="ui-tpl-layout" {
 			(category_nav(place, view, &counts, by_text.len()))
-			div class="flex min-w-0 flex-col gap-4" {
-				p class="text-sm text-muted-foreground" aria-live="polite" {
-					(hits.len()) @if hits.len() == 1 { " template" } @else { " templates" }
-					@if filtered { " match" }
-					@if let Some(c) = view.category { " in " strong { (category_label(c)) } }
-				}
-				@if hits.is_empty() {
-					(empty_state(
-						"search",
-						"No template matches",
-						Some("Try another word, or look in all categories."),
-						Some(&html! {
-							a class=(button_class(Variant::Outline, Size::Md)) href=(href(place, &clear, 1)) { "Clear the search" }
-						}),
-					))
-				} @else {
-					div class="ui-card-grid ui-tpl-grid" data-grid-nav {
-						@for (i, l) in shown.enumerate() {
-							(card(place, l, i))
-						}
+			@if hits.is_empty() {
+				(empty_state(
+					"search",
+					"No template matches",
+					Some("Try another word, or look in all categories."),
+					Some(&html! {
+						a class=(button_class(Variant::Outline, Size::Md)) href=(href(place, &clear, 1)) { "Clear the search" }
+					}),
+				))
+			} @else {
+				ul class="ui-tpl-list" data-grid-nav {
+					@for (i, l) in shown.enumerate() {
+						(row(place, l, i))
 					}
-					(pager(place, view, page, pages))
 				}
+				(pager(place, view, page, pages))
 			}
 		}
 	}
@@ -257,13 +275,14 @@ pub(super) fn browser(place: Place, view: &View) -> Markup {
 fn search_form(place: Place, view: &View) -> Markup {
 	let fragment = format!("{}/results", place.base());
 	let get = format!("@get({})", js_string(&fragment));
+	let total = templates::search(None, None).len();
 	html! {
-		form method="get" action=(place.base()) role="search" class="flex flex-wrap items-center gap-2"
+		form method="get" action=(place.base()) role="search" class="ui-tpl-search"
 			"data-on:submit"=(format!("evt.preventDefault(); {get}")) {
-			div class="relative min-w-48 max-w-xl flex-1" {
-				span class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground" { (icon("search")) }
-				input type="search" name="q" value=(view.q) class={ (INPUT) " pl-9" } autocomplete="off" maxlength=(MAX_QUERY)
-					aria-label="Search templates" placeholder="Search templates"
+			div class="ui-field-icon" {
+				(icon("search"))
+				input type="search" name="q" value=(view.q) class=(INPUT) autocomplete="off" maxlength=(MAX_QUERY)
+					aria-label="Search templates" placeholder={ "Search " (total) " templates: gotify, plausible, n8n\u{2026}" }
 					"data-bind:q" "data-on:input__debounce.300ms"=(get);
 			}
 			@if let Some(category) = view.category {
@@ -314,14 +333,14 @@ pub(super) struct Signals {
 fn render(ctx: &TeamCtx, place: Place, project: Option<&Project>, view: &View) -> Markup {
 	let signals = json!({ "q": view.q, "category": view.category.unwrap_or_default() });
 	let body = html! {
-		div class="ui-wide flex w-full flex-col gap-6" data-signals=(signals.to_string()) {
-			div class="flex min-w-0 flex-col gap-1" {
-				h1 class="text-2xl font-semibold tracking-tight" { "Templates" }
-				p class="text-sm text-muted-foreground" {
+		div class="ui-tpl-page" data-signals=(signals.to_string()) {
+			header class="ui-page-head" {
+				div class="ui-page-title" {
+					p class="ui-eyebrow" { "One-click apps" }
+					h1 { "Templates" }
+					(count_line(view))
 					@if let Some(p) = project {
-						"Ready-made services to deploy into " strong { (p.name) } "."
-					} @else {
-						"Ready-made services. Pick one, answer a few questions, and it runs on your server."
+						p class="ui-lede" { "Ready-made services to deploy into " strong { (p.name) } "." }
 					}
 				}
 			}
@@ -330,6 +349,13 @@ fn render(ctx: &TeamCtx, place: Place, project: Option<&Project>, view: &View) -
 		}
 	};
 	app_page(ctx, "Templates", &crumbs(ctx, project), &body)
+}
+
+/// The answer to a search: the count line and the results region, patched.
+fn results_patch(place: Place, view: &View) -> Response {
+	axum::response::IntoResponse::into_response(
+		sse::patch(&count_line(view)).and(sse::patch(&browser(place, view))),
+	)
 }
 
 pub(super) async fn page(
@@ -356,10 +382,7 @@ pub(super) async fn results(
 		project: None,
 		environment: None,
 	};
-	axum::response::IntoResponse::into_response(sse::patch(&browser(
-		place,
-		&View::new(&sig.q, &sig.category, None),
-	)))
+	results_patch(place, &View::new(&sig.q, &sig.category, None))
 }
 
 pub(super) async fn project_page(
@@ -400,10 +423,7 @@ pub(super) async fn project_results(
 		project: Some(project.id),
 		environment: None,
 	};
-	axum::response::IntoResponse::into_response(sse::patch(&browser(
-		place,
-		&View::new(&sig.q, &sig.category, None),
-	)))
+	results_patch(place, &View::new(&sig.q, &sig.category, None))
 }
 
 #[cfg(test)]
@@ -442,5 +462,11 @@ mod unit {
 			environment: None,
 		};
 		assert_eq!(href(place, &View::default(), 1), "/teams/1/templates");
+	}
+
+	#[test]
+	fn a_version_is_prefixed_only_when_it_is_a_number() {
+		assert_eq!(version_label("2.9.1"), "v2.9.1");
+		assert_eq!(version_label("latest"), "latest");
 	}
 }

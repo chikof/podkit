@@ -136,12 +136,12 @@ fn target_card(ctx: &TeamCtx, target: &BackupTarget, can_delete: bool) -> Markup
 	);
 	let _ = ctx;
 	html! {
-		article class="ui-card flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-xs" data-provider=(provider.key()) {
-			div class="flex items-start gap-3" {
+		article class="ui-card ui-dest" data-provider=(provider.key()) {
+			div class="ui-dest-head" {
 				(provider.mark())
-				div class="flex min-w-0 flex-1 flex-col gap-0.5" {
-					h2 class="truncate text-base leading-tight font-semibold" title=(target.name) { (target.name) }
-					p class="text-sm text-muted-foreground" { (provider.label()) }
+				div class="ui-dest-id" {
+					h2 title=(target.name) { (target.name) }
+					p { (provider.label()) }
 				}
 				@if can_delete {
 					button type="button" class=(button_class(Variant::Ghost, Size::Icon)) aria-label={ "Delete " (target.name) }
@@ -150,19 +150,19 @@ fn target_card(ctx: &TeamCtx, target: &BackupTarget, can_delete: bool) -> Markup
 					}
 				}
 			}
-			dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm" {
-				dt class="text-muted-foreground" { "Endpoint" }
-				dd class="min-w-0 truncate font-mono text-xs leading-5" title=(target.endpoint) { (target.endpoint) }
-				dt class="text-muted-foreground" { "Bucket" }
-				dd class="min-w-0 break-all" { strong class="font-medium" { (target.bucket) } " · region " (target.region) }
+			dl class="ui-dest-facts" {
+				dt { "Endpoint" }
+				dd class="ui-mono" title=(target.endpoint) { (target.endpoint) }
+				dt { "Bucket" }
+				dd { strong { (target.bucket) } " \u{b7} region " (target.region) }
 				@if !target.prefix.is_empty() {
-					dt class="text-muted-foreground" { "Prefix" }
-					dd class="min-w-0 font-mono text-xs leading-5 break-all" { (target.prefix) }
+					dt { "Prefix" }
+					dd class="ui-mono" { (target.prefix) }
 				}
-				dt class="text-muted-foreground" { "Access key" }
-				dd class="min-w-0 font-mono text-xs leading-5 break-all" { (target.access_key_id) }
+				dt { "Access key" }
+				dd class="ui-mono" { (target.access_key_id) }
 				@if target.path_style {
-					dt class="text-muted-foreground" { "Addressing" }
+					dt { "Addressing" }
 					dd { "path-style" }
 				}
 			}
@@ -229,55 +229,53 @@ fn add_card(team: TeamId) -> Markup {
 	);
 	let hints = "({aws: 'https://s3.eu-west-1.amazonaws.com', r2: 'https://<account>.r2.cloudflarestorage.com', garage: 'https://s3.garage.example.com', other: 'https://s3.example.com'})[$_provider]";
 	card(&html! {
-		form id="add-destination" class="flex flex-col gap-5" "data-on:submit"=(post) {
+		form id="add-destination" "data-on:submit"=(post) {
 			(card_section("Add a destination", Some("The secret key is stored encrypted and never shown again."), None))
 			(card_content(&html! {
-				div class="flex flex-col gap-5" {
-					(provider_picker())
-					div class="grid grid-cols-1 gap-4 sm:grid-cols-2" {
-						label class=(LABEL) {
-							"Name"
-							input class=(INPUT) type="text" required maxlength="60" placeholder="offsite" autocomplete="off" "data-bind:name";
-						}
-						label class=(LABEL) {
-							"Bucket"
-							input class=(INPUT) type="text" required autocomplete="off" spellcheck="false" "data-bind:bucket";
-						}
+				(provider_picker())
+				div class="ui-pair" {
+					label class=(LABEL) {
+						"Name"
+						input class=(INPUT) type="text" required maxlength="60" placeholder="offsite" autocomplete="off" "data-bind:name";
 					}
 					label class=(LABEL) {
-						"Endpoint"
-						input class=(INPUT) type="text" required autocomplete="off" spellcheck="false" inputmode="url"
-							"data-bind:endpoint" "data-attr:placeholder"=(hints);
-						span class="text-sm font-normal text-muted-foreground" { "Use https. Plain http is only accepted for localhost." }
+						"Bucket"
+						input class=(INPUT) type="text" required autocomplete="off" spellcheck="false" "data-bind:bucket";
 					}
-					div class="grid grid-cols-1 gap-4 sm:grid-cols-2" {
-						label class=(LABEL) {
-							"Region"
-							input class=(INPUT) type="text" required autocomplete="off" spellcheck="false" "data-bind:region";
-						}
-						label class=(LABEL) {
-							"Prefix (optional)"
-							input class=(INPUT) type="text" autocomplete="off" spellcheck="false" placeholder="podkit" "data-bind:prefix";
-						}
-					}
-					label class="flex cursor-pointer items-center gap-2 text-sm" {
-						input type="checkbox" class=(CHECKBOX) "data-bind:path_style";
-						"Path-style addressing (S3-compatible servers such as Garage)"
-					}
-					div class="grid grid-cols-1 gap-4 sm:grid-cols-2" {
-						label class=(LABEL) {
-							"Access key ID"
-							input class=(INPUT) type="text" required autocomplete="off" spellcheck="false" "data-bind:access_key_id";
-						}
-						label class=(LABEL) {
-							"Secret access key"
-							input class=(INPUT) type="password" required autocomplete="new-password" spellcheck="false" "data-bind:secret_access_key";
-						}
-					}
-					p role="status" class="text-sm" "data-show"="$_test" "data-text"="$_test" style="display: none"
-						"data-class:text-success"="$_test_ok" "data-class:text-destructive"="!$_test_ok" {}
-					(form_error())
 				}
+				label class=(LABEL) {
+					"Endpoint"
+					input class=(INPUT) type="text" required autocomplete="off" spellcheck="false" inputmode="url"
+						"data-bind:endpoint" "data-attr:placeholder"=(hints);
+					span class="ui-hint" { "Use https. Plain http is only accepted for localhost." }
+				}
+				div class="ui-pair" {
+					label class=(LABEL) {
+						"Region"
+						input class=(INPUT) type="text" required autocomplete="off" spellcheck="false" "data-bind:region";
+					}
+					label class=(LABEL) {
+						"Prefix (optional)"
+						input class=(INPUT) type="text" autocomplete="off" spellcheck="false" placeholder="podkit" "data-bind:prefix";
+					}
+				}
+				label class="ui-check" {
+					input type="checkbox" class=(CHECKBOX) "data-bind:path_style";
+					"Path-style addressing (S3-compatible servers such as Garage)"
+				}
+				div class="ui-pair" {
+					label class=(LABEL) {
+						"Access key ID"
+						input class=(INPUT) type="text" required autocomplete="off" spellcheck="false" "data-bind:access_key_id";
+					}
+					label class=(LABEL) {
+						"Secret access key"
+						input class=(INPUT) type="password" required autocomplete="new-password" spellcheck="false" "data-bind:secret_access_key";
+					}
+				}
+				p role="status" class="text-sm" "data-show"="$_test" "data-text"="$_test" style="display: none"
+					"data-class:text-success"="$_test_ok" "data-class:text-destructive"="!$_test_ok" {}
+				(form_error())
 			}))
 			(card_footer(&html! {
 				button type="button" class=(BUTTON_OUTLINE) "data-on:click"=(test) "data-indicator:_testing"
@@ -303,11 +301,14 @@ async fn targets_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<maud::M
 	.to_string();
 
 	let body = html! {
-		div class="ui-wide flex flex-col gap-6" "data-signals"=(signals) {
-			div class="flex flex-col gap-1" {
-				h1 class="text-2xl font-semibold tracking-tight" { "S3 destinations" }
-				p class="text-sm text-muted-foreground" {
-					"S3-compatible buckets (for example Garage, Cloudflare R2 or Amazon S3) that your team's databases are backed up to."
+		div class="ui-dests" "data-signals"=(signals) {
+			header class="ui-page-head" {
+				div class="ui-page-title" {
+					p class="ui-eyebrow" { "Backups" }
+					h1 { "S3 destinations" }
+					p class="ui-lede" {
+						"S3-compatible buckets (for example Garage, Cloudflare R2 or Amazon S3) that your team's databases are backed up to."
+					}
 				}
 			}
 			@if rows.is_empty() {
@@ -318,7 +319,7 @@ async fn targets_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<maud::M
 					None,
 				))
 			} @else {
-				div class="ui-card-grid" {
+				div class="ui-dest-grid" {
 					@for target in &rows { (target_card(&ctx, target, can_delete)) }
 				}
 			}

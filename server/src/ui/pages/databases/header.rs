@@ -1,6 +1,6 @@
-//! The head of a database's page: logo, name, engine and version, status, server, and the
-//! actions Start, Stop and Restart with a menu that holds Delete (a dialog that asks for the
-//! name, with an optional data purge).
+//! The head of a database's page: logo, name, engine and version, status, and the actions
+//! Start, Stop and Restart with a menu that holds Delete (a dialog that asks for the name,
+//! with an optional data purge), over the row of live figures.
 //!
 //! Every action comes back as an SSE stream. A refusal ("a job is running", a missing
 //! permission) lands in the `_action_error` signal, which the header shows, so no tab needs
@@ -18,17 +18,18 @@ use crate::databases::service::{self, DatabaseDetail};
 use crate::databases::{Database, DatabaseStatus};
 use crate::error::ServerError;
 use crate::ids::{DatabaseId, ProjectId, TeamId};
-use crate::projects::overview::ResourceStatus;
+use crate::metrics::service as metrics;
+use crate::metrics::{Range, ResourcePoint};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, CHECKBOX, Dismiss, INPUT, LABEL, LogoSize, MENU_ITEM,
-	MENU_ITEM_DANGER, Size, Tone, Variant, badge, button_class, dialog, dropdown_menu, icon, logo,
-	menu_label, menu_separator,
+	BUTTON, BUTTON_OUTLINE, CHECKBOX, Dismiss, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER,
+	Size, Status as Shape, Variant, button_class, dialog, dropdown_menu, icon, logo, menu_label,
+	menu_separator,
 };
 use crate::ui::extract::TeamCtx;
-use crate::ui::pages::projects::cards::status_line;
+use crate::ui::pages::apps::chrome;
 use crate::ui::sse::js_string;
-use crate::ui::status::poll;
+use crate::ui::status::{Status, poll};
 use crate::ui::{error, sse};
 
 const DB: &str = "/teams/{team_id}/projects/{project_id}/databases/{database_id}";
@@ -47,9 +48,22 @@ fn fail(e: &ServerError) -> Response {
 	action_error(&error::message(e)).into_response()
 }
 
-/// Start, Restart and Stop, each shown only to someone who may update the database and
-/// enabled only while it can work; a stale page still gets the server's refusal in the error
-/// line. Restart and Stop fold into the menu on a narrow screen.
+/// The shape of a database's state; one being removed reads as at rest.
+const fn shape(status: DatabaseStatus) -> Shape {
+	match status {
+		DatabaseStatus::Pending => Shape::Pending,
+		DatabaseStatus::Running => Shape::Running,
+		DatabaseStatus::Stopped | DatabaseStatus::Deleting => Shape::Stopped,
+		DatabaseStatus::Failed => Shape::Failed,
+	}
+}
+
+/// What the header offers. A running database can be restarted or stopped; one that is
+/// stopped or failed can be started, and only that: Start is not shown while it runs, and
+/// Stop is not shown while it does not. While a job or a status change is in flight nothing
+/// can be pressed, so the row keeps one disabled Restart in place. A stale page still gets
+/// the server's refusal in the error line. Restart and Stop fold into the menu on a narrow
+/// screen.
 fn actions(ctx: &TeamCtx, d: &DatabaseDetail) -> Markup {
 	let database = &d.database;
 	let base = database_url(ctx.team.id, database.project_id, database.id);
@@ -59,23 +73,24 @@ fn actions(ctx: &TeamCtx, d: &DatabaseDetail) -> Markup {
 	let status = database.status;
 	let can_start = !busy && matches!(status, DatabaseStatus::Stopped | DatabaseStatus::Failed);
 	let can_stop = !busy && status == DatabaseStatus::Running;
-	let can_restart = !busy
-		&& matches!(
-			status,
-			DatabaseStatus::Running | DatabaseStatus::Stopped | DatabaseStatus::Failed
-		);
 	let post = |action: &str| format!("@post({})", js_string(&format!("{base}/{action}")));
 	let menu_class = button_class(Variant::Outline, Size::Icon);
 	let open_delete = "$confirm = ''; $purge = false; $_delete_error = ''; el.commandForElement || document.getElementById('delete-dialog').showModal()";
 	html! {
 		div class="ui-app-actions" {
 			@if can_update {
-				button type="button" class=(if can_start { BUTTON } else { BUTTON_OUTLINE }) disabled[!can_start] "data-on:click"=(post("start"))
-					"data-indicator:_acting" "data-attr:disabled"={ "$_acting || " (!can_start) } { (icon("play")) "Start" }
-				button type="button" class={ (BUTTON_OUTLINE) " ui-app-secondary" } disabled[!can_restart] "data-on:click"=(post("restart"))
-					"data-attr:disabled"={ "$_acting || " (!can_restart) } { (icon("refresh-cw")) "Restart" }
-				button type="button" class={ (BUTTON_DANGER) " ui-app-secondary" } disabled[!can_stop] "data-on:click"=(post("stop"))
-					"data-attr:disabled"={ "$_acting || " (!can_stop) } { (icon("square")) "Stop" }
+				@if can_start {
+					button type="button" class=(BUTTON) "data-on:click"=(post("start"))
+						"data-indicator:_acting" "data-attr:disabled"="$_acting" { (icon("play")) "Start" }
+				}
+				@if can_stop {
+					button type="button" class={ (BUTTON_OUTLINE) " ui-app-secondary" } "data-on:click"=(post("restart"))
+						"data-indicator:_acting" "data-attr:disabled"="$_acting" { (icon("refresh-cw")) "Restart" }
+					button type="button" class={ (BUTTON_OUTLINE) " ui-app-secondary" } "data-on:click"=(post("stop"))
+						"data-attr:disabled"="$_acting" { (icon("square")) "Stop" }
+				} @else if !can_start {
+					button type="button" class={ (BUTTON_OUTLINE) " ui-app-secondary" } disabled { (icon("refresh-cw")) "Restart" }
+				}
 			}
 			@if can_update || can_delete {
 				(dropdown_menu(
@@ -85,9 +100,9 @@ fn actions(ctx: &TeamCtx, d: &DatabaseDetail) -> Markup {
 					&icon("ellipsis"),
 					&html! {
 						(menu_label("Database"))
-						@if can_update {
-							button type="button" class={ (MENU_ITEM) " ui-app-collapsed" } disabled[!can_restart] "data-on:click"=(post("restart")) { (icon("refresh-cw")) "Restart" }
-							button type="button" class={ (MENU_ITEM_DANGER) " ui-app-collapsed" } disabled[!can_stop] "data-on:click"=(post("stop")) { (icon("square")) "Stop" }
+						@if can_update && can_stop {
+							button type="button" class={ (MENU_ITEM) " ui-app-collapsed" } "data-on:click"=(post("restart")) { (icon("refresh-cw")) "Restart" }
+							button type="button" class={ (MENU_ITEM_DANGER) " ui-app-collapsed" } "data-on:click"=(post("stop")) { (icon("square")) "Stop" }
 						}
 						@if can_delete {
 							(menu_separator())
@@ -101,39 +116,75 @@ fn actions(ctx: &TeamCtx, d: &DatabaseDetail) -> Markup {
 	}
 }
 
+/// The newest CPU and memory reading, for the figures under the head. Without one (the
+/// sampler has not reached it yet) they read as a dash.
+async fn usage(s: &AppState, ctx: &TeamCtx, database: &Database) -> Option<ResourcePoint> {
+	metrics::database(
+		&s.db,
+		ctx.user.id,
+		ctx.team.id,
+		database.project_id,
+		database.id,
+		Range::Hour,
+	)
+	.await
+	.ok()
+	.and_then(|points| points.last().cloned())
+}
+
 /// `#db-header`: what polling and the actions re-render.
-pub fn header(ctx: &TeamCtx, d: &DatabaseDetail) -> Markup {
+pub async fn header(s: &AppState, ctx: &TeamCtx, d: &DatabaseDetail) -> Markup {
 	let database = &d.database;
 	let base = database_url(ctx.team.id, database.project_id, database.id);
 	let busy = busy(d);
+	let running = database.status == DatabaseStatus::Running;
+	let point = usage(s, ctx, database).await;
+	let dash = || "\u{2014}".to_owned();
+	let figures = [
+		(
+			"CPU",
+			point
+				.as_ref()
+				.and_then(|p| p.cpu)
+				.filter(|_| running)
+				.map_or_else(dash, |c| format!("{c:.1}%")),
+		),
+		(
+			"Memory",
+			point
+				.as_ref()
+				.filter(|_| running)
+				.map_or_else(dash, |p| chrome::bytes(p.mem)),
+		),
+		(
+			"Public port",
+			database.public_port.map_or_else(dash, |p| p.to_string()),
+		),
+		("Server", d.server_name.clone()),
+	];
 	html! {
-		div id="db-header" class="flex flex-col gap-3" {
+		div id="db-header" class="flex flex-col gap-5" {
 			(poll(&format!("{base}/header"), busy))
-			div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-4" {
-				div class="flex min-w-0 items-center gap-4" {
-					(logo(engine_value(database.engine), LogoSize::Lg))
-					div class="flex min-w-0 flex-col gap-1.5" {
-						div class="flex flex-wrap items-center gap-x-3 gap-y-1" {
-							h1 class="min-w-0 truncate text-2xl font-semibold tracking-tight" { (database.name) }
-							(badge(Tone::Neutral, "Database"))
-						}
-						div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm" {
-							(status_line(ResourceStatus::Database(database.status)))
-							@if busy && !crate::ui::status::Status::in_flight(database.status) {
-								span class="text-muted-foreground" { "A job is running" }
-							}
-							span class="text-muted-foreground" {
-								(engine_label(database.engine)) " " (database.version) " on " (d.server_name)
-							}
-						}
-						@if let Some(message) = &database.status_message {
-							p class="text-sm break-words text-muted-foreground" { (message) }
-						}
+			(chrome::head(
+				&logo(engine_value(database.engine), LogoSize::Lg),
+				&html! {
+					(icon("database"))
+					"Database \u{b7} " (engine_label(database.engine)) " " (database.version)
+				},
+				&database.name,
+				&html! {
+					(chrome::dot(shape(database.status), Status::label(database.status)))
+					@if busy && !Status::in_flight(database.status) {
+						span { "A job is running" }
 					}
-				}
-				(actions(ctx, d))
-			}
+					@if let Some(message) = &database.status_message {
+						span class="ui-head-ref" { (message) }
+					}
+				},
+				&actions(ctx, d),
+			))
 			p class="text-sm text-destructive" role="alert" "data-show"="$_action_error" "data-text"="$_action_error" style="display: none" {}
+			(chrome::stats("Live figures", &figures))
 		}
 	}
 }
@@ -194,13 +245,13 @@ type DbPath = Path<(TeamId, ProjectId, DatabaseId)>;
 async fn fragment(State(s): State<AppState>, ctx: TeamCtx, path: DbPath) -> Response {
 	let Path((_, project, database)) = path;
 	match load(&s, &ctx, project, database).await {
-		Ok((_, d)) => sse::patch(&header(&ctx, &d)).into_response(),
+		Ok((_, d)) => sse::patch(&header(&s, &ctx, &d).await).into_response(),
 		Err(response) => response,
 	}
 }
 
 /// Starts a lifecycle job and reloads the page, which then follows its log.
-pub(super) fn reloaded(ctx: &TeamCtx, database: &Database) -> Response {
+pub(in crate::ui) fn reloaded(ctx: &TeamCtx, database: &Database) -> Response {
 	sse::redirect(&database_url(ctx.team.id, database.project_id, database.id)).into_response()
 }
 

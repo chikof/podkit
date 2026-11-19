@@ -23,6 +23,7 @@ use crate::ui::components::{
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page};
+use crate::ui::pages::apps::chrome;
 
 #[derive(Debug, Default, Deserialize)]
 pub(super) struct DetailQuery {
@@ -246,25 +247,29 @@ async fn render(
 	let open = deployable && query.deploy.is_some();
 	let body = html! {
 		div class="flex flex-col gap-6" {
-			div class="flex flex-wrap items-start gap-4" {
-				(image_logo(&crate::logos::template_url(l), LogoSize::Lg, Priority::Normal))
-				div class="flex min-w-0 flex-1 flex-col gap-2" {
-					h1 class="text-2xl font-semibold tracking-tight" { (t.name) }
-					p class="max-w-prose text-sm text-muted-foreground" { (t.description) }
-					div class="flex flex-wrap items-center gap-2" {
-						(badge(Tone::Neutral, gallery::category_label(&t.category)))
-						(badge(Tone::Neutral, if l.plain_app { "Application" } else { "Stack" }))
-						@if !t.version.is_empty() { span class="font-mono text-xs text-muted-foreground" { (t.version) } }
+			(chrome::head(
+				&image_logo(&crate::logos::template_url(l), LogoSize::Lg, Priority::Normal),
+				&html! {
+					(icon("layers"))
+					"Template \u{b7} " (gallery::category_label(&t.category)) " \u{b7} " (if l.plain_app { "Application" } else { "Stack" })
+				},
+				&t.name,
+				&html! {
+					span class="ui-head-desc" { (t.description) }
+					@if !t.version.is_empty() { span class="ui-head-ref" { (t.version) } }
+				},
+				&html! {
+					@if deployable {
+						div class="ui-app-actions" {
+							button type="button" class=(button_class(Variant::Default, Size::Md))
+								command="show-modal" commandfor=(deploy::DIALOG_ID) aria-haspopup="dialog"
+								"data-on:click"="el.commandForElement || document.getElementById('tpl-deploy').showModal()" {
+								(icon("rocket")) "Deploy"
+							}
+						}
 					}
-				}
-				@if deployable {
-					button type="button" class=(button_class(Variant::Default, Size::Md))
-						command="show-modal" commandfor=(deploy::DIALOG_ID) aria-haspopup="dialog"
-						"data-on:click"="el.commandForElement || document.getElementById('tpl-deploy').showModal()" {
-						(icon("rocket")) "Deploy"
-					}
-				}
-			}
+				},
+			))
 			div class="flex flex-wrap items-center gap-2" {
 				@if let Some(url) = web_link(t.website.as_deref()) { (link_row("Website", url)) }
 				@if let Some(url) = web_link(t.docs.as_deref()) { (link_row("Documentation", url)) }
