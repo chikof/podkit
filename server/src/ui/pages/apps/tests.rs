@@ -321,6 +321,8 @@ async fn creating_shows_the_webhook_secret_once_and_never_again(db: PgPool) {
 	for uri in [
 		f.base() + "/new",
 		app_uri.clone(),
+		format!("{app_uri}/settings"),
+		format!("{app_uri}/monitoring"),
 		format!("{app_uri}/webhooks"),
 		format!("{app_uri}/advanced"),
 		format!("{app_uri}/deployments"),
@@ -337,8 +339,11 @@ async fn creating_shows_the_webhook_secret_once_and_never_again(db: PgPool) {
 	assert_contains(&page, &url);
 	let (_, page) = f.get(&app_uri).await;
 	assert_contains(&page, "Web");
-	assert_contains(&page, "https://example.com/web.git@main");
+	// The application's own page names the ref it follows; the repository itself is on Settings.
+	assert_contains(&page, "main");
 	assert_contains(&page, "web.127-0-0-1.sslip.io");
+	let (_, page) = f.get(&format!("{app_uri}/settings")).await;
+	assert_contains(&page, "https://example.com/web.git");
 }
 
 /// Was `credentials_are_stored_but_never_rendered`.
@@ -383,16 +388,16 @@ async fn credentials_are_stored_but_never_rendered(db: PgPool) {
 		}
 	}
 	let id = application_id(&db, "keyed").await;
-	let (_, page) = f.get(&format!("{}/{id}", f.base())).await;
+	let (_, page) = f.get(&format!("{}/{id}/settings", f.base())).await;
 	assert_contains(&page, "A deploy key is stored.");
 	let id = application_id(&db, "regged").await;
-	let (_, page) = f.get(&format!("{}/{id}", f.base())).await;
+	let (_, page) = f.get(&format!("{}/{id}/settings", f.base())).await;
 	assert_contains(&page, "Registry credentials are stored.");
 
 	// A reader sees that a credential exists, in words, and never what it is.
 	let carol = f.member("carol").await;
 	let id = application_id(&db, "keyed").await;
-	let (_, _, page) = get_html(&f.app, &format!("{}/{id}", f.base()), Some(&carol)).await;
+	let (_, _, page) = get_html(&f.app, &format!("{}/{id}/settings", f.base()), Some(&carol)).await;
 	assert_contains(&page, "Deploy key stored");
 }
 
@@ -464,16 +469,16 @@ async fn blank_credentials_on_save_keep_the_stored_ones(db: PgPool) {
 async fn bad_input_is_an_inline_message_and_creates_nothing(db: PgPool) {
 	let f = Fixture::new(&db).await;
 	let cases = [
-		(json!({ "repo_url": "ftp://nope" }), "invalid repo_url"),
+		(
+			json!({ "repo_url": "ftp://nope" }),
+			"That repository URL isn't valid.",
+		),
 		(json!({ "repo_url": "" }), "Repository URL is required."),
 		(
 			json!({ "git_token": TOKEN, "repo_url": "git@github.com:me/r.git" }),
-			"git_token requires an https://",
+			"An access token needs an https://",
 		),
-		(
-			json!({ "deploy_key": KEY }),
-			"deploy_key requires an ssh://",
-		),
+		(json!({ "deploy_key": KEY }), "A deploy key needs an ssh://"),
 		(
 			json!({ "container_port": "abc" }),
 			"Container port must be a number.",
@@ -493,7 +498,7 @@ async fn bad_input_is_an_inline_message_and_creates_nothing(db: PgPool) {
 		),
 		(
 			json!({ "dockerfile_path": "../etc/passwd" }),
-			"invalid dockerfile_path",
+			"That Dockerfile path isn't valid.",
 		),
 		(json!({ "name": "" }), "Name must be"),
 		(json!({ "slug": "Not A Slug" }), "Slug must be"),
@@ -521,7 +526,9 @@ async fn bad_input_is_an_inline_message_and_creates_nothing(db: PgPool) {
 	let body = f
 		.post(&uri, &f.form("other", json!({ "repo_url": "nope" })))
 		.await;
-	assert_contains(&body, "invalid repo_url");
+	assert_contains(&body, "That repository URL isn't valid.");
+	// The person reads a sentence, never the name of an API field.
+	assert_not_contains(&body, "repo_url");
 }
 
 #[db_test]
@@ -529,10 +536,13 @@ async fn image_input_is_checked_and_a_source_cannot_be_mixed_or_switched(db: PgP
 	let f = Fixture::new(&db).await;
 	let cases = [
 		(json!({ "image": "" }), "Image is required."),
-		(json!({ "image": "not a ref" }), "invalid image reference"),
+		(
+			json!({ "image": "not a ref" }),
+			"That image reference isn't valid.",
+		),
 		(
 			json!({ "registry_username": "me" }),
-			"registry_username and registry_password go together",
+			"Give both a registry username and password",
 		),
 		(
 			json!({ "container_port": "" }),
@@ -591,9 +601,18 @@ async fn creating_an_image_app_shows_the_image_on_general_and_deploys_it(db: PgP
 	let app_uri = format!("{}/{id}", f.base());
 	let (s, page) = f.get(&app_uri).await;
 	assert_eq!(s, StatusCode::OK);
-	// The header says what it runs and from where; the form holds the image and no git field.
+	// The header says what it runs and from where, and an image is never "cloned": nothing
+	// on its page speaks of a repository or a git provider.
 	assert_contains(&page, "traefik/whoami:v1.10");
-	assert_contains(&page, "Docker image");
+	assert_contains(&page, "Docker image app");
+	assert_not_contains(&page, "Not cloned yet");
+	let (_, hooks) = f.get(&format!("{app_uri}/webhooks")).await;
+	assert_contains(&hooks, "Deploy on a new image");
+	assert_not_contains(&hooks, "git provider");
+	assert_not_contains(&hooks, "GitHub");
+	// The form holds the image and no git field.
+	let (s, page) = f.get(&format!("{app_uri}/settings")).await;
+	assert_eq!(s, StatusCode::OK);
 	assert_contains(&page, "&quot;image&quot;:&quot;traefik/whoami:v1.10&quot;");
 	assert_contains(&page, "data-bind:registry_username");
 	assert_not_contains(&page, "data-bind:repo_url");
@@ -674,7 +693,7 @@ async fn the_general_tab_is_prefilled_and_saving_toasts(db: PgPool) {
 	.await;
 	let id = application_id(&db, "web").await;
 	let uri = format!("{}/{id}/settings", f.base());
-	let (s, page) = f.get(&format!("{}/{id}", f.base())).await;
+	let (s, page) = f.get(&uri).await;
 	assert_eq!(s, StatusCode::OK);
 	assert_contains(&page, "&quot;name&quot;:&quot;Web&quot;");
 	assert_contains(&page, "&quot;memory_limit_mb&quot;:&quot;256&quot;");
@@ -695,14 +714,13 @@ async fn the_general_tab_is_prefilled_and_saving_toasts(db: PgPool) {
 	assert_contains(&body, "Settings saved");
 	assert_contains(&body, "app-header");
 	assert_contains(&body, "web2.127-0-0-1.sslip.io");
-	let (_, page) = f.get(&format!("{}/{id}", f.base())).await;
+	let (_, page) = f.get(&uri).await;
 	assert_contains(&page, "Web 2");
-	assert_contains(&page, "8080");
-	assert_contains(&page, "No limit");
+	assert_contains(&page, "&quot;container_port&quot;:&quot;8080&quot;");
 
-	// The old Settings address still leads to the tab.
+	// Settings has its own address; the application's root is the Deployments tab.
 	let (s, _, _) = get_html(&f.app, &uri, Some(&f.cookie)).await;
-	assert_eq!(s, StatusCode::SEE_OTHER);
+	assert_eq!(s, StatusCode::OK);
 }
 
 /// Was `deleting_needs_the_slug_typed_exactly`.
@@ -939,6 +957,7 @@ async fn a_read_only_member_sees_no_actions_and_forged_posts_fail(db: PgPool) {
 	assert_not_contains(&page, "Forged");
 
 	// The owner has the form, the tabs and the delete dialog.
+	let (_, page) = f.get(&format!("{}/{id}/settings", f.base())).await;
 	assert_contains(&page, "Save changes");
 	assert_contains(&page, "Advanced");
 	assert_contains(&page, "Webhooks");
@@ -1177,7 +1196,7 @@ async fn the_history_lists_deployments_and_polls_only_while_one_is_in_flight(db:
 	// A user-triggered one says so.
 	f.post_empty(&format!("{}/deploy", f.url(""))).await;
 	let (_, page) = f.get(&uri).await;
-	assert_contains(&page, ">User<");
+	assert_contains(&page, "Deployed by hand");
 }
 
 /// Was `rollback_and_cancel_show_only_in_valid_states`.
@@ -1664,7 +1683,7 @@ async fn domains_are_added_listed_and_removed_with_dns_help(db: PgPool) {
 			&json!({ "domain_hostname": "not a host" }),
 		)
 		.await;
-	assert_contains(&body, "invalid hostname");
+	assert_contains(&body, "That hostname isn't valid.");
 
 	let id = only_id(&db, "custom_domains").await;
 	let body = f.post_empty(&f.url(&format!("domains/{id}/delete"))).await;

@@ -123,7 +123,6 @@ pub fn metrics_section(section: &MetricsSection<'_>, body: &Markup) -> Markup {
 /// CPU and memory of one resource: what every resource kind has. `now` is the end of the
 /// window, in unix seconds.
 // For the application, database, model and stack pages (cards F4, F5, F7, F8).
-#[allow(dead_code, reason = "embedded by the resource pages of later cards")]
 #[must_use]
 pub fn resource_charts(points: &[ResourcePoint], range: Range, now: i64) -> Markup {
 	let from = now - range.duration().whole_seconds();

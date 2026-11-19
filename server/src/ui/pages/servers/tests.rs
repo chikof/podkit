@@ -261,14 +261,18 @@ async fn bad_input_shows_a_message_and_creates_nothing(db: PgPool) {
 
 	let cases = [
 		("name", json!(""), "Name must be"),
-		("hostname", json!("not a host"), "invalid hostname"),
-		("ssh_user", json!("Root User"), "invalid ssh_user"),
+		(
+			"hostname",
+			json!("not a host"),
+			"That hostname isn't valid.",
+		),
+		("ssh_user", json!("Root User"), "That ssh user isn't valid."),
 		("ssh_port", json!(70000), "SSH port"),
 		("ssh_port", json!("abc"), "SSH port"),
 		(
 			"podman_socket_path",
 			json!("relative/path"),
-			"podman_socket_path",
+			"podman socket path",
 		),
 		("ssh_private_key", json!("  "), "private key is required"),
 	];

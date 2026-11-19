@@ -30,7 +30,8 @@ pub fn table(id: &str, caption: &str, headers: &[&str], rows: &[Vec<Markup>]) ->
 								@if i == 0 {
 									th scope="row" { (cell) }
 								} @else {
-									td data-label=[headers.get(i).copied().filter(|h| !h.is_empty())] { (cell) }
+									td data-label=[headers.get(i).copied().filter(|h| !h.is_empty())]
+										class=[headers.get(i).is_some_and(|h| h.is_empty()).then_some("ui-table-act")] { (cell) }
 								}
 							}
 						}
@@ -94,7 +95,10 @@ mod tests {
 			html.contains("<td data-label=\"Role\">Owner</td>"),
 			"{html}"
 		);
-		assert!(html.contains("<td>menu</td>"), "{html}");
+		assert!(
+			html.contains("<td class=\"ui-table-act\">menu</td>"),
+			"{html}"
+		);
 	}
 
 	#[test]

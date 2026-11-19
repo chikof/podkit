@@ -13,11 +13,13 @@ use crate::ids::{ProjectId, StackId, TeamId};
 use crate::stacks::{ServiceStatus, StackService, StackStatus};
 use crate::state::AppState;
 use crate::ui::components::{
-	Size, Variant, button_class, card, card_content, card_heading, empty_state, icon, table,
+	LogoSize, MENU_ITEM, Size, Variant, button_class, card, card_content, card_section,
+	dropdown_menu, empty_state, icon, logo, menu_link, table,
 };
 use crate::ui::extract::TeamCtx;
+use crate::ui::pages::apps::chrome;
 use crate::ui::sse::{self, js_string};
-use crate::ui::status::status_badge;
+use crate::ui::status::Status;
 
 /// `http://host` (and the ingress port when it is not 80).
 pub(super) fn public_link(s: &AppState, host: &str) -> String {
@@ -30,8 +32,8 @@ pub(super) fn public_link(s: &AppState, host: &str) -> String {
 fn health(svc: &StackService) -> Markup {
 	html! {
 		@match svc.health.as_deref() {
-			Some(h) if !h.is_empty() => { span class="text-sm" { (h) } }
-			_ => { span class="text-sm text-muted-foreground" { "no check" } }
+			Some(h) if !h.is_empty() => { span class="text-sm whitespace-nowrap" { (h) } }
+			_ => { span class="text-sm whitespace-nowrap text-muted-foreground" { "no check" } }
 		}
 	}
 }
@@ -44,36 +46,51 @@ fn row(s: &AppState, ctx: &TeamCtx, l: &Loaded, svc: &StackService) -> Vec<Marku
 		"@post({})",
 		js_string(&format!("{base}/services/{}/restart", svc.name))
 	);
+	let has_logs = svc.container_id.is_some();
+	let can_restart = can_update && idle;
 	vec![
-		html! { span class="font-mono" { (svc.name) } },
-		html! { span class="block max-w-56 truncate font-mono text-xs" title=(svc.image) { (svc.image) } },
 		html! {
-			div class="flex flex-col gap-0.5" {
-				(status_badge(svc.status))
-				@if svc.status == ServiceStatus::Failed {
-					@if let Some(m) = &svc.status_message { span class="max-w-56 text-xs text-destructive" { (m) } }
+			div class="ui-svc" {
+				(logo(&svc.name, LogoSize::Sm))
+				div class="ui-svc-id" {
+					span class="ui-svc-name" { (svc.name) }
+					span class="ui-svc-image" title=(svc.image) { (svc.image) }
+					@if svc.status == ServiceStatus::Failed {
+						@if let Some(m) = &svc.status_message {
+							span class="ui-svc-err" { (icon("circle-alert")) (m) }
+						}
+					}
 				}
 			}
 		},
+		html! { (chrome::dot(chrome::service_shape(svc.status), svc.status.label())) },
 		health(svc),
 		html! {
 			@if let Some(host) = &svc.domain {
-				a class="inline-flex items-center gap-1 hover:underline" href=(public_link(s, host)) target="_blank" rel="noopener noreferrer" {
-					span class="max-w-56 truncate" { (host) } (icon("external-link"))
+				a class="ui-svc-link" href=(public_link(s, host)) target="_blank" rel="noopener noreferrer" {
+					span { (host) } (icon("external-link"))
 				}
 			} @else {
 				span class="text-muted-foreground" { "none" }
 			}
 		},
 		html! {
-			div class="flex items-center gap-2" {
-				@if svc.container_id.is_some() {
-					a class=(button_class(Variant::Ghost, Size::Sm)) href={ (base) "/logs?service=" (svc.name) } { (icon("terminal")) "Logs" }
-				}
-				@if can_update && idle {
-					button type="button" class=(button_class(Variant::Outline, Size::Sm)) "data-on:click"=(restart)
-						"data-attr:disabled"="$_acting" "data-indicator:_acting" { (icon("refresh-cw")) "Restart" }
-				}
+			@if has_logs || can_restart {
+				(dropdown_menu(
+					&format!("svc-{}", svc.name),
+					&button_class(Variant::Outline, Size::Icon),
+					&format!("Actions for {}", svc.name),
+					&icon("ellipsis"),
+					&html! {
+						@if has_logs {
+							(menu_link(&format!("{base}/logs?service={}", svc.name), &html! { (icon("terminal")) "Logs" }))
+						}
+						@if can_restart {
+							button type="button" class=(MENU_ITEM) "data-on:click"=(restart)
+								"data-attr:disabled"="$_acting" "data-indicator:_acting" { (icon("refresh-cw")) "Restart" }
+						}
+					},
+				))
 			}
 		},
 	]
@@ -87,15 +104,32 @@ pub(super) fn services_card(s: &AppState, ctx: &TeamCtx, l: &Loaded) -> Markup {
 		.filter(|svc| svc.status != ServiceStatus::Removing)
 		.collect();
 	let rows: Vec<Vec<Markup>> = services.iter().map(|svc| row(s, ctx, l, svc)).collect();
+	let failed = services
+		.iter()
+		.filter(|svc| svc.status == ServiceStatus::Failed)
+		.count();
+	let running = services
+		.iter()
+		.filter(|svc| svc.status == ServiceStatus::Running)
+		.count();
 	html! {
 		div id="stack-services" {
 			(card(&html! {
-				(card_heading("Services", Some("One container per service, on this stack's private network.")))
+				(card_section(
+					"Services",
+					Some("One container per service, on this stack's private network."),
+					Some(&html! {
+						span class="text-xs text-muted-foreground" {
+							@if failed > 0 { (failed) " failed \u{b7} " }
+							(running) " running"
+						}
+					}),
+				))
 				(card_content(&html! {
 					@if services.is_empty() {
 						(empty_state("layers", "No services", Some("The compose file defines none."), None))
 					} @else {
-						(table("stack-services-table", "Services of this stack", &["Service", "Image", "Status", "Health", "Domain", "Actions"], &rows))
+						(table("stack-services-table", "Services of this stack", &["Service", "Status", "Health", "Domain", ""], &rows))
 					}
 					@if !l.detail.missing_vars.is_empty() {
 						p class="mt-4 text-sm text-warning" {

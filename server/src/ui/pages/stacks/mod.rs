@@ -18,6 +18,7 @@ mod domains;
 mod env;
 mod frame;
 mod issues;
+mod monitoring;
 mod runs;
 mod services;
 #[cfg(test)]
@@ -48,6 +49,8 @@ pub fn router() -> Router<AppState> {
 		.route(&at("/deployments/log"), get(runs::deployment_log))
 		.route(&at("/logs"), get(runs::logs))
 		.route(&at("/logs/stream"), get(runs::logs_stream))
+		.route(&at("/monitoring"), get(monitoring::page))
+		.route(&at("/monitoring/charts"), get(monitoring::charts))
 		.route(&at("/advanced"), get(danger::page))
 		.route(&at("/remove"), post(danger::remove))
 }
