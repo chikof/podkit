@@ -1,6 +1,9 @@
 use axum::Router;
+use axum::http::{Extensions, HeaderMap, StatusCode, Version, header};
 use axum::routing::get;
 use tower_cookies::CookieManagerLayer;
+use tower_http::compression::CompressionLayer;
+use tower_http::compression::predicate::{Predicate, SizeAbove};
 
 use crate::error::AppResult;
 use crate::state::AppState;
@@ -89,7 +92,32 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest("/api/v1", api)
 		.nest("/webhooks", webhooks::router())
 		.layer(CookieManagerLayer::new())
+		.layer(compression())
 		.with_state(state))
+}
+
+/// Compress the text a browser downloads: HTML, CSS, JS and SVG, from 256 bytes up. JSON from
+/// the API, event streams and the font and image files are left as they are: the fonts are
+/// already compressed, and a stream has to flush each event.
+fn compression() -> CompressionLayer<impl Predicate> {
+	CompressionLayer::new().compress_when(SizeAbove::new(256).and(
+		|_: StatusCode, _: Version, headers: &HeaderMap, _: &Extensions| {
+			headers
+				.get(header::CONTENT_TYPE)
+				.and_then(|v| v.to_str().ok())
+				.is_some_and(|ct| {
+					[
+						"text/html",
+						"text/css",
+						"text/javascript",
+						"application/javascript",
+						"image/svg+xml",
+					]
+					.iter()
+					.any(|t| ct.starts_with(t))
+				})
+		},
+	))
 }
 
 #[cfg(test)]
@@ -99,6 +127,46 @@ mod tests {
 	use sqlx::PgPool;
 
 	use crate::tests::{app, call, user_with_team};
+
+	#[sqlx::test]
+	async fn text_assets_are_gzipped_and_json_and_fonts_are_not(db: PgPool) {
+		use axum::body::Body;
+		use axum::http::Request;
+		use tower::ServiceExt;
+
+		let app = app(db).await;
+		let get = |uri: &'static str| {
+			let app = app.clone();
+			async move {
+				app.oneshot(
+					Request::builder()
+						.uri(uri)
+						.header("accept-encoding", "gzip")
+						.body(Body::empty())
+						.unwrap(),
+				)
+				.await
+				.unwrap()
+			}
+		};
+		let r = get("/static/app.css").await;
+		assert_eq!(r.status(), StatusCode::OK);
+		assert_eq!(r.headers()["content-encoding"], "gzip", "css");
+		let r = get("/static/page.js").await;
+		assert_eq!(r.headers()["content-encoding"], "gzip", "js");
+		let r = get("/login").await;
+		assert_eq!(r.headers()["content-encoding"], "gzip", "html");
+		let r = get("/api/v1/catalog").await;
+		assert!(
+			r.headers().get("content-encoding").is_none(),
+			"json stays plain"
+		);
+		let r = get("/static/fonts/hanken-grotesk-var.woff2").await;
+		assert!(
+			r.headers().get("content-encoding").is_none(),
+			"fonts stay plain"
+		);
+	}
 
 	#[sqlx::test]
 	async fn api_is_served_under_api_v1(db: PgPool) {

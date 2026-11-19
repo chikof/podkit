@@ -22,6 +22,7 @@ serde.workspace = true
 forgeconf.workspace = true
 dirs.workspace = true
 tower-cookies.workspace = true
+tower-http.workspace = true
 maud.workspace = true
 datastar.workspace = true
 zeroize.workspace = true

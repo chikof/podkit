@@ -45,7 +45,6 @@ code { font-size: 0.92em; }
 .ui-skip:focus-visible { translate: 0 0; }
 
 /* Numbers line up in every column. */
-.ui-num { text-align: right; font-variant-numeric: tabular-nums; }
 .ui-link { color: var(--primary-text); text-decoration: underline; text-underline-offset: 3px; }
 .ui-link:hover { text-decoration-thickness: 2px; }
 
@@ -76,9 +75,6 @@ code { font-size: 0.92em; }
 	width: 2rem; height: 2rem; border-radius: var(--r-md); background-color: var(--accent);
 	color: var(--foreground); font-size: var(--fs-sm); font-weight: var(--fw-bold); line-height: 1; user-select: none;
 }
-.ui-avatar-sm { width: 1.375rem; height: 1.375rem; border-radius: var(--r-sm); font-size: var(--fs-xs); }
-.ui-avatars { display: flex; }
-.ui-avatars > .ui-avatar + .ui-avatar { margin-inline-start: -6px; box-shadow: 0 0 0 2px var(--card); }
 
 @supports (color: color-mix(in oklab, red, blue)) {
 	.ui-logo[data-h], .ui-avatar[data-h] { color: var(--foreground); }
@@ -162,14 +158,11 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 /* label, hint and error: the error shows only while its field is invalid */
 .ui-field-group { display: grid; gap: var(--s-2); min-width: 0; }
 .ui-label { display: grid; gap: var(--s-2); font-size: var(--fs-sm); font-weight: var(--fw-medium); line-height: 1.3; }
-.ui-label-row { display: flex; justify-content: space-between; gap: var(--s-3); }
 .ui-hint { font-size: var(--fs-xs); color: var(--muted-foreground); }
 .ui-error { display: flex; align-items: flex-start; gap: var(--s-2); font-size: var(--fs-xs); color: var(--destructive); }
 .ui-field-group > .ui-error[data-when="invalid"] { display: none; }
 .ui-field-group:has(.ui-field:user-invalid) > .ui-error[data-when="invalid"],
 .ui-field-group:has([aria-invalid="true"]) > .ui-error[data-when="invalid"] { display: flex; }
-.ui-field-hint-invalid { display: none; }
-:has(> .ui-field:user-invalid) > .ui-field-hint-invalid { display: block; }
 
 /* A native select, in a wrapper that draws the chevron. Where the platform has a
    customizable select (`appearance: base-select`) the picker is restyled too; elsewhere the
@@ -249,7 +242,6 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 .ui-banner-ok { --bn: var(--success); --bn-soft: var(--success-soft); }
 .ui-banner-warn { --bn: var(--warning); --bn-soft: var(--warning-soft); }
 .ui-banner-info { --bn: var(--info); --bn-soft: var(--info-soft); }
-.ui-note { display: flex; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-radius: var(--r-md); background-color: var(--secondary); color: var(--muted-foreground); font-size: var(--fs-sm); }
 
 /* The logo card: one service or resource, clickable as a whole. A tile with no border that
    gains a hairline and a wash on hover. */
@@ -274,7 +266,6 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 .ui-table tbody tr { transition: background-color var(--dur-1) var(--ease); }
 .ui-table tbody tr:hover > * { background-color: var(--secondary); }
 .ui-table td small { display: block; font-size: var(--fs-xs); color: var(--muted-foreground); }
-.ui-table .ui-num { text-align: right; }
 .ui-table .ui-table-act { width: 1%; text-align: right; white-space: nowrap; }
 .ui-table tr[data-status="failed"] > :first-child { color: var(--destructive); }
 
@@ -412,7 +403,6 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
    the trigger, flipped and clamped), and until it runs it is a bottom sheet. */
 @supports (position-area: block-end) {
 	.ui-menu { inset: auto; position-area: block-end span-inline-end; position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline; }
-	.ui-menu-end { position-area: block-end span-inline-start; }
 }
 @supports not (position-area: block-end) {
 	.ui-menu { position: fixed; inset: auto var(--s-3) var(--s-3) var(--s-3); width: auto; margin: 0; }
@@ -485,7 +475,6 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 @media (prefers-reduced-motion: no-preference) {
 	.ui-log-line { animation: ui-log-in var(--dur-2) var(--ease-out) both; }
 }
-.ui-caret { display: inline-block; width: 0.6ch; height: 1.1em; vertical-align: text-bottom; background-color: currentColor; animation: ui-caret 1s steps(1) infinite; }
 
 /* Charts: inline SVG with non-scaling strokes; the axis labels are HTML so they never stretch. */
 .ui-chart { display: flex; flex-direction: column; }
@@ -498,7 +487,6 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 @media (prefers-reduced-motion: no-preference) {
 	.ui-chart-area { transform-origin: bottom; animation: ui-chart-in var(--dur-3) var(--ease-out) both; }
 }
-.ui-legend { display: flex; flex-wrap: wrap; gap: var(--s-4); font-size: var(--fs-xs); color: var(--muted-foreground); }
 
 /* ---- Motion ----------------------------------------------------------------------------------- */
 
@@ -536,7 +524,7 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 		animation-duration: 0.01ms !important; animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important; transition-delay: 0ms !important; scroll-behavior: auto !important;
 	}
-	.ui-skeleton, .ui-caret { animation: none; }
+	.ui-skeleton { animation: none; }
 	::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
 
@@ -552,7 +540,7 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 @media (max-width: 760px) {
 	:root { --dlg-from: translateY(28px); --page-pad: var(--s-4); }
 	/* Dialogs become bottom sheets. */
-	.ui-dialog:not(.ui-palette, .ui-drawer) { width: 100%; max-width: 100vw; margin: auto 0 0; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+	.ui-dialog:not(.ui-palette) { width: 100%; max-width: 100vw; margin: auto 0 0; border-radius: var(--r-lg) var(--r-lg) 0 0; }
 	.ui-menu { max-width: calc(100vw - 16px); }
 	.ui-button, .ui-field, .ui-menu-item { min-height: 2.75rem; }
 	.ui-button-icon { width: 2.75rem; }
@@ -865,16 +853,14 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 .ui-auth-head { display: grid; gap: var(--s-2); }
 .ui-auth-head h1 { font-size: var(--fs-3xl); font-weight: var(--fw-bold); letter-spacing: -0.012em; line-height: 1.1; }
 .ui-auth-form { display: grid; gap: var(--s-4); }
-.ui-auth-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-4); font-size: var(--fs-sm); }
 .ui-auth-foot { font-size: var(--fs-sm); color: var(--muted-foreground); }
-.ui-auth-foot a, .ui-auth-row a { color: var(--primary-text); text-underline-offset: 3px; }
+.ui-auth-foot a { color: var(--primary-text); text-underline-offset: 3px; }
 .ui-auth-meta { display: grid; gap: var(--s-2); margin: 0; padding: var(--s-3) var(--s-2) 0; border-block-start: var(--bw) solid var(--border); }
 .ui-auth-meta div { display: flex; justify-content: space-between; gap: var(--s-5); padding-block: var(--s-2); border-block-end: var(--bw) solid var(--border); font-size: var(--fs-sm); }
 .ui-auth-meta div:last-child { border-block-end: 0; }
 .ui-auth-meta dt { color: var(--muted-foreground); }
 .ui-auth-meta dd { display: flex; align-items: center; gap: var(--s-3); margin: 0; }
 .ui-auth-theme { position: absolute; inset-block-start: var(--s-5); inset-inline-end: var(--s-5); }
-.ui-auth-btn { width: 100%; }
 @media (max-width: 760px) {
 	.ui-auth { place-items: start center; padding: var(--s-8) var(--s-4) var(--s-4); }
 	.ui-auth-theme { inset-block-start: var(--s-3); inset-inline-end: var(--s-3); }
@@ -887,20 +873,9 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 .ui-nf-code { font-family: var(--font-mono); font-size: var(--fs-sm); color: var(--primary-text); }
 .ui-nf h1 { font-size: var(--fs-4xl); font-weight: var(--fw-bold); letter-spacing: -0.02em; line-height: 1.1; }
 .ui-nf-path { overflow-wrap: anywhere; }
-.ui-nf-rec { display: grid; gap: var(--s-3); width: 100%; margin-block-start: var(--s-5); }
-.ui-nf-rec ul { display: grid; margin: 0; padding: 0; list-style: none; }
-.ui-rec {
-	display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-block-end: var(--bw) solid var(--border);
-	color: var(--foreground); font-size: var(--fs-sm); text-decoration: none; transition: background-color var(--dur-1) var(--ease);
-}
-.ui-rec:hover { background-color: var(--card); }
-.ui-rec .ui-icon { color: var(--muted-foreground); }
-.ui-rec-s { margin-inline-start: auto; color: var(--muted-foreground); font-size: var(--fs-xs); }
-.ui-nf-id { font-size: var(--fs-xs); color: var(--muted-foreground); }
 @media (max-width: 760px) {
 	.ui-nf { padding-block-start: var(--s-4); }
 	.ui-nf h1 { font-size: var(--fs-3xl); }
-	.ui-rec { min-height: 48px; }
 }
 
 /* ---- Application page ------------------------------------------------------------------ */
@@ -980,41 +955,6 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 	z-index: 1;
 }
 
-/* One way to create something: a logo and two lines, as a link. */
-.ui-pick-grid {
-	display: grid;
-	gap: 0.5rem;
-	grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
-}
-
-.ui-pick {
-	display: flex;
-	align-items: center;
-	gap: 0.75rem;
-	padding: 0.75rem;
-	border: 1px solid var(--border);
-	border-radius: var(--r-lg);
-	color: inherit;
-	text-decoration: none;
-	transition-property: border-color, background-color;
-	transition-duration: var(--dur-1);
-}
-
-a.ui-pick:hover {
-	border-color: color-mix(in oklab, var(--foreground) 25%, var(--border));
-	background-color: var(--accent);
-}
-
-a.ui-pick:focus-visible {
-	outline: 2px solid var(--ring);
-	outline-offset: 2px;
-}
-
-.ui-pick[aria-disabled="true"] {
-	cursor: not-allowed;
-	opacity: 0.6;
-}
-
 /* A mark drawn as an icon (stroked), in the same tile as a logo. */
 .ui-pick-icon {
 	display: inline-flex;
@@ -1028,12 +968,6 @@ a.ui-pick:focus-visible {
 	background-color: var(--muted);
 	color: var(--foreground);
 	font-size: 1.25rem;
-}
-
-@media (pointer: coarse) {
-	.ui-pick {
-		min-height: 3.5rem;
-	}
 }
 
 /* A list page asks for more width than the shell gives a form: the shell's wrapper holds a

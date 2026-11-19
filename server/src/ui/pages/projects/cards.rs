@@ -47,16 +47,6 @@ pub fn logo_row(logos: &[ResourceLogo]) -> Markup {
 	}
 }
 
-pub const fn dot_class(tone: Tone) -> &'static str {
-	match tone {
-		Tone::Neutral => "ui-dot ui-dot-neutral",
-		Tone::Progress => "ui-dot ui-dot-progress",
-		Tone::Success => "ui-dot ui-dot-success",
-		Tone::Warning => "ui-dot ui-dot-warning",
-		Tone::Danger => "ui-dot ui-dot-danger",
-	}
-}
-
 fn parts(status: ResourceStatus) -> (&'static str, Tone, bool) {
 	match status {
 		ResourceStatus::NotDeployed => ("Not deployed", Tone::Neutral, false),

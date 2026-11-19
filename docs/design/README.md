@@ -69,7 +69,7 @@ on `accent` for anything small.
 |---|---|---|
 | `--radius` | `0.625rem` (10px) | cards `rounded-xl`, controls `rounded-md`, badges `rounded-full`, tiles `rounded-lg` |
 | Spacing | Tailwind's 4px scale | inside a card `px-6`/`py-6`, between its blocks `gap-5`, form fields `gap-2` (label to control) and `gap-4` (field to field), sections of a page `gap-6` or `gap-10` |
-| Font | Geist Sans (`--font-sans`), Geist Mono (`--font-mono`) | variable woff2, `font-display: swap`; mono for ids, hashes, branches, log lines, keys |
+| Font | Hanken Grotesk (`--font-sans`), Spline Sans Mono (`--font-mono`) | variable woff2, `font-display: swap`; mono for ids, hashes, branches, log lines, keys |
 | Type scale | `text-xs` 12 · `text-sm` 14 (default for UI) · `text-base` 16 (card titles) · `text-lg` 18 (dialog titles, section headings) · `text-2xl` 24 (page title) | weights 400, 500 (labels, buttons), 600 (titles); never bold above 600 |
 | Shadows | `--shadow-xs` controls, `--shadow-sm` raised cards, `--shadow-md` menus, `--shadow-lg` dialogs and toasts | in dark the border does most of the work |
 | Motion | `--duration-fast` 120ms, `--duration-base` 200ms, `--ease-out` | see Motion |
