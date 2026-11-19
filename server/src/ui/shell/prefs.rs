@@ -2,8 +2,8 @@
 //!
 //! - `flash`: a message left by an action for the page it redirects to (“Team renamed”).
 //!   It is shown once as a toast, then the cookie is dropped.
-//! - `sidebar`: `collapsed` when the user folded the sidebar to its icon rail (set by
-//!   `page.js`, read here so the page is rendered that way from the first byte).
+//! - `sidebar`: `collapsed` when the user folded the sidebar to its icon rail (written by the
+//!   toggle, `shell`, and read here so the page is rendered that way from the first byte).
 //!
 //! The same task-local pattern as `ui::theme`.
 
@@ -44,7 +44,7 @@ pub fn pending_flash() -> Option<Flash> {
 	CURRENT.try_with(|p| p.flash.clone()).ok().flatten()
 }
 
-/// Whether the browser asked for the icon rail. `page.js` writes the `sidebar` cookie when
+/// Whether the browser asked for the icon rail. The toggle (`shell`) writes the `sidebar` cookie when
 /// the toggle is used; reading it here lets the first byte of the page already be the right
 /// width, so nothing jumps on load.
 pub fn sidebar_collapsed() -> bool {

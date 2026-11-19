@@ -155,6 +155,13 @@ mod tests {
 	use super::*;
 
 	#[test]
+	fn the_stylesheet_has_no_moz_focusring_preflight() {
+		// Firefox-only, and it came after every focus style of ours (see build.rs).
+		assert!(!crate::ui::APP_CSS.contains(":-moz-focusring"));
+		assert!(crate::ui::APP_CSS.contains(":focus-visible{outline:2px solid var(--ring)"));
+	}
+
+	#[test]
 	fn page_js_stays_under_its_budget_and_the_rest_loads_on_demand() {
 		assert!(
 			PAGE_JS.len() < 10 * 1024,
