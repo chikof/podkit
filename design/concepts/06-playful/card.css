@@ -29,7 +29,6 @@
 .cmp-h{font-size:var(--fs-xs);color:var(--text-3);font-weight:var(--fw-medium);text-transform:uppercase;letter-spacing:.08em}
 .cmp-row{display:flex;flex-wrap:wrap;gap:var(--s-2);align-items:center}
 .cmp-col{display:grid;gap:var(--s-3)}
-.res-grid--demo{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))}
 .cc-motion{max-width:70ch;color:var(--text-2)}
 .motion-tokens{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:var(--s-2) var(--s-4);margin-top:var(--s-4);font:var(--fs-xs) var(--font-mono)}
 .motion-tokens div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:var(--s-2);border-bottom:var(--bw) solid var(--border);padding-bottom:var(--s-1)}
