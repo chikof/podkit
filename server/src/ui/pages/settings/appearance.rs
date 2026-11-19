@@ -18,41 +18,29 @@ pub fn router() -> Router<AppState> {
 async fn page(ctx: TeamCtx) -> Markup {
 	let current = theme::current();
 	let option = |choice: Theme, label: &str, hint: &str, icon_name: &str| {
-		let chosen = choice == current;
 		html! {
-			button type="submit" name="theme" value=(choice.as_str()) aria-pressed=(if chosen { "true" } else { "false" })
-				class=(if chosen { SELECTED } else { UNSELECTED }) {
-				span class="flex items-center gap-2 text-sm font-medium" {
+			button type="submit" name="theme" value=(choice.as_str()) aria-pressed=(if choice == current { "true" } else { "false" })
+				class="ui-theme-opt" {
+				span class="ui-theme-opt-head" {
 					(icon(icon_name))
 					(label)
-					@if chosen { span class="ml-auto" { (icon("check")) } }
+					@if choice == current { span class="ui-theme-opt-check" { (icon("check")) } }
 				}
-				span class="text-left text-xs font-normal text-muted-foreground" { (hint) }
+				span class="ui-theme-opt-hint" { (hint) }
 			}
 		}
 	};
 	let content = html! {
 		(card(&html! {
-			(card_heading("Theme", Some("Dark is the default. System follows your device. The choice is kept in this browser.")))
+			(card_heading("Theme", Some("Follows your system by default. The choice is kept in this browser.")))
 			(card_content(&html! {
-				form method="post" action="/theme" class="grid gap-3 sm:grid-cols-3" {
+				form method="post" action="/theme" class="ui-theme-opts" {
 					(option(Theme::System, "System", "Match the device setting.", "monitor"))
 					(option(Theme::Light, "Light", "Light surfaces.", "sun"))
 					(option(Theme::Dark, "Dark", "Dark surfaces.", "moon"))
 				}
 			}))
 		}))
-		(card(&html! {
-			(card_heading("Sidebar", Some("Fold it to icons for more room.")))
-			(card_content(&html! {
-				p class="text-sm text-muted-foreground" {
-					"Use the panel button at the left of the header. podkit remembers it in this browser."
-				}
-			}))
-		}))
 	};
 	settings_page(&ctx, "Appearance", &content)
 }
-
-const SELECTED: &str = "flex cursor-pointer flex-col gap-1 rounded-lg border border-foreground bg-accent p-4 text-accent-foreground outline-hidden focus-visible:ring-2 focus-visible:ring-ring/50";
-const UNSELECTED: &str = "flex cursor-pointer flex-col gap-1 rounded-lg border border-border bg-card p-4 text-card-foreground outline-hidden transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50";

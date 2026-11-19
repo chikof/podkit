@@ -10,9 +10,8 @@ mod members;
 mod registration;
 mod team;
 
-/// The tab row of the settings pages, for pages of other areas that sit among them (the
-/// Hugging Face token).
-pub use frame::settings_tabs;
+/// The settings frame, for pages of other areas that sit among them (the Hugging Face token).
+pub use frame::{settings_body, settings_crumbs};
 
 pub fn router() -> Router<AppState> {
 	Router::new()

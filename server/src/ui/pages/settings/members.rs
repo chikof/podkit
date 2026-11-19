@@ -15,10 +15,14 @@ use crate::error::AppResult;
 use crate::ids::{RoleId, TeamId, UserId};
 use crate::members::service::{self, MemberDetail, Role};
 use crate::state::AppState;
-use crate::ui::components::{BUTTON, INPUT, LABEL, card, card_content, card_heading};
+use crate::ui::components::{
+	BUTTON, INPUT, LABEL, SELECT, avatar, card, card_content, card_heading, icon,
+};
 use crate::ui::extract::TeamCtx;
-use crate::ui::layout::{Crumb, app_page, form_error};
+use crate::ui::layout::{app_page, form_error};
 use crate::ui::{error, sse};
+
+use super::frame::{settings_body, settings_crumbs};
 
 pub fn router() -> Router<AppState> {
 	Router::new()
@@ -31,10 +35,6 @@ pub fn router() -> Router<AppState> {
 
 fn base(team: TeamId) -> String {
 	format!("/teams/{team}/members")
-}
-
-fn crumbs<'a>() -> Vec<Crumb<'a>> {
-	vec![("Members", None)]
 }
 
 /// Members and the roles on offer, as the page needs them. The roles list is
@@ -64,24 +64,42 @@ fn member_list(ctx: &TeamCtx, data: &Data) -> Markup {
 	);
 	html! {
 		div id="member-list" {
-			ul {
-				@for m in &data.members {
-					li class="flex flex-wrap items-center justify-between gap-3 border-t border-border py-3 text-sm first:border-t-0" {
-						div class="flex min-w-0 flex-col gap-1" {
-							span class="font-medium" { (m.display_name) }
-							span class="text-muted-foreground" { (m.email) }
-						}
-						@if can_update {
-							div class="w-40" {
-								select class=(INPUT) aria-label={ "Role of " (m.display_name) }
-									data-user=(m.user_id.0) "data-on:change"=(post) {
-									@for r in &data.roles {
-										option value=(r.id.0) selected[r.id == m.role_id] { (r.name) }
+			table class="ui-table" {
+				caption class="ui-visually-hidden" { "Team members" }
+				thead {
+					tr {
+						th scope="col" { "Member" }
+						th scope="col" { "Role" }
+					}
+				}
+				tbody {
+					@for m in &data.members {
+						tr {
+							th scope="row" {
+								div class="ui-who" {
+									(avatar(&m.display_name))
+									div {
+										b { (m.display_name) }
+										small { (m.email) }
 									}
 								}
 							}
-						} @else {
-							span class="text-muted-foreground" { (m.role_name) }
+							td data-label="Role" {
+								@if can_update {
+									div class="ui-select-wrap ui-select-sm" {
+										select class=(SELECT) aria-label={ "Role of " (m.display_name) }
+											data-user=(m.user_id.0) "data-on:change"=(post) {
+											button { selectedcontent {} }
+											@for r in &data.roles {
+												option value=(r.id.0) selected[r.id == m.role_id] { (r.name) }
+											}
+										}
+										(icon("chevron-down"))
+									}
+								} @else {
+									span class="ui-role-fixed" { (m.role_name) }
+								}
+							}
 						}
 					}
 				}
@@ -95,21 +113,26 @@ fn add_card(ctx: &TeamCtx, data: &Data) -> Markup {
 	card(&html! {
 		(card_heading("Add a member", Some("The person needs a podkit account already. Use the email they signed up with.")))
 		(card_content(&html! {
-			form class="flex flex-col gap-4" "data-on:submit"=(post) {
-				label class=(LABEL) {
-					"Email"
-					input class=(INPUT) type="email" required "data-bind:email";
+			form class="ui-field-row ui-field-row-inv" "data-on:submit"=(post) {
+				div class="ui-field-group" {
+					label class=(LABEL) for="member-email" { "Email" }
+					input id="member-email" class=(INPUT) type="email" required placeholder="name@example.com" "data-bind:email";
 				}
-				label class=(LABEL) {
-					"Role"
-					select class=(INPUT) "data-bind:newrole" {
-						@for r in &data.roles {
-							option value=(r.id.0) { (r.name) }
+				div class="ui-field-group" {
+					label class=(LABEL) for="member-role" { "Role" }
+					div class="ui-select-wrap" {
+						select id="member-role" class=(SELECT) "data-bind:newrole" {
+							button { selectedcontent {} }
+							@for r in &data.roles {
+								option value=(r.id.0) { (r.name) }
+							}
 						}
+						(icon("chevron-down"))
 					}
 				}
-				div {
-					button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Add member" }
+				button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" {
+					(icon("plus"))
+					span { "Add member" }
 				}
 			}
 		}))
@@ -119,26 +142,25 @@ fn add_card(ctx: &TeamCtx, data: &Data) -> Markup {
 fn roles_card(data: &Data) -> Markup {
 	card(&html! {
 		(card_heading("Roles", Some("What each role is called and who owns it. Roles are read-only here.")))
-		(card_content(&html! {
-			table class="w-full text-left text-sm" {
-				thead {
-					tr class="text-muted-foreground" {
-						th class="pb-2 font-medium" { "Role" }
-						th class="pb-2 font-medium" { "Kind" }
-					}
+		table class="ui-table" {
+			caption class="ui-visually-hidden" { "Roles" }
+			thead {
+				tr {
+					th scope="col" { "Role" }
+					th scope="col" { "Kind" }
 				}
-				tbody {
-					@for r in &data.roles {
-						tr class="border-t border-border" {
-							td class="py-2 font-medium" { (r.name) }
-							td class="py-2 text-muted-foreground" {
-								@if r.is_builtin() { "Built-in" } @else { "This team" }
-							}
+			}
+			tbody {
+				@for r in &data.roles {
+					tr {
+						th scope="row" { (r.name) }
+						td data-label="Kind" {
+							@if r.is_builtin() { "Built-in" } @else { "This team" }
 						}
 					}
 				}
 			}
-		}))
+		}
 	})
 }
 
@@ -161,20 +183,27 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 		default_role(&data.roles)
 	);
 	let body = html! {
-		div class="flex flex-col gap-6" data-signals=(signals) {
-			(crate::ui::pages::settings::settings_tabs(&ctx))
+		div class="ui-settings-members" data-signals=(signals) {
 			(card(&html! {
-				(card_heading("Members", Some("Everyone who can work in this team.")))
-				(card_content(&html! {
-					(member_list(&ctx, &data))
-					div class="mt-3" { (form_error()) }
-				}))
+				div class="ui-card-h" {
+					div {
+						h2 class="ui-card-title" { "Members" span class="ui-count" { (data.members.len()) } }
+						p class="ui-card-sub" { "Everyone who can work in this team." }
+					}
+				}
+				(member_list(&ctx, &data))
+				div class="ui-card-b" { (form_error()) }
 			}))
 			@if can_add { (add_card(&ctx, &data)) }
 			@if !data.roles.is_empty() { (roles_card(&data)) }
 		}
 	};
-	Ok(app_page(&ctx, "Members", &crumbs(), &body))
+	Ok(app_page(
+		&ctx,
+		"Members",
+		&settings_crumbs(&ctx, "Members"),
+		&settings_body(&ctx, &body),
+	))
 }
 
 #[derive(Deserialize)]

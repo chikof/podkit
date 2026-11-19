@@ -8,7 +8,7 @@ use axum::routing::{get, post};
 use maud::{Markup, html};
 use serde::Deserialize;
 
-use super::{crumbs, models_url};
+use super::models_url;
 use crate::auth::permission::{Action, Resource};
 use crate::model_files::token;
 use crate::state::AppState;
@@ -68,19 +68,19 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Response, Respo
 		.await
 		.map_err(|e| error::page(&ctx, &e))?;
 	let body = html! {
-		div class="flex flex-col gap-6" data-signals="{_error: ''}" {
-			h1 class="text-xl font-semibold" { "Model settings" }
-			(crate::ui::pages::settings::settings_tabs(&ctx))
-			(card(&html! {
-				(card_heading("Hugging Face token", Some("Needed for gated models and to avoid rate limits. It is stored encrypted, sent only to the downloader, and can't be read back.")))
-				(card_content(&status_region(&ctx, configured)))
+		div class="contents" data-signals="{_error: ''}" {
+			(crate::ui::pages::settings::settings_body(&ctx, &html! {
+				(card(&html! {
+					(card_heading("Hugging Face token", Some("Needed for gated models and to avoid rate limits. It is stored encrypted, sent only to the downloader, and can't be read back.")))
+					(card_content(&status_region(&ctx, configured)))
+				}))
 			}))
 		}
 	};
 	Ok(app_page(
 		&ctx,
-		"Model settings",
-		&crumbs(&ctx, vec![("Settings", None)]),
+		"Hugging Face token",
+		&crate::ui::pages::settings::settings_crumbs(&ctx, "Hugging Face token"),
 		&body,
 	)
 	.into_response())

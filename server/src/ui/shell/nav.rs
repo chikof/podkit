@@ -69,6 +69,47 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	items
 }
 
+/// What the sidebar and the mobile tab bar list: the places above, then one "Settings"
+/// entry that stands for the settings pages (which the settings page lists in full).
+pub fn primary_items(ctx: &TeamCtx) -> Vec<NavItem> {
+	let mut items = main_items(ctx);
+	items.push(item(
+		"Settings",
+		format!("/teams/{}/settings", ctx.team.id),
+		"settings",
+	));
+	items
+}
+
+/// The entry of [`primary_items`] the request is on. Every settings page marks "Settings".
+pub fn primary_current(ctx: &TeamCtx) -> Option<String> {
+	let main = main_items(ctx);
+	let settings = settings_items(ctx);
+	let best = current(main.iter().chain(&settings), &ctx.path)?;
+	if settings.iter().any(|i| i.href == best) {
+		Some(format!("/teams/{}/settings", ctx.team.id))
+	} else {
+		Some(best.to_owned())
+	}
+}
+
+/// How many entries the tab bar shows.
+pub const TAB_SLOTS: usize = 5;
+
+/// The mobile tab bar: [`primary_items`] cut to [`TAB_SLOTS`], keeping "Settings" last. What
+/// does not fit (S3 destinations, for a user who sees everything) stays in the sidebar of a
+/// wider screen and in the command palette.
+pub fn tab_items(ctx: &TeamCtx) -> Vec<NavItem> {
+	let mut items = primary_items(ctx);
+	if items.len() > TAB_SLOTS
+		&& let Some(settings) = items.pop()
+	{
+		items.truncate(TAB_SLOTS - 1);
+		items.push(settings);
+	}
+	items
+}
+
 /// The item whose page `path` is on: the longest href that is `path` or a parent of it,
 /// so `/models/settings` marks the token page and not Models.
 pub fn current<'a>(items: impl IntoIterator<Item = &'a NavItem>, path: &str) -> Option<&'a str> {

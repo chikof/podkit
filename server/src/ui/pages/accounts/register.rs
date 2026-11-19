@@ -15,8 +15,8 @@ use tower_cookies::Cookies;
 use crate::auth::{self, Credentials, service};
 use crate::error::ServerError;
 use crate::state::AppState;
-use crate::ui::components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
-use crate::ui::layout::{self, form_error};
+use crate::ui::components::{BUTTON, INPUT, LABEL, icon, reveal_button};
+use crate::ui::layout::{self, form_banner};
 use crate::ui::{error, sse};
 
 pub fn router() -> Router<AppState> {
@@ -24,19 +24,17 @@ pub fn router() -> Router<AppState> {
 }
 
 fn closed_page() -> Markup {
-	layout::document(
-		"Registration is closed",
-		&html! {
-			main class="mx-auto max-w-sm px-6 pt-16" {
-				(card(&html! {
-					(card_header("Registration is closed", Some("This podkit instance doesn't accept new sign-ups. Ask an administrator to add you.")))
-					(card_content(&html! {
-						a class="text-sm font-medium hover:underline" href="/login" { "Back to sign in" }
-					}))
-				}))
-			}
-		},
-	)
+	let card = html! {
+		div class="ui-auth-head" {
+			h1 id="auth-t" { "Registration is closed" }
+			p class="ui-lede" { "This podkit instance doesn't accept new sign-ups. Ask an administrator to add you." }
+		}
+		a class={ (BUTTON) " ui-button-lg ui-button-block" } href="/login" {
+			(icon("arrow-left"))
+			span { "Back to sign in" }
+		}
+	};
+	layout::auth_page("Registration is closed", None, &card, None)
 }
 
 async fn page(State(s): State<AppState>) -> Response {
@@ -45,41 +43,51 @@ async fn page(State(s): State<AppState>) -> Response {
 		Ok(false) => return (StatusCode::FORBIDDEN, closed_page()).into_response(),
 		Err(e) => return error::bare(None, &e),
 	}
-	layout::document(
-		"Create an account",
-		&html! {
-			main class="mx-auto max-w-sm px-6 pt-16" data-signals="{name: '', email: '', password: '', confirm: '', _error: ''}" {
-				(card(&html! {
-					(card_header("Create your account", Some("On a new install the first account becomes the administrator.")))
-					(card_content(&html! {
-						form class="flex flex-col gap-4" "data-on:submit"="evt.preventDefault(); @post('/register')" {
-							label class=(LABEL) {
-								"Name"
-								input class=(INPUT) type="text" autocomplete="name" required maxlength="100" "data-bind:name";
-							}
-							label class=(LABEL) {
-								"Email"
-								input class=(INPUT) type="email" autocomplete="username" required "data-bind:email";
-							}
-							label class=(LABEL) {
-								"Password"
-								input class=(INPUT) type="password" autocomplete="new-password" required minlength="8" "data-bind:password";
-							}
-							label class=(LABEL) {
-								"Confirm password"
-								input class=(INPUT) type="password" autocomplete="new-password" required minlength="8" "data-bind:confirm";
-							}
-							(form_error())
-							p class="text-sm text-muted-foreground" "data-show"="!window.isSecureContext" style="display: none" {
-								"This connection isn't encrypted, so your password and session travel in plain text. Use HTTPS when podkit is reachable from other machines."
-							}
-							button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Create account" }
-							a class="text-sm text-muted-foreground hover:underline" href="/login" { "Already have an account? Sign in" }
-						}
-					}))
-				}))
+	let card = html! {
+		div class="ui-auth-head" {
+			h1 id="auth-t" { "Create your account" }
+			p class="ui-lede" { "On a new install the first account becomes the administrator." }
+		}
+		form class="ui-auth-form" "data-on:submit"="evt.preventDefault(); @post('/register')" {
+			div class="ui-field-group" {
+				label class=(LABEL) for="su-name" { "Name" }
+				input id="su-name" class=(INPUT) type="text" autocomplete="name" required autofocus maxlength="100" "data-bind:name";
 			}
-		},
+			div class="ui-field-group" {
+				label class=(LABEL) for="su-email" { "Email" }
+				input id="su-email" class=(INPUT) type="email" autocomplete="username" required placeholder="you@example.com" "data-bind:email";
+			}
+			div class="ui-field-group" {
+				label class=(LABEL) for="su-pw" { "Password" }
+				div class="ui-pw" {
+					input id="su-pw" class=(INPUT) type="password" autocomplete="new-password" required minlength="8" "data-bind:password";
+					(reveal_button())
+				}
+				p class="ui-hint" { "At least 8 characters." }
+			}
+			div class="ui-field-group" {
+				label class=(LABEL) for="su-confirm" { "Confirm password" }
+				div class="ui-pw" {
+					input id="su-confirm" class=(INPUT) type="password" autocomplete="new-password" required minlength="8" "data-bind:confirm";
+					(reveal_button())
+				}
+			}
+			(form_banner())
+			p class="ui-auth-foot" "data-show"="!window.isSecureContext" style="display: none" {
+				"This connection isn't encrypted, so your password and session travel in plain text. Use HTTPS when podkit is reachable from other machines."
+			}
+			button type="submit" class={ (BUTTON) " ui-button-lg ui-button-block" } "data-indicator:_busy" "data-attr:disabled"="$_busy" "data-attr:aria-busy"="$_busy" {
+				span { "Create account" }
+				(icon("arrow-right"))
+			}
+		}
+		p class="ui-auth-foot" { "Already have an account? " a href="/login" { "Sign in" } }
+	};
+	layout::auth_page(
+		"Create an account",
+		Some("{name: '', email: '', password: '', confirm: '', _error: ''}"),
+		&card,
+		Some(&layout::auth_meta()),
 	)
 	.into_response()
 }
@@ -274,6 +282,9 @@ mod tests {
 		f["confirm"] = json!("something else entirely");
 		let (_, _, body) = post_signals(&app, "/register", None, &f).await;
 		assert_contains(&body, "The passwords don't match.");
+		// A refused form clears both password fields, the confirmation too.
+		assert_contains(&body, "\"password\":\"\"");
+		assert_contains(&body, "\"confirm\":\"\"");
 
 		let mut f = form("Al", "al@example.com");
 		f["password"] = json!("short");

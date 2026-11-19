@@ -49,9 +49,9 @@ mod status;
 mod testing;
 mod theme;
 
-use components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
+use components::{BUTTON, INPUT, LABEL, icon, reveal_button};
 use extract::UiUser;
-use layout::form_error;
+use layout::form_banner;
 
 /// Versioned so browsers can cache it forever; bump with the vendored file.
 const DATASTAR_PATH: &str = "/static/datastar-1.0.5.js";
@@ -203,36 +203,39 @@ async fn login_page(State(s): State<AppState>, Query(query): Query<LoginQuery>) 
 		"{{email: '', password: '', next: {}, _error: ''}}",
 		sse::js_string(next)
 	);
-	layout::document(
-		"Sign in",
-		&html! {
-			main class="mx-auto max-w-sm px-6 pt-16" data-signals=(signals) {
-				(card(&html! {
-					(card_header("Sign in to podkit", Some("Use the email and password of your podkit account.")))
-					(card_content(&html! {
-						form class="flex flex-col gap-4" "data-on:submit"="evt.preventDefault(); @post('/login')" {
-							label class=(LABEL) {
-								"Email"
-								input class=(INPUT) type="email" autocomplete="username" required "data-bind:email";
-							}
-							label class=(LABEL) {
-								"Password"
-								input class=(INPUT) type="password" autocomplete="current-password" required "data-bind:password";
-							}
-							(form_error())
-							p class="text-sm text-muted-foreground" "data-show"="!window.isSecureContext" style="display: none" {
-								"This connection isn't encrypted, so your password and session travel in plain text. Use HTTPS when podkit is reachable from other machines."
-							}
-							button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Sign in" }
-							@if can_register {
-								a class="text-sm text-muted-foreground hover:underline" href="/register" { "No account yet? Create one" }
-							}
-						}
-					}))
-				}))
+	let card = html! {
+		div class="ui-auth-head" {
+			h1 id="auth-t" { "Sign in to podkit" }
+			p class="ui-lede" { "Use the email and password of your podkit account." }
+		}
+		form class="ui-auth-form" "data-on:submit"="evt.preventDefault(); @post('/login')" {
+			div class="ui-field-group" {
+				label class=(LABEL) for="si-email" { "Email" }
+				input id="si-email" class=(INPUT) type="email" autocomplete="username" required autofocus placeholder="you@example.com" "data-bind:email";
 			}
-		},
-	)
+			div class="ui-field-group" {
+				label class=(LABEL) for="si-pw" { "Password" }
+				div class="ui-pw" {
+					input id="si-pw" class=(INPUT) type="password" autocomplete="current-password" required "data-bind:password";
+					(reveal_button())
+				}
+			}
+			(form_banner())
+			p class="ui-auth-foot" "data-show"="!window.isSecureContext" style="display: none" {
+				"This connection isn't encrypted, so your password and session travel in plain text. Use HTTPS when podkit is reachable from other machines."
+			}
+			button type="submit" class={ (BUTTON) " ui-button-lg ui-button-block" } "data-indicator:_busy" "data-attr:disabled"="$_busy" "data-attr:aria-busy"="$_busy" {
+				span { "Sign in" }
+				(icon("arrow-right"))
+			}
+		}
+		@if can_register {
+			p class="ui-auth-foot" { "No account yet? " a href="/register" { "Create one" } }
+		} @else {
+			p class="ui-auth-foot" { "Ask an owner to add you if you do not have an account yet." }
+		}
+	};
+	layout::auth_page("Sign in", Some(&signals), &card, Some(&layout::auth_meta()))
 }
 
 #[derive(Deserialize)]
@@ -408,7 +411,7 @@ mod tests {
 		for path in ["/login", "/register"] {
 			let (s, _, page) = get_html(&app, path, None).await;
 			assert_eq!(s, StatusCode::OK, "{path}");
-			assert_contains(&page, "px-6 pt-16");
+			assert_contains(&page, "class=\"ui-auth\"");
 			assert!(
 				!page.contains("mt-16"),
 				"{path}: margin collapses out of the body"

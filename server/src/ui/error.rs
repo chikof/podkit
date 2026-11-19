@@ -6,6 +6,7 @@ use axum::http::{Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use maud::{Markup, html};
 
+use super::components::{BUTTON, BUTTON_OUTLINE, dialog_open_button, icon, kbd};
 use super::extract::{TeamCtx, UiUser};
 use super::{layout, sse};
 use crate::error::ServerError;
@@ -15,6 +16,8 @@ const GENERIC: &str = "Something went wrong. Try again.";
 struct View {
 	status: StatusCode,
 	title: &'static str,
+	/// The `<h1>` on the page: a sentence where `title` is a label.
+	heading: &'static str,
 	message: String,
 }
 
@@ -24,6 +27,7 @@ fn view(err: &ServerError) -> View {
 		return View {
 			status,
 			title: "Registration is closed",
+			heading: "Registration is closed",
 			message: err.to_string(),
 		};
 	}
@@ -31,11 +35,14 @@ fn view(err: &ServerError) -> View {
 		StatusCode::NOT_FOUND => View {
 			status,
 			title: "Not found",
-			message: "This page doesn't exist, or you don't have access to it.".to_owned(),
+			heading: "This page doesn’t exist",
+			message: "It may have been deleted or renamed, or you may not have access to it."
+				.to_owned(),
 		},
 		StatusCode::FORBIDDEN => View {
 			status,
 			title: "Not allowed",
+			heading: "You don’t have access to this",
 			message: "You don't have permission to do that.".to_owned(),
 		},
 		s if s.is_server_error() && s != StatusCode::BAD_GATEWAY => {
@@ -43,12 +50,14 @@ fn view(err: &ServerError) -> View {
 			View {
 				status,
 				title: "Something went wrong",
+				heading: "Something went wrong",
 				message: "The server hit an unexpected error. Try again in a moment.".to_owned(),
 			}
 		}
 		_ => View {
 			status,
 			title: "Can't do that",
+			heading: "Can’t do that",
 			message: err.to_string(),
 		},
 	}
@@ -65,12 +74,33 @@ pub fn message(err: &ServerError) -> String {
 	}
 }
 
-fn body(v: &View) -> Markup {
+/// The page body: the status, what happened, and where to go from here. `path` is what
+/// was asked for (a 404 names it); `back` is where "back" goes; `search` adds the palette
+/// button, which only exists inside the team's frame.
+fn body(v: &View, path: Option<&str>, back: (&str, &str), search: bool) -> Markup {
 	html! {
-		div class="flex flex-col gap-3 py-12" {
-			h1 class="text-2xl font-semibold" { (v.title) }
-			p class="text-muted-foreground" { (v.message) }
-			a class="text-sm font-medium hover:underline" href="/" { "Back to podkit" }
+		section class="ui-nf" aria-labelledby="nf-t" {
+			p class="ui-nf-code" { (v.status.as_u16()) }
+			h1 id="nf-t" { (v.heading) }
+			p class="ui-lede ui-nf-path" {
+				@if let (StatusCode::NOT_FOUND, Some(path)) = (v.status, path) {
+					"Nothing matches " code { (path) } ". "
+				}
+				(v.message)
+			}
+			div class="ui-page-actions" {
+				a class={ (BUTTON) } href=(back.0) {
+					(icon("arrow-left"))
+					span { (back.1) }
+				}
+				@if search {
+					(dialog_open_button("palette", BUTTON_OUTLINE, &html! {
+						(icon("search"))
+						span { "Search" }
+						(kbd("Ctrl K"))
+					}))
+				}
+			}
 		}
 	}
 }
@@ -79,15 +109,18 @@ fn body(v: &View) -> Markup {
 pub fn page(ctx: &TeamCtx, err: &ServerError) -> Response {
 	let v = view(err);
 	let crumbs = [(v.title, None)];
-	(v.status, layout::app_page(ctx, v.title, &crumbs, &body(&v))).into_response()
+	let projects = format!("/teams/{}/projects", ctx.team.id);
+	let main = body(&v, Some(&ctx.path), (&projects, "Back to Projects"), true);
+	(v.status, layout::app_page(ctx, v.title, &crumbs, &main)).into_response()
 }
 
 /// An error page with no team around it, for failures before a team is known.
 pub fn bare(user: Option<&UiUser>, err: &ServerError) -> Response {
 	let v = view(err);
+	let main = body(&v, None, ("/", "Back to podkit"), false);
 	(
 		v.status,
-		layout::bare_page(user.map(|u| u.name.as_str()), v.title, &body(&v)),
+		layout::bare_page(user.map(|u| u.name.as_str()), v.title, &main),
 	)
 		.into_response()
 }

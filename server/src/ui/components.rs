@@ -57,7 +57,7 @@ pub use dialog::{Dismiss, dialog, dialog_cancel, dialog_open_button};
 pub use empty_state::empty_state;
 pub use field::{
 	CHECKBOX, INPUT, LABEL, SELECT, SWITCH, TEXTAREA, checkbox_field, copy_field, error_text,
-	help_text, invalid_text, password_field, select_field, switch_field, text_field,
+	help_text, invalid_text, password_field, reveal_button, select_field, switch_field, text_field,
 	textarea_field,
 };
 pub use icon::{icon, icon_with};

@@ -44,6 +44,17 @@ pub const SWITCH: &str = "ui-switch";
 /// `aria-pressed`, and the name of the button follows it.
 static REVEAL: &str = "const i = el.previousElementSibling; const show = i.type === 'password'; i.type = show ? 'text' : 'password'; el.setAttribute('aria-pressed', show); el.setAttribute('aria-label', show ? 'Hide password' : 'Show password')";
 
+/// The button that reveals the password in the input before it (a bound input on the
+/// sign-in and sign-up forms; `password_field` is the plain-form version).
+pub fn reveal_button() -> Markup {
+	html! {
+		button type="button" class="ui-pw-btn" aria-label="Show password" aria-pressed="false" "data-on:click"=(REVEAL) {
+			(icon("eye"))
+			(icon("eye-off"))
+		}
+	}
+}
+
 /// Copies the value of the input before the button. The Clipboard API is withheld over
 /// plain HTTP, so the fallback copies through the selected input.
 static COPY: &str = "const i = el.previousElementSibling; const done = () => { const s = el.querySelector('span'); s.textContent = 'Copied'; setTimeout(() => s.textContent = 'Copy', 1600) }; if (window.isSecureContext && navigator.clipboard) { navigator.clipboard.writeText(i.value).then(done) } else { i.select(); document.execCommand('copy'); done() }";

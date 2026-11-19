@@ -29,7 +29,7 @@ calendar check chevron-down chevron-left chevron-right chevron-up chevrons-up-do
 circle circle-alert circle-check circle-help circle-x clock cloud command container copy
 cpu database download ellipsis ellipsis-vertical external-link eye eye-off file-text filter
 folder folder-open git-branch globe grip-vertical hard-drive history house inbox info key-round
-layers layout-dashboard link loader-circle lock log-out memory-stick menu minus monitor moon
+layers layout-dashboard layout-grid link loader-circle lock log-out memory-stick menu minus monitor moon
 network package pause pencil play plus power refresh-cw rocket rotate-ccw save scroll-text
 search server settings shield square sun tag terminal trash-2 triangle-alert undo-2 upload
 user users webhook wrench x zap panel-left life-buoy

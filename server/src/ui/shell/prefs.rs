@@ -1,8 +1,6 @@
 //! Per-request state the shell reads from cookies, without every handler passing it along:
 //!
-//! - `sidebar`: `collapsed` when the user folded the sidebar to icons. The server writes the
-//!   state into the first byte of the page, so the layout never jumps on load.
-//! - `flash`: a message left by an action for the page it redirects to ("Team renamed").
+//! - `flash`: a message left by an action for the page it redirects to (“Team renamed”).
 //!   It is shown once as a toast, then the cookie is dropped.
 //!
 //! The same task-local pattern as `ui::theme`.
@@ -18,7 +16,6 @@ use tower_cookies::{Cookie, Cookies};
 use crate::ui::components::Tone;
 
 const FLASH: &str = "flash";
-const SIDEBAR: &str = "sidebar";
 /// A message longer than this is cut; flash is for one short sentence.
 const MAX_FLASH: usize = 200;
 
@@ -31,17 +28,11 @@ pub struct Flash {
 
 #[derive(Debug, Clone, Default)]
 struct Prefs {
-	collapsed: bool,
 	flash: Option<Flash>,
 }
 
 tokio::task_local! {
 	static CURRENT: Prefs;
-}
-
-/// Whether the sidebar is folded to icons.
-pub fn sidebar_collapsed() -> bool {
-	CURRENT.try_with(|p| p.collapsed).unwrap_or_default()
 }
 
 /// The message left for this page, if any.
@@ -124,12 +115,11 @@ fn cookie_value<'h>(headers: &'h HeaderMap, name: &str) -> Option<&'h str> {
 
 fn prefs_from(headers: &HeaderMap) -> Prefs {
 	Prefs {
-		collapsed: cookie_value(headers, SIDEBAR) == Some("collapsed"),
 		flash: cookie_value(headers, FLASH).and_then(decode),
 	}
 }
 
-/// Makes the request's cookies available to `sidebar_collapsed()` and `pending_flash()`
+/// Makes the request's cookies available to `pending_flash()`
 /// while the handler runs, and drops the flash cookie once a page that shows it has been
 /// sent. A redirect keeps it, so it survives to the page it was meant for.
 pub async fn scope(req: Request, next: Next) -> Response {
@@ -192,7 +182,6 @@ mod tests {
 		);
 		// `flash` is the encoded pair; the raw header carries it percent-encoded once.
 		let p = prefs_from(&h);
-		assert!(p.collapsed);
 		assert_eq!(
 			p.flash, None,
 			"the cookie value is the serialized pair, not double-encoded"
@@ -207,7 +196,6 @@ mod tests {
 			format!("sidebar=open; flash={value}").parse().unwrap(),
 		);
 		let p = prefs_from(&h);
-		assert!(!p.collapsed);
 		assert_eq!(p.flash.unwrap().message, "Done");
 	}
 }
