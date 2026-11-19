@@ -91,6 +91,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.route("/health", get(health))
 		.nest("/api/v1", api)
 		.nest("/webhooks", webhooks::router())
+		.fallback(ui::not_found)
 		.layer(CookieManagerLayer::new())
 		.layer(compression())
 		.with_state(state))

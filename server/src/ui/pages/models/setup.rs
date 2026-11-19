@@ -110,9 +110,15 @@ impl Setup<'_> {
 			section id=(id) class="flex flex-col gap-4 outline-hidden" tabindex="-1" aria-labelledby=(heading)
 				"data-show"=[self.stepped.then(|| format!("$step == {n}"))]
 				style=[(self.stepped && n != self.start).then_some("display: none")] {
-				h3 id=(heading) class="text-base font-semibold" {
+				@let title_inner = html! {
 					@if self.stepped { span class="text-muted-foreground" { (n) " of 4 · " } }
 					(title)
+				};
+				// The dialog has its own h2, so its steps are h3; on the page they follow the h1.
+				@if self.stepped {
+					h3 id=(heading) class="text-base font-semibold" { (title_inner) }
+				} @else {
+					h2 id=(heading) class="text-base font-semibold" { (title_inner) }
 				}
 				(body)
 				@if self.stepped { div class="flex flex-wrap justify-between gap-2" { (nav) } }

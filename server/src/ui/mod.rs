@@ -68,6 +68,19 @@ static APP_CSS_HREF: LazyLock<String> = LazyLock::new(|| {
 	format!("/static/app.css?v={short}")
 });
 
+/// The answer for a path no route matches: the 404 page for a browser, an empty 404 for
+/// the API and for anything that is not a page request.
+pub async fn not_found(method: Method, uri: axum::http::Uri) -> Response {
+	let is_page = (method == Method::GET || method == Method::HEAD)
+		&& !uri.path().starts_with("/api/")
+		&& !uri.path().starts_with("/webhooks/");
+	if is_page {
+		error::bare(None, &ServerError::NotFound)
+	} else {
+		StatusCode::NOT_FOUND.into_response()
+	}
+}
+
 pub fn router() -> Router<AppState> {
 	Router::new()
 		.route("/", get(index))

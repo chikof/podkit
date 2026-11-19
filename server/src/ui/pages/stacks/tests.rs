@@ -889,3 +889,24 @@ async fn an_unauthenticated_stack_page_and_action_are_sent_to_sign_in(db: PgPool
 		post_signals(&f.app, &format!("{}/deploy", f.stack(id)), None, &json!({})).await;
 	assert_contains(&body, "/login");
 }
+
+/// A stack's pages sit in the environment it lives in, not the project's first one: the
+/// breadcrumb names it.
+#[db_test]
+async fn a_stack_outside_the_first_environment_is_named_in_the_breadcrumb(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	f.post(
+		&format!("/teams/{}/projects/{}/environments", f.team, f.project),
+		&json!({ "newName": "Staging", "newSlug": "staging" }),
+	)
+	.await;
+	let staging = env_id(&db, f.project, "staging").await;
+	let mut signals = f.create_signals("Blog", COMPOSE);
+	signals["environment"] = json!(staging.to_string());
+	f.post(&f.base(), &signals).await;
+	let id = newest_stack(&db).await;
+	let (s, body) = f.get(&f.stack(id)).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_contains(&body, "class=\"ui-crumb-link\">Staging</a>");
+	assert_not_contains(&body, "class=\"ui-crumb-link\">production</a>");
+}

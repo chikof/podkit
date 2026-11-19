@@ -584,6 +584,8 @@ async fn creating_an_image_app_shows_the_image_on_general_and_deploys_it(db: PgP
 		)
 		.await;
 	assert_contains(&body, "Application created");
+	assert_contains(&body, "registry or CI");
+	assert_not_contains(&body, "git provider");
 	let webhook_secret = shown_value(&body, "Webhook secret");
 	assert_eq!(webhook_secret.len(), 48);
 	assert_eq!(

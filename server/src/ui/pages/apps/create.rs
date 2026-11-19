@@ -20,6 +20,7 @@ use super::form::{
 	image_source_fields, runtime_fields,
 };
 use super::{app_url, crumbs, origin, project_url};
+use crate::applications::SourceKind;
 use crate::applications::service::{self, Created};
 use crate::error::ServerError;
 use crate::ids::{EnvironmentId, ProjectId, ServerId, TeamId};
@@ -178,7 +179,11 @@ fn created_card(ctx: &TeamCtx, origin: &str, created: &Created) -> Markup {
 	html! {
 		div id="app-form" {
 			(card(&html! {
-				(card_section("Application created", Some("Add the webhook to your git provider to deploy on every push."), None))
+				(card_section("Application created", Some(if app.source_kind == SourceKind::Git {
+					"Add the webhook to your git provider to deploy on every push."
+				} else {
+					"Call the webhook from your registry or CI to redeploy when the image changes."
+				}), None))
 				(card_content(&html! {
 					div class="flex flex-col gap-4" {
 						(copy_row("Webhook URL", &webhook))

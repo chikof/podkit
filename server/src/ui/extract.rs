@@ -13,7 +13,9 @@ use crate::auth::permission::{self, Permissions};
 use crate::auth::{SessionToken, session, users};
 use crate::environments::{self, Environment};
 use crate::error::ServerError;
-use crate::ids::{ApplicationId, EnvironmentId, ProjectId, TeamId, UserId};
+use crate::ids::{
+	ApplicationId, DatabaseId, EnvironmentId, ModelId, ProjectId, StackId, TeamId, UserId,
+};
 use crate::projects::{self, Project};
 use crate::state::AppState;
 use crate::teams::{self, Team};
@@ -106,6 +108,47 @@ pub struct ProjectScope {
 	pub environment: Environment,
 }
 
+/// The resource a page is about, named by its path parameter.
+#[derive(Debug, Clone, Copy)]
+enum Resource {
+	App(ApplicationId),
+	Database(DatabaseId),
+	Stack(StackId),
+	Model(ModelId),
+}
+
+impl Resource {
+	/// The environment the resource lives in; `None` when it is not found (the page's
+	/// own handler reports that).
+	async fn environment(
+		self,
+		state: &AppState,
+		team: TeamId,
+		project: ProjectId,
+	) -> Option<EnvironmentId> {
+		use crate::scope;
+		let db = &state.db;
+		match self {
+			Self::App(id) => scope::application(db, team, project, id)
+				.await
+				.ok()
+				.map(|r| r.environment_id),
+			Self::Database(id) => scope::database(db, team, project, id)
+				.await
+				.ok()
+				.map(|r| r.environment_id),
+			Self::Stack(id) => scope::stack(db, team, project, id)
+				.await
+				.ok()
+				.map(|r| r.environment_id),
+			Self::Model(id) => scope::model(db, team, project, id)
+				.await
+				.ok()
+				.map(|r| r.environment_id),
+		}
+	}
+}
+
 impl ProjectScope {
 	/// Best effort: a failure leaves the header without switchers, and the page's own
 	/// handler reports the real error. Only navigations pay for it.
@@ -116,7 +159,7 @@ impl ProjectScope {
 		team: TeamId,
 		project: Option<ProjectId>,
 		env_slug: Option<&str>,
-		app: Option<ApplicationId>,
+		resource: Option<Resource>,
 	) -> Option<Self> {
 		// Datastar fragments (polls, previews) never render the header.
 		if !is_navigation(&parts.method) || parts.headers.contains_key("datastar-request") {
@@ -143,19 +186,20 @@ impl ProjectScope {
 			.ok()?;
 		// The path names the environment (`/projects/{p}/{env_slug}`) on an environment's
 		// own page; `?environment=<id>` picks it on the project's other pages.
-		// An application's pages sit in the environment the application lives in.
-		let app_environment = match (app, wanted) {
-			(Some(app), None) => crate::scope::application(&state.db, team, project_id, app)
-				.await
-				.ok()
-				.map(|a| a.environment_id),
+		// A resource's own pages sit in the environment the resource lives in.
+		let resource_environment = match (resource, wanted) {
+			(Some(resource), None) => resource.environment(state, team, project_id).await,
 			_ => None,
 		};
 		let environment = environments
 			.iter()
 			.find(|e| env_slug.is_some_and(|slug| e.slug == slug))
 			.or_else(|| environments.iter().find(|e| Some(e.id) == wanted))
-			.or_else(|| environments.iter().find(|e| Some(e.id) == app_environment))
+			.or_else(|| {
+				environments
+					.iter()
+					.find(|e| Some(e.id) == resource_environment)
+			})
 			.or_else(|| environments.first())?
 			.clone();
 		Some(Self {
@@ -179,7 +223,7 @@ impl FromRequestParts<AppState> for TeamCtx {
 			error::respond(&parts.method, Some(user), &e)
 		};
 
-		let (team_id, project_id, env_slug, app_id) =
+		let (team_id, project_id, env_slug, resource) =
 			match RawPathParams::from_request_parts(parts, state).await {
 				Ok(params) => {
 					let id = |name: &str| {
@@ -196,7 +240,13 @@ impl FromRequestParts<AppState> for TeamCtx {
 						id("team_id"),
 						id("project_id").map(ProjectId),
 						slug,
-						id("app_id").map(ApplicationId),
+						id("app_id")
+							.map(|n| Resource::App(ApplicationId(n)))
+							.or_else(|| {
+								id("database_id").map(|n| Resource::Database(DatabaseId(n)))
+							})
+							.or_else(|| id("stack_id").map(|n| Resource::Stack(StackId(n))))
+							.or_else(|| id("model_id").map(|n| Resource::Model(ModelId(n)))),
 					)
 				}
 				Err(_) => (None, None, None, None),
@@ -226,7 +276,7 @@ impl FromRequestParts<AppState> for TeamCtx {
 			team_id,
 			project_id,
 			env_slug.as_deref(),
-			app_id,
+			resource,
 		)
 		.await;
 

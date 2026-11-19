@@ -296,6 +296,18 @@ async fn the_header_switches_team_project_and_environment(db: PgPool) {
 }
 
 #[db_test]
+async fn an_unknown_path_is_the_404_page_for_a_browser_and_bare_for_the_api(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (s, _, body) = get_html(&app, "/no-such-page", None).await;
+	assert_eq!(s, StatusCode::NOT_FOUND);
+	assert_contains(&body, "<h1");
+	assert_contains(&body, "Not found");
+	let (s, _, body) = get_html(&app, "/api/v1/no-such", None).await;
+	assert_eq!(s, StatusCode::NOT_FOUND);
+	assert!(body.is_empty(), "{body}");
+}
+
+#[db_test]
 async fn another_teams_project_gets_the_404_page_and_no_switchers(db: PgPool) {
 	let app = app(db.clone()).await;
 	let (alice_token, alice_team) = user_with_team(&app, "alice").await;
