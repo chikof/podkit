@@ -22,8 +22,8 @@ pub fn main_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	let can = |resource| ctx.perms.can(Action::Read, resource);
 	let mut items = Vec::new();
 	if can(Resource::Project) {
-		items.push(item("Projects", format!("{base}/projects"), "folder"));
-		items.push(item("Templates", format!("{base}/templates"), "layers"));
+		items.push(item("Projects", format!("{base}/projects"), "layout-grid"));
+		items.push(item("Templates", format!("{base}/templates"), "package"));
 	}
 	if can(Resource::Server) {
 		items.push(item("Servers", format!("{base}/servers"), "server"));

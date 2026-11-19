@@ -115,8 +115,8 @@ fn var_field(i: usize, v: &VariableInfo) -> Markup {
 		""
 	};
 	html! {
-		div class="flex flex-col gap-2" {
-			label for=(format!("tpl-var-{i}")) class="text-sm leading-none font-medium" {
+		div class="ui-field-group" {
+			label for=(format!("tpl-var-{i}")) class="ui-label" {
 				(title)
 				@if v.kind == "input" && !v.required { span class="font-normal text-muted-foreground" { " (optional)" } }
 			}
@@ -127,10 +127,10 @@ fn var_field(i: usize, v: &VariableInfo) -> Markup {
 				aria-describedby=[v.description.as_ref().map(|_| help_id.as_str())]
 				"data-bind"=(bind);
 			@if let Some(d) = &v.description {
-				p id=(help_id) class="text-sm text-muted-foreground" { (d) }
+				p id=(help_id) class="ui-hint" { (d) }
 			}
 			@if v.secret {
-				p class="text-sm text-muted-foreground" { "Stored encrypted. It is never shown again." }
+				p class="ui-hint" { "Stored encrypted. It is never shown again." }
 			}
 		}
 	}
@@ -178,21 +178,26 @@ pub(super) fn dialog(place: Place, l: &Loaded, vars: &[VariableInfo], targets: &
 		dialog id=(DIALOG_ID) class="ui-dialog ui-dialog-wide" closedby="closerequest"
 			aria-labelledby="tpl-deploy-title" aria-describedby="tpl-deploy-description"
 			"data-signals"=(signals(l, vars, targets).to_string()) {
-			div id="tpl-deploy-panel" class="flex flex-col gap-5 p-6" {
-				div class="flex flex-col gap-1.5 pr-8" {
-					h2 id="tpl-deploy-title" class="text-lg leading-none font-semibold" { "Deploy " (t.name) }
-					p id="tpl-deploy-description" class="text-sm text-muted-foreground" {
-						@if l.plain_app { "It runs as one application on the server you pick." }
-						@else { "It runs as a stack of " (l.services.len()) " services on the server you pick." }
+			div id="tpl-deploy-panel" class="ui-dlg-panel" {
+				div class="ui-dialog-head" {
+					div {
+						h2 id="tpl-deploy-title" class="ui-dialog-title" { "Deploy " (t.name) }
+						p id="tpl-deploy-description" class="ui-dialog-desc" {
+							@if l.plain_app { "It runs as one application on the server you pick." }
+							@else { "It runs as a stack of " (l.services.len()) " services on the server you pick." }
+						}
+					}
+					form method="dialog" {
+						button class="ui-icon-btn" aria-label="Close" { (icon("x")) }
 					}
 				}
 				@if let Some(blocked) = &blocked {
-					(blocked)
-					div class="flex justify-end" {
+					div class="ui-dialog-body" { (blocked) }
+					div class="ui-dialog-foot" {
 						form method="dialog" { button class=(BUTTON_OUTLINE) autofocus { "Close" } }
 					}
 				} @else {
-					form id="tpl-deploy-form" class="flex flex-col gap-4" "data-on:submit"=(post) {
+					form id="tpl-deploy-form" class="ui-dialog-body" "data-on:submit"=(post) {
 						div class="grid grid-cols-1 gap-4 sm:grid-cols-2" {
 							label class=(LABEL) {
 								"Project"
@@ -220,8 +225,8 @@ pub(super) fn dialog(place: Place, l: &Loaded, vars: &[VariableInfo], targets: &
 						}
 						@let questions = asked(vars);
 						@if !questions.is_empty() {
-							fieldset class="flex flex-col gap-4 rounded-lg border border-border p-4" {
-								legend class="px-1 text-sm font-medium" { "Variables" }
+							fieldset {
+								legend { "Variables" }
 								@for (i, v) in questions.iter().enumerate() {
 									(var_field(i, v))
 								}
@@ -229,7 +234,7 @@ pub(super) fn dialog(place: Place, l: &Loaded, vars: &[VariableInfo], targets: &
 						}
 						(form_error())
 					}
-					div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end" {
+					div class="ui-dialog-foot" {
 						form method="dialog" { button class=(BUTTON_OUTLINE) { "Cancel" } }
 						button type="submit" form="tpl-deploy-form" class=(BUTTON)
 							"data-indicator:_busy" "data-attr:disabled"="$_busy" {
@@ -237,11 +242,6 @@ pub(super) fn dialog(place: Place, l: &Loaded, vars: &[VariableInfo], targets: &
 							span "data-show"="$_busy" style="display: none" { "Deploying" }
 						}
 					}
-				}
-			}
-			form method="dialog" class="absolute top-3 right-3" {
-				button class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-hidden hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50" aria-label="Close" {
-					(icon("x"))
 				}
 			}
 		}
@@ -321,17 +321,22 @@ fn target(team: TeamId, project: ProjectId, d: &Deployed) -> String {
 
 fn credentials_panel(href: &str, d: &Deployed) -> Markup {
 	html! {
-		div id="tpl-deploy-panel" class="flex flex-col gap-5 p-6" {
-			div class="flex flex-col gap-1.5 pr-8" {
-				h2 id="tpl-deploy-title" class="text-lg leading-none font-semibold" { (d.name) " is deploying" }
-				p id="tpl-deploy-description" class="text-sm text-muted-foreground" {
-					"Use these to sign in. podkit shows them only now and cannot show them again."
+		div id="tpl-deploy-panel" class="ui-dlg-panel" {
+			div class="ui-dialog-head" {
+				div {
+					h2 id="tpl-deploy-title" class="ui-dialog-title" { (d.name) " is deploying" }
+					p id="tpl-deploy-description" class="ui-dialog-desc" {
+						"Use these to sign in. podkit shows them only now and cannot show them again."
+					}
+				}
+				form method="dialog" {
+					button class="ui-icon-btn" aria-label="Close" { (icon("x")) }
 				}
 			}
-			dl class="flex flex-col gap-3" {
+			dl class="ui-dialog-body" {
 				@for (name, value) in &d.credentials {
-					div class="flex flex-col gap-1.5" {
-						dt class="text-sm font-medium" { (name) }
+					div class="ui-field-group" {
+						dt class="ui-label" { (name) }
 						dd class="flex gap-2" {
 							input class=(INPUT) type="text" readonly value=(value) autocomplete="off" spellcheck="false"
 								aria-label=(name) "data-on:focus"="el.select()";
@@ -341,7 +346,7 @@ fn credentials_panel(href: &str, d: &Deployed) -> Markup {
 					}
 				}
 			}
-			div class="flex justify-end" {
+			div class="ui-dialog-foot" {
 				(link_button(Variant::Default, Size::Md, href, &html! { "Open " (d.name) }))
 			}
 		}

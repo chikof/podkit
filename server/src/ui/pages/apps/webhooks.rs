@@ -46,7 +46,7 @@ fn secret_slot(secret: Option<&str>) -> Markup {
 			@if let Some(secret) = secret {
 				div class="flex flex-col gap-3" {
 					(copy_row("New webhook secret", secret))
-					p class="text-sm text-destructive" { "Copy the secret now. It is shown only this once and can't be recovered." }
+					div class="ui-banner ui-banner-warn" role="status" { (icon("triangle-alert")) div class="ui-banner-body" { b { "Copy the secret now." } " It is shown only this once and can't be recovered." } }
 				}
 			}
 		}

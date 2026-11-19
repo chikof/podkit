@@ -9,7 +9,7 @@ use super::icon::icon;
 pub fn breadcrumb(crumbs: &[(&str, Option<String>)]) -> Markup {
 	html! {
 		nav aria-label="Breadcrumb" {
-			ol class="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground" {
+			ol class="flex flex-wrap items-center gap-1.5 text-muted-foreground" {
 				@for (i, (label, href)) in crumbs.iter().enumerate() {
 					li class="inline-flex items-center gap-1.5" {
 						@if i > 0 { span class="text-muted-foreground/60" { (icon("chevron-right")) } }

@@ -346,18 +346,25 @@ impl Setup<'_> {
 	/// The dialog's content: heading, stepper, and the four steps in one form.
 	fn dialog_content(&self) -> Markup {
 		html! {
-			div id="setup-body" class="flex flex-col gap-5 p-6" "data-signals"=(self.signals()) {
-				div class="flex flex-col gap-1.5 pr-8" {
-					h2 id="setup-title" class="text-lg leading-none font-semibold" { "Set up " (self.model.name) }
-					p class="text-sm text-muted-foreground" { "Download the weights to a server, then start the engine." }
+			div id="setup-body" class="ui-dlg-panel" "data-signals"=(self.signals()) {
+				div class="ui-dialog-head" {
+					div {
+						h2 id="setup-title" class="ui-dialog-title" { "Set up " (self.model.name) }
+						p class="ui-dialog-desc" { "Download the weights to a server, then start the engine." }
+					}
+					form method="dialog" {
+						button class="ui-icon-btn" aria-label="Close" { (icon("x")) }
+					}
 				}
-				(stepper("Set-up steps", &flow_steps(), &Current::Signal("step")))
-				div class="ui-setup-panels" {
-					form class="flex flex-col gap-6" "data-on:submit"=(self.download_post()) {
-						(self.step_model())
-						(self.step_server())
-						(self.step_recipe())
-						(self.step_overrides())
+				div class="ui-dialog-body" {
+					(stepper("Set-up steps", &flow_steps(), &Current::Signal("step")))
+					div class="ui-setup-panels" {
+						form class="flex flex-col gap-6" "data-on:submit"=(self.download_post()) {
+							(self.step_model())
+							(self.step_server())
+							(self.step_recipe())
+							(self.step_overrides())
+						}
 					}
 				}
 			}

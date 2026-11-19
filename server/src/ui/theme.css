@@ -199,7 +199,7 @@
 html {
 	-webkit-text-size-adjust: 100%;
 	text-size-adjust: 100%;
-	scrollbar-color: color-mix(in oklab, var(--muted-foreground) 40%, transparent) transparent;
+	scrollbar-color: color-mix(in oklab, var(--muted-foreground) 65%, transparent) transparent;
 }
 
 body {

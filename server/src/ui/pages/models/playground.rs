@@ -201,7 +201,7 @@ impl Run {
 		// on its summary toggles it. It stays hidden (`:has(:empty)`) for a model that does
 		// not think. Its body is not a live region, so no thinking token is announced.
 		let markup = html! {
-			article class="ui-pair" aria-label={ "Exchange " (n + 1) } {
+			article class="ui-xchg" aria-label={ "Exchange " (n + 1) } {
 				div class="ui-msg ui-msg-user" {
 					span class="ui-msg-who" { "You" }
 					p class="ui-msg-body" { (self.prompt) }

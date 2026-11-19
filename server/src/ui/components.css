@@ -149,6 +149,8 @@ code { font-size: 0.92em; }
 .ui-field:disabled { opacity: 0.5; cursor: not-allowed; }
 .ui-field[readonly] { background-color: var(--muted); }
 textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block: var(--s-3); line-height: 1.5; resize: vertical; }
+/* Scrollable fields get the thin page scrollbar, not the platform's boxed one with arrows. */
+textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-color: color-mix(in oklab, var(--muted-foreground) 65%, transparent) transparent; }
 
 /* Invalid once the user touched it (`:user-invalid`), or when the server says so with
    aria-invalid. Never on page load. */
@@ -156,8 +158,8 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 .ui-field:user-invalid:focus-visible, .ui-field[aria-invalid="true"]:focus-visible { outline-color: var(--destructive); }
 
 /* label, hint and error: the error shows only while its field is invalid */
-.ui-field-group { display: grid; gap: var(--s-2); min-width: 0; }
-.ui-label { display: grid; gap: var(--s-2); font-size: var(--fs-sm); font-weight: var(--fw-medium); line-height: 1.3; }
+.ui-field-group { display: grid; align-content: start; gap: var(--s-2); min-width: 0; }
+.ui-label { display: grid; align-content: start; gap: var(--s-2); font-size: var(--fs-sm); font-weight: var(--fw-medium); line-height: 1.3; }
 .ui-hint { font-size: var(--fs-xs); color: var(--muted-foreground); }
 .ui-error { display: flex; align-items: flex-start; gap: var(--s-2); font-size: var(--fs-xs); color: var(--destructive); }
 .ui-field-group > .ui-error[data-when="invalid"] { display: none; }
@@ -924,8 +926,8 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 	content: "";
 	position: absolute;
 	inset-block: 1rem -0.25rem;
-	inset-inline-start: 0.1875rem;
-	width: 1px;
+	inset-inline-start: 3px;
+	width: 2px;
 	background-color: var(--border);
 }
 
@@ -1007,7 +1009,7 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 }
 
 .ui-choice:hover {
-	background-color: var(--accent);
+	background-color: var(--secondary);
 }
 
 .ui-choice > input {
@@ -1019,9 +1021,9 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 }
 
 .ui-choice:has(> input:checked) {
-	border-color: var(--foreground);
+	border-color: var(--primary);
 	background-color: var(--accent);
-	box-shadow: 0 0 0 1px var(--foreground);
+	box-shadow: 0 0 0 1px var(--primary);
 }
 
 .ui-choice:has(> input:focus-visible) {
@@ -1193,8 +1195,9 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 /* The environment: tabs, a filter, then one row per resource. Logo, name and type, URL and
    last deploy, status, and (on hover and on focus) CPU and memory. */
 .ui-res-filter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
-.ui-res-tabrow { display: flex; align-items: center; gap: var(--s-2); }
-.ui-res-tabrow > :first-child { flex: 1 1 auto; min-width: 0; }
+.ui-res-tabrow { position: relative; display: flex; align-items: center; gap: var(--s-2); }
+.ui-res-tabrow::after { content: ""; position: absolute; inset-inline: 0; inset-block-end: 0; block-size: var(--bw); background-color: var(--border); }
+.ui-res-tabrow > :first-child { position: relative; z-index: 1; flex: 1 1 auto; min-width: 0; }
 .ui-res-tabrow .ui-tabs { margin-bottom: 0; }
 .ui-res-search { position: relative; flex: 1 1 12rem; min-width: 0; }
 .ui-res-search .ui-field { padding-inline-start: 2.25rem; }
@@ -1309,8 +1312,8 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 /* The head of a resource page: its mark, kind, name, status line and the actions. */
 .ui-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-5); }
 .ui-head-logo { flex-shrink: 0; }
-.ui-head-id { display: grid; flex: 1 1 15rem; gap: var(--s-2); min-width: 0; }
-.ui-head-id h1 { margin: 0; font-size: var(--fs-3xl); font-weight: var(--fw-bold); line-height: 1.15; overflow-wrap: anywhere; }
+.ui-head > .ui-head-id { display: grid; flex: 1 1 15rem; align-items: start; gap: var(--s-2); min-width: 0; }
+.ui-head > .ui-head-id h1 { margin: 0; font-size: var(--fs-2xl); font-weight: var(--fw-bold); line-height: 1.2; overflow-wrap: anywhere; }
 .ui-eyebrow { display: flex; align-items: center; gap: var(--s-2); margin: 0; color: var(--subtle-foreground); font-size: var(--fs-xs); }
 .ui-head-sub { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); color: var(--muted-foreground); font-size: var(--fs-sm); }
 .ui-head-url { display: inline-flex; min-width: 0; align-items: center; gap: var(--s-2); color: var(--primary-text); text-decoration: none; }
@@ -1543,7 +1546,7 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 .ui-pg { display: grid; grid-template-columns: minmax(0, 1fr) 18.75rem; gap: var(--s-6); align-items: start; }
 .ui-chat { display: grid; gap: var(--s-3); min-width: 0; }
 .ui-msgs { display: grid; gap: var(--s-6); padding-block: var(--s-4); }
-.ui-pair { display: grid; gap: var(--s-6); min-width: 0; }
+.ui-xchg { display: grid; gap: var(--s-6); min-width: 0; }
 .ui-msg { display: grid; gap: var(--s-2); min-width: 0; }
 .ui-msg-bot, .ui-think-state { min-width: 0; }
 .ui-msg-who { font-size: var(--fs-xs); color: var(--subtle-foreground); }
@@ -1560,7 +1563,7 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 .ui-think[open] .ui-think-sum > :last-child { rotate: 180deg; }
 .ui-think-body { max-height: 20rem; overflow: auto; padding: var(--s-1) var(--s-4) var(--s-4); color: var(--muted-foreground); font-size: var(--fs-sm); font-style: italic; overflow-wrap: anywhere; white-space: pre-wrap; }
 @media (prefers-reduced-motion: no-preference) {
-	.ui-pair { animation: ui-vt-in var(--dur-3) var(--ease-out) both; }
+	.ui-xchg { animation: ui-vt-in var(--dur-3) var(--ease-out) both; }
 }
 .ui-composer { display: grid; gap: var(--s-2); padding: var(--s-3); border: var(--bw) solid var(--input); border-radius: var(--r-lg); background-color: var(--card); transition: border-color var(--dur-1) var(--ease); }
 .ui-composer:focus-within { border-color: var(--ring); }
@@ -1585,3 +1588,49 @@ textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block
 	.ui-composer-actions > * { min-height: 44px; }
 	.ui-range-link { min-height: 36px; }
 }
+
+/* == design review (Q8) ===================================================================== */
+
+/* The type scale. The templates were written with Tailwind's names (`text-sm` and so on),
+   which are 12, 14, 16, 18 and 24 px; Quiet's steps are 11.5, 12.5, 13.5, 15, 18 and 22
+   (README 2.3). One rule per name puts each on its nearest Quiet step (xs 11.5, sm 13.5,
+   base 15, lg 18, 2xl 22), so a title, a description and a hint are the same size on every
+   page. `html` in front outranks the utility, which is emitted after this file. Line
+   height stays with the utility. */
+html .text-xs { font-size: var(--fs-xs); }
+html .text-sm { font-size: var(--fs-md); }
+html .text-base { font-size: var(--fs-lg); }
+html .text-lg { font-size: var(--fs-xl); }
+html .text-2xl { font-size: var(--fs-2xl); }
+
+/* A dialog whose content arrives by patch keeps one wrapper with an id; the wrapper adds no
+   box, so its head, body and foot are the dialog's own (README 4, Dialog). */
+.ui-dlg-panel { display: contents; }
+.ui-dialog-body > fieldset { display: grid; gap: var(--s-4); min-width: 0; margin: 0; padding: var(--s-4); border: var(--bw) solid var(--border); border-radius: var(--r-md); }
+.ui-dialog-body > fieldset > legend { padding-inline: var(--s-2); font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.ui-dialog-body > dl { display: grid; gap: var(--s-4); margin: 0; }
+
+/* The mark of a resource page is 44 px on an application, database or stack (concept.css);
+   servers and models keep the 56 px tile. */
+.ui-head-logo .ui-logo-lg { width: 2.75rem; height: 2.75rem; font-size: 0.9375rem; }
+
+/* Inline code sits in running text at the size of that text, not larger: the mono face is wider. */
+code.font-mono { font-size: 0.92em; }
+
+/* A template's description takes its own line; the version goes under it, not beside it. */
+.ui-head-sub:has(> .ui-head-desc) { display: grid; justify-items: start; gap: var(--s-2); }
+
+/* On a phone the page you are on keeps its name; the crumbs before it give way first. */
+@media (max-width: 760px) {
+	.ui-crumb:not(:last-child) { flex: 0 1 auto; }
+	.ui-crumb:not(:last-child) .ui-crumb-link { max-width: 5rem; }
+	.ui-crumb:last-child { flex: 1 1 auto; min-width: 6rem; }
+}
+
+/* Hover and focus washes on rows ease in like every other control (--dur-1). */
+.ui-table tbody tr > *, .ui-log-line { transition: background-color var(--dur-1) var(--ease); }
+
+/* Two pages defined `.ui-facts` (a row of figures on the deployments tab; lines on a server
+   or model). The later rule won everywhere, so the deployment facts stacked in one long
+   column. Where the figures belong in a row, they are one. */
+.ui-dep .ui-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-6); }

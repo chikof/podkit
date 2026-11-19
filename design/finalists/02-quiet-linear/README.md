@@ -139,10 +139,10 @@ Computed with `contrast.py` (WCAG 2.x relative luminance; alpha colours composit
 | `--fs-xs` | 11.5 px | 1.5 (17.2 px) | meta, captions, kbd, tab counts |
 | `--fs-sm` | 12.5 px | 1.5 (18.8 px) | secondary text, buttons, table cells |
 | `--fs-md` | 13.5 px | 1.5 (20.2 px) | body, inputs, names |
-| `--fs-lg` | 15 px | 1.2 (18.0 px) | card and dialog titles |
-| `--fs-xl` | 18 px | 1.2 (21.6 px) | stat values |
-| `--fs-2xl` | 22 px | 1.2 (26.4 px) | page titles |
-| `--fs-3xl` | 28 px | 1.1 (30.8 px) | sign-in and app titles |
+| `--fs-lg` | 15 px | 1.2 (18.0 px) | card titles |
+| `--fs-xl` | 18 px | 1.2 (21.6 px) | dialog titles, empty-state titles, stat values |
+| `--fs-2xl` | 22 px | 1.2 (26.4 px) | page titles, including the name on an application, database or stack page |
+| `--fs-3xl` | 28 px | 1.1 (30.8 px) | sign-in title |
 | `--fs-4xl` | 38 px | 1.1 (41.8 px) | 404 title, large display figure |
 
 Weights: regular 400, medium 500, bold 600. Label tracking `--tracking-label: 0`; `text-wrap: pretty` on body text; tabular numerals on every number column (`font-variant-numeric: tabular-nums`).
@@ -301,3 +301,15 @@ Lucide (`--icon-sw: 1.75`). Logos on rounded tiles; services without a logo get 
 - Tooltips are `popover="hint"` + `interestfor`: they open on hover **and** keyboard focus, and the control keeps its own accessible name.
 - Every status is colour + shape + word (never colour alone). Focus ring: 2 px `--focus` outline with 2 px offset (1 px in Cockpit's square system), 3:1 against every surface.
 - Touch targets are 44 px at 390 px; at desktop density controls are 30px high (above the 24 px WCAG 2.5.8 minimum).
+
+## 10. Where podkit goes beyond the mockups (from the Q8 review)
+
+States and parts the mockups did not draw, as built in podkit and kept because they follow the system above. `REVIEW.md` has the full punch list.
+
+- **Environment tab row**: the tabs and their actions share one hairline that runs the whole width; the 2 px accent underline sits on it.
+- **Dialogs filled by a patch** (template deploy, model set-up): the same head, body and foot as every other dialog. The wrapper that carries the id for the patch adds no box (`.ui-dlg-panel`, `display: contents`); the close button lives in the head.
+- **Copy-once secrets** (webhook secret): a warning banner (`Copy the secret now.`), not coloured body text.
+- **Option cards** (database engine, recipe): the selected card takes the primary border on `--accent`; hover is `--surface-2`.
+- **Type scale for utility classes**: templates written with Tailwind names map onto Quiet's steps (`text-xs` 11.5, `text-sm` 13.5, `text-base` 15, `text-lg` 18, `text-2xl` 22 px) in one place (`components.css`, "design review"); no page has a size off the scale.
+- **Scrollbars**: thin, thumb at 65 % of the muted text colour on both themes, also in text areas and logs.
+- **On a phone**, the breadcrumb keeps the current page's name and gives the crumbs before it up first.

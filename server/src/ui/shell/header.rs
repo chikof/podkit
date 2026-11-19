@@ -198,7 +198,7 @@ fn breadcrumbs(ctx: &TeamCtx, crumbs: &[Crumb<'_>]) -> Markup {
 		.collect();
 	html! {
 		nav aria-label="Breadcrumb" class="ui-crumbs min-w-0 flex-1" {
-			ol class="flex min-w-0 items-center text-sm" {
+			ol class="flex min-w-0 items-center" {
 				@if !hidden.is_empty() {
 					li class="ui-crumb ui-crumb-more" {
 						(dropdown_menu(

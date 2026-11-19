@@ -402,12 +402,15 @@ fn setup_dialog() -> Markup {
 	html! {
 		dialog id="setup-dialog" class="ui-dialog ui-dialog-wide" closedby="closerequest"
 			aria-label="Set up a model" aria-labelledby="setup-title" {
-			div id="setup-body" class="p-6" {
-				p class="text-sm text-muted-foreground" { "Loading…" }
-			}
-			form method="dialog" class="absolute top-3 right-3" {
-				button class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-hidden hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50" aria-label="Close" {
-					(icon("x"))
+			div id="setup-body" class="ui-dlg-panel" {
+				div class="ui-dialog-head" {
+					div { h2 id="setup-title" class="ui-dialog-title" { "Set up a model" } }
+					form method="dialog" {
+						button class="ui-icon-btn" aria-label="Close" { (icon("x")) }
+					}
+				}
+				div class="ui-dialog-body" {
+					p class="ui-hint" { "Loading…" }
 				}
 			}
 		}

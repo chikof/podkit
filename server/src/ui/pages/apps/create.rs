@@ -188,7 +188,7 @@ fn created_card(ctx: &TeamCtx, origin: &str, created: &Created) -> Markup {
 					div class="flex flex-col gap-4" {
 						(copy_row("Webhook URL", &webhook))
 						(copy_row("Webhook secret", &created.webhook_secret))
-						p class="text-sm text-destructive" { "Copy the secret now. It is shown only this once and can't be recovered." }
+						div class="ui-banner ui-banner-warn" role="status" { (icon("triangle-alert")) div class="ui-banner-body" { b { "Copy the secret now." } " It is shown only this once and can't be recovered." } }
 						p class="text-sm text-muted-foreground" {
 							"Send it as the GitHub signature secret, or in an "
 							code class="font-mono" { "X-Gitlab-Token" } " or " code class="font-mono" { "X-Webhook-Secret" } " header."

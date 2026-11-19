@@ -179,13 +179,13 @@ fn variables_card(vars: &[VariableInfo]) -> Markup {
 				p class="text-sm text-muted-foreground" { "Nothing to fill in. It deploys as it is." }
 			}
 			@if !asked.is_empty() {
-				h3 class="text-xs font-medium tracking-wide text-muted-foreground uppercase" { "You choose" }
+				h3 class="text-xs font-medium text-muted-foreground" { "You choose" }
 				ul class="mb-2 flex flex-col" {
 					@for v in &asked { (variable_row(v)) }
 				}
 			}
 			@if !generated.is_empty() {
-				h3 class="text-xs font-medium tracking-wide text-muted-foreground uppercase" { "Generated" }
+				h3 class="text-xs font-medium text-muted-foreground" { "Generated" }
 				ul class="flex flex-col" {
 					@for v in &generated { (variable_row(v)) }
 				}

@@ -94,7 +94,7 @@ const fn engine_blurb(engine: crate::databases::EngineKind) -> &'static str {
 fn version_hint(option: &service::EngineOption) -> Markup {
 	let condition = format!("$engine === {}", js_string(engine_value(option.kind)));
 	html! {
-		p class="text-sm font-normal text-muted-foreground" "data-show"=(condition) style="display: none" {
+		p class="text-xs font-normal text-muted-foreground" "data-show"=(condition) style="display: none" {
 			"Default " strong { (option.default_version) }
 			". Available: " (option.versions.join(", ")) "."
 		}
@@ -231,7 +231,7 @@ async fn new_page(
 								label class=(LABEL) {
 									"Public port"
 									input class=(INPUT) type="text" inputmode="numeric" placeholder="Not published" "data-bind:public_port";
-									span class="text-sm font-normal text-muted-foreground" { "Publish the database on the server's host at this port, 1024 to 65535. Leave empty to keep it reachable only by your applications." }
+									span class="text-xs font-normal text-muted-foreground" { "Publish the database on the server's host at this port, 1024 to 65535. Leave empty to keep it reachable only by your applications." }
 								}
 								div class="grid grid-cols-1 gap-4 sm:grid-cols-2" {
 									label class=(LABEL) {
