@@ -40,8 +40,7 @@ pub fn router() -> Router<AppState> {
 		)
 }
 
-const ROW: &str =
-	"flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-3";
+const ROW: &str = "ui-card-row";
 
 fn delete_dialog(base: &str, volume: &Volume) -> Markup {
 	let id = format!("volume-delete-{}", volume.id);
@@ -76,16 +75,14 @@ fn volume_list(base: &str, volumes: &[Volume], can_delete: bool) -> Markup {
 	html! {
 		div id="volume-list" {
 			@if volumes.is_empty() {
-				div class="border-t border-border px-6 pt-6" {
-					(empty_state(
-						"hard-drive",
-						"No volumes yet.",
-						Some("Without one, files written by the application are lost on every deploy."),
-						None,
-					))
-				}
+				(empty_state(
+					"hard-drive",
+					"No volumes yet.",
+					Some("Without one, files written by the application are lost on every deploy."),
+					None,
+				))
 			} @else {
-				ul aria-label="Volumes" {
+				ul class="ui-card-rows" aria-label="Volumes" {
 					@for volume in volumes {
 						li class=(ROW) {
 							div class="flex min-w-0 flex-col" {
@@ -132,8 +129,8 @@ async fn volumes_page(
 			(saved_slot(&ctx, &base, false))
 			(card(&html! {
 				(card_section("Volumes", Some("Persistent storage mounted into the container. A volume keeps its files across deploys and is mounted from the next deploy on."), None))
-				div class="flex flex-col gap-2" {
-					div class="px-6" { (form_error()) }
+				div class="ui-card-list" {
+					div class="ui-card-slot" { (form_error()) }
 					(volume_list(&base, &list, can_delete))
 				}
 			}))
