@@ -707,6 +707,9 @@ async fn the_playground_escapes_model_output_and_shows_speed_and_usage(db: PgPoo
 	assert_not_contains(thread_tag, "aria-live");
 	assert_not_contains(thread_tag, "role=");
 	assert_contains(&page, "<label for=\"pg-input\"");
+	// Not `required`: after Clear or a send the empty box must not turn red (`:user-invalid`).
+	let textarea = page.split("<textarea id=\"pg-input\"").nth(1).unwrap();
+	assert_not_contains(&textarea[..textarea.find('>').unwrap()], "required");
 
 	let body = s
 		.post(
@@ -830,6 +833,82 @@ async fn the_stream_renderer_escapes_whatever_the_model_says() {
 	assert_not_contains(&text, "\"chat\"");
 }
 
+#[tokio::test]
+async fn the_thinking_block_is_collapsed_and_announced_once_not_per_token() {
+	use super::playground::respond;
+	use crate::links::playground::ChatEvent;
+	use futures_util::StreamExt;
+
+	let events = futures_util::stream::iter([
+		ChatEvent::Thinking("first ".to_owned()),
+		ChatEvent::Thinking("second ".to_owned()),
+		ChatEvent::Thinking("third".to_owned()),
+		ChatEvent::Token("one ".to_owned()),
+		ChatEvent::Token("two".to_owned()),
+		ChatEvent::Usage {
+			prompt: 4,
+			completion: 9,
+		},
+	])
+	.boxed();
+	let resp = respond(
+		CancellationToken::new(),
+		"hi".to_owned(),
+		Vec::new(),
+		events,
+	);
+	let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+		.await
+		.unwrap();
+	let text = String::from_utf8(bytes.to_vec()).unwrap();
+	// A native `<details>`, closed (no `open`), whose summary is a keyboard control.
+	assert_contains(&text, "<details class=\"ui-think\">");
+	assert_contains(&text, "<summary class=\"ui-think-sum\">");
+	assert_not_contains(&text, "<details class=\"ui-think\" open");
+	// The thinking arrives in its own body, token by token, and no live region holds it.
+	assert_eq!(text.matches("#pg-think-0").count(), 3, "{text}");
+	assert_not_contains(&text, "aria-live");
+	// The label turns once, when the thinking ends: not once per token.
+	assert_eq!(text.matches("id=\"pg-think-state-0\"").count(), 2, "{text}");
+	assert_eq!(text.matches("Thought for").count(), 2, "{text}");
+	// And the one status line is patched twice per turn (start, finish), the finish naming
+	// the thinking time.
+	assert_eq!(text.matches("id=\"pg-live\"").count(), 2, "{text}");
+	assert_contains(&text, "Answer complete. Thought for");
+	// The usage panel is patched once, with the figures of the answer.
+	assert_eq!(text.matches("id=\"pg-stats\"").count(), 1, "{text}");
+	assert_contains(&text, "tokens</span>");
+}
+
+#[db_test]
+async fn the_model_page_has_a_monitoring_section_that_pauses_when_hidden(db: PgPool) {
+	let s = Setup::new(db.clone()).await;
+	let (_, model) = s.running_model().await;
+	let url = s.model_url(model);
+
+	let (status, page) = s.get(&format!("{url}?tab=monitoring")).await;
+	assert_eq!(status, StatusCode::OK);
+	assert_contains(&page, "aria-current=\"page\">Monitoring");
+	assert_contains(&page, "id=\"metrics-title\"");
+	for range in ["range=1h", "range=24h", "range=7d"] {
+		assert_contains(&page, range);
+	}
+	// No reading yet: the chart says so instead of drawing an empty plot.
+	assert_contains(&page, "No readings in this range yet");
+	// The refresh does nothing while the tab is hidden.
+	assert_contains(&page, "document.hidden || @get(");
+	assert_contains(&page, &format!("{url}/metrics?range=1h"));
+
+	// The refresh endpoint patches the charts only; a bad range is the default.
+	for q in ["?range=24h", "?range=forever"] {
+		let (status, out) = s.get(&format!("{url}/metrics{q}")).await;
+		assert_eq!(status, StatusCode::OK);
+		assert_contains(&out, "datastar-patch-elements");
+		assert_contains(&out, "id=\"metrics-body\"");
+		assert_not_contains(&out, "data-on-interval");
+	}
+}
+
 #[db_test]
 async fn the_hugging_face_token_is_write_only(db: PgPool) {
 	let s = Setup::new(db.clone()).await;
@@ -913,6 +992,7 @@ async fn another_teams_model_pages_are_the_404_page(db: PgPool) {
 		format!("{}?tab=usage", s.model_url(model)),
 		format!("{}?tab=advanced", s.model_url(model)),
 		format!("{}?tab=logs", s.model_url(model)),
+		format!("{}?tab=monitoring", s.model_url(model)),
 		format!("{}?tab=playground", s.model_url(model)),
 		format!("/teams/{bob_team}/models/downloads/{file}"),
 		format!("/teams/{bob_team}/projects/{}/models/{model}", s.project),

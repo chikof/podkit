@@ -210,8 +210,8 @@ async fn page(
 	));
 	crumbs.push(("Monitoring", None));
 	let body = html! {
-		div class="mx-auto flex w-full max-w-7xl flex-col gap-6" {
-			(header(ctx.team.id, server, true))
+		div class="ui-page-body" {
+			(header(ctx.team.id, server, true, &html! {}))
 			(metrics_section(&section, &server_charts(server, &points, range, now())))
 		}
 	};

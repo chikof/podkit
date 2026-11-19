@@ -361,13 +361,16 @@ impl Setup<'_> {
 	fn page_content(&self) -> Markup {
 		let m = self.model;
 		html! {
-			div class="flex flex-col gap-8" "data-signals"=(self.signals()) {
-				div class="flex items-center gap-4" {
-					(family_logo(&m.family, LogoSize::Lg))
-					div class="flex min-w-0 flex-col gap-1" {
-						h1 class="text-2xl font-semibold tracking-tight" { (m.name) }
-						p class="text-sm text-muted-foreground" {
-							(m.family) " · " (params_text(m.params_b, m.active_params_b)) " · " (m.license) " · " (tier_label(m.tier))
+			div class="ui-page-body" "data-signals"=(self.signals()) {
+				header class="ui-page-head" {
+					div class="ui-head-id" {
+						(family_logo(&m.family, LogoSize::Lg))
+						div class="ui-page-title" {
+							p class="ui-eyebrow" { "Catalog" }
+							h1 { (m.name) }
+							p class="ui-lede" {
+								(m.family) " · " (params_text(m.params_b, m.active_params_b)) " · " (m.license) " · " (tier_label(m.tier))
+							}
 						}
 					}
 				}

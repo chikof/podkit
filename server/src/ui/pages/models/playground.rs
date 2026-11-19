@@ -32,9 +32,7 @@ use crate::ids::{ModelId, ProjectId, TeamId};
 use crate::links::playground::{self as chat_service, ChatEvent, Message};
 use crate::models::{Model, ModelStatus};
 use crate::state::AppState;
-use crate::ui::components::{
-	Size, TEXTAREA, Variant, button_class, card, card_content, card_section, empty_state,
-};
+use crate::ui::components::{Size, Variant, button_class, empty_state, icon};
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::form_error;
@@ -58,6 +56,41 @@ fn live(text: &str) -> Markup {
 	html! { p id="pg-live" class="ui-visually-hidden" role="status" { (text) } }
 }
 
+/// The label of a turn's thinking block. Patched when the thinking ends, not per token.
+fn think_state(turn: usize, text: &str) -> Markup {
+	html! { span id={ "pg-think-state-" (turn) } class="ui-think-state" { (text) } }
+}
+
+/// The usage figures of the last answer; `—` until there is one. Patched once per turn.
+fn usage_stats(figures: Option<&Figures>) -> Markup {
+	let cell = |label: &str, value: Option<String>, unit: &str| {
+		html! {
+			div class="ui-ustat" {
+				dt { (label) }
+				dd {
+					@if let Some(v) = value { (v) @if !unit.is_empty() { span class="ui-ustat-u" { (unit) } } } @else { "—" }
+				}
+			}
+		}
+	};
+	html! {
+		dl id="pg-stats" class="ui-ustats" {
+			(cell("Prompt", figures.and_then(|f| f.prompt).map(|v| v.to_string()), "tokens"))
+			(cell("Completion", figures.map(|f| f.completion.to_string()), "tokens"))
+			(cell("Speed", figures.and_then(|f| f.per_second).map(|v| format!("{v:.1}")), "tok/s"))
+			(cell("First token", figures.and_then(|f| f.first_token_ms).map(|v| v.to_string()), "ms"))
+		}
+	}
+}
+
+/// What one answer cost, for the usage panel.
+struct Figures {
+	prompt: Option<u64>,
+	completion: u64,
+	per_second: Option<f64>,
+	first_token_ms: Option<u128>,
+}
+
 /// The chat box, shown to someone who may use the model once it runs.
 pub fn chat_panel(ctx: &TeamCtx, model: &Model) -> Markup {
 	if !ctx.perms.can(Action::Update, Resource::Model) {
@@ -78,29 +111,36 @@ pub fn chat_panel(ctx: &TeamCtx, model: &Model) -> Markup {
 			model_url(ctx.team.id, model.project_id, model.id)
 		))
 	);
-	card(&html! {
-		(card_section("Playground", Some("Chats through the gateway with a key of its own, so it shows up in the usage table as Playground. Nothing is saved."), None))
-		(card_content(&html! {
-			div class="flex flex-col gap-4" data-signals="{prompt: '', chat: []}" {
-				div id="pg-thread" class="ui-chat-thread flex flex-col gap-4" {}
+	// The textarea is not `required`: an empty box is refused in the handler above, so
+	// Clear and a sent message leave nothing for `:user-invalid` to paint red.
+	html! {
+		div class="ui-pg" data-signals="{prompt: '', chat: []}" {
+			section class="ui-chat" aria-label="Conversation" {
+				div id="pg-thread" class="ui-msgs" {}
 				(live(""))
-				form class="flex flex-col gap-3" "data-on:submit"=(post) {
-					label for="pg-input" class="text-sm leading-none font-medium" { "Message" }
-					textarea id="pg-input" name="message" class=(TEXTAREA) rows="3" required maxlength="8000"
-						placeholder="Say something" aria-describedby="pg-hint"
+				form class="ui-composer" "data-on:submit"=(post) {
+					label for="pg-input" class="ui-visually-hidden" { "Message" }
+					textarea id="pg-input" name="message" class="ui-composer-input" rows="2" maxlength="8000"
+						placeholder="Message the model…  (Shift+Enter for a new line)" aria-describedby="pg-hint"
 						"data-bind:prompt" "data-on:keydown"=(ENTER_SENDS) {}
-					p id="pg-hint" class="text-xs text-muted-foreground" { "Enter sends. Shift+Enter adds a line." }
-					(form_error())
-					div class="flex flex-wrap items-center gap-3" {
-						button type="submit" class=(button_class(Variant::Default, Size::Md)) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Send" }
+					div class="ui-composer-actions" {
 						button type="button" class=(button_class(Variant::Ghost, Size::Md))
-							"data-on:click"="$chat = []; document.getElementById('pg-thread').replaceChildren(); document.getElementById('pg-stats').textContent = ''; document.getElementById('pg-live').textContent = ''" { "Clear" }
-						span id="pg-stats" class="text-xs text-muted-foreground" {}
+							"data-on:click"="$chat = []; $prompt = ''; document.getElementById('pg-thread').replaceChildren(); document.getElementById('pg-live').textContent = ''; document.getElementById('pg-stats').querySelectorAll('dd').forEach(d => d.textContent = '—')" { "Clear" }
+						button type="submit" class=(button_class(Variant::Default, Size::Md)) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Send" (icon("arrow-right")) }
 					}
 				}
+				p id="pg-hint" class="ui-hint" { "Enter sends. Shift+Enter adds a line." }
+				(form_error())
 			}
-		}))
-	})
+			aside class="ui-side" aria-label="Session" {
+				section class="ui-side-sec" {
+					h2 class="ui-sec-h" { "Usage" }
+					(usage_stats(None))
+					p class="ui-hint" { "Chats through the gateway with a key of its own, so it shows up in the usage table as Playground. Nothing is saved." }
+				}
+			}
+		}
+	}
 }
 
 #[derive(Deserialize)]
@@ -120,6 +160,9 @@ struct Run {
 	started: Instant,
 	first_token: Option<Instant>,
 	chunks: u64,
+	/// When the first thinking token came, and when the thinking gave way to the answer.
+	think_start: Option<Instant>,
+	think_end: Option<Instant>,
 	usage: Option<(u64, u64)>,
 	failed: bool,
 	stage: Stage,
@@ -154,16 +197,26 @@ fn signals(value: &serde_json::Value) -> Event {
 impl Run {
 	fn opening(&self) -> Vec<Event> {
 		let n = self.turn;
+		// The thinking block is a native `<details>`: closed until opened, and Enter or Space
+		// on its summary toggles it. It stays hidden (`:has(:empty)`) for a model that does
+		// not think. Its body is not a live region, so no thinking token is announced.
 		let markup = html! {
-			article class="flex flex-col gap-2" aria-label={ "Exchange " (n + 1) } {
-				div class="ui-chat-user flex flex-col gap-1 p-3 text-sm" {
-					span class="text-xs font-medium text-muted-foreground" { "You" }
-					p class="break-words whitespace-pre-wrap" { (self.prompt) }
+			article class="ui-pair" aria-label={ "Exchange " (n + 1) } {
+				div class="ui-msg ui-msg-user" {
+					span class="ui-msg-who" { "You" }
+					p class="ui-msg-body" { (self.prompt) }
 				}
-				div class="ui-chat-model flex flex-col gap-1 p-3 text-sm" {
-					span class="text-xs font-medium text-muted-foreground" { "Model" }
-					p id={ "pg-think-" (n) } class="ui-chat-thinking break-words whitespace-pre-wrap text-muted-foreground italic" {}
-					p id={ "pg-ans-" (n) } class="break-words whitespace-pre-wrap" {}
+				div class="ui-msg ui-msg-bot" {
+					span class="ui-msg-who" { "Model" }
+					details class="ui-think" {
+						summary class="ui-think-sum" {
+							(icon("brain"))
+							(think_state(n, "Thinking…"))
+							(icon("chevron-down"))
+						}
+						p id={ "pg-think-" (n) } class="ui-think-body" {}
+					}
+					p id={ "pg-ans-" (n) } class="ui-msg-body ui-answer" {}
 				}
 			}
 		};
@@ -174,17 +227,31 @@ impl Run {
 		]
 	}
 
+	/// The summary of the thinking block once the thinking is over: said once, not per token.
+	fn thought(&mut self) -> Vec<Event> {
+		let (Some(start), None) = (self.think_start, self.think_end) else {
+			return Vec::new();
+		};
+		let end = Instant::now();
+		self.think_end = Some(end);
+		let text = format!("Thought for {:.1} s", (end - start).as_secs_f64());
+		vec![patch(&think_state(self.turn, &text))]
+	}
+
 	fn absorb(&mut self, event: ChatEvent) -> Vec<Event> {
 		let n = self.turn;
 		match event {
 			ChatEvent::Token(text) => {
+				let mut out = self.thought();
 				self.first_token.get_or_insert_with(Instant::now);
 				self.chunks += 1;
 				self.answer.push_str(&text);
-				vec![append(&format!("#pg-ans-{n}"), &html! { span { (text) } })]
+				out.push(append(&format!("#pg-ans-{n}"), &html! { span { (text) } }));
+				out
 			}
 			ChatEvent::Thinking(text) => {
 				self.first_token.get_or_insert_with(Instant::now);
+				self.think_start.get_or_insert_with(Instant::now);
 				vec![append(
 					&format!("#pg-think-{n}"),
 					&html! { span { (text) } },
@@ -196,28 +263,45 @@ impl Run {
 			}
 			ChatEvent::Error(message) => {
 				self.failed = true;
-				vec![append(
+				let mut out = self.thought();
+				out.push(append(
 					&format!("#pg-ans-{n}"),
-					&html! { span class="text-destructive" { (message) } },
-				)]
+					&html! { span class="ui-err" { (message) } },
+				));
+				out
 			}
 		}
 	}
 
-	fn stats(&self) -> String {
-		let completion = self
-			.usage
+	fn completion(&self) -> u64 {
+		self.usage
 			.map(|(_, c)| c)
 			.filter(|c| *c > 0)
-			.unwrap_or(self.chunks);
+			.unwrap_or(self.chunks)
+	}
+
+	fn figures(&self) -> Figures {
+		let completion = self.completion();
 		let elapsed = self.first_token.unwrap_or(self.started).elapsed();
+		Figures {
+			prompt: self.usage.map(|(p, _)| p),
+			completion,
+			per_second: (self.first_token.is_some()
+				&& elapsed >= Duration::from_millis(100)
+				&& completion > 1)
+				.then(|| completion as f64 / elapsed.as_secs_f64()),
+			first_token_ms: self
+				.first_token
+				.map(|t| t.duration_since(self.started).as_millis()),
+		}
+	}
+
+	fn stats(&self) -> String {
+		let completion = self.completion();
+		let figures = self.figures();
 		let mut out = format!("{completion} tokens");
-		if self.first_token.is_some() && elapsed >= Duration::from_millis(100) && completion > 1 {
-			let _ = write!(
-				out,
-				" · {:.1} tokens/s",
-				completion as f64 / elapsed.as_secs_f64()
-			);
+		if let Some(rate) = figures.per_second {
+			let _ = write!(out, " · {rate:.1} tokens/s");
 		}
 		if let Some((prompt, completion)) = self.usage {
 			let _ = write!(out, " · {prompt} in, {completion} out");
@@ -226,7 +310,7 @@ impl Run {
 	}
 
 	fn finish(&mut self) -> Vec<Event> {
-		let mut out = Vec::new();
+		let mut out = self.thought();
 		if !self.failed && !self.answer.is_empty() {
 			let mut chat = std::mem::take(&mut self.history);
 			chat.push(Message {
@@ -240,13 +324,15 @@ impl Run {
 			out.push(signals(&json!({ "chat": chat })));
 		}
 		let stats = self.stats();
-		out.push(patch(&html! {
-			span id="pg-stats" class="text-xs text-muted-foreground" { (stats) }
-		}));
+		out.push(patch(&usage_stats(Some(&self.figures()))));
+		let thought = match (self.think_start, self.think_end) {
+			(Some(a), Some(b)) => format!(" Thought for {:.1} s.", (b - a).as_secs_f64()),
+			_ => String::new(),
+		};
 		out.push(patch(&live(&if self.failed {
 			"The answer failed. The message is in the thread.".to_owned()
 		} else {
-			format!("Answer complete. {stats}")
+			format!("Answer complete.{thought} {stats}")
 		})));
 		out
 	}
@@ -269,6 +355,8 @@ pub(super) fn respond(
 		started: Instant::now(),
 		first_token: None,
 		chunks: 0,
+		think_start: None,
+		think_end: None,
 		usage: None,
 		failed: false,
 		stage: Stage::Opening,

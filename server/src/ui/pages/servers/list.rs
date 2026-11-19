@@ -80,7 +80,7 @@ fn server_card(ctx: &TeamCtx, server: &Server, points: &[ServerPoint], now: i64)
 		.iter()
 		.map(|p| percent(p.mem_used, p.mem_total))
 		.collect();
-	// The line starts at the oldest reading, so a young server still fills the card instead
+	// The line starts at the oldest reading, so a young server still fills the row instead
 	// of a sliver at the right edge of an hour.
 	let hour_ago = now - Range::Hour.duration().whole_seconds();
 	let from = xs
@@ -88,42 +88,40 @@ fn server_card(ctx: &TeamCtx, server: &Server, points: &[ServerPoint], now: i64)
 		.copied()
 		.map_or(hour_ago, |t| t.max(hour_ago).min(now - 60));
 	html! {
-		article class="ui-card ui-link-card flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-xs" {
-			div class="ui-link-card-body" {
-				(logo(&server.name, LogoSize::Md))
-				div class="flex min-w-0 flex-1 flex-col gap-1" {
-					h2 class="truncate text-sm leading-tight font-semibold" {
-						a href=(detail_url(ctx.team.id, server.id)) class="ui-link-card-link outline-hidden" { (server.name) }
-					}
-					p class="truncate text-sm text-muted-foreground" {
-						"Linux"
-						@if let Some(arch) = &server.arch { " · " (arch) }
-						" · " (host_port(server))
-					}
-					div class="mt-1 flex flex-wrap items-center gap-2" {
-						(status_badge(server.status))
-						@if server.is_local { (local_badge()) }
-						@if let Some(version) = &server.agent_version {
-							span class="text-xs text-muted-foreground" { "Agent " (version) }
-						}
-					}
+		li class="ui-row" {
+			span class="ui-row-logo" { (logo(&server.name, LogoSize::Md)) }
+			div class="ui-row-main" {
+				h2 class="ui-row-name" {
+					a href=(detail_url(ctx.team.id, server.id)) class="ui-row-link" { (server.name) }
+				}
+				p class="ui-row-sub" {
+					"Linux"
+					@if let Some(arch) = &server.arch { " · " (arch) }
+					" · " (host_port(server))
+					@if let Some(version) = &server.agent_version { " · Agent " (version) }
+				}
+				@if let Some(message) = &server.status_message {
+					p class="ui-err" { (message) }
 				}
 			}
-			@if let Some(message) = &server.status_message {
-				p class="text-sm text-destructive" { (message) }
+			div class="ui-row-mid" {
+				@if hardware.is_empty() {
+					p class="ui-row-sub" { "Hardware not reported yet." }
+				} @else {
+					p class="ui-row-sub" { (hardware.join(" · ")) }
+				}
+				@if let Some(fp) = &fingerprint {
+					p class="ui-row-fp" title=(fp) { (fp) }
+				}
 			}
-			@if hardware.is_empty() {
-				p class="text-xs text-muted-foreground" { "Hardware not reported yet." }
-			} @else {
-				p class="text-xs text-muted-foreground" { (hardware.join(" · ")) }
-			}
-			@if let Some(fp) = &fingerprint {
-				p class="truncate font-mono text-xs text-muted-foreground" title=(fp) { (fp) }
+			div class="ui-row-end" {
+				(status_badge(server.status))
+				@if server.is_local { (local_badge()) }
 			}
 			@if points.is_empty() {
-				p class="border-t border-border pt-3 text-xs text-muted-foreground" { "No readings yet." }
+				p class="ui-row-sub ui-row-spark" { "No readings yet." }
 			} @else {
-				div class="grid grid-cols-2 gap-4 border-t border-border pt-3" {
+				div class="ui-row-spark" {
 					(figure("CPU", &cpu, &xs, from, now))
 					(figure("Memory", &mem, &xs, from, now))
 				}
@@ -132,19 +130,22 @@ fn server_card(ctx: &TeamCtx, server: &Server, points: &[ServerPoint], now: i64)
 	}
 }
 
-/// The grid of cards. Re-fetched every few seconds while any server is pending, so its
-/// badge turns by itself, and every 30 seconds for the figures.
+/// The rows. Re-fetched every few seconds while any server is pending, so its badge turns
+/// by itself, and every 30 seconds for the figures.
 fn server_list(ctx: &TeamCtx, servers: &[Server], points: &[Vec<ServerPoint>]) -> Markup {
 	let pending = servers.iter().any(|s| s.status.in_flight());
 	let rows_url = format!("{}/rows", list_url(ctx.team.id));
 	let now = now();
 	html! {
-		div id="server-list" class="ui-card-grid" {
+		div id="server-list" {
 			@if servers.is_empty() {
-				p class="text-sm text-muted-foreground" { "No servers yet." }
-			}
-			@for (server, points) in servers.iter().zip(points) {
-				(server_card(ctx, server, points, now))
+				p class="ui-lede" { "No servers yet." }
+			} @else {
+				ul class="ui-rows ui-reveal" aria-label="Servers" {
+					@for (server, points) in servers.iter().zip(points) {
+						(server_card(ctx, server, points, now))
+					}
+				}
 			}
 			@if pending {
 				(rows_poll(&rows_url, "3s"))
@@ -305,14 +306,16 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 	);
 
 	let body = html! {
-		div class="mx-auto flex w-full max-w-7xl flex-col gap-6" data-signals=(signals) "data-on:close__capture"=(on_close) {
-			div class="flex flex-wrap items-start justify-between gap-4" {
-				div class="flex flex-col gap-1" {
-					h1 class="text-2xl font-semibold" { "Servers" }
-					p class="text-sm text-muted-foreground" { "The podman hosts this team deploys to." }
+		div class="ui-page-body" data-signals=(signals) "data-on:close__capture"=(on_close) {
+			header class="ui-page-head" {
+				div class="ui-page-title" {
+					h1 { "Servers" }
+					p class="ui-lede" { "The podman hosts this team deploys to." }
 				}
 				@if can_create {
-					(dialog_open_button(DIALOG_ID, BUTTON, &html! { (icon("plus")) "Add a server" }))
+					div class="ui-page-actions" {
+						(dialog_open_button(DIALOG_ID, BUTTON, &html! { (icon("plus")) "Add a server" }))
+					}
 				}
 			}
 			(server_list(&ctx, &servers, &points))

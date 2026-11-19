@@ -96,15 +96,15 @@ pub fn metrics_section(section: &MetricsSection<'_>, body: &Markup) -> Markup {
 			"data-signals"="{_tables: false}"
 			"data-on-interval__duration.30s"=(on_interval)
 			"data-on:visibilitychange__window"=(on_interval) {
-			div class="flex flex-wrap items-center justify-between gap-3" {
-				h2 id=(title_id) class="text-lg font-semibold" { "Metrics" }
-				div class="flex flex-wrap items-center gap-2" {
-					nav aria-label="Time range" class="flex items-center gap-1" {
+			div class="ui-range-bar" {
+				h2 id=(title_id) class="ui-sec-h" { "Metrics" }
+				div class="ui-range-tools" {
+					nav aria-label="Time range" class="ui-range" {
 						@for range in RANGES {
 							@if range == section.range {
-								a href=(with_range(section.page_url, range)) class=(button_class(Variant::Secondary, Size::Sm)) aria-current="true" { (range_value(range)) }
+								a href=(with_range(section.page_url, range)) class="ui-range-link" aria-current="true" { (range_value(range)) }
 							} @else {
-								a href=(with_range(section.page_url, range)) class=(button_class(Variant::Ghost, Size::Sm)) { (range_value(range)) }
+								a href=(with_range(section.page_url, range)) class="ui-range-link" { (range_value(range)) }
 							}
 						}
 					}

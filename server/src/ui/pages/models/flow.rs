@@ -446,10 +446,12 @@ async fn page(
 		.map_err(|e| error::page(&ctx, &e))?;
 	let log_url = format!("{}/log", download_url(ctx.team.id, file.id));
 	let body = html! {
-		div class="flex flex-col gap-6" {
-			div class="flex flex-col gap-1" {
-				h1 class="text-2xl font-semibold tracking-tight" { "Download " (file.repo) }
-				p class="text-sm text-muted-foreground" { "Then start it as a model in one of your projects." }
+		div class="ui-page-body" {
+			header class="ui-page-head" {
+				div class="ui-page-title" {
+					h1 { "Download " (file.repo) }
+					p class="ui-lede" { "Then start it as a model in one of your projects." }
+				}
 			}
 			(body_region)
 			(card(&html! {

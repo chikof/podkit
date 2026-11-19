@@ -462,15 +462,17 @@ async fn page(
 	let catalog_tab = view.url(ctx.team.id, |v| v.hugging_face = false);
 	let hf_tab = view.url(ctx.team.id, |v| v.hugging_face = true);
 	let body = html! {
-		div class="ui-wide flex flex-col gap-6" data-signals=(signals) {
-			div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3" {
-				div class="flex flex-col gap-1" {
-					h1 class="text-2xl font-semibold tracking-tight" { "Model catalog" }
-					p class="max-w-2xl text-sm text-muted-foreground" {
+		div class="ui-page-body" data-signals=(signals) {
+			header class="ui-page-head" {
+				div class="ui-page-title" {
+					h1 { "Model catalog" }
+					p class="ui-lede" {
 						"Models chiko has run and ranked, rated against one of your servers. Pick one to download its weights and serve it."
 					}
 				}
-				a class=(button_class(Variant::Outline, Size::Md)) href=(models_url(ctx.team.id)) { "Your models" }
+				div class="ui-page-actions" {
+					a class=(button_class(Variant::Outline, Size::Md)) href=(models_url(ctx.team.id)) { "Your models" }
+				}
 			}
 			(tabs("Catalog sections", &[
 				TabItem { label: "Catalog", href: &catalog_tab, current: !view.hugging_face },

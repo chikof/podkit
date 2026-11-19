@@ -657,9 +657,9 @@ async fn the_cards_show_os_arch_hardware_and_sparklines(db: PgPool) {
 	assert_not_contains(main, "<title>");
 	// A decorative picture: its numbers are in the text beside it.
 	assert_contains(main, "aria-hidden=\"true\" focusable=\"false\"");
-	// The whole card is one link to the server.
+	// The whole row is one link to the server (a stretched link).
 	assert_contains(main, &format!("href=\"/teams/{team}/servers/{local}\""));
-	assert_contains(main, "ui-link-card-link");
+	assert_contains(main, "ui-row-link");
 }
 
 #[db_test]
@@ -726,7 +726,14 @@ async fn the_detail_page_has_tabs_and_the_hardware(db: PgPool) {
 	assert_contains(main, "aria-label=\"Server sections\"");
 	assert_contains(main, "aria-current=\"page\">Overview");
 	assert_contains(main, &format!("/teams/{team}/servers/{local}/monitoring"));
-	assert_contains(main, "16 threads · 32 GB RAM · 500 GB disk");
+	// The hardware strip: one cell each, with what the agent reported.
+	assert_contains(main, "aria-label=\"Hardware\"");
+	assert_contains(main, ">Test CPU<");
+	assert_contains(main, "16 threads");
+	assert_contains(main, ">32 GB<");
+	assert_contains(main, "20 GB available");
+	assert_contains(main, ">500 GB<");
+	assert_contains(main, "400 GB free");
 	assert_not_contains(main, "BEGIN");
 }
 
@@ -844,6 +851,9 @@ async fn the_range_picks_the_window_and_an_unknown_one_means_the_last_hour(db: P
 		assert_eq!(s, StatusCode::OK, "{query}");
 		assert_contains(&body, &format!("aria-current=\"true\">{current}"));
 		assert_contains(&body, &format!("CPU, {phrase}."));
+		// The segmented range control, and a refresh that never runs in a hidden tab.
+		assert_contains(&body, "class=\"ui-range-link\" aria-current=\"true\"");
+		assert_contains(&body, "document.hidden || @get(");
 	}
 }
 
