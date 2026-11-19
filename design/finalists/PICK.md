@@ -25,8 +25,8 @@ Effort: **S** = token swap plus re-skinned components, a few days. **M** = new l
 
 ## Final pick (chiko)
 
-- **Pick:** [ ] 01 Cockpit  [ ] 02 Quiet  [ ] 09 Panelboard  [ ] mix: ______________________
+- **Pick:** [ ] 01 Cockpit  [x] 02 Quiet  [ ] 09 Panelboard  [ ] mix: ______________________
 - **Keep / drop / change before it is built** (free text): 
 
-- **Theme to ship as default:** [ ] dark  [ ] light  [ ] follow system
+- **Theme to ship as default:** [ ] dark  [ ] light  [x] follow system
 - **Decision date / by:** 
