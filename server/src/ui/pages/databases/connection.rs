@@ -16,7 +16,9 @@ use crate::databases::EngineKind;
 use crate::databases::service::{self, ConnectionInfo};
 use crate::ids::{DatabaseId, ProjectId, TeamId};
 use crate::state::AppState;
-use crate::ui::components::{BUTTON_OUTLINE, INPUT, card, card_content, card_section, icon};
+use crate::ui::components::{
+	BUTTON_OUTLINE, INPUT, Size, Variant, button_class, card, card_content, card_section, icon,
+};
 use crate::ui::extract::TeamCtx;
 use crate::ui::sse::js_string;
 use crate::ui::{error, sse};
@@ -31,21 +33,31 @@ pub fn router() -> Router<AppState> {
 		.route(&at("/reveal"), post(reveal))
 }
 
-/// The password row before **Reveal**: bullets and the button. `#db-secret` is what the
-/// reveal and the hide patch.
+/// The password row before **Reveal**: bullets and the eye. `#db-secret` is what the reveal
+/// and the hide patch.
 fn masked(base: &str) -> Markup {
 	let reveal = format!("@post({})", js_string(&format!("{base}/reveal")));
 	html! {
-		div id="db-secret" class="flex flex-col gap-3" {
-			div class="flex flex-col gap-2 text-sm font-medium" {
-				span { "Password" }
-				div class="flex gap-2" {
-					input class={ (INPUT) " font-mono" } type="text" readonly value="••••••••••••••••" aria-label="Password (hidden)" tabindex="-1";
-					button type="button" class=(BUTTON_OUTLINE) "data-on:click"=(reveal)
-						"data-indicator:_revealing" "data-attr:disabled"="$_revealing" { (icon("eye")) "Reveal password and URLs" }
-				}
+		div id="db-secret" class="ui-field-group" {
+			label for="db-password" class=(crate::ui::components::LABEL) { "Password" }
+			div class="ui-copy" {
+				input id="db-password" class=(INPUT) type="text" readonly value="••••••••••••••••" tabindex="-1";
+				button type="button" class=(button_class(Variant::Outline, Size::Md)) "data-on:click"=(reveal)
+					aria-label="Reveal password and URLs"
+					"data-indicator:_revealing" "data-attr:disabled"="$_revealing" { (icon("eye")) }
 			}
-			p class="text-sm text-destructive" role="alert" "data-show"="$_reveal_error" "data-text"="$_reveal_error" style="display: none" {}
+			p class="ui-error" role="alert" "data-show"="$_reveal_error" "data-text"="$_reveal_error" style="display: none" {}
+		}
+	}
+}
+
+/// The connection strings before **Reveal**: they carry the password, so none is written
+/// into the page.
+fn urls_masked() -> Markup {
+	html! {
+		div id="db-urls" class="ui-field-group" {
+			input class=(INPUT) type="text" readonly value="••••••••••••••••••••••••" tabindex="-1" aria-label="Connection string (hidden)";
+			p class="ui-hint" { "The connection strings carry the password, so they appear only after you reveal it." }
 		}
 	}
 }
@@ -64,50 +76,57 @@ async fn connection_page(
 	let keyed = d.database.engine != EngineKind::Redis;
 
 	let content = html! {
-		div class="flex flex-col gap-6" {
-			@if let Some(info) = &info {
-				(card(&html! {
-					(card_section("Internal", Some("How your applications reach this database inside podkit."), None))
-					(card_content(&html! { (internal_rows(info, keyed)) }))
-				}))
-				(card(&html! {
-					(card_section("External", Some("From outside the server, through the public port."), None))
-					(card_content(&html! {
-						@if let Some((host, port)) = &info.public {
-							(copy_row("Public address", &format!("{host}:{port}")))
-						} @else {
-							p class="text-sm text-muted-foreground" {
-								"Not published. Set a public port under General to reach it from outside the server."
-							}
-						}
-					}))
-				}))
-			}
+		div class="ui-two" {
 			(card(&html! {
-				(card_section("Credentials", Some("The password is shown only after you ask for it, and is not kept in the page."), None))
-				(card_content(&masked(&base)))
+				(card_section("Credentials", None, Some(&html! { span class="ui-card-note" { "internal network" } })))
+				(card_content(&html! {
+					@if let Some(info) = &info {
+						(internal_rows(info, keyed))
+					}
+					(masked(&base))
+				}))
 			}))
+			div class="ui-stack" {
+				(card(&html! {
+					(card_section("Connection string", None, None))
+					(card_content(&urls_masked()))
+				}))
+				@if let Some(info) = &info {
+					(card(&html! {
+						(card_section("External", None, None))
+						(card_content(&html! {
+							@if let Some((host, port)) = &info.public {
+								(copy_row("Public address", &format!("{host}:{port}")))
+							} @else {
+								p class="ui-hint" {
+									"Not published. Set a public port under General to reach it from outside the server."
+								}
+							}
+						}))
+					}))
+				}
+			}
 		}
 	};
-	Ok(page(&ctx, &project, &d, Tab::Connection, &content))
+	Ok(page(&s, &ctx, &project, &d, Tab::Connection, &content).await)
 }
 
 fn internal_rows(info: &ConnectionInfo, keyed: bool) -> Markup {
 	html! {
-		div class="flex flex-col gap-4" {
-			(copy_row("Host", &info.internal_host))
-			div class="grid grid-cols-1 gap-4 sm:grid-cols-2" {
-				(copy_row("Port", &info.port.to_string()))
-				@if keyed {
-					(copy_row("User", &info.username))
-					(copy_row("Database", &info.database))
-				}
+		(copy_row("Host", &info.internal_host))
+		div class="ui-pair" {
+			(copy_row("Port", &info.port.to_string()))
+			@if keyed {
+				(copy_row("Database", &info.database))
 			}
+		}
+		@if keyed {
+			(copy_row("User", &info.username))
 		}
 	}
 }
 
-/// The masked row again, after **Hide**.
+/// The masked rows again, after **Hide**.
 async fn hide(
 	State(s): State<AppState>,
 	ctx: TeamCtx,
@@ -115,14 +134,15 @@ async fn hide(
 ) -> Response {
 	match service::find(&s.db, ctx.user.id, ctx.team.id, project, database).await {
 		Ok(found) => sse::patch(&masked(&database_url(ctx.team.id, project, found.id)))
+			.and(sse::patch(&urls_masked()))
 			.and(sse::signals(&json!({ "_reveal_error": "" })))
 			.into_response(),
 		Err(e) => error::action(&e),
 	}
 }
 
-/// The password and URLs, patched into `#db-secret`. They exist in a page only after this
-/// click, and the response may not be stored.
+/// The password and URLs, patched into `#db-secret` and `#db-urls`. They exist in a page only
+/// after this click, and the response may not be stored.
 async fn reveal(
 	State(s): State<AppState>,
 	ctx: TeamCtx,
@@ -142,18 +162,23 @@ async fn reveal(
 		))
 	);
 	let secret = html! {
-		div id="db-secret" class="flex flex-col gap-4" {
+		div id="db-secret" class="ui-field-group" {
 			(copy_row("Password", &connection.password))
-			(copy_row("Internal URL", &connection.internal_url))
-			@if let Some(public) = &connection.public_url {
-				(copy_row("Public URL", public))
-			}
 			div {
 				button type="button" class=(BUTTON_OUTLINE) "data-on:click"=(hide) { (icon("eye-off")) "Hide" }
 			}
 		}
 	};
+	let urls = html! {
+		div id="db-urls" class="ui-field-group" {
+			(copy_row("Internal URL", &connection.internal_url))
+			@if let Some(public) = &connection.public_url {
+				(copy_row("Public URL", public))
+			}
+		}
+	};
 	let mut response = sse::patch(&secret)
+		.and(sse::patch(&urls))
 		.and(sse::signals(&json!({ "_reveal_error": "" })))
 		.into_response();
 	response

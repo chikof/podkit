@@ -50,7 +50,7 @@ async fn logs_page(
 			}
 		}))
 	});
-	Ok(page(&ctx, &project, &d, Tab::Logs, &content))
+	Ok(page(&s, &ctx, &project, &d, Tab::Logs, &content).await)
 }
 
 async fn logs_stream(

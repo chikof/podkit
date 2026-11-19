@@ -161,15 +161,18 @@ async fn the_gallery_shows_a_page_of_logo_cards_with_ai_and_databases_to_filter_
 	assert_contains(main, "aria-label=\"Categories\"");
 	assert_contains(main, "<span>AI</span>");
 	assert_contains(main, "<span>Databases</span>");
-	assert_eq!(cards(main), 48, "one page of 48 cards");
-	// Logos are the template's own file, served from this origin, and the cards below the
+	assert_eq!(cards(main), 24, "one page of 24 rows");
+	// Logos are the template's own file, served from this origin, and the rows below the
 	// first screen lazy-load.
 	assert_contains(main, "src=\"/static/logos/");
 	assert_contains(main, "loading=\"lazy\"");
 	assert_contains(main, "width=\"40\" height=\"40\"");
 	let total = templates::search(None, None).len();
-	assert_contains(main, &format!("{total} templates"));
+	assert_contains(main, &format!("{total} in the catalog"));
+	assert_contains(main, "24 templates shown");
 	assert_contains(main, "Page 1 of ");
+	// A row is small: the gallery page stays well under the 93 KB it was with every card.
+	assert!(body.len() < 50_000, "{} bytes", body.len());
 }
 
 #[db_test]
@@ -219,6 +222,7 @@ async fn the_debounced_search_answers_with_the_results_region_only(db: PgPool) {
 	assert_eq!(s, StatusCode::OK);
 	assert_contains(&body, "datastar-patch-elements");
 	assert_contains(&body, "id=\"tpl-browser\"");
+	assert_contains(&body, "id=\"tpl-count\"");
 	assert_contains(&body, "Gotify");
 	assert_not_contains(&body, "<main");
 	// The page's search box wires the same fragment, debounced.
@@ -234,7 +238,7 @@ async fn a_category_narrows_the_grid_and_an_unknown_one_is_ignored(db: PgPool) {
 	assert!(!in_db.is_empty());
 	let (_, body) = f.get(&format!("{}?category=database", f.gallery())).await;
 	let main = page_main(&body);
-	assert_eq!(cards(main), in_db.len().min(48));
+	assert_eq!(cards(main), in_db.len().min(24));
 	assert_contains(main, "aria-current=\"page\"");
 	assert_not_contains(main, "Gotify");
 
@@ -243,7 +247,7 @@ async fn a_category_narrows_the_grid_and_an_unknown_one_is_ignored(db: PgPool) {
 		.await;
 	assert_eq!(s, StatusCode::OK);
 	let all = templates::search(None, None).len();
-	let last_page = all - (all.div_ceil(48) - 1) * 48;
+	let last_page = all - (all.div_ceil(24) - 1) * 24;
 	assert_eq!(
 		cards(page_main(&body)),
 		last_page,

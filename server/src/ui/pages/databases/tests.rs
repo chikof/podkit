@@ -293,8 +293,9 @@ async fn the_password_is_only_in_the_reveal_response(db: PgPool) {
 	assert_contains(&page, "podkit");
 	assert_contains(&page, ":15432");
 	assert_contains(&page, "Reveal password and URLs");
-	assert_contains(&page, "<span>User</span>");
+	assert_contains(&page, ">User</label>");
 	assert_contains(&page, "id=\"db-secret\"");
+	assert_contains(&page, "id=\"db-urls\"");
 
 	let (s, headers, body) = post_signals(
 		&f.app,
@@ -313,13 +314,16 @@ async fn the_password_is_only_in_the_reveal_response(db: PgPool) {
 	assert_contains(&body, ":15432/podkit");
 	assert_contains(&body, "Copy");
 	assert_contains(&body, "db-secret");
+	assert_contains(&body, "db-urls");
 	assert_contains(&body, "Hide");
 
 	// Hide puts the bullets back, and a page loaded after the reveal is as clean as before.
 	let (_, _, hidden) = get_html(&f.app, &format!("{tab}/hide"), Some(&f.cookie)).await;
 	assert_contains(&hidden, "db-secret");
+	assert_contains(&hidden, "db-urls");
 	assert_contains(&hidden, "Reveal password and URLs");
 	assert_not_contains(&hidden, &password);
+	assert_not_contains(&hidden, "postgres://");
 	let (_, again) = f.get(&tab).await;
 	assert_not_contains(&again, &password);
 }
@@ -413,16 +417,13 @@ async fn the_header_offers_the_actions_that_can_work(db: PgPool) {
 	set_jobs(&db, id, "succeeded").await;
 	set_state(&db, id, "running", Some("c1")).await;
 	let (_, page) = f.get(&f.url(id)).await;
-	for text in [
-		"Start",
-		"Restart",
-		"Stop",
-		"Delete",
-		"Actions for orders",
-		"db-menu",
-	] {
+	for text in ["Restart", "Stop", "Delete", "Actions for orders", "db-menu"] {
 		assert_contains(&page, text);
 	}
+	// A running database is not offered Start: the header says what can work now.
+	assert_not_contains(&page, &format!("{}/start", f.url(id)));
+	assert_contains(&page, &format!("{}/stop", f.url(id)));
+	assert_contains(&page, &format!("{}/restart", f.url(id)));
 	// The delete dialog asks for the name and offers the purge as its own choice.
 	assert_contains(&page, "id=\"delete-dialog\"");
 	assert_contains(
@@ -430,6 +431,13 @@ async fn the_header_offers_the_actions_that_can_work(db: PgPool) {
 		"Type <strong class=\"font-mono break-all\">orders</strong>",
 	);
 	assert_contains(&page, "Also delete the data");
+
+	// Stopped: Start is the one action, and neither Stop nor Restart is offered.
+	set_state(&db, id, "stopped", None).await;
+	let (_, page) = f.get(&f.url(id)).await;
+	assert_contains(&page, &format!("{}/start", f.url(id)));
+	assert_not_contains(&page, &format!("{}/stop", f.url(id)));
+	assert_not_contains(&page, &format!("{}/restart", f.url(id)));
 }
 
 #[db_test]
@@ -695,7 +703,14 @@ async fn another_teams_database_is_the_404_page_and_cannot_be_changed(db: PgPool
 		format!("/teams/{}/projects/{}/databases/{id}", f.team, f.project),
 	];
 	for base in &bases {
-		for tail in ["", "/connection", "/backups", "/logs", "/advanced"] {
+		for tail in [
+			"",
+			"/connection",
+			"/backups",
+			"/monitoring",
+			"/logs",
+			"/advanced",
+		] {
 			let (s, _, page) = get_html(&f.app, &format!("{base}{tail}"), Some(&bob)).await;
 			assert_eq!(s, StatusCode::NOT_FOUND, "{base}{tail}");
 			assert_contains(&page, "Not found");
@@ -709,6 +724,7 @@ async fn another_teams_database_is_the_404_page_and_cannot_be_changed(db: PgPool
 			"/logs/stream",
 			"/backups/list",
 			"/connection/hide",
+			"/monitoring/charts",
 		] {
 			let (_, _, body) = get_html(&f.app, &format!("{base}{tail}"), Some(&bob)).await;
 			assert_not_contains(&body, "orders");
@@ -724,6 +740,10 @@ async fn another_teams_database_is_the_404_page_and_cannot_be_changed(db: PgPool
 			("/settings", saved(json!({ "public_port": "15432" }))),
 			(
 				"/schedule",
+				saved(json!({ "backup_schedule": "0 3 * * *" })),
+			),
+			(
+				"/backups/settings",
 				saved(json!({ "backup_schedule": "0 3 * * *" })),
 			),
 			("/delete", json!({ "confirm": "orders", "purge": true })),
@@ -812,6 +832,43 @@ async fn the_environment_lists_databases_and_polls_while_they_change(db: PgPool)
 	let (_, _, page) = get_html(&f.app, &overview, Some(&carol)).await;
 	assert_contains(&page, "orders");
 	assert_not_contains(&page, "Create a resource");
+}
+
+#[db_test]
+async fn the_monitoring_tab_charts_the_databases_own_samples_and_the_header_shows_the_latest(
+	db: PgPool,
+) {
+	let f = Fixture::new(&db).await;
+	let id = f.create(&db, "orders", json!({})).await;
+	set_state(&db, id, "running", Some("c1")).await;
+	set_jobs(&db, id, "succeeded").await;
+	sqlx::query(
+		"INSERT INTO resource_metrics (kind, resource_id, at, rollup, cpu, mem) \
+		 VALUES ('database', $1, now(), false, 2.5, 123456789)",
+	)
+	.bind(id)
+	.execute(&db)
+	.await
+	.unwrap();
+
+	let tab = format!("{}/monitoring", f.url(id));
+	let (s, page) = f.get(&tab).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_contains(&page, "id=\"metrics\"");
+	assert_contains(&page, "aria-label=\"Time range\"");
+	assert_contains(&page, &format!("{tab}/charts"));
+	assert_contains(&page, "aria-current=\"page\">Monitoring</a>");
+	// The figures under the head are the newest sample.
+	assert_contains(&page, "<dd>2.5%</dd>");
+	assert_contains(&page, "<dd>123 MB</dd>");
+	assert_eq!(page.matches("<h1").count(), 1, "one h1");
+
+	let (s, _, body) = get_html(&f.app, &format!("{tab}/charts?range=24h"), Some(&f.cookie)).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_contains(&body, "datastar-patch-elements");
+	// An unknown range is the default one, not an error.
+	let (s, _, _) = get_html(&f.app, &format!("{tab}?range=nope"), Some(&f.cookie)).await;
+	assert_eq!(s, StatusCode::OK);
 }
 
 #[db_test]

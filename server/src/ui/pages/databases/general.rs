@@ -66,10 +66,11 @@ async fn general_page(
 
 	let content = html! {
 		div class="flex flex-col gap-6" {
+			div class="ui-two" {
 			(card(&html! {
 				(card_section("Details", None, None))
 				(card_content(&html! {
-					dl class="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2" {
+					dl class="ui-facts ui-facts-col" {
 						(fact("Engine", engine_label(database.engine)))
 						(fact("Version", &database.version))
 						(fact("Server", &d.server_name))
@@ -81,33 +82,32 @@ async fn general_page(
 			}))
 			@if can_update {
 				(card(&html! {
-					form class="flex flex-col gap-5" "data-on:submit"=(save) {
+					form "data-on:submit"=(save) {
 						(card_section("Network and limits", Some("Changing the public port or a limit recreates the container; its data is kept."), None))
 						(card_content(&html! {
-							div class="flex flex-col gap-4" {
-								label class=(LABEL) {
-									"Public port"
-									input class=(INPUT) type="text" inputmode="numeric" placeholder="Not published" "data-bind:public_port";
-									span class="text-sm font-normal text-muted-foreground" { "Publishes the database on the server's host, 1024 to 65535. Leave empty to keep it reachable only by your applications." }
-								}
-								div class="grid grid-cols-1 gap-4 sm:grid-cols-2" {
-									label class=(LABEL) {
-										"Memory limit in MB"
-										input class=(INPUT) type="text" inputmode="numeric" placeholder="No limit" "data-bind:memory_limit_mb";
-									}
-									label class=(LABEL) {
-										"CPU limit in cores"
-										input class=(INPUT) type="text" inputmode="decimal" placeholder="No limit" "data-bind:cpu_limit";
-									}
-								}
-								(form_error())
+							label class=(LABEL) {
+								"Public port"
+								input class=(INPUT) type="text" inputmode="numeric" placeholder="Not published" "data-bind:public_port";
+								span class="ui-hint" { "Publishes the database on the server's host, 1024 to 65535. Leave empty to keep it reachable only by your applications." }
 							}
+							div class="ui-pair" {
+								label class=(LABEL) {
+									"Memory limit in MB"
+									input class=(INPUT) type="text" inputmode="numeric" placeholder="No limit" "data-bind:memory_limit_mb";
+								}
+								label class=(LABEL) {
+									"CPU limit in cores"
+									input class=(INPUT) type="text" inputmode="decimal" placeholder="No limit" "data-bind:cpu_limit";
+								}
+							}
+							(form_error())
 						}))
 						(card_footer(&html! {
 							button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Save changes" }
 						}))
 					}
 				}))
+			}
 			}
 			(card(&html! {
 				(card_section("Latest job", Some("What podkit did most recently to this database."), None))
@@ -121,14 +121,14 @@ async fn general_page(
 			}))
 		}
 	};
-	Ok(page(&ctx, &project, &d, Tab::General, &content))
+	Ok(page(&s, &ctx, &project, &d, Tab::General, &content).await)
 }
 
 fn fact(label: &str, value: &str) -> Markup {
 	html! {
-		div class="flex flex-col gap-0.5" {
-			dt class="text-muted-foreground" { (label) }
-			dd class="font-medium break-words" { (value) }
+		div {
+			dt { (label) }
+			dd { (value) }
 		}
 	}
 }
@@ -179,7 +179,7 @@ impl SettingsSignals {
 		(!schedule.is_empty()).then_some(schedule)
 	}
 
-	fn input(&self) -> Result<SettingsInput, ServerError> {
+	pub(in crate::ui) fn input(&self) -> Result<SettingsInput, ServerError> {
 		Ok(SettingsInput {
 			public_port: number(&self.public_port, "Public port")?,
 			memory_limit_mb: number(&self.memory_limit_mb, "Memory limit")?,

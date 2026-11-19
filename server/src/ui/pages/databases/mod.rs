@@ -24,7 +24,7 @@ use crate::jobs::JobStatus;
 use crate::projects;
 use crate::projects::Project;
 use crate::state::AppState;
-use crate::ui::components::{BUTTON_OUTLINE, INPUT, TabItem, icon, tabs};
+use crate::ui::components::{TabItem, copy_field, tabs};
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page};
 use crate::ui::{error, sse};
@@ -35,8 +35,10 @@ mod create;
 mod general;
 mod header;
 mod logs;
+mod monitoring;
 
-pub(in crate::ui) use general::schedule_hint;
+pub(in crate::ui) use general::{SettingsSignals, schedule_hint};
+pub(in crate::ui) use header::reloaded;
 
 #[cfg(test)]
 mod tests;
@@ -48,6 +50,7 @@ pub fn router() -> Router<AppState> {
 		.merge(general::router())
 		.merge(connection::router())
 		.merge(logs::router())
+		.merge(monitoring::router())
 		.merge(advanced::router())
 }
 
@@ -149,18 +152,20 @@ fn id<T>(raw: &str, what: &str, make: fn(i64) -> T) -> Result<Option<T>, ServerE
 		.map_err(|_| ServerError::Validation(format!("Pick a valid {what}.")))
 }
 
-/// A read-only field with a button that copies its value. `execCommand` rather than the
-/// Clipboard API, which browsers withhold over plain HTTP.
+/// A read-only field with a button that copies its value (`field::copy_field`: the
+/// Clipboard API where the page is a secure context, a selected input over plain HTTP).
 pub(in crate::ui) fn copy_row(label: &str, value: &str) -> Markup {
-	html! {
-		div class="flex flex-col gap-2 text-sm font-medium" {
-			span { (label) }
-			div class="flex gap-2" {
-				input class={ (INPUT) " font-mono" } type="text" readonly value=(value) autocomplete="off" spellcheck="false" aria-label=(label) "data-on:focus"="el.select()";
-				button type="button" class=(BUTTON_OUTLINE) "data-on:click"="el.previousElementSibling.select(); document.execCommand('copy')" aria-label={ "Copy " (label) } { (icon("copy")) "Copy" }
+	let id: String = label
+		.chars()
+		.map(|c| {
+			if c.is_ascii_alphanumeric() {
+				c.to_ascii_lowercase()
+			} else {
+				'-'
 			}
-		}
-	}
+		})
+		.collect();
+	copy_field(&format!("copy-{id}"), label, value)
 }
 
 /// What a refusal of an action reads as in the header's error line.
@@ -175,15 +180,17 @@ pub(in crate::ui) enum Tab {
 	General,
 	Connection,
 	Backups,
+	Monitoring,
 	Logs,
 	Advanced,
 }
 
 impl Tab {
-	const ALL: [Self; 5] = [
+	const ALL: [Self; 6] = [
 		Self::General,
 		Self::Connection,
 		Self::Backups,
+		Self::Monitoring,
 		Self::Logs,
 		Self::Advanced,
 	];
@@ -193,6 +200,7 @@ impl Tab {
 			Self::General => "General",
 			Self::Connection => "Connection",
 			Self::Backups => "Backups",
+			Self::Monitoring => "Monitoring",
 			Self::Logs => "Logs",
 			Self::Advanced => "Advanced",
 		}
@@ -204,6 +212,7 @@ impl Tab {
 			Self::General => "",
 			Self::Connection => "/connection",
 			Self::Backups => "/backups",
+			Self::Monitoring => "/monitoring",
 			Self::Logs => "/logs",
 			Self::Advanced => "/advanced",
 		}
@@ -216,6 +225,7 @@ impl Tab {
 			Self::General | Self::Logs => true,
 			Self::Connection => can(Action::Update, Resource::Database),
 			Self::Backups => can(Action::Read, Resource::Backup),
+			Self::Monitoring => can(Action::Read, Resource::Database),
 			Self::Advanced => {
 				can(Action::Update, Resource::Database) || can(Action::Delete, Resource::Database)
 			}
@@ -299,7 +309,8 @@ fn frame_signals(database: &Database) -> String {
 
 /// The page frame of every tab: header, tab row, `content`, and the dialogs the header's
 /// menu opens. The dialogs sit outside the header, which polling re-renders.
-pub(in crate::ui) fn page(
+pub(in crate::ui) async fn page(
+	s: &AppState,
 	ctx: &TeamCtx,
 	project: &Project,
 	d: &DatabaseDetail,
@@ -319,7 +330,7 @@ pub(in crate::ui) fn page(
 	}
 	let body = html! {
 		div class="flex flex-col gap-6" data-signals=(frame_signals(database)) {
-			(header::header(&ctx, d))
+			(header::header(s, &ctx, d).await)
 			(tab_row(&ctx, database, active))
 			(content)
 			(header::dialogs(&ctx, database))
