@@ -22,9 +22,8 @@ use crate::projects::overview::{self, ProjectCard};
 use crate::projects::service;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, Dismiss, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, Size, Tone, Variant,
-	button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu, empty_state, icon,
-	menu_label,
+	BUTTON_DANGER, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, Size, Tone, Variant, button_class,
+	dialog, dialog_cancel, dialog_open_button, dropdown_menu, empty_state, icon, menu_label,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page, form_error};
@@ -173,7 +172,6 @@ fn create_dialog(team: TeamId) -> Markup {
 		"project-create",
 		"New project",
 		Some("A project groups the applications, databases and models that belong together."),
-		Dismiss::Esc,
 		&html! {
 			form id="project-create-form" class="flex flex-col gap-4" "data-on:submit"=(post) {
 				label class=(LABEL) {
@@ -204,7 +202,6 @@ fn rename_dialog(team: TeamId) -> Markup {
 		"project-rename",
 		"Rename project",
 		Some("The slug and the links to the project stay the same."),
-		Dismiss::Esc,
 		&html! {
 			form id="project-rename-form" class="flex flex-col gap-4" "data-on:submit"=(post) {
 				label class=(LABEL) {
@@ -228,7 +225,6 @@ fn delete_dialog(team: TeamId) -> Markup {
 		"project-delete",
 		"Delete project",
 		None,
-		Dismiss::Esc,
 		&html! {
 			form id="project-delete-form" class="flex flex-col gap-4" "data-on:submit"=(post) {
 				p {

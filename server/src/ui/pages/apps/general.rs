@@ -22,12 +22,28 @@ use crate::applications::{BuildStrategy, SourceKind};
 use crate::auth::permission::{Action, Resource};
 use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::state::AppState;
-use crate::ui::components::{
-	Size, Variant, button_class, card, card_content, card_footer, card_section,
-};
+use crate::ui::components::{card, card_content, card_section, save_bar, save_bar_saved};
 use crate::ui::extract::TeamCtx;
-use crate::ui::layout::form_error;
 use crate::ui::{error, sse};
+
+/// The signals the form's fields are bound to (`prefilled_signals` has the same names); the
+/// save bar watches all of them.
+const SAVE_FIELDS: &[&str] = &[
+	"name",
+	"slug",
+	"repo_url",
+	"git_ref",
+	"deploy_key",
+	"git_token",
+	"build_strategy",
+	"dockerfile_path",
+	"image",
+	"registry_username",
+	"registry_password",
+	"container_port",
+	"memory_limit_mb",
+	"cpu_limit",
+];
 
 pub fn router() -> Router<AppState> {
 	// The application's own page is its deployments; its configuration is this tab.
@@ -134,13 +150,7 @@ fn edit_form(base: &str, app: &ApplicationView) -> Markup {
 					}
 				}
 				(section("Runtime", None, &runtime_fields()))
-				(card(&html! {
-					(card_content(&html! { (form_error()) }))
-					(card_footer(&html! {
-						button type="submit" class=(button_class(Variant::Default, Size::Md))
-							"data-indicator:_busy" "data-attr:disabled"="$_busy" { "Save changes" }
-					}))
-				}))
+				(save_bar(SAVE_FIELDS))
 			}
 		}
 	}
@@ -186,6 +196,7 @@ async fn save(
 				.and(sse::signals(&clear_credentials()))
 				.and(sse::signals(&json!({ "_error": "" })))
 				.and(toast_ok("Settings saved"))
+				.and(save_bar_saved())
 				.into_response()
 		}
 		Err(e) => error::action(&e),

@@ -1647,3 +1647,99 @@ code.font-mono { font-size: 0.92em; }
 /* An empty state inside a card is the card's own content: flush, no second box, text on the header's edge. */
 .ui-card .ui-empty { border: 0; border-radius: 0; padding: var(--s-7) var(--card-pad); }
 .ui-card-b:has(> .ui-empty:only-child) { padding: 0; }
+
+/* == sidebar rail ==
+   The sidebar folds to a 56 px icon rail (`.ui-shell-collapsed`, set by the `sidebar` cookie on the
+   server and by `[` or the toggle in page.js). Labels give way by max-width and opacity so the
+   change animates with the grid column; below 760 px the strip and tab bar are unchanged. */
+.ui-sidebar .ui-nav-link, .ui-side-toggle, .ui-sidebar .ui-team-trigger, .ui-sidebar .ui-user-trigger, .ui-sidebar .ui-brand { gap: 0; }
+.ui-sidebar .ui-nav-label, .ui-side-toggle .ui-nav-label, .ui-sidebar .ui-brand-name, .ui-sidebar .ui-team-name, .ui-sidebar .ui-user-name { margin-inline-start: var(--s-3); max-width: 14rem; }
+.ui-sidebar .ui-team-name, .ui-sidebar .ui-user-name { margin-inline-end: var(--s-3); }
+.ui-sidebar { overflow-x: hidden; }
+.ui-chrome-foot { flex-direction: column; align-items: stretch; gap: var(--s-2); }
+.ui-side-toggle {
+	display: flex; align-items: center; height: 28px; padding-inline: var(--s-3); border: 0; border-radius: var(--r-md);
+	background: none; color: var(--muted-foreground); font: inherit; font-size: var(--fs-md); text-align: start; cursor: pointer;
+	transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
+}
+.ui-side-toggle .ui-icon { color: var(--subtle-foreground); }
+.ui-side-toggle:hover { background-color: var(--secondary); color: var(--foreground); }
+.ui-side-toggle:active { background-color: var(--accent); transform: scale(var(--press-scale)); }
+.ui-side-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ui-when-collapsed { display: none; }
+.ui-shell-collapsed .ui-when-open { display: none; }
+.ui-shell-collapsed .ui-when-collapsed { display: inline; }
+.ui-tip .ui-kbd { margin-inline-start: var(--s-2); }
+@supports (position-area: block-end) {
+	.ui-tip-side { position-area: inline-end; margin-top: 0; margin-inline-start: var(--s-3); position-try-fallbacks: flip-inline; }
+}
+.ui-shell:not(.ui-shell-collapsed) li > .ui-tip-side { display: none !important; }
+@media (max-width: 760px) {
+	.ui-side-toggle, #side-toggle-tip { display: none; }
+}
+@media (min-width: 761px) {
+	.ui-shell-collapsed { --nav-w: 56px; }
+	.ui-shell-collapsed .ui-sidebar { padding-inline: var(--s-3); }
+	.ui-shell-collapsed .ui-nav-label, .ui-shell-collapsed .ui-brand-name, .ui-shell-collapsed .ui-team-name, .ui-shell-collapsed .ui-user-name {
+		max-width: 0; margin-inline: 0; opacity: 0; flex: none;
+	}
+	.ui-shell-collapsed .ui-team-chev { display: none; }
+	.ui-shell-collapsed .ui-nav-link, .ui-shell-collapsed .ui-side-toggle, .ui-shell-collapsed .ui-team-trigger,
+	.ui-shell-collapsed .ui-user-trigger, .ui-shell-collapsed .ui-brand { justify-content: center; padding-inline: 0; }
+}
+@media (min-width: 761px) and (prefers-reduced-motion: no-preference) {
+	.ui-shell { transition: grid-template-columns var(--dur-3) var(--ease); }
+	.ui-sidebar .ui-nav-label, .ui-side-toggle .ui-nav-label, .ui-sidebar .ui-brand-name, .ui-sidebar .ui-team-name, .ui-sidebar .ui-user-name {
+		transition: max-width var(--dur-3) var(--ease), margin var(--dur-3) var(--ease), opacity var(--dur-2) var(--ease);
+	}
+	.ui-sidebar .ui-nav-link, .ui-side-toggle, .ui-sidebar .ui-team-trigger, .ui-sidebar .ui-user-trigger, .ui-sidebar .ui-brand {
+		transition-property: background-color, border-color, color, transform, padding; transition-duration: var(--dur-1), var(--dur-1), var(--dur-1), var(--dur-1), var(--dur-3);
+	}
+}
+
+/* == save bar ==
+   Shown only while a form differs from its snapshot (`data-dirty`, set by the bar's own
+   Datastar attribute); it slides up from the page's bottom edge and sticks there while the form
+   is taller than the window. A clean bar is not rendered at all (display: none). */
+.ui-save-bar {
+	position: sticky; inset-block-end: var(--s-5); z-index: 5;
+	display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3) var(--s-5);
+	padding: var(--s-3) var(--card-pad); border-radius: var(--r-lg);
+	background-color: var(--popover); color: var(--popover-foreground); box-shadow: var(--sh-3);
+	transition-property: opacity, transform, display, overlay; transition-duration: var(--dur-2); transition-timing-function: var(--ease-out); transition-behavior: allow-discrete;
+}
+.ui-save-bar:not([data-dirty]) { display: none; opacity: 0; transform: translateY(var(--s-6)); }
+@starting-style { .ui-save-bar[data-dirty] { opacity: 0; transform: translateY(var(--s-6)); } }
+.ui-save-msg { display: grid; gap: var(--s-1); min-width: 0; }
+.ui-save-title { font-size: var(--fs-md); font-weight: var(--fw-medium); }
+.ui-save-act { display: flex; align-items: center; gap: var(--s-3); margin-inline-start: auto; }
+@media (max-width: 760px) { .ui-save-bar { inset-block-end: calc(var(--tab-h) + var(--s-3)); } }
+@media (prefers-reduced-motion: reduce) { .ui-save-bar, .ui-save-bar:not([data-dirty]) { transform: none; } }
+.ui-dialog-head + .ui-dialog-foot { margin-top: var(--s-5); }
+
+/* == chart tooltip ==
+   A crosshair, one dot per series and a card with the time and every series' value at that x.
+   page.js fills them from the plot's `data-points`; the card is anchored to the crosshair where
+   anchor positioning exists (flipping at the plot's edge) and placed by page.js elsewhere. */
+.ui-chart-plot { touch-action: pan-y; }
+.ui-chart-plot:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: var(--r-sm); }
+.ui-chart-cross { position: absolute; inset-block: 0; width: 1px; margin-inline-start: -0.5px; background-color: var(--muted-foreground); opacity: 0.6; pointer-events: none; }
+.ui-chart-dot { position: absolute; background-color: var(--c); width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; box-shadow: 0 0 0 2px var(--card); pointer-events: none; }
+.ui-chart-tip {
+	position: absolute; z-index: 3; inset-block-start: 0; min-width: 9.5rem; max-width: 16rem; padding: var(--s-3) var(--s-4); pointer-events: none;
+	border-radius: var(--r-md); background-color: var(--popover); color: var(--popover-foreground); box-shadow: var(--sh-3);
+	font-size: var(--fs-xs); line-height: 1.4; font-variant-numeric: tabular-nums;
+}
+.ui-chart-tip b { display: block; margin-bottom: var(--s-2); color: var(--muted-foreground); font-weight: var(--fw-regular); }
+.ui-chart-row { display: flex; align-items: center; gap: var(--s-3); }
+.ui-chart-row::before { content: ""; width: 8px; height: 8px; flex: none; border-radius: 50%; background-color: var(--c); }
+.ui-chart-row span { margin-inline-start: auto; padding-inline-start: var(--s-4); font-weight: var(--fw-medium); }
+.ui-chart-row[data-c="1"], .ui-chart-dot[data-c="1"] { --c: var(--chart-1); }
+.ui-chart-row[data-c="2"], .ui-chart-dot[data-c="2"] { --c: var(--chart-2); }
+.ui-chart-row[data-c="3"], .ui-chart-dot[data-c="3"] { --c: var(--chart-3); }
+.ui-chart-row[data-c="4"], .ui-chart-dot[data-c="4"] { --c: var(--chart-4); }
+.ui-chart-row[data-c="5"], .ui-chart-dot[data-c="5"] { --c: var(--chart-5); }
+@supports (position-area: inline-end) {
+	.ui-chart-cross { anchor-name: var(--an); }
+	.ui-chart-tip { inset: auto; position-anchor: var(--an); position-area: inline-end; margin-inline: var(--s-3); position-try-fallbacks: flip-inline; }
+}

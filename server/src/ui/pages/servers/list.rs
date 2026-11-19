@@ -19,7 +19,7 @@ use crate::servers::{Server, host_key_fingerprint};
 use crate::state::AppState;
 use crate::ui::charts::sparkline;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, LogoSize, TEXTAREA, dialog, dialog_cancel,
+	BUTTON, BUTTON_OUTLINE, INPUT, LABEL, LogoSize, TEXTAREA, dialog, dialog_cancel,
 	dialog_open_button, icon, logo,
 };
 use crate::ui::error;
@@ -285,7 +285,6 @@ fn add_dialog(ctx: &TeamCtx) -> Markup {
 		Some(
 			"podkit connects over SSH, installs its agent and starts it. The server stays pending until that finishes.",
 		),
-		Dismiss::Esc,
 		&body,
 		&footer,
 	)

@@ -18,7 +18,7 @@ use crate::auth::permission::{Action, Resource};
 use crate::ids::{ApplicationId, ProjectId, TeamId, VolumeId};
 use crate::state::AppState;
 use crate::ui::components::{
-	Dismiss, INPUT, LABEL, Size, Variant, button_class, card, card_content, card_section, dialog,
+	INPUT, LABEL, Size, Variant, button_class, card, card_content, card_section, dialog,
 	dialog_open_button, empty_state, icon,
 };
 use crate::ui::extract::TeamCtx;
@@ -52,7 +52,6 @@ fn delete_dialog(base: &str, volume: &Volume) -> Markup {
 		&id,
 		"Delete this volume?",
 		None,
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				p {

@@ -5,10 +5,12 @@
 //! A chart is a `<figure>` holding
 //!
 //! - a caption with the title and the latest value of each series,
-//! - an `<svg role="img">` with axis ticks, one path per run of readings (a missing
+//! - an `<svg role="img">` with axis ticks and one path per run of readings (a missing
 //!   reading, or a hole longer than three times the usual step, breaks the line instead
-//!   of being bridged), and one invisible column per reading whose `<title>` is the hover
-//!   value,
+//!   of being bridged); the plot around it is focusable and carries the readings in a
+//!   compact `data-points` attribute, from which `page.js` draws a crosshair, a dot per
+//!   series and a tooltip card at the pointer, or at the point the arrow keys have stepped
+//!   to (and says its values politely); there is no native `title` tooltip,
 //! - a visually hidden summary the SVG points at with `aria-describedby`,
 //! - a table of the readings, shown by the `_tables` signal that
 //!   `components::metrics_section` declares (the "data table" toggle).
@@ -454,16 +456,15 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 	let span = chart.to - chart.from;
 	let x_ticks: Vec<i64> = (0..=4i64).map(|i| chart.from + span * i / 4).collect();
 	let base = HEIGHT - BOTTOM;
-	let plot_width = WIDTH - LEFT - RIGHT;
-	// A hover column is one usual step wide (or the plot split evenly when that is unknown).
-	let col = usual_step(chart.xs)
-		.map_or(plot_width / chart.xs.len().max(1) as f64, |s| {
-			s as f64 / span.max(1) as f64 * plot_width
-		})
-		.clamp(1.0, plot_width);
+	let figure_anchor = format!("--{figure_id}");
+	let label = format!(
+		"{} readings. Use the left and right arrow keys to move between them.",
+		chart.title
+	);
 	html! {
 		div class="ui-chart" {
-			div class="ui-chart-plot" {
+			div class="ui-chart-plot" tabindex="0" role="group" aria-label=(label)
+				style={ "--an:" (figure_anchor) } "data-points"=(points_json(chart, &plot)) {
 				svg viewBox={ "0 0 " (WIDTH) " " (HEIGHT) } preserveAspectRatio="none" role="img"
 					aria-labelledby={ (figure_id) "-title" } aria-describedby={ (figure_id) "-summary" } {
 					@for tick in &ticks {
@@ -480,18 +481,18 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 							}
 						}
 					}
-					@for (i, t) in chart.xs.iter().enumerate() {
-						@let left = (plot.x(*t) - col / 2.0).max(LEFT);
-						@let right = (plot.x(*t) + col / 2.0).min(WIDTH - RIGHT);
-						rect x=(num(left)) y=(TOP) width=(num((right - left).max(1.0))) height=(base - TOP)
-							class="fill-transparent hover:fill-foreground/10" {
-							title { (hover_text(chart, i)) }
-						}
-					}
 				}
 				@for tick in &ticks {
 					span class="ui-chart-yl" style={ "--p:" (num((1.0 - tick / top) * 100.0)) } aria-hidden="true" { (format_value(chart.unit, *tick)) }
 				}
+				// The hover layer: `page.js` places the crosshair, the dots and the card, and
+				// says the values politely when a key moves the point.
+				span class="ui-chart-cross" hidden aria-hidden="true" {}
+				@for s in &chart.series {
+					i class="ui-chart-dot" data-c=(s.color) hidden aria-hidden="true" {}
+				}
+				div class="ui-chart-tip" hidden aria-hidden="true" {}
+				div class="ui-visually-hidden" aria-live="polite" {}
 			}
 			div class="ui-chart-xl" aria-hidden="true" {
 				@for t in &x_ticks {
@@ -502,18 +503,38 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 	}
 }
 
-fn hover_text(chart: &Chart<'_>, i: usize) -> String {
-	let mut out = full_time(chart.xs[i]);
-	for s in &chart.series {
-		let v = s
-			.values
-			.get(i)
-			.copied()
-			.flatten()
-			.map_or_else(|| "no reading".to_owned(), |v| format_value(chart.unit, v));
-		let _ = write!(out, " · {}: {v}", s.label);
-	}
-	out
+/// What `page.js` needs to draw the hover layer, as compact JSON: the window (`f`, `t` in unix
+/// seconds), the series labels (`s`) and colors (`c`), and one entry per reading `[time,
+/// [[y, "text"] | null, ...]]` where `y` is the point's height as a fraction of the plot and
+/// `text` is the value with its unit. Nothing is computed from it but positions.
+fn points_json(chart: &Chart<'_>, plot: &Plot) -> String {
+	let readings: Vec<serde_json::Value> = chart
+		.xs
+		.iter()
+		.enumerate()
+		.map(|(i, t)| {
+			let per_series: Vec<serde_json::Value> = chart
+				.series
+				.iter()
+				.map(|s| match s.values.get(i).copied().flatten() {
+					Some(v) => serde_json::json!([
+						(plot.y(v) / HEIGHT * 1000.0).round() / 1000.0,
+						format_value(chart.unit, v)
+					]),
+					None => serde_json::Value::Null,
+				})
+				.collect();
+			serde_json::json!([t, per_series])
+		})
+		.collect();
+	serde_json::json!({
+		"f": chart.from,
+		"t": chart.to,
+		"s": chart.series.iter().map(|s| s.label).collect::<Vec<_>>(),
+		"c": chart.series.iter().map(|s| s.color).collect::<Vec<_>>(),
+		"p": readings,
+	})
+	.to_string()
 }
 
 /// One chart as a `<figure id="chart-<id>">`. See the module docs.
@@ -795,9 +816,10 @@ mod tests {
 			..one(&xs, vals, Unit::Percent, Some(100.0))
 		};
 		let html = render(&chart);
-		// One hover column per reading, each with its own value.
-		assert_eq!(html.matches("<rect").count(), 300);
-		assert_eq!(html.matches("<title>").count(), 300);
+		// Every reading is in `data-points`, which is all the hover layer needs.
+		assert_eq!(html.matches("<rect").count(), 0);
+		assert!(!html.contains("<title"), "no native tooltip: {html}");
+		assert_eq!(points(&html)["p"].as_array().unwrap().len(), 300);
 		// The table is thinned, and says so.
 		assert_eq!(html.matches("<tr>").count(), TABLE_ROWS + 1);
 		assert!(html.contains("Showing 30 of 300 readings."), "{html}");
@@ -832,11 +854,42 @@ mod tests {
 		assert!(html.contains("data-show=\"$_tables\""), "{html}");
 		assert!(html.contains("<th scope=\"col\">Time</th>"), "{html}");
 		assert!(html.contains("2023-11-14 22:13:20 UTC"), "{html}");
-		// Hover values.
-		assert!(
-			html.contains("<title>2023-11-14 22:13:20 UTC · CPU: 10%</title>"),
-			"{html}"
-		);
+		// Hover values come from `data-points`, not from a native tooltip.
+		assert!(!html.contains("<title"), "{html}");
+		let p = points(&html);
+		assert_eq!(p["s"][0], "CPU");
+		assert_eq!(p["p"][0][0], 1_700_000_000);
+		assert_eq!(p["p"][0][1][0][1], "10%");
+		assert_eq!(p["p"][3][1][0][1], "40%");
+	}
+
+	/// The JSON of the chart's `data-points` attribute.
+	fn points(html: &str) -> serde_json::Value {
+		let (_, rest) = html.split_once("data-points=\"").expect("data-points");
+		let raw = rest.split('"').next().unwrap();
+		serde_json::from_str(&raw.replace("&quot;", "\"").replace("&amp;", "&")).unwrap()
+	}
+
+	#[test]
+	fn charts_are_keyboard_reachable_with_a_polite_live_region() {
+		let xs = minutes(4);
+		let vals = vec![Some(10.0), None, Some(30.0), Some(40.0)];
+		let html = render(&one(&xs, vals, Unit::Percent, Some(100.0)));
+		assert!(html.contains("tabindex=\"0\""), "{html}");
+		assert!(html.contains("role=\"group\""), "{html}");
+		assert!(html.contains("aria-live=\"polite\""), "{html}");
+		// A missing reading is null, so the card can say "no reading".
+		assert!(points(&html)["p"][1][1][0].is_null());
+		// The crosshair, one dot per series and the card are in the markup, hidden.
+		for part in [
+			"ui-chart-cross\" hidden",
+			"ui-chart-dot\" data-c=\"2\" hidden",
+			"ui-chart-tip\" hidden",
+		] {
+			assert!(html.contains(part), "{part}: {html}");
+		}
+		// The summary for screen readers stays.
+		assert!(html.contains("id=\"chart-cpu-summary\""), "{html}");
 	}
 
 	#[test]
@@ -905,7 +958,8 @@ mod tests {
 		let html = render(&chart);
 		assert!(html.contains("Received") && html.contains("Sent"), "{html}");
 		assert!(html.contains("4 KB/s"), "{html}");
-		assert!(html.contains("no reading"), "{html}");
+		// A missing reading is `null` in the hover data; the card says "no reading" for it.
+		assert!(points(&html)["p"][1][1][1].is_null(), "{html}");
 		assert!(html.contains("–"), "{html}");
 	}
 

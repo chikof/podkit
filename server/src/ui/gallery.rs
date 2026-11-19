@@ -12,7 +12,6 @@ use axum::routing::get;
 use maud::{Markup, PreEscaped, html};
 
 use super::assets::ICONS_SVG;
-use super::components::Dismiss;
 use super::components::{
 	BUTTON, BannerKind, CHECKBOX, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, RadioTab,
 	SELECT, SWITCH, Size, Status, TabItem, Tone, Variant, avatar, badge, banner, breadcrumb,
@@ -450,7 +449,6 @@ fn dialog_demo(p: &str) -> Markup {
 			&confirm,
 			"Delete api?",
 			Some("This removes its deployments and environment variables. It cannot be undone."),
-			Dismiss::Esc,
 			&html! { p { "Type the name to confirm." } input class=(INPUT) aria-label="Application name" placeholder="api"; },
 			&html! {
 				form method="dialog" { button class=(button_class(Variant::Outline, Size::Md)) autofocus { "Keep it" } }
@@ -461,7 +459,6 @@ fn dialog_demo(p: &str) -> Markup {
 			&form,
 			"Rename application",
 			None,
-			Dismiss::EscOrOutside,
 			&html! { label class=(LABEL) { "Name" input class=(INPUT) value="api" autofocus; } },
 			&html! {
 				(dialog_cancel(&button_class(Variant::Outline, Size::Md), &html! { "Cancel" }))

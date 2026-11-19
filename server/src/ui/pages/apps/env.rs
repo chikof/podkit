@@ -20,8 +20,8 @@ use crate::error::ServerError;
 use crate::ids::{ApplicationId, EnvVarId, ProjectId, TeamId};
 use crate::state::AppState;
 use crate::ui::components::{
-	Dismiss, INPUT, LABEL, Size, TEXTAREA, Variant, button_class, card, card_content, card_section,
-	dialog, dialog_cancel, dialog_open_button, empty_state, icon,
+	INPUT, LABEL, Size, TEXTAREA, Variant, button_class, card, card_content, card_section, dialog,
+	dialog_cancel, dialog_open_button, empty_state, icon,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::form_error;
@@ -108,7 +108,6 @@ fn bulk_dialog(base: &str) -> Markup {
 		Some(
 			"One KEY=VALUE per line. Blank lines and lines starting with # are ignored. Lines that don't parse are skipped and reported by number.",
 		),
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-4" {
 				(closer("env-bulk"))

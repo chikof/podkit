@@ -32,6 +32,7 @@ mod logo;
 mod menu;
 mod metrics;
 mod progress;
+mod save_bar;
 mod skeleton;
 mod stepper;
 mod table;
@@ -53,7 +54,7 @@ pub use card::{
 	card_title, link_card,
 };
 pub use chip::{chip, chip_group};
-pub use dialog::{Dismiss, dialog, dialog_cancel, dialog_open_button};
+pub use dialog::{dialog, dialog_cancel, dialog_open_button, discard_confirm};
 pub use empty_state::empty_state;
 pub use field::{
 	CHECKBOX, INPUT, LABEL, SELECT, SWITCH, TEXTAREA, checkbox_field, copy_field, error_text,
@@ -74,6 +75,7 @@ pub use metrics::{
 	resource_charts,
 };
 pub use progress::progress;
+pub use save_bar::{save_bar, saved as save_bar_saved};
 pub use skeleton::{skeleton, skeleton_row};
 pub use stepper::{Current, stepper};
 pub use table::table;

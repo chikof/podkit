@@ -14,9 +14,10 @@ use super::frame::settings_page;
 use crate::auth::permission::{Action, Resource};
 use crate::state::AppState;
 use crate::teams::service;
-use crate::ui::components::{BUTTON, INPUT, LABEL, Tone, card, card_content, card_heading};
+use crate::ui::components::{
+	INPUT, LABEL, Tone, card, card_content, card_heading, save_bar, save_bar_saved,
+};
 use crate::ui::extract::TeamCtx;
-use crate::ui::layout::form_error;
 use crate::ui::sse::js_string;
 use crate::ui::{error, shell, sse};
 
@@ -30,26 +31,28 @@ async fn page(ctx: TeamCtx) -> Markup {
 	let url = format!("/teams/{}/settings", ctx.team.id);
 	let content = html! {
 		div class="flex flex-col gap-6" data-signals=(signals) {
-			(card(&html! {
-				(card_heading("Team name", Some("Shown in the sidebar and the team switcher.")))
-				(card_content(&html! {
-					@if can_rename {
-						form class="flex max-w-md flex-col gap-4" "data-on:submit"={ "evt.preventDefault(); @post(" (js_string(&url)) ")" } {
+			@if can_rename {
+				form class="flex flex-col gap-6" "data-on:submit"={ "evt.preventDefault(); @post(" (js_string(&url)) ")" } {
+					(card(&html! {
+						(card_heading("Team name", Some("Shown in the sidebar and the team switcher.")))
+						(card_content(&html! {
 							label class=(LABEL) {
 								"Name"
-								input class=(INPUT) type="text" required maxlength="60" autocomplete="off" "data-bind:name";
+								input class={ (INPUT) " max-w-md" } type="text" required maxlength="60" autocomplete="off" "data-bind:name";
 							}
-							(form_error())
-							div {
-								button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Save" }
-							}
-						}
-					} @else {
+						}))
+					}))
+					(save_bar(&["name"]))
+				}
+			} @else {
+				(card(&html! {
+					(card_heading("Team name", Some("Shown in the sidebar and the team switcher.")))
+					(card_content(&html! {
 						p class="text-sm" { (ctx.team.name) }
 						p class="mt-2 text-sm text-muted-foreground" { "Only people who can update the team may rename it." }
-					}
+					}))
 				}))
-			}))
+			}
 			(card(&html! {
 				(card_heading("Team slug", Some("The short name the team was created with. It does not change.")))
 				(card_content(&html! {
@@ -79,7 +82,10 @@ async fn rename(
 				Tone::Success,
 				&format!("Team renamed to {}.", team.name),
 			);
-			sse::redirect(&format!("/teams/{}/settings", team.id)).into_response()
+			sse::signals(&serde_json::json!({ "_error": "" }))
+				.and(save_bar_saved())
+				.and(sse::redirect(&format!("/teams/{}/settings", team.id)))
+				.into_response()
 		}
 		Err(e) => error::action(&e),
 	}

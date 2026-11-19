@@ -671,3 +671,26 @@ async fn creating_a_team_leaves_a_message_for_its_first_page(db: PgPool) {
 	let flash = flash_cookie(&h).expect("a flash cookie");
 	assert_contains(&flash, "Second");
 }
+
+#[db_test]
+async fn the_sidebar_cookie_renders_the_rail_and_a_toggle(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	let path = format!("/teams/{team}/projects");
+	let (_, _, open) = get_html(&app, &path, Some(&cookie)).await;
+	assert_contains(&open, "class=\"ui-shell\"");
+	assert_not_contains(&open, "ui-shell-collapsed\" data-signals");
+	assert_contains(&open, "{_side: false}");
+	assert_contains(&open, "data-side-toggle");
+	assert_contains(&open, "aria-keyshortcuts=\"[\"");
+	let (_, _, rail) = get_html(&app, &path, Some(&format!("{cookie}; sidebar=collapsed"))).await;
+	assert_contains(&rail, "class=\"ui-shell ui-shell-collapsed\"");
+	assert_contains(&rail, "{_side: true}");
+	assert_contains(&rail, "aria-label=\"Expand sidebar\"");
+	// Every place has a tooltip for the rail, and the discard question is on the page.
+	assert_contains(&rail, "id=\"nav-tip-0\"");
+	assert_contains(&rail, "id=\"discard-confirm\"");
+	// Any other value of the cookie is the open sidebar.
+	let (_, _, junk) = get_html(&app, &path, Some(&format!("{cookie}; sidebar=nonsense"))).await;
+	assert_contains(&junk, "class=\"ui-shell\"");
+}
