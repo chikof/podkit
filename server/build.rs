@@ -65,7 +65,56 @@ fn main() {
 
 	let utilities = encre_css::generate(sources.iter().map(String::as_str), &full);
 	let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("app.css");
-	fs::write(out, format!("{theme}\n{components}\n{utilities}")).expect("write app.css");
+	fs::write(
+		out,
+		format!("{}\n{}\n{utilities}", squeeze(&theme), squeeze(&components)),
+	)
+	.expect("write app.css");
+}
+
+/// Drops comments and the whitespace that carries no meaning (around `{`, `}`, `;`, `,` and
+/// after `:`), so the hand-written parts weigh what they say. Strings are copied as they are.
+fn squeeze(css: &str) -> String {
+	let mut out = String::with_capacity(css.len() / 2);
+	let mut chars = css.chars().peekable();
+	let mut pending_space = false;
+	while let Some(c) = chars.next() {
+		if c == '/' && chars.peek() == Some(&'*') {
+			chars.next();
+			let mut prev = ' ';
+			for d in chars.by_ref() {
+				if prev == '*' && d == '/' {
+					break;
+				}
+				prev = d;
+			}
+			pending_space = true;
+			continue;
+		}
+		if c.is_whitespace() {
+			pending_space = true;
+			continue;
+		}
+		if pending_space {
+			let tight_before = out.chars().last().is_none_or(|l| "{};,:".contains(l));
+			if !tight_before && !"{};,".contains(c) {
+				out.push(' ');
+			}
+			pending_space = false;
+		}
+		out.push(c);
+		if c == '"' || c == '\'' {
+			while let Some(d) = chars.next() {
+				out.push(d);
+				if d == '\\' {
+					out.extend(chars.next());
+				} else if d == c {
+					break;
+				}
+			}
+		}
+	}
+	out
 }
 
 /// Every `--name:` declared in the first `:root` block of `theme.css`, so a

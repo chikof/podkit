@@ -97,7 +97,7 @@ async fn every_team_page_renders_inside_the_shell(db: PgPool) {
 		for marker in [
 			"class=\"ui-shell\"",
 			"class=\"ui-sidebar ui-vt-chrome\"",
-			"id=\"nav-drawer\"",
+			"<nav class=\"ui-tabbar\" aria-label=\"Tabs\">",
 			"id=\"palette\"",
 			"<main id=\"main\"",
 			"<link rel=\"expect\" href=\"#main\" blocking=\"render\">",
@@ -118,31 +118,75 @@ async fn the_sidebar_lists_the_places_and_marks_the_current_one(db: PgPool) {
 	let (cookie, team) = ui_session(&app, "alice").await;
 
 	let (_, _, body) = get_html(&app, &format!("/teams/{team}/servers"), Some(&cookie)).await;
+	// The sidebar lists the places and one "Settings"; the settings pages are listed on the
+	// settings page itself (and in the palette).
 	for label in [
 		"Projects",
 		"Templates",
 		"Servers",
 		"Models",
 		"S3 Destinations",
-		"Members",
-		"Registration",
-		"Hugging Face token",
-		"Appearance",
+		"Settings",
 	] {
 		assert_contains(
 			&body,
 			&format!("<span class=\"ui-nav-label\">{label}</span>"),
 		);
 	}
-	// The sidebar's and the drawer's copy of the one current link, and no other.
-	let current = format!(
-		"href=\"/teams/{team}/servers\" class=\"ui-nav-link\" title=\"Servers\" aria-current=\"page\""
-	);
+	for label in [
+		"Members",
+		"Registration",
+		"Hugging Face token",
+		"Appearance",
+	] {
+		assert_not_contains(
+			&body,
+			&format!("<span class=\"ui-nav-label\">{label}</span>"),
+		);
+	}
+	// The one current link, in the sidebar and in the tab bar, and no other.
+	let current =
+		format!("href=\"/teams/{team}/servers\" class=\"ui-nav-link\" aria-current=\"page\"");
 	assert_eq!(body.matches(&current).count(), 2, "{body}");
-	assert_eq!(body.matches("class=\"ui-nav-link\"").count() % 2, 0);
 	// The user menu has the theme choice and sign out.
 	assert_contains(&body, "action=\"/logout\"");
 	assert_contains(&body, "name=\"theme\" value=\"dark\"");
+}
+
+#[db_test]
+async fn every_settings_page_marks_settings_in_the_sidebar_and_the_tab_bar(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	let settings =
+		format!("href=\"/teams/{team}/settings\" class=\"ui-nav-link\" aria-current=\"page\"");
+	for path in [
+		format!("/teams/{team}/settings"),
+		format!("/teams/{team}/members"),
+		format!("/teams/{team}/settings/registration"),
+		format!("/teams/{team}/models/settings"),
+		format!("/teams/{team}/settings/appearance"),
+	] {
+		let (_, _, body) = get_html(&app, &path, Some(&cookie)).await;
+		assert_eq!(body.matches(&settings).count(), 2, "{path}");
+	}
+}
+
+#[db_test]
+async fn the_tab_bar_has_five_places_and_keeps_settings_last(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	let (_, _, body) = get_html(&app, &format!("/teams/{team}/projects"), Some(&cookie)).await;
+	let bar = body
+		.split("<nav class=\"ui-tabbar\"")
+		.nth(1)
+		.and_then(|rest| rest.split("</nav>").next())
+		.expect("a tab bar");
+	assert_eq!(bar.matches("class=\"ui-nav-link\"").count(), 5, "{bar}");
+	assert!(
+		bar.rfind("Settings").unwrap() > bar.rfind("Models").unwrap(),
+		"{bar}"
+	);
+	assert_not_contains(bar, "S3 Destinations");
 }
 
 #[db_test]
@@ -174,23 +218,6 @@ async fn a_link_the_role_may_not_use_is_not_rendered(db: PgPool) {
 	for hidden in ["Create project", "Add server", "Add S3 destination"] {
 		assert_not_contains(&body, hidden);
 	}
-}
-
-#[db_test]
-async fn a_folded_sidebar_is_rendered_folded_from_the_cookie(db: PgPool) {
-	let app = app(db.clone()).await;
-	let (cookie, team) = ui_session(&app, "alice").await;
-	let page = format!("/teams/{team}/projects");
-
-	let (_, _, open) = get_html(&app, &page, Some(&cookie)).await;
-	assert_contains(&open, "data-signals=\"{_collapsed: false}\"");
-	assert_not_contains(&open, "class=\"ui-shell\" data-collapsed");
-
-	let folded = format!("{cookie}; sidebar=collapsed");
-	let (_, _, body) = get_html(&app, &page, Some(&folded)).await;
-	assert_contains(&body, "class=\"ui-shell\" data-collapsed");
-	assert_contains(&body, "data-signals=\"{_collapsed: true}\"");
-	assert_contains(&body, "aria-pressed=\"true\"");
 }
 
 // --- breadcrumbs and switchers --------------------------------------------------------
@@ -603,7 +630,15 @@ async fn the_settings_tabs_cover_members_and_the_token_page(db: PgPool) {
 		assert_eq!(s, StatusCode::OK, "{path}");
 		let main = page_main(&body);
 		assert_contains(main, "aria-label=\"Settings sections\"");
-		assert_contains(main, &format!("aria-current=\"page\">{current}</a>"));
+		// The one current section is the page the request is on.
+		let at = main
+			.find("aria-current=\"page\"")
+			.expect("a current section");
+		let link = &main[at..at + main[at..].find("</a>").unwrap()];
+		assert!(
+			link.contains(&format!("<span>{current}</span>")),
+			"{path}: {link}"
+		);
 		assert_eq!(main.matches("aria-current=\"page\"").count(), 1, "{path}");
 	}
 }

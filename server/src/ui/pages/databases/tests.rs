@@ -792,7 +792,9 @@ async fn the_environment_lists_databases_and_polls_while_they_change(db: PgPool)
 	let overview = format!("/teams/{}/projects/{}", f.team, f.project);
 	let (_, page) = f.get(&overview).await;
 	assert_contains(&page, "Nothing in production yet");
-	assert_contains(&page, "MySQL");
+	// The database engines are on the create-resource page.
+	let (_, picker) = f.get(&format!("{overview}/production/create")).await;
+	assert_contains(&picker, "MySQL");
 
 	let id = f.create(&db, "orders", json!({ "engine": "mysql" })).await;
 	let (_, page) = f.get(&overview).await;

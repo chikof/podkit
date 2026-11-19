@@ -13,15 +13,15 @@ use super::icon::icon;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Variant {
-	/// The main action of a view.
+	/// The main action of a view: the accent button.
 	Default,
 	/// A supporting action next to the main one.
 	Secondary,
-	/// A bordered action; the usual choice for the second button.
+	/// A bordered action; the usual choice for the second button. Looks like `Secondary`.
 	Outline,
 	/// A low-emphasis action, e.g. in a toolbar or a row.
 	Ghost,
-	/// An action that deletes or stops something.
+	/// An action that deletes or stops something, drawn solid.
 	Destructive,
 	/// Reads as a link but acts as a button.
 	Link,
@@ -36,30 +36,28 @@ pub enum Size {
 	Icon,
 }
 
-const BASE: &str = "ui-button inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border text-sm font-medium whitespace-nowrap transition-colors outline-hidden select-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50";
+// The skin of every variant and size is in `components.css` (`ui-button-*`).
+const DEFAULT: &str = "ui-button ui-button-default";
+const SECONDARY: &str = "ui-button ui-button-secondary";
+const OUTLINE: &str = "ui-button ui-button-outline";
+const GHOST: &str = "ui-button ui-button-ghost";
+const DESTRUCTIVE: &str = "ui-button ui-button-danger-solid";
+const LINK: &str = "ui-button ui-button-link";
 
-const DEFAULT: &str = "border-transparent bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 active:bg-primary/80";
-const SECONDARY: &str = "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80 active:bg-secondary/70";
-const OUTLINE: &str = "border-input bg-background text-foreground shadow-xs hover:bg-accent hover:text-accent-foreground active:bg-accent/70";
-const GHOST: &str = "border-transparent text-foreground hover:bg-accent hover:text-accent-foreground active:bg-accent/70";
-const DESTRUCTIVE: &str = "border-transparent bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90 active:bg-destructive/80";
-const LINK: &str =
-	"border-transparent text-primary underline-offset-4 hover:underline active:opacity-80";
-
-const SM: &str = "h-8 px-3 text-xs";
-const MD: &str = "h-9 px-4";
-const LG: &str = "h-10 px-6";
-const ICON: &str = "h-9 w-9";
+const SM: &str = "ui-button-sm";
+const MD: &str = "";
+const LG: &str = "ui-button-lg";
+const ICON: &str = "ui-button-icon";
 
 /// The main action on a page.
-pub const BUTTON: &str = "ui-button inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-transparent bg-primary px-4 text-sm font-medium whitespace-nowrap text-primary-foreground shadow-xs transition-colors outline-hidden select-none hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-ring/50 active:bg-primary/80 disabled:pointer-events-none disabled:opacity-50";
+pub const BUTTON: &str = "ui-button ui-button-default";
 
 /// A secondary action, drawn as a bordered button.
-pub const BUTTON_OUTLINE: &str = "ui-button inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium whitespace-nowrap text-foreground shadow-xs transition-colors outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50 active:bg-accent/70 disabled:pointer-events-none disabled:opacity-50";
+pub const BUTTON_OUTLINE: &str = "ui-button ui-button-outline";
 
 /// A destructive action drawn as a bordered button in the error color: quieter than
 /// `Variant::Destructive`, for a delete next to other actions in a row or card.
-pub const BUTTON_DANGER: &str = "ui-button inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-medium whitespace-nowrap text-destructive shadow-xs transition-colors outline-hidden select-none hover:bg-destructive/10 focus-visible:ring-2 focus-visible:ring-ring/50 active:bg-destructive/20 disabled:pointer-events-none disabled:opacity-50";
+pub const BUTTON_DANGER: &str = "ui-button ui-button-danger";
 
 /// The class list of a button, for markup that adds its own attributes.
 pub fn button_class(variant: Variant, size: Size) -> String {
@@ -77,7 +75,11 @@ pub fn button_class(variant: Variant, size: Size) -> String {
 		Size::Lg => LG,
 		Size::Icon => ICON,
 	};
-	format!("{BASE} {variant} {size}")
+	if size.is_empty() {
+		variant.to_owned()
+	} else {
+		format!("{variant} {size}")
+	}
 }
 
 /// A `<button>` with a text label. `kind` is the `type`: `"button"` or `"submit"`.
@@ -124,8 +126,10 @@ mod tests {
 				assert_ne!(a, b);
 			}
 		}
-		assert!(button_class(Variant::Default, Size::Icon).contains("h-9 w-9"));
-		assert!(button_class(Variant::Default, Size::Sm).contains("h-8"));
+		assert!(button_class(Variant::Default, Size::Icon).contains("ui-button-icon"));
+		assert!(button_class(Variant::Default, Size::Sm).contains("ui-button-sm"));
+		assert!(button_class(Variant::Default, Size::Lg).contains("ui-button-lg"));
+		assert!(button_class(Variant::Destructive, Size::Md).contains("ui-button-danger-solid"));
 	}
 
 	#[test]
@@ -159,7 +163,7 @@ mod tests {
 	#[test]
 	fn the_legacy_constants_are_buttons_too() {
 		for c in [BUTTON, BUTTON_OUTLINE, BUTTON_DANGER] {
-			assert!(c.contains("ui-button") && c.contains("focus-visible:ring-2"));
+			assert!(c.starts_with("ui-button "), "{c}");
 		}
 	}
 }

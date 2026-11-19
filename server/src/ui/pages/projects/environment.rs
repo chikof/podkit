@@ -1,10 +1,12 @@
-//! A project's environment: tabs for its environments, a grid of resource cards (logo,
-//! name, type, status, URL, last deployment), a type filter and search, and the picker that
-//! creates any kind of resource.
+//! A project's environment: tabs for its environments, a list of resource rows (logo, name,
+//! type, status, URL, last deployment; CPU and memory on hover and focus), a type filter and
+//! search, and the create-resource picker page.
 //!
 //! An Operate surface: the person is here to open or act on a resource, so the page is the
-//! grid and its one primary action is "Create". `/projects/{p}` shows the default
+//! list and its one primary action is "Create resource". `/projects/{p}` shows the default
 //! environment; `/projects/{p}/{env_slug}` a named one.
+
+use std::fmt::Write as _;
 
 use axum::Router;
 use axum::extract::{Path, Query, State};
@@ -17,7 +19,7 @@ use serde_json::json;
 use time::OffsetDateTime;
 use tower_cookies::Cookies;
 
-use super::cards::{card_logo, in_flight, relative_time, status_line};
+use super::cards::{card_logo, in_flight, relative_time, status_badge, status_data};
 use super::picker;
 use crate::auth::permission::{Action, Resource};
 use crate::environments;
@@ -26,8 +28,8 @@ use crate::projects::overview::{self, EnvironmentView, Pick, ResourceCard, Resou
 use crate::state::AppState;
 use crate::ui::components::{
 	BUTTON_DANGER, Dismiss, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, SELECT, Size, TabItem, Tone,
-	Variant, badge, button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu,
-	empty_state, icon, menu_label, tabs,
+	Variant, button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu, empty_state,
+	icon, menu_label, skeleton_row, tabs,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page, form_error};
@@ -46,6 +48,10 @@ pub fn router() -> Router<AppState> {
 		.route(
 			"/teams/{team_id}/projects/{project_id}/{env_slug}/resources",
 			get(resources),
+		)
+		.route(
+			"/teams/{team_id}/projects/{project_id}/{env_slug}/create",
+			get(create_page),
 		)
 		.route(
 			"/teams/{team_id}/projects/{project_id}/environments",
@@ -123,9 +129,40 @@ struct FilterSignals {
 	q: String,
 	#[serde(default, rename = "type")]
 	kind: String,
+	/// What the page last showed (`kind:id=status` pairs), to tell which statuses moved.
+	#[serde(default)]
+	seen: String,
 }
 
-// --- the grid ------------------------------------------------------------------------
+/// "6 resources in production · 4 running · 1 building": the environment at a glance.
+fn summary_line(view: &EnvironmentView) -> String {
+	let n = view.resources.len();
+	let mut line = format!(
+		"{n} {} in {}",
+		if n == 1 { "resource" } else { "resources" },
+		view.environment.name
+	);
+	for key in [
+		"running",
+		"building",
+		"deploying",
+		"failed",
+		"stopped",
+		"pending",
+	] {
+		let count = view
+			.resources
+			.iter()
+			.filter(|c| status_data(c.status) == key)
+			.count();
+		if count > 0 {
+			let _ = write!(line, " · {count} {key}");
+		}
+	}
+	line
+}
+
+// --- the list ------------------------------------------------------------------------
 
 fn resource_href(team: TeamId, project: ProjectId, card: &ResourceCard) -> String {
 	match card.kind {
@@ -136,12 +173,78 @@ fn resource_href(team: TeamId, project: ProjectId, card: &ResourceCard) -> Strin
 	}
 }
 
-fn tile(
+/// The icon in front of a resource's type.
+const fn kind_icon(kind: ResourceKind) -> &'static str {
+	match kind {
+		ResourceKind::Application => "git-branch",
+		ResourceKind::Database => "database",
+		ResourceKind::Model => "brain",
+		ResourceKind::Stack => "layers",
+	}
+}
+
+/// `412 MB`, `1.1 GB`: resident memory the way a person reads it.
+fn format_memory(bytes: i64) -> String {
+	const MB: f64 = 1024.0 * 1024.0;
+	#[allow(clippy::cast_precision_loss)]
+	let mb = bytes.max(0) as f64 / MB;
+	if mb >= 1024.0 {
+		format!("{:.1} GB", mb / 1024.0)
+	} else {
+		format!("{mb:.0} MB")
+	}
+}
+
+/// The CPU and memory figures of a row: shown on hover and on focus, never hidden from a
+/// screen reader. A resource with no recent sample shows dashes.
+fn metrics(card: &ResourceCard) -> Markup {
+	let (cpu, mem) = card.usage.map_or_else(
+		|| ("—".to_owned(), "—".to_owned()),
+		|u| {
+			(
+				u.cpu.map_or_else(|| "—".to_owned(), |c| format!("{c:.1}%")),
+				format_memory(u.mem),
+			)
+		},
+	);
+	html! {
+		dl class="ui-res-metrics" {
+			div { dt { "CPU" } dd { (cpu) } }
+			div { dt { "Mem" } dd { (mem) } }
+		}
+	}
+}
+
+/// What the page last showed of each resource, as `kind:id=status` pairs. The poll sends it
+/// back so the server can say which statuses changed since.
+fn seen_of(cards: &[ResourceCard]) -> String {
+	cards
+		.iter()
+		.map(|c| format!("{}:{}={}", c.kind.slug(), c.id, status_data(c.status)))
+		.collect::<Vec<_>>()
+		.join(";")
+}
+
+/// Whether a card's status differs from the one the page last showed. A card the page has
+/// not seen yet, or a first render, is not a change.
+fn changed_since(seen: Option<&str>, card: &ResourceCard) -> bool {
+	let Some(seen) = seen.filter(|s| !s.is_empty()) else {
+		return false;
+	};
+	let key = format!("{}:{}=", card.kind.slug(), card.id);
+	seen.split(';')
+		.find_map(|pair| pair.strip_prefix(&key))
+		.is_some_and(|before| before != status_data(card.status))
+}
+
+fn row(
 	s: &AppState,
 	ctx: &TeamCtx,
 	project: ProjectId,
 	card: &ResourceCard,
 	now: OffsetDateTime,
+	index: usize,
+	flip: bool,
 ) -> Markup {
 	let href = resource_href(ctx.team.id, project, card);
 	let when = match (card.kind, card.changed_at) {
@@ -150,61 +253,68 @@ fn tile(
 		_ => None,
 	};
 	html! {
-		article class="ui-card ui-link-card flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-xs"
-			data-kind=(card.kind.slug()) data-resource=(card.id) {
-			div class="flex items-start gap-3" {
-				(card_logo(card))
-				div class="flex min-w-0 flex-1 flex-col gap-1" {
-					div class="flex items-center justify-between gap-2" {
-						h2 class="min-w-0 truncate text-sm leading-tight font-semibold" {
-							a href=(href) class="ui-link-card-link outline-hidden" { (card.name) }
-						}
-						span class="shrink-0" { (badge(Tone::Neutral, card.kind.label())) }
-					}
-					p class="truncate text-xs text-muted-foreground" { (card.detail) }
+		li class="ui-res" data-kind=(card.kind.slug()) data-resource=(card.id)
+			data-status=(status_data(card.status)) style=(format!("--i:{index}")) {
+			div class="ui-res-logo" { (card_logo(card)) }
+			div class="ui-res-main" {
+				span class="ui-res-kind" { (icon(kind_icon(card.kind))) (card.kind.label()) }
+				h2 class="ui-res-name" {
+					a href=(href) class="ui-res-link" { (card.name) }
 				}
+				p class="ui-res-sub" { (card.detail) }
 			}
-			div class="mt-auto flex flex-col gap-2" {
-				div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1" {
-					(status_line(card.status))
-					@if let Some((verb, at)) = when {
-						p class="text-xs text-muted-foreground" { (verb) (relative_time(at, now)) }
-					}
-				}
+			div class="ui-res-meta" {
 				@if let Some(host) = &card.host {
-					p class="truncate text-xs" {
-						a href=(public_link(s, host)) class="inline-flex max-w-full items-center gap-1 text-muted-foreground hover:text-foreground hover:underline"
-							target="_blank" rel="noopener noreferrer" {
-							span class="truncate" { (host) }
-							(icon("external-link"))
-						}
+					a href=(public_link(s, host)) class="ui-res-url" target="_blank" rel="noopener noreferrer" {
+						span { (host) }
+						(icon("external-link"))
 					}
 				}
+				@if let Some((verb, at)) = when {
+					span class="ui-res-when" { (verb) (relative_time(at, now)) }
+				} @else if card.host.is_none() {
+					span class="ui-res-when ui-res-none" { "—" }
+				}
 			}
+			div class="ui-res-status" { (status_badge(card.status, flip)) }
+			(metrics(card))
 		}
 	}
 }
 
-/// The region that polling and the filter re-render: the grid, or what stands in for it.
+/// What a row looks like while the list is being fetched again: the same columns, so the
+/// page does not jump when the rows arrive.
+fn skeleton_rows() -> Markup {
+	html! {
+		div class="ui-res-skel" data-show="$_filtering" style="display: none" aria-hidden="true" {
+			@for _ in 0..4 { (skeleton_row()) }
+		}
+	}
+}
+
+/// The region that polling and the filter re-render: the list, or what stands in for it.
+/// `seen` is what the page last showed (see [`seen_of`]); `None` on a first render.
 fn grid(
 	s: &AppState,
 	ctx: &TeamCtx,
 	view: &EnvironmentView,
 	filter: &Filter,
 	now: OffsetDateTime,
+	seen: Option<&str>,
 ) -> Markup {
 	let shown: Vec<&ResourceCard> = view.resources.iter().filter(|c| filter.keeps(c)).collect();
 	let busy = shown.iter().any(|c| in_flight(c.status));
 	let fragment = fragment_url(ctx.team.id, view.project.id, &view.environment.slug);
+	let create = create_url(ctx.team.id, view.project.id, &view.environment.slug);
 	html! {
-		div id="resource-grid" class="flex flex-col gap-4" {
+		div id="resource-grid" class="ui-res-region" {
 			(poll(&fragment, busy))
 			@if view.resources.is_empty() {
 				(empty_state(
 					"boxes",
 					&format!("Nothing in {} yet", view.environment.name),
 					Some("Create an application, a database or a model. Each one shows up here with its status."),
-					picker::can_create_any(ctx).then(picker::open_button).as_ref(),
+					picker::can_create_any(ctx).then(|| picker::open_button(&create)).as_ref(),
 				))
 			} @else if shown.is_empty() {
 				(empty_state(
@@ -219,13 +329,23 @@ fn grid(
 					}),
 				))
 			} @else {
-				p class="text-sm text-muted-foreground" aria-live="polite" {
+				p class="ui-res-count" aria-live="polite" {
 					(shown.len()) @if shown.len() == 1 { " resource" } @else { " resources" }
 					@if filter.is_active() { " match" }
 				}
-				div class="ui-card-grid" {
-					@for card in &shown {
-						(tile(s, ctx, view.project.id, card, now))
+				(skeleton_rows())
+				ul class="ui-res-list" "data-show"="!$_filtering" aria-label="Resources" {
+					@for (i, card) in shown.iter().enumerate() {
+						(row(s, ctx, view.project.id, card, now, i, changed_since(seen, card)))
+					}
+					@if picker::can_create_any(ctx) {
+						li class="ui-res ui-res-new" style=(format!("--i:{}", shown.len())) {
+							a href=(create) class="ui-res-newlink" {
+								(icon("plus"))
+								span class="ui-res-newt" { "Create resource" }
+								span class="ui-res-news" { "Git repo · image · database · compose · template · model" }
+							}
+						}
 					}
 				}
 			}
@@ -237,22 +357,26 @@ fn fragment_url(team: TeamId, project: ProjectId, slug: &str) -> String {
 	format!("/teams/{team}/projects/{project}/{slug}/resources")
 }
 
+fn create_url(team: TeamId, project: ProjectId, slug: &str) -> String {
+	format!("{}/create", env_url(team, project, slug))
+}
+
 fn filter_bar(view: &EnvironmentView, ctx: &TeamCtx, filter: &Filter) -> Markup {
 	let page = env_url(ctx.team.id, view.project.id, &view.environment.slug);
 	let fragment = fragment_url(ctx.team.id, view.project.id, &view.environment.slug);
 	let get = format!("@get({})", js_string(&fragment));
 	let kind = filter.kind.map_or("all", ResourceKind::slug);
 	html! {
-		form method="get" action=(page) role="search" class="flex flex-wrap items-center gap-2"
+		form method="get" action=(page) role="search" class="ui-res-filter"
 			"data-on:submit"=(format!("evt.preventDefault(); {get}")) {
-			div class="relative min-w-48 flex-1" {
-				span class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground" { (icon("search")) }
-				input type="search" name="q" value=(filter.q) class={ (INPUT) " pl-9" } autocomplete="off"
+			div class="ui-res-search" {
+				span class="ui-res-search-ic" { (icon("search")) }
+				input type="search" name="q" value=(filter.q) class=(INPUT) autocomplete="off"
 					aria-label="Search resources" placeholder="Search resources"
-					"data-bind:q" "data-on:input__debounce.250ms"=(get);
+					"data-bind:q" "data-indicator:_filtering" "data-on:input__debounce.250ms"=(get);
 			}
-			select name="type" class={ (SELECT) " sm:w-44" } aria-label="Filter by type"
-				"data-bind:type" "data-on:change"=(get) {
+			select name="type" class={ (SELECT) " ui-res-type" } aria-label="Filter by type"
+				"data-bind:type" "data-indicator:_filtering" "data-on:change"=(get) {
 				button { selectedcontent {} }
 				@for (value, label) in [("all", "All types"), ("application", "Applications"), ("database", "Databases"), ("model", "Models"), ("stack", "Stacks")] {
 					option value=(value) selected[value == kind] { (label) }
@@ -289,7 +413,7 @@ fn tab_row(ctx: &TeamCtx, view: &EnvironmentView) -> Markup {
 	let can_update = ctx.perms.can(Action::Update, Resource::Project);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::Project);
 	html! {
-		div class="flex items-center gap-2" {
+		div class="ui-res-tabrow" {
 			div class="min-w-0 flex-1" { (tabs("Environments", &items)) }
 			@if can_create {
 				(dialog_open_button(
@@ -445,21 +569,27 @@ async fn render(
 		"envName": view.environment.name,
 		"envId": view.environment.id.to_string(),
 		"_error": "",
+		"_filtering": false,
+		"seen": seen_of(&view.resources),
 	});
 
 	let body = html! {
-		div class="ui-wide flex w-full flex-col gap-6" data-signals=(signals.to_string()) {
-			div class="flex flex-wrap items-end justify-between gap-4" {
-				div class="flex min-w-0 flex-col gap-1" {
-					h1 class="truncate text-2xl font-semibold tracking-tight" { (view.project.name) }
-					p class="truncate font-mono text-xs text-muted-foreground" { (view.project.slug) }
+		div class="ui-wide ui-res-page" data-signals=(signals.to_string()) {
+			header class="ui-page-head" {
+				div class="ui-page-title" {
+					p class="ui-eyebrow" { "Project" }
+					h1 { (view.project.name) }
+					p class="ui-lede" { (summary_line(&view)) }
 				}
-				@if can_pick { (picker::open_button()) }
+				@if can_pick {
+					div class="ui-page-actions" {
+						(picker::open_button(&create_url(ctx.team.id, view.project.id, &view.environment.slug)))
+					}
+				}
 			}
 			(tab_row(ctx, &view))
 			(filter_bar(&view, ctx, filter))
-			(grid(s, ctx, &view, filter, now))
-			@if can_pick { (picker::dialog(ctx, view.project.id, &view.environment)) }
+			(grid(s, ctx, &view, filter, now, None))
 			@if can_create_env { (create_env_dialog(ctx.team.id, view.project.id)) }
 			@if can_update { (rename_env_dialog(ctx.team.id, view.project.id)) }
 			@if can_delete { (delete_env_dialog(ctx.team.id, view.project.id, &view.environment.name)) }
@@ -514,11 +644,41 @@ async fn resources(
 	{
 		Ok(view) => {
 			let filter = Filter::new(&sig.q, &sig.kind);
-			sse::patch(&grid(&s, &ctx, &view, &filter, OffsetDateTime::now_utc())).into_response()
+			// The page tells what it last showed; the rows whose status moved play the
+			// change animation, then `seen` catches up so the next poll does not repeat it.
+			let seen = (!sig.seen.is_empty()).then_some(sig.seen.as_str());
+			let markup = grid(&s, &ctx, &view, &filter, OffsetDateTime::now_utc(), seen);
+			sse::patch(&markup)
+				.and(sse::signals(&json!({ "seen": seen_of(&view.resources) })))
+				.into_response()
 		}
 		// A real 404 (not an SSE message): a poll that lost its environment stops.
 		Err(e) => error::page(&ctx, &e),
 	}
+}
+
+/// The create-resource picker: a page of its own, so it has room for what each choice
+/// involves. Every link on it carries `?environment=<id>` into the create flows.
+async fn create_page(
+	State(s): State<AppState>,
+	ctx: TeamCtx,
+	Path((_, project, slug)): Path<(TeamId, ProjectId, String)>,
+) -> Result<Markup, Response> {
+	let view =
+		overview::environment_view(&s.db, ctx.user.id, ctx.team.id, project, Pick::Slug(&slug))
+			.await
+			.map_err(|e| error::page(&ctx, &e))?;
+	if !picker::can_create_any(&ctx) {
+		return Err(error::page(&ctx, &crate::error::ServerError::Forbidden));
+	}
+	let env_href = env_url(ctx.team.id, view.project.id, &view.environment.slug);
+	let crumbs: Vec<Crumb<'_>> = vec![
+		("Projects", Some(format!("/teams/{}/projects", ctx.team.id))),
+		(view.project.name.as_str(), Some(env_href)),
+		("Create resource", None),
+	];
+	let body = picker::page(&ctx, &view.project, &view.environment);
+	Ok(app_page(&ctx, "Create resource", &crumbs, &body))
 }
 
 // --- environment actions -------------------------------------------------------------

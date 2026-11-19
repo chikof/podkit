@@ -1,8 +1,10 @@
 //! Dropdown menu: a popover opened by an invoker button (`command="toggle-popover"
 //! commandfor=<id>`). The browser opens and closes it, dismisses it on Esc and on a click
-//! outside, and anchors it to the button (CSS anchor positioning with flip fallbacks; a
-//! bottom sheet where that is missing). `podkit.js` adds the arrow keys, Home/End, the
-//! `menu`/`menuitem` roles, `aria-expanded` and closing after a command.
+//! outside, and anchors it to the button (CSS anchor positioning with flip fallbacks). The
+//! items are a `focusgroup="menu nomemory"`: the browser moves focus with the arrow keys and
+//! Home/End and infers the `menu` and `menuitem` roles. Where it cannot, `page.js` does all
+//! of that, places the menu by hand when anchor positioning is missing, keeps `aria-expanded`
+//! and closes the menu after a command.
 //!
 //! Items are links (`menu_link`) or commands. A command carries Datastar attributes, so
 //! the page writes it with the class constants:
@@ -31,7 +33,7 @@ pub fn dropdown_menu(
 			aria-haspopup="menu" aria-expanded="false" aria-label=(label)
 			command="toggle-popover" commandfor=(id) { (trigger) }
 		div id=(id) popover class="ui-menu" {
-			div data-menu aria-labelledby=(trigger_id) { (items) }
+			div data-menu focusgroup="menu nomemory" aria-labelledby=(trigger_id) { (items) }
 		}
 	}
 }

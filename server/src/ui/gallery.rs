@@ -9,23 +9,43 @@ use axum::Router;
 use axum::http::Method;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use maud::{Markup, html};
+use maud::{Markup, PreEscaped, html};
 
 use super::assets::ICONS_SVG;
 use super::components::Dismiss;
 use super::components::{
-	BUTTON, CHECKBOX, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, SELECT, SWITCH, Size,
-	Status, TabItem, Tone, Variant, avatar, badge, breadcrumb, button, button_class, card,
-	card_content, card_description, card_footer, card_section, card_title, checkbox_field, dialog,
-	dialog_cancel, dialog_open_button, dropdown_menu, empty_state, error_text, help_text, icon,
-	icon_button, icon_with, kbd, kbd_combo, link_button, link_card, logo, menu_label, menu_link,
-	menu_separator, select_field, skeleton, status_badge, status_dot, switch_field, table, tabs,
-	text_field, textarea_field, theme_toggle, toast, tooltip,
+	BUTTON, BannerKind, CHECKBOX, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, RadioTab,
+	SELECT, SWITCH, Size, Status, TabItem, Tone, Variant, avatar, badge, banner, breadcrumb,
+	button, button_class, card, card_content, card_description, card_footer, card_section,
+	card_title, checkbox_field, copy_field, dialog, dialog_cancel, dialog_open_button,
+	dropdown_menu, empty_state, error_text, help_text, icon, icon_button, icon_with, invalid_text,
+	kbd, kbd_combo, link_button, link_card, logo, menu_label, menu_link, menu_separator,
+	password_field, radio_tabs, select_field, skeleton, skeleton_row, status_badge, status_dot,
+	switch_field, table, tabs, text_field, textarea_field, theme_toggle, toast, tooltip,
 };
 use super::extract::UiUser;
 use super::{error, layout};
 use crate::error::ServerError;
 use crate::state::AppState;
+
+/// Hover, focus and active drawn with `data-state`, so every state sits side by side. Only
+/// this page needs them (the real pseudo-classes work everywhere), so they are not in the
+/// app stylesheet. A constant, never user data.
+const FORCED_STATES: &str = r#".ui-states [data-state~="focus"] { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ui-states .ui-field[data-state~="focus"] { border-color: var(--primary); outline-offset: -1px; }
+.ui-states .ui-field[data-state~="hover"] { border-color: var(--subtle-foreground); }
+.ui-states .ui-button[data-state~="hover"] { border-color: var(--muted-foreground); background-color: var(--accent); }
+.ui-states .ui-button-default[data-state~="hover"] { border-color: var(--primary-hover); background-color: var(--primary-hover); }
+.ui-states .ui-button-ghost[data-state~="hover"] { border-color: transparent; background-color: var(--secondary); color: var(--foreground); }
+.ui-states .ui-button-danger[data-state~="hover"] { background-color: var(--destructive-soft); border-color: var(--destructive); }
+.ui-states .ui-button-danger-solid[data-state~="hover"] { border-color: var(--destructive); background-color: var(--destructive); filter: brightness(1.1); }
+.ui-states .ui-button[data-state~="active"] { transform: scale(var(--press-scale)); }
+.ui-states .ui-checkbox[data-state~="hover"], .ui-states .ui-switch[data-state~="hover"] { border-color: var(--muted-foreground); }
+.ui-states .ui-chip[data-state~="hover"] { background-color: var(--accent); color: var(--foreground); }
+.ui-states .ui-menu-item[data-state~="hover"], .ui-states .ui-menu-item[data-state~="focus"] { background-color: var(--accent); outline: none; }
+.ui-states .ui-menu-item[data-state~="focus"] { box-shadow: inset 0 0 0 2px var(--ring); }
+.ui-states .ui-link-card[data-state~="hover"] { border-color: var(--border); background-color: var(--secondary); }
+.ui-states .ui-tab[data-state~="hover"] { color: var(--foreground); }"#;
 
 pub fn router() -> Router<AppState> {
 	Router::new().route("/_ui", get(page))
@@ -50,6 +70,12 @@ pub const ICON_NAMES: &[&str] = &[
 	"trash-2",
 	"triangle-alert",
 	"x",
+	"eye",
+	"eye-off",
+	"copy",
+	"chevron-down",
+	"circle-alert",
+	"package",
 ];
 
 fn enabled_with(debug_build: bool, env: Option<&str>) -> bool {
@@ -67,7 +93,12 @@ async fn page(user: UiUser) -> Response {
 	if !enabled() {
 		return error::respond(&Method::GET, Some(&user), &ServerError::NotFound);
 	}
-	layout::document("UI gallery", &body(&user.name)).into_response()
+	layout::document_with_head(
+		"UI gallery",
+		&html! { style { (PreEscaped(FORCED_STATES)) } },
+		&body(&user.name),
+	)
+	.into_response()
 }
 
 /// Every icon in the sprite, from the sprite itself.
@@ -124,11 +155,11 @@ fn body(user: &str) -> Markup {
 			}
 		}
 		"\n"
-		main class="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-8 md:px-8" {
+		main class="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-8 md:px-8 ui-states" {
 			div class="flex flex-col gap-2" {
 				h1 class="text-2xl font-semibold" { "Design system" }
 				p class="max-w-3xl text-sm text-muted-foreground" {
-					"Every component in every state, in both color schemes. The spec is docs/design/README.md; this page is the visual check."
+					"Every component in every state, in both color schemes. The spec is design/finalists/02-quiet-linear (components.html); this page is the visual check. Hover, focus and active are forced with data-state so they sit side by side; the real states work as well."
 				}
 			}
 			"\n"
@@ -218,7 +249,7 @@ fn body(user: &str) -> Markup {
 					}))
 				}
 			}))
-			(section("badge", "Badge", "A fact, in one of five tones.", |_| {
+			(section("badge", "Tag", "A fact, in one of five tones.", |_| {
 				row(&html! {
 					(badge(Tone::Neutral, "Neutral"))
 					(badge(Tone::Progress, "In progress"))
@@ -227,10 +258,10 @@ fn body(user: &str) -> Markup {
 					(badge(Tone::Danger, "Danger"))
 				})
 			}))
-			(section("status-dot", "Status dot and status badge", "State of something that runs. Always carries its word.", |_| {
+			(section("status-dot", "Status badge", "State of something that runs: color, a shape of its own and the word. Seven statuses; building and deploying pulse.", |_| {
 				html! {
-					(row(&html! { @for s in ALL_STATUSES { (status_dot(s)) } }))
-					(row(&html! { @for s in ALL_STATUSES { (status_badge(s)) } }))
+					(row(&html! { @for s in Status::ALL { (status_dot(s)) } }))
+					(row(&html! { @for s in Status::ALL { (status_badge(s)) } }))
 				}
 			}))
 			(section("tabs", "Tabs", "Links with aria-current, server-rendered. Scrolls sideways when narrow.", |_| {
@@ -246,15 +277,11 @@ fn body(user: &str) -> Markup {
 			(section("chart", "Chart", "Server-rendered SVG: a line with a gap, two lines, the empty state. Hover a column for its value; the toggle shows each chart's table.", super::charts::demo))
 			(section("dialog", "Dialog", "A native modal. Esc closes it; focus is trapped and returned.", dialog_demo))
 			(section("dropdown-menu", "Dropdown menu", "A popover on an invoker button; arrow keys, Esc and outside click close it.", menu_demo))
-			(section("tooltip", "Tooltip", "On hover and keyboard focus; Esc hides it.", |p| {
-				let tip = format!("{p}-tip");
+			(section("tooltip", "Tooltip", "popover=hint opened by interestfor: on hover and keyboard focus; Esc hides it. A copy of the shown tip is drawn in place.", |p| {
 				row(&html! {
-					(tooltip(&tip, "Redeploy the latest commit", &html! {
-						button type="button" class=(button_class(Variant::Outline, Size::Icon)) aria-label="Redeploy" aria-describedby=(tip) { (icon("rocket")) }
-					}))
-					(tooltip(&format!("{p}-tip2"), "Needs the owner role", &html! {
-						button type="button" class=(button_class(Variant::Outline, Size::Md)) aria-describedby=(format!("{p}-tip2")) { "Delete team" }
-					}))
+					(tooltip(&format!("{p}-tip"), "Redeploy the latest commit", &button_class(Variant::Outline, Size::Icon), Some("Redeploy"), &icon("rocket")))
+					(tooltip(&format!("{p}-tip2"), "Needs the owner role", &button_class(Variant::Outline, Size::Md), None, &html! { "Delete team" }))
+					span class="ui-tip ui-inline" { "Redeploy the latest commit" }
 				})
 			}))
 			(section("toast", "Toast", "Appended to the live region at the bottom right. Each tone shown here in place.", |_| {
@@ -270,17 +297,21 @@ fn body(user: &str) -> Markup {
 					}
 				}
 			}))
-			(section("skeleton", "Skeleton", "The shape of content that is loading.", |_| {
+			(section("skeleton", "Skeleton", "The shape of content that is loading; rows have the geometry of the final rows. The shimmer stops under reduced motion.", |_| {
 				html! {
 					div class="flex items-center gap-3" aria-busy="true" {
 						(skeleton("h-10 w-10 rounded-full"))
 						div class="flex flex-col gap-2" { (skeleton("h-4 w-40")) (skeleton("h-3 w-24")) }
 					}
-					(skeleton("h-24 w-full"))
+					div class="ui-card" aria-busy="true" { (skeleton_row()) (skeleton_row()) (skeleton_row()) }
 				}
 			}))
-			(section("empty-state", "Empty state", "What a list shows when it has nothing, and the one next step.", |_| {
-				empty_state("rocket", "No applications yet", Some("Deploy a repository or a template to see it here."), Some(&link_button(Variant::Default, Size::Md, "#new", &html! { "Create application" })))
+			(section("empty-state", "Empty state", "What a list shows when it has nothing: an icon, a title, a sentence and up to three actions.", |_| {
+				empty_state("rocket", "No applications yet", Some("Deploy a repository or a template to see it here."), Some(&html! {
+					(link_button(Variant::Default, Size::Md, "#new", &html! { (icon("plus")) "Create application" }))
+					(link_button(Variant::Outline, Size::Md, "#templates", &html! { (icon("package")) "Browse templates" }))
+					(link_button(Variant::Ghost, Size::Md, "#docs", &html! { "Read the guide" }))
+				}))
 			}))
 			(section("breadcrumb", "Breadcrumb", "Where this page sits. The last crumb is the current page.", |_| {
 				breadcrumb(&[
@@ -289,8 +320,8 @@ fn body(user: &str) -> Markup {
 					("Settings", None),
 				])
 			}))
-			(section("avatar", "Avatar", "Initials, named for assistive technology.", |_| {
-				row(&html! { (avatar("Ada Lovelace")) (avatar("grace")) (avatar("Linus Torvalds")) (avatar("   ")) })
+			(section("avatar", "Avatar", "Initials on one of six tints, chosen from the name; named for assistive technology.", |_| {
+				row(&html! { (avatar("Ada Lovelace")) (avatar("grace")) (avatar("Linus Torvalds")) (avatar("Mara Lindqvist")) (avatar("Priya Nair")) (avatar("Tomás Ortega")) (avatar("   ")) })
 			}))
 			(section("kbd", "Kbd", "A key or a shortcut, as a hint.", |_| {
 				row(&html! { (kbd("Esc")) (kbd_combo(&["Ctrl", "K"])) (kbd_combo(&["Shift", "Enter"])) })
@@ -308,32 +339,29 @@ fn body(user: &str) -> Markup {
 			(section("theme-toggle", "Theme toggle", "System, light or dark; stored in a cookie and rendered on <html> by the server.", |_| {
 				theme_toggle()
 			}))
+			(section("banner", "Banner", "Error, warning, info and success: the icon's shape says the kind as well as its color. An error is announced at once.", banner_demo))
+			(section("field-extras", "Password, copy field, hint and invalid text", "A reveal button named for what a press does; a read-only value with Copy; a message that shows only once the field is invalid.", field_extras_demo))
+			(section("button-states", "Button states", "Default, hover, focus, active, disabled and loading (aria-busy keeps the width).", button_states_demo))
+			(section("field-states", "Input states", "Default, hover, focus, filled, invalid, disabled and readonly.", field_states_demo))
+			(section("switch-row", "Switch row and chips", "A setting with a title and help, and filter chips (toggle buttons) with counts.", switch_chip_demo))
+			(section("radio-tabs", "Tabs, radio panels", "Native radios: Tab lands on the selected tab, arrow keys move and select, the panel follows through :has(). No script.", radio_tabs_demo))
+			(section("table-stack", "Table stacked", "The same table in a 24rem box: each row becomes a block with its column names in front of the values.", |p| {
+				html! { div class="max-w-sm" { (table_demo(&format!("{p}-n"))) } }
+			}))
+			(section("log-viewer", "Log viewer", "Lines carry data-lv (info, warn, error, debug); the chips filter by level; the search box and Follow work as on a live log.", log_demo))
+			(section("overlays-open", "Overlays, drawn open", "A dialog, a menu and a toast as they look open (static copies; the live ones are above).", overlays_open_demo))
 			(section("loading-error", "Loading and error patterns", "A busy button, an inline error and a banner.", |_| {
 				html! {
 					(row(&html! {
 						button type="button" class=(BUTTON) disabled { (icon_with("loader-circle", "ui-icon-spin")) "Deploying" }
 						button type="button" class=(button_class(Variant::Outline, Size::Md)) { "Retry" }
 					}))
-					div class="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm" role="alert" {
-						(icon_with("circle-x", "mt-0.5 text-destructive"))
-						div class="flex flex-col gap-1" {
-							p class="font-medium" { "Could not reach the server" }
-							p class="text-muted-foreground" { "podkit could not open an SSH connection to 10.0.0.5. Check the address and try again." }
-						}
-					}
+					(banner(BannerKind::Error, Some("Could not reach the server."), "podkit could not open an SSH connection to 10.0.0.5. Check the address and try again.", Some(&button(Variant::Outline, Size::Sm, "button", &html! { "Retry" }))))
 				}
 			}))
 		}
 	}
 }
-
-const ALL_STATUSES: [Status; 5] = [
-	Status::Running,
-	Status::Building,
-	Status::Failed,
-	Status::Stopped,
-	Status::Pending,
-];
 
 fn button_demo(_: &str) -> Markup {
 	html! {
@@ -470,6 +498,208 @@ fn menu_demo(p: &str) -> Markup {
 	})
 }
 
+fn banner_demo(_: &str) -> Markup {
+	html! {
+		(banner(BannerKind::Error, Some("Could not load metrics from atlas."), "The request timed out after 10 s.", Some(&button(Variant::Outline, Size::Sm, "button", &html! { "Retry" }))))
+		(banner(BannerKind::Warning, Some("Disk almost full."), "92% of 100 GB is used on atlas.", None))
+		(banner(BannerKind::Info, Some("Build #148 is queued."), "It starts when a builder is free.", None))
+		(banner(BannerKind::Success, Some("Backup finished."), "38 MB written to s3://acme-backups.", None))
+	}
+}
+
+fn field_extras_demo(p: &str) -> Markup {
+	html! {
+		(password_field(&format!("{p}-pw"), "pw", "Password", "new-password", Some("At least 12 characters."), None))
+		(password_field(&format!("{p}-pw2"), "pw2", "Repeat password", "new-password", None, Some("The passwords do not match.")))
+		(copy_field(&format!("{p}-dsn"), "Connection string", "postgres://app:secret@db.internal:5432/app"))
+		div class="ui-field-group" {
+			label for=(format!("{p}-em")) class=(LABEL) { "Email" }
+			input id=(format!("{p}-em")) type="email" class=(INPUT) required placeholder="you@example.com" aria-describedby=(format!("{p}-em-e"));
+			(invalid_text(&format!("{p}-em-e"), "Enter an address like name@example.com."))
+		}
+	}
+}
+
+fn button_states_demo(_: &str) -> Markup {
+	let states: [(&str, &str); 4] = [
+		("default", ""),
+		("hover", "hover"),
+		("focus", "focus"),
+		("active", "active"),
+	];
+	html! {
+		@for (name, variant) in [("primary", Variant::Default), ("secondary", Variant::Outline), ("ghost", Variant::Ghost), ("danger", Variant::Destructive)] {
+			div class="flex flex-wrap items-center gap-3" {
+				span class="w-20 font-mono text-xs text-muted-foreground" { (name) }
+				@for (_, state) in states {
+					button type="button" class=(button_class(variant, Size::Md)) data-state=[(!state.is_empty()).then_some(state)] { (icon("rocket")) "Deploy" }
+				}
+				button type="button" class=(button_class(variant, Size::Md)) disabled { (icon("rocket")) "Deploy" }
+				button type="button" class=(button_class(variant, Size::Md)) aria-busy="true" { (icon("rocket")) "Deploy" }
+			}
+		}
+		div class="flex flex-wrap items-center gap-3" {
+			span class="w-20 font-mono text-xs text-muted-foreground" { "danger outline" }
+			button type="button" class="ui-button ui-button-danger" { (icon("trash-2")) "Delete" }
+			button type="button" class="ui-button ui-button-danger" data-state="hover" { (icon("trash-2")) "Delete" }
+			button type="button" class="ui-button ui-button-danger" disabled { (icon("trash-2")) "Delete" }
+			span class="font-mono text-xs text-muted-foreground" { "lg" }
+			button type="button" class=(button_class(Variant::Default, Size::Lg)) { "Large" }
+			button type="button" class=(button_class(Variant::Ghost, Size::Icon)) aria-label="More" data-state="hover" { (icon("ellipsis")) }
+		}
+	}
+}
+
+fn field_states_demo(p: &str) -> Markup {
+	html! {
+		div class="grid gap-4 sm:grid-cols-2" {
+			@for (name, attrs) in [("default", ""), ("hover", "hover"), ("focus", "focus")] {
+				div class="ui-field-group" {
+					label for=(format!("{p}-{name}")) class=(LABEL) { (name) }
+					input id=(format!("{p}-{name}")) class=(INPUT) placeholder="my-app" data-state=[(!attrs.is_empty()).then_some(attrs)];
+				}
+			}
+			div class="ui-field-group" {
+				label for=(format!("{p}-filled")) class=(LABEL) { "filled" }
+				input id=(format!("{p}-filled")) class=(INPUT) value="storefront";
+			}
+			div class="ui-field-group" {
+				label for=(format!("{p}-inv")) class=(LABEL) { "invalid" }
+				input id=(format!("{p}-inv")) class=(INPUT) value="Not valid!" aria-invalid="true" aria-describedby=(format!("{p}-inv-e"));
+				(error_text(&format!("{p}-inv-e"), "Use lowercase letters and dashes."))
+			}
+			div class="ui-field-group" {
+				label for=(format!("{p}-dis")) class=(LABEL) { "disabled" }
+				input id=(format!("{p}-dis")) class=(INPUT) value="locked" disabled;
+			}
+			div class="ui-field-group" {
+				label for=(format!("{p}-ro")) class=(LABEL) { "readonly" }
+				input id=(format!("{p}-ro")) class=(INPUT) value="read only" readonly;
+			}
+		}
+		div class="flex flex-wrap items-center gap-4" {
+			span class="font-mono text-xs text-muted-foreground" { "checkbox" }
+			input type="checkbox" class=(CHECKBOX) aria-label="Unchecked";
+			input type="checkbox" class=(CHECKBOX) checked aria-label="Checked";
+			input type="checkbox" class=(CHECKBOX) data-state="hover" aria-label="Hover";
+			input type="checkbox" class=(CHECKBOX) data-state="focus" aria-label="Focus";
+			input type="checkbox" class=(CHECKBOX) disabled aria-label="Disabled";
+			span class="font-mono text-xs text-muted-foreground" { "switch" }
+			input type="checkbox" switch role="switch" class=(SWITCH) aria-label="Off";
+			input type="checkbox" switch role="switch" class=(SWITCH) checked aria-label="On";
+			input type="checkbox" switch role="switch" class=(SWITCH) data-state="hover" aria-label="Hover";
+			input type="checkbox" switch role="switch" class=(SWITCH) data-state="focus" aria-label="Focus";
+			input type="checkbox" switch role="switch" class=(SWITCH) disabled aria-label="Disabled";
+		}
+	}
+}
+
+fn switch_chip_demo(p: &str) -> Markup {
+	html! {
+		(switch_field(&format!("{p}-sw"), "sw", "Deploy on push", true, Some("Builds every commit to main.")))
+		(row(&html! {
+			@for (word, count, on) in [("All", "12", true), ("Apps", "5", false), ("Databases", "4", false), ("Stacks", "3", false)] {
+				button type="button" class="ui-chip" aria-pressed=(if on { "true" } else { "false" }) { (word) span class="ui-chip-n" { (count) } }
+			}
+			button type="button" class="ui-chip" data-state="hover" { "hover" }
+			button type="button" class="ui-chip" data-state="focus" { "focus" }
+		}))
+		(super::components::progress("Build progress", 64, "Step 4 of 7 · 64%"))
+	}
+}
+
+fn radio_tabs_demo(p: &str) -> Markup {
+	radio_tabs(
+		&format!("{p}-env"),
+		"Environments",
+		&[
+			RadioTab {
+				value: "production",
+				label: "production",
+				count: Some("6"),
+			},
+			RadioTab {
+				value: "staging",
+				label: "staging",
+				count: Some("2"),
+			},
+			RadioTab {
+				value: "preview",
+				label: "preview",
+				count: Some("0"),
+			},
+		],
+		0,
+		&[
+			html! { p class="text-sm" { "Six resources run in production." } },
+			html! { p class="text-sm" { "Two in staging, both building." } },
+			html! { (empty_state("box", "Nothing in preview", Some("Preview environments appear with a pull request."), None)) },
+		],
+	)
+}
+
+fn log_demo(p: &str) -> Markup {
+	let scroll = format!("{p}-scroll");
+	let chip = |word: &str, level: Option<&str>| {
+		let set = level.map_or_else(
+			|| "delete s.dataset.filter".to_owned(),
+			|l| format!("s.dataset.filter = '{l}'"),
+		);
+		let script = format!(
+			"const s = document.getElementById('{scroll}'); {set}; for (const b of el.parentElement.children) b.setAttribute('aria-pressed', String(b === el))"
+		);
+		html! { button type="button" class="ui-chip" aria-pressed=(if level.is_none() { "true" } else { "false" }) "data-on:click"=(script) { (word) } }
+	};
+	html! {
+		div class="flex flex-wrap items-center gap-2" role="group" aria-label="Show log levels" {
+			(chip("All", None)) (chip("Info", Some("INFO"))) (chip("Warn", Some("WARN"))) (chip("Error", Some("ERR")))
+		}
+		div id=(scroll) class="ui-log h-48" tabindex="0" role="region" aria-label="Build log" {
+			div {
+				@for (lv, line) in [
+					("STEP", "[6/7] RUN pnpm build"),
+					("INFO", "▲ Next.js 15.3 · Creating an optimized production build"),
+					("INFO", "✓ Compiled successfully in 8.7s"),
+					("WARN", "Image /hero.png is 2.4 MB · consider compressing"),
+					("ERR", "Error: ENOSPC: no space left on device, write"),
+					("DEBUG", "cache miss for layer 6"),
+					("OK", "Health check passed (3/3)"),
+				] {
+					div class="ui-log-line" data-lv=(lv) { (line) }
+				}
+			}
+		}
+	}
+}
+
+fn overlays_open_demo(_: &str) -> Markup {
+	html! {
+		div class="ui-dialog ui-inline" role="group" aria-label="Delete confirmation, drawn open" {
+			div class="ui-dialog-head" {
+				span class="ui-dialog-ic ui-dialog-ic-err" { (icon("triangle-alert")) }
+				div { p class="ui-dialog-title" { "Delete redis-cache?" } }
+			}
+			div class="ui-dialog-body" { p { "This removes the container, its volume (38 MB) and all backups. It cannot be undone." } }
+			div class="ui-dialog-foot" {
+				button type="button" class=(button_class(Variant::Outline, Size::Md)) { "Cancel" }
+				button type="button" class=(button_class(Variant::Destructive, Size::Md)) { (icon("trash-2")) "Delete" }
+			}
+		}
+		div class="ui-menu ui-inline" role="group" aria-label="Menu, drawn open" {
+			div data-menu {
+				(menu_label("Create resource"))
+				a href="#" class=(MENU_ITEM) { (icon("git-branch")) span { "Git repository" small { "GitHub, GitLab or any Git URL" } } }
+				a href="#" class=(MENU_ITEM) data-state="hover" { (icon("box")) span { "Docker image" small { "From a registry, with auth" } } }
+				a href="#" class=(MENU_ITEM) data-state="focus" { (icon("database")) span { "Database" small { "Postgres, MySQL, MongoDB, Redis" } } }
+				hr;
+				button type="button" class=(MENU_ITEM_DANGER) { (icon("trash-2")) "Delete…" }
+			}
+		}
+		div class="ui-toast ui-inline" { (icon_with("circle-check", "text-success")) div class="ui-toast-body" { p class="ui-toast-title" { "Deployment #148 succeeded" } p class="ui-toast-text" { "shop.acme.dev is live." } } }
+		div class="ui-toast ui-inline" role="alert" { (icon_with("circle-x", "text-destructive")) div class="ui-toast-body" { p class="ui-toast-title" { "Could not reach atlas" } p class="ui-toast-text" { "Retrying in 5 s…" } } }
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use axum::http::StatusCode;
@@ -602,7 +832,9 @@ mod tests {
 			assert_not_contains(&login, external);
 		}
 		assert_contains(&login, "rel=\"preload\"");
-		assert_contains(&login, "/static/fonts/Geist-Variable.woff2");
+		assert_contains(&login, "/static/fonts/hanken-grotesk-var.woff2");
+		assert_contains(&login, "/static/fonts/spline-sans-mono-var.woff2");
+		assert_contains(&login, "/static/page.js");
 		assert_contains(&login, "id=\"toasts\"");
 	}
 
@@ -613,8 +845,9 @@ mod tests {
 			("/static/icons.svg", "image/svg+xml"),
 			("/static/logos.svg", "image/svg+xml"),
 			("/static/podkit.js", "text/javascript"),
-			("/static/fonts/Geist-Variable.woff2", "font/woff2"),
-			("/static/fonts/GeistMono-Variable.woff2", "font/woff2"),
+			("/static/page.js", "text/javascript"),
+			("/static/fonts/hanken-grotesk-var.woff2", "font/woff2"),
+			("/static/fonts/spline-sans-mono-var.woff2", "font/woff2"),
 		] {
 			let resp = tower::ServiceExt::oneshot(
 				app.clone(),

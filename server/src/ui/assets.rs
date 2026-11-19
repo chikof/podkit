@@ -19,11 +19,13 @@ use crate::state::AppState;
 pub static ICONS_SVG: &str = include_str!("../../static/icons.svg");
 pub static LOGOS_SVG: &str = include_str!("../../static/logos.svg");
 static PODKIT_JS: &str = include_str!("../../static/podkit.js");
-static GEIST_SANS: &[u8] = include_bytes!("../../static/fonts/Geist-Variable.woff2");
-static GEIST_MONO: &[u8] = include_bytes!("../../static/fonts/GeistMono-Variable.woff2");
+static PAGE_JS: &str = include_str!("../../static/page.js");
+static HANKEN_GROTESK: &[u8] = include_bytes!("../../static/fonts/hanken-grotesk-var.woff2");
+static SPLINE_SANS_MONO: &[u8] = include_bytes!("../../static/fonts/spline-sans-mono-var.woff2");
 
-/// The Geist version in the URLs below and in `theme.css`'s `@font-face`; bump with the files.
-pub static FONT_SANS_HREF: &str = "/static/fonts/Geist-Variable.woff2?v=1.9.2";
+/// The `?v=` of the font URLs below and in `theme.css`'s `@font-face`; bump with the files.
+pub static FONT_SANS_HREF: &str = "/static/fonts/hanken-grotesk-var.woff2?v=1";
+pub static FONT_MONO_HREF: &str = "/static/fonts/spline-sans-mono-var.woff2?v=1";
 
 fn hashed(path: &str, body: &str) -> String {
 	let hash = Sha256::digest(body.as_bytes());
@@ -34,6 +36,7 @@ pub static ICONS_HREF: LazyLock<String> = LazyLock::new(|| hashed("/static/icons
 pub static LOGOS_HREF: LazyLock<String> = LazyLock::new(|| hashed("/static/logos.svg", LOGOS_SVG));
 pub static PODKIT_JS_HREF: LazyLock<String> =
 	LazyLock::new(|| hashed("/static/podkit.js", PODKIT_JS));
+pub static PAGE_JS_HREF: LazyLock<String> = LazyLock::new(|| hashed("/static/page.js", PAGE_JS));
 
 const IMMUTABLE: &str = "public, max-age=31536000, immutable";
 
@@ -42,8 +45,9 @@ pub fn router() -> Router<AppState> {
 		.route("/static/icons.svg", get(icons))
 		.route("/static/logos.svg", get(logos))
 		.route("/static/podkit.js", get(podkit_js))
-		.route("/static/fonts/Geist-Variable.woff2", get(sans))
-		.route("/static/fonts/GeistMono-Variable.woff2", get(mono))
+		.route("/static/page.js", get(page_js))
+		.route("/static/fonts/hanken-grotesk-var.woff2", get(sans))
+		.route("/static/fonts/spline-sans-mono-var.woff2", get(mono))
 }
 
 async fn icons() -> impl IntoResponse {
@@ -76,13 +80,23 @@ async fn podkit_js() -> impl IntoResponse {
 	)
 }
 
+async fn page_js() -> impl IntoResponse {
+	(
+		[
+			(header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+			(header::CACHE_CONTROL, IMMUTABLE),
+		],
+		PAGE_JS,
+	)
+}
+
 async fn sans() -> impl IntoResponse {
 	(
 		[
 			(header::CONTENT_TYPE, "font/woff2"),
 			(header::CACHE_CONTROL, IMMUTABLE),
 		],
-		GEIST_SANS,
+		HANKEN_GROTESK,
 	)
 }
 
@@ -92,7 +106,7 @@ async fn mono() -> impl IntoResponse {
 			(header::CONTENT_TYPE, "font/woff2"),
 			(header::CACHE_CONTROL, IMMUTABLE),
 		],
-		GEIST_MONO,
+		SPLINE_SANS_MONO,
 	)
 }
 

@@ -7,8 +7,7 @@ use maud::{Markup, html};
 use super::icon::icon;
 use crate::ui::theme::{Theme, current};
 
-const BUTTON: &str = "inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm text-muted-foreground outline-hidden transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50";
-const BUTTON_PRESSED: &str = "inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-sm bg-accent text-accent-foreground outline-hidden focus-visible:ring-2 focus-visible:ring-ring/50";
+const BUTTON: &str = "ui-seg-btn";
 
 pub fn theme_toggle() -> Markup {
 	toggle_for(current())
@@ -21,11 +20,11 @@ fn toggle_for(active: Theme) -> Markup {
 		(Theme::Dark, "moon", "Dark theme"),
 	];
 	html! {
-		form method="post" action="/theme" role="group" aria-label="Color theme" class="inline-flex items-center gap-0.5 rounded-md border border-border p-0.5" {
+		form method="post" action="/theme" role="group" aria-label="Color theme" class="ui-seg" {
 			@for (theme, icon_name, label) in options {
 				button type="submit" name="theme" value=(theme.as_str()) title=(label) aria-label=(label)
 					aria-pressed=(if theme == active { "true" } else { "false" })
-					class=(if theme == active { BUTTON_PRESSED } else { BUTTON }) {
+					class=(BUTTON) {
 					(icon(icon_name))
 				}
 			}

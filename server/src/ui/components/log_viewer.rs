@@ -1,11 +1,14 @@
 //! Log viewer: a scrollable, monospace region that fills from an SSE stream (`live::job_log`
-//! or `live::container_log` append lines into `#<id>`), with a live/ended indicator, a
-//! follow toggle, a search box and a copy button.
+//! or `live::container_log` append lines into `#<id>`), with a live/ended indicator, level
+//! filter chips, a follow toggle, a search box and a copy button.
 //!
 //! - The region is focusable and named, so the keyboard scrolls it (arrows, PgUp/PgDn,
 //!   Home/End) once Tab has reached it.
-//! - Search hides the lines that do not match; it needs no round trip, and lines that
-//!   arrive later are filtered as they land.
+//! - Every line carries `data-lv` (`INFO`, `ERR`, `DEBUG`, ...), which colors it and which
+//!   the filter chips (All, Info, Warn, Error) key on: the chip sets `data-filter` on the
+//!   region and `components.css` hides the other levels. No round trip.
+//! - Search hides the lines that do not match; lines that arrive later are filtered as they
+//!   land.
 //! - Copy takes the visible lines. The Clipboard API is withheld over plain HTTP, so the
 //!   fallback copies through a selected text area.
 //! - Follow keeps the newest line in view; turn it off to read.
@@ -17,9 +20,16 @@ use maud::{Markup, html};
 use super::icon::icon;
 use crate::ui::sse::js_string;
 
-const SEARCH: &str = "ui-field h-8 w-full min-w-0 rounded-md border border-input bg-transparent pr-3 pl-8 text-sm font-normal shadow-xs transition-colors outline-hidden placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/50";
-const TOOL: &str = "ui-button inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-3 text-sm font-medium whitespace-nowrap text-foreground shadow-xs transition-colors outline-hidden select-none hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50";
-const SCROLL: &str = "h-96 overflow-auto rounded-lg border border-border bg-card p-3 font-mono text-xs leading-5 text-card-foreground outline-hidden focus-visible:ring-2 focus-visible:ring-ring/50";
+const SEARCH: &str = "ui-field";
+const TOOL: &str = "ui-button ui-button-outline ui-button-sm";
+
+/// The filters: the chip's word and the level it keeps (`None`: all lines).
+const FILTERS: [(&str, Option<&str>); 4] = [
+	("All", None),
+	("Info", Some("INFO")),
+	("Warn", Some("WARN")),
+	("Error", Some("ERR")),
+];
 
 /// Hides the lines that miss the search and, with follow on, scrolls to the newest. Stored
 /// on the scroller as `_apply` so the search box can call it too.
@@ -34,6 +44,18 @@ fn copy_script(id: &str) -> String {
 	)
 }
 
+/// Sets (or clears) the level filter on the region and moves `aria-pressed` to this chip.
+fn filter_script(scroll_id: &str, level: Option<&str>) -> String {
+	let set = level.map_or_else(
+		|| "delete s.dataset.filter".to_owned(),
+		|l| format!("s.dataset.filter = {}", js_string(l)),
+	);
+	format!(
+		"const s = document.getElementById({}); {set}; for (const b of el.parentElement.children) b.setAttribute('aria-pressed', String(b === el))",
+		js_string(scroll_id)
+	)
+}
+
 /// A viewer named `label` ("Build log") whose lines go into `#id` and come from
 /// `stream_url`, which must answer with `job_log` or `container_log` for the same `id`.
 pub fn log_viewer(id: &str, label: &str, stream_url: &str) -> Markup {
@@ -44,20 +66,26 @@ pub fn log_viewer(id: &str, label: &str, stream_url: &str) -> Markup {
 	);
 	let load = format!("@get({})", js_string(stream_url));
 	html! {
-		div class="flex flex-col gap-2" data-signals="{_live: true, _follow: true, _q: '', _copied: false}" {
-			div class="flex flex-wrap items-center gap-2" {
-				span class="inline-flex items-center gap-2 text-xs text-muted-foreground" role="status" {
+		div class="flex flex-col gap-3" data-signals="{_live: true, _follow: true, _q: '', _copied: false}" {
+			div class="flex flex-wrap items-center gap-3" {
+				span class="inline-flex items-center gap-3 text-xs text-muted-foreground" role="status" {
 					span class="ui-dot ui-dot-progress" "data-class:ui-dot-progress"="$_live" "data-class:ui-dot-neutral"="!$_live" aria-hidden="true" {}
 					span "data-text"="$_live ? 'Live' : 'Ended'" { "Live" }
 				}
-				div class="relative ml-auto min-w-40 flex-1 sm:max-w-64 sm:flex-none" {
-					span class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted-foreground" { (icon("search")) }
+				div class="flex flex-wrap items-center gap-2" role="group" aria-label="Show log levels" {
+					@for (word, level) in FILTERS {
+						button type="button" class="ui-chip" aria-pressed=(if level.is_none() { "true" } else { "false" })
+							"data-on:click"=(filter_script(&scroll_id, level)) { (word) }
+					}
+				}
+				div class="ui-field-icon ml-auto min-w-40 flex-1 sm:max-w-64 sm:flex-none" {
+					(icon("search"))
 					input type="search" class=(SEARCH) autocomplete="off" placeholder="Search the log"
 						aria-label={ "Search the " (label.to_lowercase()) }
 						"data-bind:_q" "data-on:input__debounce.150ms"=(search);
 				}
-				label class="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground" {
-					input type="checkbox" class="ui-checkbox outline-hidden focus-visible:ring-2 focus-visible:ring-ring/50" "data-bind:_follow";
+				label class="ui-check text-xs text-muted-foreground" {
+					input type="checkbox" class="ui-checkbox" "data-bind:_follow";
 					"Follow"
 				}
 				button type="button" class=(TOOL) "data-on:click"=(copy_script(id)) {
@@ -65,7 +93,7 @@ pub fn log_viewer(id: &str, label: &str, stream_url: &str) -> Markup {
 					span "data-text"="$_copied ? 'Copied' : 'Copy'" { "Copy" }
 				}
 			}
-			div id=(scroll_id) class=(SCROLL) tabindex="0" role="region" aria-label=(label) "data-init"=(apply_script()) {
+			div id=(scroll_id) class="ui-log" tabindex="0" role="region" aria-label=(label) "data-init"=(apply_script()) {
 				div id=(id) "data-init"=(load) {}
 			}
 			p class="sr-only" role="status" "data-text"="$_copied ? 'Copied the log' : ''" {}
@@ -104,6 +132,25 @@ mod tests {
 			html.contains("document.getElementById('l-scroll')._apply()"),
 			"{html}"
 		);
+	}
+
+	#[test]
+	fn the_level_chips_are_toggle_buttons_and_only_all_starts_pressed() {
+		let html = log_viewer("l", "Log", "/s").into_string();
+		assert_eq!(html.matches("aria-pressed=\"true\"").count(), 1, "{html}");
+		assert_eq!(html.matches("aria-pressed=\"false\"").count(), 3, "{html}");
+		assert!(
+			html.contains("role=\"group\" aria-label=\"Show log levels\""),
+			"{html}"
+		);
+		for level in ["INFO", "WARN", "ERR"] {
+			assert!(
+				html.contains(&format!("s.dataset.filter = &#39;{level}&#39;"))
+					|| html.contains(&format!("s.dataset.filter = '{level}'")),
+				"{level}: {html}"
+			);
+		}
+		assert!(html.contains("delete s.dataset.filter"), "{html}");
 	}
 
 	#[test]

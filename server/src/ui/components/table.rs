@@ -1,7 +1,8 @@
 //! Table: semantic `<table>` with a sticky header and a row header, in a scrollable
 //! region that a keyboard can focus. Below 36rem of its own width the table stacks: each
 //! row becomes a block and every cell shows its column name (`data-label`), so nothing
-//! needs sideways scrolling on a phone.
+//! needs sideways scrolling on a phone. A column with no name (a row menu) has no label, and
+//! `ui-table-act` on its cell keeps it to the end of the row.
 
 use maud::{Markup, html};
 
@@ -29,7 +30,7 @@ pub fn table(id: &str, caption: &str, headers: &[&str], rows: &[Vec<Markup>]) ->
 								@if i == 0 {
 									th scope="row" { (cell) }
 								} @else {
-									td data-label=[headers.get(i)] { (cell) }
+									td data-label=[headers.get(i).copied().filter(|h| !h.is_empty())] { (cell) }
 								}
 							}
 						}
@@ -78,6 +79,22 @@ mod tests {
 			html.contains("<td data-label=\"Status\">Failed</td>"),
 			"{html}"
 		);
+	}
+
+	#[test]
+	fn a_column_without_a_name_has_no_label_for_the_stacked_layout() {
+		let html = table(
+			"t",
+			"T",
+			&["Name", "Role", ""],
+			&[vec![html! { "a" }, html! { "Owner" }, html! { "menu" }]],
+		)
+		.into_string();
+		assert!(
+			html.contains("<td data-label=\"Role\">Owner</td>"),
+			"{html}"
+		);
+		assert!(html.contains("<td>menu</td>"), "{html}");
 	}
 
 	#[test]

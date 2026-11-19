@@ -765,7 +765,15 @@ async fn the_project_overview_links_apps_with_url_and_latest_status(db: PgPool) 
 	assert_contains(&page, "web.127-0-0-1.sslip.io");
 	assert_contains(&page, "Running");
 	assert_contains(&page, "Not deployed");
-	// The create-resource picker sends "Git repository" and "Docker image" to the new page.
+	// The create-resource picker (its own page now) sends "Git repository" and "Docker image"
+	// to the new page.
+	let (s, page) = f
+		.get(&format!(
+			"/teams/{}/projects/{}/production/create",
+			f.team, f.project
+		))
+		.await;
+	assert_eq!(s, StatusCode::OK);
 	assert_contains(&page, "Git repository");
 	assert_contains(&page, "Docker image");
 	assert_contains(&page, &format!("{}/new?environment=", f.base()));

@@ -5,20 +5,18 @@
 //! passes the part from the section down (`Projects › api › Settings`); the shell puts the
 //! team in front and, on a project's pages, adds the environment after the project and
 //! turns each of those into a switcher. On a narrow screen the middle of a long trail
-//! folds into a "…" menu, keeping the last two.
+//! folds into a "…" menu, keeping the last three.
 
 use maud::{Markup, html};
 
-use super::prefs::sidebar_collapsed;
 use super::sidebar::team_items;
 use crate::ui::components::{
-	MENU_ITEM, Size, Variant, button_class, dialog_open_button, dropdown_menu, icon, kbd,
-	menu_label, menu_link, menu_separator,
+	MENU_ITEM, dialog_open_button, dropdown_menu, icon, kbd, menu_label, menu_link, menu_separator,
 };
 use crate::ui::extract::{ProjectScope, TeamCtx};
 use crate::ui::layout::Crumb;
 
-const SEARCH_BUTTON: &str = "ui-search-button inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 text-sm text-muted-foreground shadow-xs outline-hidden transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50";
+const SEARCH_BUTTON: &str = "ui-search";
 const SWITCH_TRIGGER: &str = "ui-crumb-switch";
 
 /// One entry of a switcher.
@@ -190,8 +188,8 @@ fn team_switcher(ctx: &TeamCtx) -> Markup {
 fn breadcrumbs(ctx: &TeamCtx, crumbs: &[Crumb<'_>]) -> Markup {
 	let segs = segments(ctx, crumbs);
 	let n = segs.len();
-	// On a narrow screen everything but the last two segments folds into a "…" menu.
-	let folded = |i: usize| i + 2 < n;
+	// On a narrow screen everything but the last three segments folds into a "…" menu.
+	let folded = |i: usize| i + 3 < n;
 	let hidden: Vec<&Segment> = segs
 		.iter()
 		.enumerate()
@@ -231,33 +229,34 @@ fn breadcrumbs(ctx: &TeamCtx, crumbs: &[Crumb<'_>]) -> Markup {
 
 /// The header bar. `crumbs` run from the section down to the current page.
 pub fn bar(ctx: &TeamCtx, crumbs: &[Crumb<'_>]) -> Markup {
-	let ghost = button_class(Variant::Ghost, Size::Icon);
 	html! {
-		header class="ui-header ui-vt-header" {
-			span class="md:hidden" {
-				(dialog_open_button("nav-drawer", &ghost, &html! {
-					(icon("menu"))
-					span class="ui-visually-hidden" { "Open menu" }
-				}))
-			}
-			span class="hidden md:inline-flex" {
-				button type="button" class=(ghost)
-					"data-on:click"="$_collapsed = !$_collapsed; document.cookie = 'sidebar=' + ($_collapsed ? 'collapsed' : 'open') + '; path=/; max-age=31536000; samesite=lax'"
-					"data-attr:aria-pressed"="$_collapsed ? 'true' : 'false'" aria-pressed=(if sidebar_collapsed() { "true" } else { "false" }) {
-					(icon("panel-left"))
-					span class="ui-visually-hidden" { "Collapse the sidebar" }
-				}
-			}
+		header class="ui-bar ui-vt-header" {
 			(breadcrumbs(ctx, crumbs))
-			(dialog_open_button("palette", SEARCH_BUTTON, &html! {
-				(icon("search"))
-				span class="hidden sm:inline" { "Search" }
-				span class="hidden items-center gap-1 sm:inline-flex" aria-hidden="true" {
-					(kbd("Ctrl"))
-					(kbd("K"))
-				}
-				span class="ui-visually-hidden sm:hidden" { "Search" }
-			}))
+			div class="ui-bar-actions" {
+				(dialog_open_button("palette", SEARCH_BUTTON, &html! {
+					(icon("search"))
+					span class="ui-search-label" { "Search or jump to…" }
+					span class="ui-search-kbd" aria-hidden="true" { (kbd("Ctrl K")) }
+				}))
+				(theme_flip())
+			}
+		}
+	}
+}
+
+/// One button that turns the theme to the other one. A form posting to `/theme`, so it works
+/// without script. Both buttons are in the page and CSS shows the one that applies: the sun
+/// (go light) while the page is dark, the moon (go dark) while it is light, whether the page
+/// follows the system or the user chose.
+pub fn theme_flip() -> Markup {
+	html! {
+		form method="post" action="/theme" class="contents" {
+			button type="submit" name="theme" value="light" class="ui-icon-btn ui-only-dark" aria-label="Switch to the light theme" {
+				(icon("sun"))
+			}
+			button type="submit" name="theme" value="dark" class="ui-icon-btn ui-only-light" aria-label="Switch to the dark theme" {
+				(icon("moon"))
+			}
 		}
 	}
 }

@@ -10,7 +10,7 @@ use serde::Deserialize;
 
 use crate::state::AppState;
 use crate::teams::service;
-use crate::ui::components::{BUTTON, INPUT, LABEL, card, card_content, card_header};
+use crate::ui::components::{BUTTON, INPUT, LABEL, card, card_content};
 use crate::ui::extract::UiUser;
 use crate::ui::layout::{self, form_error};
 use crate::ui::{error, shell, sse};
@@ -19,24 +19,36 @@ pub fn router() -> Router<AppState> {
 	Router::new().route("/teams/new", get(new_page).post(create))
 }
 
+/// The slug a team name suggests: lower-case letters and digits, one dash between words.
+/// Runs in the browser while the slug has not been typed by hand (`_slugEdited`).
+const SLUG_FROM_NAME: &str = "if (!$_slugEdited) $slug = $name.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60).replace(/-+$/g, '')";
+
 /// The create-team form, as a page body.
 pub fn create_form(intro: &str) -> Markup {
 	html! {
-		div data-signals="{name: '', slug: '', _error: ''}" {
+		div class="ui-create-team" data-signals="{name: '', slug: '', _slugEdited: false, _error: ''}" {
+			header class="ui-page-head" {
+				div class="ui-page-title" {
+					h1 { "Create a team" }
+					p class="ui-lede" { (intro) }
+				}
+			}
 			(card(&html! {
-				(card_header("Create a team", Some(intro)))
 				(card_content(&html! {
-					form class="flex flex-col gap-4" "data-on:submit"="evt.preventDefault(); @post('/teams/new')" {
-						label class=(LABEL) {
-							"Name"
-							input class=(INPUT) type="text" required maxlength="60" "data-bind:name";
+					form class="ui-auth-form" "data-on:submit"="evt.preventDefault(); @post('/teams/new')" {
+						div class="ui-field-group" {
+							label class=(LABEL) for="team-name" { "Name" }
+							input id="team-name" class=(INPUT) type="text" required maxlength="60" autofocus autocomplete="off" "data-bind:name" "data-effect"=(SLUG_FROM_NAME);
 						}
-						label class=(LABEL) {
-							"Slug"
-							input class=(INPUT) type="text" required maxlength="60" pattern="[a-z0-9]([a-z0-9\\-]*[a-z0-9])?" placeholder="my-team" "data-bind:slug";
+						div class="ui-field-group" {
+							label class=(LABEL) for="team-slug" { "Slug" }
+							input id="team-slug" class={ (INPUT) " font-mono" } type="text" required maxlength="60" pattern="[a-z0-9]([a-z0-9\\-]*[a-z0-9])?" placeholder="my-team" autocomplete="off" "data-bind:slug" "data-on:input"="$_slugEdited = true";
+							p class="ui-hint" { "Lower-case letters, digits and dashes. It is filled in from the name until you change it." }
 						}
 						(form_error())
-						button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Create team" }
+						div class="ui-form-actions" {
+							button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Create team" }
+						}
 					}
 				}))
 			}))
@@ -105,6 +117,16 @@ mod tests {
 		assert_eq!(s, StatusCode::OK);
 		assert_contains(&body, "window.location.assign('/teams/");
 		assert_contains(&body, "/projects')");
+	}
+
+	#[db_test]
+	async fn the_create_form_fills_the_slug_from_the_name_until_it_is_typed(db: PgPool) {
+		let app = app(db).await;
+		let (cookie, _) = ui_session(&app, "alice").await;
+		let (_, _, body) = get_html(&app, "/teams/new", Some(&cookie)).await;
+		assert_contains(&body, "_slugEdited: false");
+		assert_contains(&body, "data-effect=\"if (!$_slugEdited) $slug = $name");
+		assert_contains(&body, "data-on:input=\"$_slugEdited = true\"");
 	}
 
 	#[db_test]

@@ -2,8 +2,8 @@
 
 use maud::{DOCTYPE, Markup, html};
 
-use super::assets::{FONT_SANS_HREF, PODKIT_JS_HREF};
-use super::components::{BUTTON_OUTLINE, theme_toggle, toast, toast_region, toast_region_with};
+use super::assets::{FONT_MONO_HREF, FONT_SANS_HREF, PAGE_JS_HREF, PODKIT_JS_HREF};
+use super::components::{BUTTON_OUTLINE, icon, toast, toast_region, toast_region_with};
 use super::extract::TeamCtx;
 use super::{APP_CSS_HREF, DATASTAR_PATH, shell, theme};
 
@@ -25,12 +25,18 @@ pub fn document_with_head(title: &str, head: &Markup, body: &Markup) -> Markup {
 				meta charset="utf-8";
 				meta name="viewport" content="width=device-width, initial-scale=1";
 				meta name="color-scheme" content=(theme.color_scheme());
+				@if cfg!(debug_assertions) {
+					// Lets `page.js` honor `?nofeature=` (forces its fallbacks) in a debug build only.
+					meta name="podkit-debug" content="1";
+				}
 				title { (title) " · podkit" }
 				link rel="preload" href=(FONT_SANS_HREF) "as"="font" type="font/woff2" crossorigin;
+				link rel="preload" href=(FONT_MONO_HREF) "as"="font" type="font/woff2" crossorigin;
 				link rel="stylesheet" href=(*APP_CSS_HREF);
 				(head)
 				script type="module" src=(DATASTAR_PATH) {}
 				script type="module" src=(*PODKIT_JS_HREF) {}
+				script type="module" src=(*PAGE_JS_HREF) {}
 			}
 			body class="min-h-screen font-sans" {
 				(body)
@@ -63,6 +69,53 @@ pub fn form_error() -> Markup {
 	}
 }
 
+/// The `_error` signal as a banner, for the sign-in and sign-up forms: the error sits above
+/// the button, with the icon that says "error" without color.
+pub fn form_banner() -> Markup {
+	html! {
+		div class="ui-banner" role="alert" "data-show"="$_error" style="display: none" {
+			(icon("circle-alert"))
+			span class="ui-banner-body" "data-text"="$_error" {}
+		}
+	}
+}
+
+/// A page on its own, with no sidebar: sign-in, sign-up, registration closed. A centered
+/// column holding the brand, `card` and, below it, `meta` (a list of facts). `signals` is the
+/// page's initial Datastar signals, if it has a form.
+pub fn auth_page(
+	title: &str,
+	signals: Option<&str>,
+	card: &Markup,
+	meta: Option<&Markup>,
+) -> Markup {
+	document(
+		title,
+		&html! {
+			main id="main" class="ui-auth" data-signals=[signals] {
+				div class="ui-auth-wrap" {
+					section class="ui-auth-card" aria-labelledby="auth-t" {
+						(shell::brand("/"))
+						(card)
+					}
+					@if let Some(meta) = meta { (meta) }
+				}
+				div class="ui-auth-theme" { (shell::theme_flip()) }
+			}
+		},
+	)
+}
+
+/// The facts under the sign-in card: which podkit this is and how people sign in to it.
+pub fn auth_meta() -> Markup {
+	html! {
+		dl class="ui-auth-meta" aria-label="This server" {
+			div { dt { "Version" } dd { "podkit " (env!("CARGO_PKG_VERSION")) } }
+			div { dt { "Sign-in" } dd { "Local password" } }
+		}
+	}
+}
+
 fn sign_out() -> Markup {
 	html! {
 		form method="post" action="/logout" {
@@ -71,22 +124,22 @@ fn sign_out() -> Markup {
 	}
 }
 
-/// A signed-in page with no team: just the brand and Sign out.
+/// A signed-in page with no team: the brand, the user and Sign out above a page.
 pub fn bare_page(user: Option<&str>, title: &str, body: &Markup) -> Markup {
 	document(
 		title,
 		&html! {
-			header class="flex items-center justify-between border-b border-border bg-card px-6 py-3" {
-				a href="/" class="font-semibold" { "podkit" }
-				@if let Some(name) = user {
-					div class="flex items-center gap-3" {
-						span class="text-sm text-muted-foreground" { (name) }
-						(theme_toggle())
-						(sign_out())
+			header class="ui-bar ui-bar-bare" {
+				(shell::brand("/"))
+				div class="ui-bar-actions" {
+					@if let Some(name) = user {
+						span class="ui-bar-user" { (name) }
 					}
+					(shell::theme_flip())
+					@if user.is_some() { (sign_out()) }
 				}
 			}
-			main class="mx-auto max-w-3xl px-6 py-8" { (body) }
+			main id="main" tabindex="-1" class="ui-page ui-page-bare" { (body) }
 		},
 	)
 }

@@ -4,7 +4,9 @@
 //! and no `role="dialog"` or `aria-modal` (a native modal already has both).
 //!
 //! Browsers without invoker commands get the same open through a Datastar fallback on the
-//! button (`data-on:click`); it does nothing where the command already worked.
+//! button (`data-on:click`) and through `page.js`; both do nothing where the command already
+//! worked. `closedby="any"` (light dismiss) has a `page.js` fallback too; a form keeps
+//! `closedby="closerequest"` (Esc only) so a stray click outside cannot lose what was typed.
 //!
 //! Put `autofocus` on the safe action (Cancel, Keep) of a destructive confirmation, or on
 //! the first field of a form. Close with `dialog_cancel` (a `<form method="dialog">`) or
@@ -65,20 +67,20 @@ pub fn dialog(
 	html! {
 		dialog id=(id) class="ui-dialog" closedby=(closedby) aria-labelledby=(title_id)
 			aria-describedby=[description.map(|_| description_id.as_str())] {
-			div class="flex flex-col gap-4 p-6" {
-				div class="flex flex-col gap-1.5 pr-8" {
-					h2 id=(title_id) class="text-lg leading-none font-semibold" { (title) }
+			div class="ui-dialog-head" {
+				div {
+					h2 id=(title_id) class="ui-dialog-title" { (title) }
 					@if let Some(description) = description {
-						p id=(description_id) class="text-sm text-muted-foreground" { (description) }
+						p id=(description_id) class="ui-dialog-desc" { (description) }
 					}
 				}
-				div class="text-sm" { (body) }
-				div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end" { (footer) }
-			}
-			form method="dialog" class="absolute top-3 right-3" {
-				button class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-hidden hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50" aria-label="Close" {
-					(icon("x"))
+				form method="dialog" {
+					button class="ui-icon-btn" aria-label="Close" { (icon("x")) }
 				}
+			}
+			div class="ui-dialog-body" { (body) }
+			@if !footer.0.is_empty() {
+				div class="ui-dialog-foot" { (footer) }
 			}
 		}
 	}
