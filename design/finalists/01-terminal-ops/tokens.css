@@ -1,0 +1,38 @@
+/* 01 Cockpit: tokens. Dark-first phosphor console; light = "paper terminal". */
+@font-face{font-family:"JetBrains Mono";src:url(fonts/jetbrains-mono-var.woff2) format("woff2");font-weight:100 800;font-display:swap}
+:root,[data-theme="dark"]{
+  --bg:#0b0d0c;--surface:#101311;--surface-2:#161a17;--surface-3:#1d221e;
+  --border:#252b27;--border-strong:#46504a;--border-ui:#67716b;
+  --text:#d6dcd3;--text-2:#9eaa9f;--text-3:#808c81;
+  --accent:#ffb454;--accent-hover:#ffc77d;--accent-ink:#0b0d0c;--accent-soft:#2a2113;--accent-text:#ffb454;
+  --ok:#7ee787;--warn:#f2c14e;--err:#ff7b72;--info:#6cb6ff;
+  --ok-soft:#10261a;--warn-soft:#2a2310;--err-soft:#2f1517;--info-soft:#102233;
+  --err-ink:#0b0d0c;--focus:#ffb454;--overlay:rgb(2 4 3 / .72);--grid:#1d231f;
+  --log-bg:#080a09;--skeleton-a:#161a17;--skeleton-b:#232a25;
+  --chart-1:#ffb454;--chart-2:#7ee787;--chart-3:#6cb6ff;--chart-4:#d2a8ff;--chart-5:#ff7b72;--chart-6:#56d4dd;--chart-fill:.14;
+  --sh-1:none;--sh-2:0 0 0 1px var(--border-strong);--sh-3:0 12px 40px rgb(0 0 0 / .6);
+}
+[data-theme="light"]{
+  --bg:#f4f1e8;--surface:#ece8db;--surface-2:#e4dfcf;--surface-3:#d9d3c0;
+  --border:#d3cdb9;--border-strong:#7c7a68;--border-ui:#7c7a68;
+  --text:#1c211d;--text-2:#465147;--text-3:#4f5b52;
+  --accent:#9a5b00;--accent-hover:#7c4800;--accent-ink:#fffaf0;--accent-soft:#f1ddb8;--accent-text:#7c4800;
+  --ok:#17692f;--warn:#6f4f00;--err:#a8201a;--info:#0a56a2;
+  --ok-soft:#d5e8d3;--warn-soft:#f1e3b5;--err-soft:#f3d4cf;--info-soft:#d3e2f1;
+  --err-ink:#ffffff;--focus:#9a5b00;--overlay:rgb(40 38 28 / .45);--grid:#d9d3c0;
+  --log-bg:#e9e4d5;--skeleton-a:#e4dfcf;--skeleton-b:#d3cdb9;
+  --chart-1:#9a5b00;--chart-2:#17692f;--chart-3:#0b5cad;--chart-4:#7a3fb0;--chart-5:#b3261e;--chart-6:#0b7a82;--chart-fill:.16;
+  --sh-1:none;--sh-2:0 0 0 1px var(--border-strong);--sh-3:0 12px 40px rgb(60 50 20 / .25);
+}
+:root{
+  --font-sans:"JetBrains Mono",ui-monospace,Menlo,monospace;--font-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;--font-display:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  --fs-xs:11px;--fs-sm:12px;--fs-md:13px;--fs-lg:15px;--fs-xl:18px;--fs-2xl:22px;--fs-3xl:28px;--fs-4xl:40px;
+  --lh-body:1.5;--lh-heading:1.2;--fw-regular:400;--fw-medium:500;--fw-bold:700;--tracking-label:.06em;
+  --s-1:2px;--s-2:4px;--s-3:8px;--s-4:12px;--s-5:16px;--s-6:24px;--s-7:32px;--s-8:48px;
+  --ctl-h:28px;--r-sm:0;--r-md:2px;--r-lg:2px;--r-pill:2px;--bw:1px;--bw-strong:1px;
+  --nav-w:224px;--bar-h:36px;--row-h:44px;
+  --dur-1:60ms;--dur-2:90ms;--dur-3:140ms;--dur-vt:120ms;
+  --ease:steps(3,end);--ease-out:cubic-bezier(0,0,.2,1);--ease-spring:steps(4,end);--stagger:18ms;
+  --dlg-from:translateY(0);--pop-from:none;--press-scale:1;--icon-sw:1.75;--focus-w:1px;--focus-off:1px;--reveal-from:none;--toast-from:none;
+  --log-in:log-type;
+}

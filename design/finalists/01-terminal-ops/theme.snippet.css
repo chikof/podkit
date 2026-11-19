@@ -1,0 +1,44 @@
+/* podkit theme.css block for Cockpit: paste into the FIRST :root block (color tokens only, one per line). Generated from tokens.css; oklch, light-dark(<light>, <dark>). */
+:root {
+	--background: light-dark(oklch(0.958 0.012 91.5), oklch(0.156 0.004 0.0));
+	--foreground: light-dark(oklch(0.241 0.011 151.3), oklch(0.887 0.014 134.9));
+	--card: light-dark(oklch(0.931 0.018 92.7), oklch(0.183 0.006 156.6));
+	--card-foreground: light-dark(oklch(0.241 0.011 151.3), oklch(0.887 0.014 134.9));
+	--popover: light-dark(oklch(0.931 0.018 92.7), oklch(0.183 0.006 156.6)); /* menus, dialogs */
+	--popover-foreground: light-dark(oklch(0.241 0.011 151.3), oklch(0.887 0.014 134.9));
+	--primary: light-dark(oklch(0.531 0.119 65.1), oklch(0.824 0.141 70.2)); /* brand signal */
+	--primary-foreground: light-dark(oklch(0.986 0.014 84.6), oklch(0.156 0.004 0.0));
+	--secondary: light-dark(oklch(0.903 0.022 92.5), oklch(0.212 0.008 153.2));
+	--secondary-foreground: light-dark(oklch(0.241 0.011 151.3), oklch(0.887 0.014 134.9));
+	--muted: light-dark(oklch(0.903 0.022 92.5), oklch(0.212 0.008 153.2));
+	--muted-foreground: light-dark(oklch(0.422 0.022 147.7), oklch(0.725 0.021 147.8));
+	--accent: light-dark(oklch(0.866 0.026 92.4), oklch(0.245 0.010 151.3)); /* shadcn `accent` is a hover wash */
+	--accent-foreground: light-dark(oklch(0.241 0.011 151.3), oklch(0.887 0.014 134.9));
+	--destructive: light-dark(oklch(0.476 0.172 28.5), oklch(0.734 0.163 25.8));
+	--destructive-foreground: light-dark(oklch(1.000 0.000 0.0), oklch(0.156 0.004 0.0));
+	--success: light-dark(oklch(0.459 0.119 148.6), oklch(0.842 0.164 145.8));
+	--warning: light-dark(oklch(0.450 0.093 81.6), oklch(0.834 0.141 85.4));
+	--info: light-dark(oklch(0.456 0.140 254.3), oklch(0.758 0.129 249.6));
+	--border: light-dark(oklch(0.848 0.028 93.1), oklch(0.282 0.011 156.4)); /* decorative hairline */
+	--input: light-dark(oklch(0.576 0.027 102.0), oklch(0.538 0.015 159.6)); /* control border, 3:1 */
+	--ring: light-dark(oklch(0.531 0.119 65.1), oklch(0.824 0.141 70.2));
+	--chart-1: light-dark(oklch(0.531 0.119 65.1), oklch(0.824 0.141 70.2));
+	--chart-2: light-dark(oklch(0.459 0.119 148.6), oklch(0.842 0.164 145.8));
+	--chart-3: light-dark(oklch(0.478 0.147 254.3), oklch(0.758 0.129 249.6));
+	--chart-4: light-dark(oklch(0.497 0.174 304.9), oklch(0.801 0.127 305.9));
+	--chart-5: light-dark(oklch(0.501 0.178 28.7), oklch(0.734 0.163 25.8));
+	--chart-6: light-dark(oklch(0.529 0.088 203.1), oklch(0.804 0.111 201.8)); /* new (podkit has 5) */
+	--sidebar: light-dark(oklch(0.931 0.018 92.7), oklch(0.183 0.006 156.6));
+	--primary-text: light-dark(oklch(0.453 0.102 64.9), oklch(0.824 0.141 70.2)); /* new: accent as text */
+	--primary-hover: light-dark(oklch(0.453 0.102 64.9), oklch(0.864 0.112 73.2)); /* new */
+	--primary-soft: light-dark(oklch(0.905 0.053 82.9), oklch(0.254 0.028 78.0)); /* new */
+	--success-soft: light-dark(oklch(0.911 0.035 142.6), oklch(0.246 0.037 158.3)); /* new */
+	--warning-soft: light-dark(oklch(0.916 0.062 93.1), oklch(0.259 0.033 89.8)); /* new */
+	--destructive-soft: light-dark(oklch(0.894 0.035 28.7), oklch(0.234 0.042 16.0)); /* new */
+	--info-soft: light-dark(oklch(0.906 0.026 248.1), oklch(0.246 0.040 248.5)); /* new */
+	--muted-strong: light-dark(oklch(0.866 0.026 92.4), oklch(0.245 0.010 151.3)); /* new */
+	--subtle-foreground: light-dark(oklch(0.458 0.021 153.1), oklch(0.627 0.021 147.7)); /* new */
+	--border-emphasis: light-dark(oklch(0.576 0.027 102.0), oklch(0.420 0.016 159.3)); /* new */
+	--log: light-dark(oklch(0.919 0.021 91.6), oklch(0.142 0.004 165.2)); /* new */
+	--overlay: light-dark(oklch(0.267 0.018 98.0 / 45%), oklch(0.101 0.008 165.2 / 72%)); /* new */
+}

@@ -1,0 +1,52 @@
+{
+ "01-terminal-ops": {
+  "css_files": {
+   "tokens.css": 2805,
+   "base.css": 8644,
+   "extra.css": 22129,
+   "concept.css": 25520,
+   "mobile.css": 5491
+  },
+  "css_raw": 64589,
+  "css_gzip": 16433,
+  "fonts": 40404,
+  "js_raw": 16930,
+  "js_gzip": 6207,
+  "page_js": 7124,
+  "sim_js": 9806
+ },
+ "02-quiet-linear": {
+  "css_files": {
+   "tokens.css": 3133,
+   "base.css": 8644,
+   "structure.css": 20866,
+   "extra.css": 22129,
+   "concept.css": 10138,
+   "mobile.css": 5491
+  },
+  "css_raw": 70401,
+  "css_gzip": 18179,
+  "fonts": 71180,
+  "js_raw": 16930,
+  "js_gzip": 6207,
+  "page_js": 7124,
+  "sim_js": 9806
+ },
+ "09-data-dashboard": {
+  "css_files": {
+   "tokens.css": 3265,
+   "base.css": 8644,
+   "structure.css": 20866,
+   "extra.css": 22129,
+   "concept.css": 15474,
+   "mobile.css": 5491
+  },
+  "css_raw": 75869,
+  "css_gzip": 19045,
+  "fonts": 75308,
+  "js_raw": 16930,
+  "js_gzip": 6207,
+  "page_js": 7124,
+  "sim_js": 9806
+ }
+}
