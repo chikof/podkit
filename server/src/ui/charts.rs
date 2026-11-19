@@ -8,7 +8,7 @@
 //! - an `<svg role="img">` with axis ticks and one path per run of readings (a missing
 //!   reading, or a hole longer than three times the usual step, breaks the line instead
 //!   of being bridged); the plot around it is focusable and carries the readings in a
-//!   compact `data-points` attribute, from which `page.js` draws a crosshair, a dot per
+//!   compact `data-points` attribute, from which `charts.js` (loaded by the chart) draws a crosshair, a dot per
 //!   series and a tooltip card at the pointer, or at the point the arrow keys have stepped
 //!   to (and says its values politely); there is no native `title` tooltip,
 //! - a visually hidden summary the SVG points at with `aria-describedby`,
@@ -21,6 +21,7 @@ use std::fmt::Write as _;
 
 use maud::{Markup, html};
 
+use super::assets::chart_script;
 use super::components::table;
 
 // The plot fills the whole viewBox and is stretched to its box (`preserveAspectRatio="none"`);
@@ -463,6 +464,7 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 	);
 	html! {
 		div class="ui-chart" {
+			(chart_script())
 			div class="ui-chart-plot" tabindex="0" role="group" aria-label=(label)
 				style={ "--an:" (figure_anchor) } "data-points"=(points_json(chart, &plot)) {
 				svg viewBox={ "0 0 " (WIDTH) " " (HEIGHT) } preserveAspectRatio="none" role="img"
@@ -485,7 +487,7 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 				@for tick in &ticks {
 					span class="ui-chart-yl" style={ "--p:" (num((1.0 - tick / top) * 100.0)) } aria-hidden="true" { (format_value(chart.unit, *tick)) }
 				}
-				// The hover layer: `page.js` places the crosshair, the dots and the card, and
+				// The hover layer: `charts.js` places the crosshair, the dots and the card, and
 				// says the values politely when a key moves the point.
 				span class="ui-chart-cross" hidden aria-hidden="true" {}
 				@for s in &chart.series {
@@ -503,7 +505,7 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 	}
 }
 
-/// What `page.js` needs to draw the hover layer, as compact JSON: the window (`f`, `t` in unix
+/// What `charts.js` needs to draw the hover layer, as compact JSON: the window (`f`, `t` in unix
 /// seconds), the series labels (`s`) and colors (`c`), and one entry per reading `[time,
 /// [[y, "text"] | null, ...]]` where `y` is the point's height as a fraction of the plot and
 /// `text` is the value with its unit. Nothing is computed from it but positions.
@@ -875,6 +877,8 @@ mod tests {
 		let xs = minutes(4);
 		let vals = vec![Some(10.0), None, Some(30.0), Some(40.0)];
 		let html = render(&one(&xs, vals, Unit::Percent, Some(100.0)));
+		// Only a page with a chart loads the hover script.
+		assert!(html.contains("/static/charts.js?v="), "{html}");
 		assert!(html.contains("tabindex=\"0\""), "{html}");
 		assert!(html.contains("role=\"group\""), "{html}");
 		assert!(html.contains("aria-live=\"polite\""), "{html}");
@@ -914,7 +918,7 @@ mod tests {
 			..one(&xs, vec![], Unit::BytesPerSec, None)
 		};
 		let html = render(&chart);
-		assert!(!html.contains("<script"), "{html}");
+		assert!(!html.contains("<script>"), "{html}");
 		assert!(!html.contains("<img"), "{html}");
 		assert!(!html.contains("<b "), "{html}");
 		assert!(!html.contains("<svg onload"), "{html}");

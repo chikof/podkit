@@ -17,7 +17,7 @@
 //! - After a successful save the handler adds [`saved`] to its response, which empties
 //!   `_initial`; the effect then takes a new snapshot of what was just saved and the bar
 //!   goes away. A handler that redirects or reloads needs nothing.
-//! - `page.js` reads `[data-dirty]` to ask before the page is left (`beforeunload` and
+//! - `guard.js` (loaded by the bar) reads `[data-dirty]` to ask before the page is left (`beforeunload` and
 //!   in-app links), so there is one definition of "unsaved" for both.
 //!
 //! One bar per page: the snapshot signal is named `_initial`.
@@ -26,6 +26,7 @@ use maud::{Markup, html};
 use serde_json::json;
 
 use super::button::{Size, Variant, button_class};
+use crate::ui::assets::guard_script;
 use crate::ui::layout::form_error;
 use crate::ui::sse::{self, Events};
 
@@ -62,7 +63,8 @@ pub fn save_bar(fields: &[&str]) -> Markup {
 	);
 	html! {
 		div class="ui-save-bar" data-save-bar "data-signals"="{_initial: ''}" "data-effect"=(snapshot)
-			"data-attr:data-dirty"=(dirty) {
+				"data-attr:data-dirty"=(dirty) {
+			(guard_script())
 			div class="ui-save-msg" {
 				span class="ui-save-title" { "Unsaved changes" }
 				(form_error())

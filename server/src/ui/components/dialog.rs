@@ -8,10 +8,11 @@
 //! worked.
 //!
 //! Every dialog uses `closedby="any"`: Esc and a click outside both close it (`page.js` does
-//! the click outside where the attribute is unsupported). That includes a dialog with a
-//! form. When something typed in it has not been submitted, `page.js` holds the close back
-//! and asks "Discard changes?" (`discard_confirm`), so a stray click cannot lose input; the
-//! dialog's own Close and Cancel buttons are deliberate and close at once.
+//! the click outside where the attribute is unsupported, by sending the same `cancel` event
+//! Esc does). That includes a dialog with a form. When something typed in it has not been
+//! submitted, `guard.js` (loaded by `dialog` itself) holds the close back and asks "Discard
+//! changes?" (`discard_confirm`), so a stray click cannot lose input; the dialog's own Close
+//! and Cancel buttons are deliberate and close at once.
 //!
 //! Put `autofocus` on the safe action (Cancel, Keep) of a destructive confirmation, or on
 //! the first field of a form. Close with `dialog_cancel` (a `<form method="dialog">`) or
@@ -21,6 +22,7 @@ use maud::{Markup, html};
 
 use super::button::{Size, Variant, button_class};
 use super::icon::icon;
+use crate::ui::assets::guard_script;
 use crate::ui::sse::js_string;
 
 /// The button that opens the dialog `id`. `class` is a button class list.
@@ -75,10 +77,11 @@ pub fn dialog(
 				div class="ui-dialog-foot" { (footer) }
 			}
 		}
+		(guard_script())
 	}
 }
 
-/// The "Discard changes?" question `page.js` asks before a dialog with unsaved input is
+/// The "Discard changes?" question `guard.js` asks before a dialog with unsaved input is
 /// closed by Esc or a click outside, or before the page is left with unsaved changes. One
 /// per page, in the shell; it answers through its `returnValue` (`keep` or `discard`).
 pub fn discard_confirm() -> Markup {

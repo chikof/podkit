@@ -843,6 +843,8 @@ mod tests {
 			("/static/logos.svg", "image/svg+xml"),
 			("/static/podkit.js", "text/javascript"),
 			("/static/page.js", "text/javascript"),
+			("/static/charts.js", "text/javascript"),
+			("/static/guard.js", "text/javascript"),
 			("/static/fonts/hanken-grotesk-var.woff2", "font/woff2"),
 			("/static/fonts/spline-sans-mono-var.woff2", "font/woff2"),
 		] {

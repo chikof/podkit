@@ -55,27 +55,8 @@
 		if (back) setTimeout(() => d.activeElement === d.body && back.focus(), 0);
 	}, true);
 
-	/* A dialog with typed-in input asks before Esc or a click outside closes it (the palette never asks). */
-	const vals = (r) => $$("input:not([type=hidden]),textarea,select", r).map((e) => (/^(checkbox|radio)$/.test(e.type) ? e.checked : e.value)).join("\0");
-	const held = new WeakMap();
-	const dirty = (x) => held.has(x) && !x.matches("#palette,#discard-confirm") && vals(x) !== held.get(x);
-	new MutationObserver((ms) => ms.forEach((m) => m.target.open && held.set(m.target, vals(m.target))))
-		.observe(d.body, { subtree: true, attributes: true, attributeFilter: ["open"] });
-	const ask = () => new Promise((done) => {
-		const c = $("#discard-confirm");
-		c.returnValue = "";
-		c.addEventListener("close", () => done(c.returnValue === "discard"), { once: true });
-		c.showModal();
-	});
-	const leave = (x) => (dirty(x) ? ask().then((ok) => ok && x.close()) : x.close());
-	d.addEventListener("cancel", (e) => {
-		if (e.cancelable && at(e) && dirty(at(e))) {
-			e.preventDefault();
-			leave(at(e));
-		}
-	}, true);
-
-	/* `closedby="any"`: a click outside closes the dialog (press and release both outside). */
+	/* `closedby="any"`: a click outside closes the dialog (press and release both outside). It asks with a
+	   `cancel` event first, as Esc does, so guard.js can hold it back. */
 	if (!native.closedby) {
 		let pressed = null;
 		const outside = (e, dlg) => {
@@ -87,7 +68,7 @@
 			pressed = dlg && dlg.matches('[closedby="any"]') && outside(e, dlg) ? dlg : null;
 		}, true);
 		d.addEventListener("pointerup", (e) => {
-			if (pressed && outside(e, pressed)) leave(pressed);
+			if (pressed && outside(e, pressed) && pressed.dispatchEvent(new Event("cancel", { cancelable: true }))) pressed.close();
 			pressed = null;
 		}, true);
 	}
@@ -178,69 +159,6 @@
 		if (p.open) p.close();
 		else if (!$("dialog[open]")) p.showModal();
 	});
-
-	/* Charts: `data-points` (charts.rs) holds every reading; the pointer, or arrow keys on the focused
-	   chart, put a crosshair, a dot per series and a card on the nearest one. */
-	const C = (g) => (g._c ??= JSON.parse(g.dataset.points));
-	const mk = (tag, props) => Object.assign(d.createElement(tag), props);
-	const hideChart = (g) => $$(".ui-chart-cross,.ui-chart-dot,.ui-chart-tip", g).forEach((o) => (o.hidden = true));
-	const showChart = (g, i, say) => {
-		const c = C(g), [t, vs] = c.p[i], tip = $(".ui-chart-tip", g);
-		const x = Math.min(1, Math.max(0, (t - c.f) / (c.t - c.f || 1))) * 100;
-		const when = `${new Date(t * 1000).toISOString().slice(0, 19).replace("T", " ")} UTC`;
-		const text = c.s.map((l, k) => [l, vs[k] ? vs[k][1] : "no reading"]);
-		g._i = i;
-		$(".ui-chart-cross", g).style.left = `${x}%`;
-		$$(".ui-chart-dot", g).forEach((o, k) => {
-			o.hidden = !vs[k];
-			if (vs[k]) o.style.cssText = `left:${x}%;top:${vs[k][0] * 100}%`;
-		});
-		tip.replaceChildren(mk("b", { textContent: when }), ...text.map(([l, v], k) => {
-			const row = mk("div", { className: "ui-chart-row", textContent: l });
-			row.dataset.c = c.c[k];
-			return row.append(mk("span", { textContent: v })) || row;
-		}));
-		$$(".ui-chart-cross,.ui-chart-tip", g).forEach((o) => (o.hidden = false));
-		if (!native.anchor) { /* no anchor positioning: right of the crosshair, left when it would overflow */
-			const px = (x / 100) * g.clientWidth, w = tip.offsetWidth;
-			tip.style.left = `${px + 12 + w > g.clientWidth ? Math.max(0, px - 12 - w) : px + 12}px`;
-		}
-		if (say) $("[aria-live]", g).textContent = `${when}, ${text.map((r) => r.join(" ")).join(", ")}`;
-	};
-	d.addEventListener("pointermove", (e) => {
-		const g = at(e)?.closest("[data-points]");
-		if (!g) return;
-		const c = C(g), r = g.getBoundingClientRect(), t = c.f + ((e.clientX - r.left) / r.width) * (c.t - c.f);
-		showChart(g, c.p.reduce((b, p, i) => (Math.abs(p[0] - t) < Math.abs(c.p[b][0] - t) ? i : b), 0));
-	});
-	d.addEventListener("pointerout", (e) => {
-		const g = at(e)?.closest("[data-points]");
-		if (g && !g.contains(e.relatedTarget) && d.activeElement !== g) hideChart(g);
-	});
-	d.addEventListener("focusout", (e) => at(e)?.matches("[data-points]") && hideChart(at(e)));
-	d.addEventListener("keydown", (e) => {
-		const g = at(e);
-		if (!g?.matches("[data-points]")) return;
-		const n = C(g).p.length, i = g._i ?? (e.key === "ArrowRight" ? n - 2 : n);
-		const to = { ArrowLeft: i - 1, ArrowRight: i + 1, Home: 0, End: n - 1 }[e.key];
-		if (e.key === "Escape") hideChart(g);
-		else if (to !== undefined) {
-			e.preventDefault();
-			showChart(g, Math.min(n - 1, Math.max(0, to)), true);
-		}
-	});
-
-	/* `data-dirty` on a save bar (save_bar.rs) is "unsaved changes": a link asks first, a reload gets the browser's prompt. */
-	let leaving = false;
-	const unsaved = () => $(".ui-save-bar[data-dirty]");
-	d.addEventListener("click", (e) => {
-		const a = at(e)?.closest("a[href]");
-		if (!a || !unsaved() || e.defaultPrevented || e.button || e.ctrlKey || e.metaKey || e.shiftKey || a.target || a.origin !== location.origin) return;
-		if (a.hash && a.pathname + a.search === location.pathname + location.search) return;
-		e.preventDefault();
-		ask().then((ok) => ok && ((leaving = true), (location.href = a.href)));
-	});
-	addEventListener("beforeunload", (e) => !leaving && unsaved() && e.preventDefault());
 
 	/* Theme: the form posts for the cookie; the page changes at once. Works without script too. */
 	d.addEventListener("submit", (e) => {
