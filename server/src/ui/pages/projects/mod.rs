@@ -1,5 +1,5 @@
-//! Projects and what lives in them: the projects grid, an environment's resource cards and
-//! the create-resource picker. Applications and databases have their own areas.
+//! Projects and what lives in them: the projects tiles, an environment's resource rows and
+//! the create-resource picker page. Applications and databases have their own areas.
 
 use axum::Router;
 

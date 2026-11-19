@@ -26,9 +26,12 @@ section_projects() {
 
 	# The environment view, by default and by slug; the picker is on it.
 	expect_page "$base" "Nothing in production yet"
-	expect_page "$base/production" "Create a resource"
-	expect_page "$base/production" "$base/apps/new"
-	expect_page "$base/production" "$base/databases/new"
+	expect_page "$base/production" "Create resource"
+	expect_page "$base/production" "href=\"$base/production/create\""
+	expect_page "$base/production/create" "Step 1 of 2"
+	expect_page "$base/production/create" "$base/apps/new"
+	expect_page "$base/production/create" "$base/databases/new"
+	expect_page "$base/nope/create" "Not found" 404
 	expect_page "$base/nope" "Not found" 404
 	expect_page "$base?environment=0" "Not found" 404
 
@@ -86,4 +89,31 @@ section_projects() {
 	ui_post "$list/delete" "$(jq -n --arg i "$project" --arg s "$slug" '{target: $i, confirm: $s}')"
 	expect_body "window.location.assign" "POST $list/delete"
 	expect_page "$base" "Not found" 404
+}
+
+# The Quiet shapes of the grid and the environment: tiles, rows, the filter fragment's
+# change marker, and the picker's radio group.
+section_projects_grid() {
+	local suffix="$RANDOM$RANDOM" project slug name base list q
+	slug="smoke-tiles-$suffix"
+	name="Smoke tiles $suffix"
+	list="/teams/$TEAM/projects"
+	project="$(api POST "/api/v1/teams/$TEAM/projects" "$(jq -n --arg n "$name" --arg s "$slug" '{name: $n, slug: $s}')" | jq -er .id)"
+	base="$list/$project"
+
+	expect_page "$list" 'id="project-grid"'
+	expect_page "$list" 'class="ui-card ui-link-card ui-proj"'
+	expect_page "$list" "Never deployed"
+	expect_page "$list" "Team summary"
+
+	expect_page "$base/production" "0 resources in production"
+	expect_page "$base/production/create" 'name="rtype"'
+	expect_page "$base/production/create" 'data-panel="git"'
+	expect_page "$base/production/create" 'data-panel="model"'
+
+	# The fragment answers with the grid, given what the page last showed.
+	q="$(jq -rn '{q: "", type: "all", seen: "application:1=building"} | tojson | @uri')"
+	expect_page "$base/production/resources?datastar=$q" 'id="resource-grid"'
+
+	api DELETE "/api/v1/teams/$TEAM/projects/$project" >/dev/null 2>&1 || true
 }

@@ -1,4 +1,4 @@
-//! The projects grid: one card per project with its resource logos, counts and last
+//! The projects grid: one tile per project with its resource logos, counts and last
 //! deploy, and the dialogs to create, rename and delete one.
 //!
 //! This is an Explore surface (a team browsing what it runs), so the page is the grid;
@@ -126,31 +126,41 @@ fn project_card(
 	let href = project_href(ctx.team.id, card);
 	let total = card.logos.len();
 	html! {
-		article class="ui-card ui-link-card flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-xs" data-project=(card.project.id) {
-			div class="flex items-start justify-between gap-3" {
-				div class="flex min-w-0 flex-col gap-1" {
-					h2 class="truncate text-base leading-tight font-semibold" {
-						a href=(href) class="ui-link-card-link outline-hidden" { (card.project.name) }
+		article class="ui-card ui-link-card ui-proj" data-project=(card.project.id) {
+			div class="ui-proj-head" {
+				div class="ui-proj-title" {
+					h2 class="ui-proj-name" {
+						a href=(href) class="ui-link-card-link" { (card.project.name) }
 					}
-					p class="truncate font-mono text-xs text-muted-foreground" { (card.project.slug) }
+					p class="ui-proj-slug" { (card.project.slug) }
 				}
-				(card_menu(card, can_update, can_delete))
-			}
-			@if total == 0 {
-				p class="text-sm text-muted-foreground" { "No resources yet" }
-			} @else {
-				(logo_row(&card.logos))
-			}
-			div class="mt-auto flex flex-col gap-1 text-sm" {
-				p { (counts_line(card)) }
-				p class="text-xs text-muted-foreground" {
-					(plural(card.environments, "environment", "environments"))
-					" · "
-					@if let Some(at) = card.last_deploy {
-						"Last deploy " (relative_time(at, now))
+				div class="ui-proj-side" {
+					@if total == 0 {
+						span class="ui-proj-none" { "No resources yet" }
 					} @else {
-						"Never deployed"
+						(logo_row(&card.logos))
 					}
+					(card_menu(card, can_update, can_delete))
+				}
+			}
+			dl class="ui-proj-meta" {
+				div {
+					dt { "Resources" }
+					dd { (counts_line(card)) }
+				}
+				div {
+					dt { "Last deploy" }
+					dd {
+						@if let Some(at) = card.last_deploy {
+							(relative_time(at, now))
+						} @else {
+							"Never deployed"
+						}
+					}
+				}
+				div {
+					dt { "Environments" }
+					dd { (plural(card.environments, "environment", "environments")) }
 				}
 			}
 		}
@@ -256,14 +266,15 @@ async fn list_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Re
 			&html! { (icon("plus")) "New project" },
 		))
 	};
+	let resources: usize = cards.iter().map(|c| c.logos.len()).sum();
 	let body = html! {
-		div class="ui-wide flex w-full flex-col gap-6" data-signals="{name: '', slug: '', target: '', targetName: '', targetSlug: '', confirm: '', _error: ''}" {
-			div class="flex flex-wrap items-end justify-between gap-4" {
-				div class="flex flex-col gap-1" {
-					h1 class="text-2xl font-semibold tracking-tight" { "Projects" }
-					p class="text-sm text-muted-foreground" { "Applications, databases and models, grouped by what they are for." }
+		div class="ui-wide ui-proj-page" data-signals="{name: '', slug: '', target: '', targetName: '', targetSlug: '', confirm: '', _error: ''}" {
+			header class="ui-page-head" {
+				div class="ui-page-title" {
+					h1 { "Projects" }
+					p class="ui-lede" { "Applications, databases and models, grouped by what they are for." }
 				}
-				@if can_create { (new_button) }
+				@if can_create { div class="ui-page-actions" { (new_button) } }
 			}
 			@if cards.is_empty() {
 				(empty_state(
@@ -273,9 +284,28 @@ async fn list_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Re
 					can_create.then_some(&new_button),
 				))
 			} @else {
-				div id="project-grid" class="ui-card-grid" {
-					@for card in &cards {
-						(project_card(&ctx, card, now, can_update, can_delete))
+				ul class="ui-proj-summary" aria-label="Team summary" {
+					li { b { (cards.len()) } @if cards.len() == 1 { " project" } @else { " projects" } }
+					li { b { (resources) } @if resources == 1 { " resource" } @else { " resources" } }
+				}
+				div id="project-grid" class="ui-proj-grid ui-reveal" {
+					@for (i, card) in cards.iter().enumerate() {
+						div class="ui-proj-cell" style=(format!("--i:{i}")) {
+							(project_card(&ctx, card, now, can_update, can_delete))
+						}
+					}
+					@if can_create {
+						div class="ui-proj-cell" style=(format!("--i:{}", cards.len())) {
+							(dialog_open_button(
+								"project-create",
+								"ui-proj-new",
+								&html! {
+									(icon("plus"))
+									span class="ui-proj-new-t" { "New project" }
+									span class="ui-proj-new-s" { "Group resources by product" }
+								},
+							))
+						}
 					}
 				}
 			}

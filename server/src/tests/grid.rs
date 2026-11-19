@@ -85,3 +85,26 @@ pub async fn finish_deployments(db: &PgPool) {
 		.await
 		.unwrap();
 }
+
+/// One sampler reading of a resource, taken `minutes_ago` minutes ago.
+pub async fn seed_resource_sample(
+	db: &PgPool,
+	kind: &str,
+	id: i64,
+	cpu: Option<f64>,
+	mem: i64,
+	minutes_ago: i32,
+) {
+	sqlx::query(
+		"INSERT INTO resource_metrics (kind, resource_id, at, rollup, cpu, mem)
+		 VALUES ($1, $2, now() - make_interval(mins => $3), FALSE, $4, $5)",
+	)
+	.bind(kind)
+	.bind(id)
+	.bind(minutes_ago)
+	.bind(cpu)
+	.bind(mem)
+	.execute(db)
+	.await
+	.unwrap();
+}

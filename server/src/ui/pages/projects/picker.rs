@@ -1,116 +1,157 @@
-//! The create-resource picker: one dialog that lists everything an environment can hold and
-//! sends each choice to the page that creates it. The create flows themselves belong to the
-//! application, database, model and template cards; this only routes to them.
+//! The create-resource picker: a page that lists everything an environment can hold, shows
+//! what each choice involves, and sends the pick to the page that creates it. The create
+//! flows themselves belong to the application, database, model and template cards; this
+//! only routes to them.
 //!
-//! Every link carries `?environment=<id>` so the flow's header shows the right
-//! environment. The flows must read it to create the resource there (see the hand-off).
+//! A Configure surface (the first step of a two-step flow): the choices on the left, the
+//! selected one explained on the right, one primary action. The selection is a native radio
+//! group; the panel follows the checked radio through `:has()` (`components.css`), so it
+//! needs no script.
+//!
+//! Every link carries `?environment=<id>` so the flow's header shows the right environment.
+//! The flows must read it to create the resource there (see the hand-off).
 
 use maud::{Markup, html};
 
 use crate::auth::permission::{Action, Resource};
 use crate::environments::Environment;
 use crate::ids::{ProjectId, TeamId};
+use crate::projects::Project;
 use crate::ui::components::{LogoSize, Size, Tone, Variant, badge, button_class, icon, logo};
 use crate::ui::extract::TeamCtx;
-
-pub const DIALOG_ID: &str = "create-resource";
 
 /// The compose and template pages, as paths under the project (F8). `None` shows the option as
 /// "Soon", not a link.
 const COMPOSE_HREF: Option<&str> = Some("/stacks/new");
 const TEMPLATES_HREF: Option<&str> = Some("/templates");
 
-/// How a tile draws its mark.
+/// How a choice draws its mark.
 enum Mark<'a> {
 	Logo(&'a str),
 	Icon(&'a str),
 }
 
-struct Choice<'a> {
+/// One thing that can be created.
+struct Entry<'a> {
+	/// The radio's value and the panel's key.
+	key: &'a str,
 	title: &'a str,
-	description: &'a str,
+	/// The line under the title in the list.
+	summary: &'a str,
+	/// What the panel says about it.
+	detail: &'a str,
+	/// What the next page asks for.
+	provide: &'a [&'a str],
 	mark: Mark<'a>,
 	/// `None`: not available yet.
 	href: Option<String>,
+	/// A choice that is several links (a database's engines) instead of one.
+	engines: Vec<Engine<'a>>,
 }
 
-fn tile(choice: &Choice<'_>, first: bool) -> Markup {
-	let mark = match &choice.mark {
-		Mark::Logo(name) => logo(name, LogoSize::Md),
-		Mark::Icon(name) => html! {
-			span class="ui-pick-icon" aria-hidden="true" { (icon(name)) }
-		},
-	};
+struct Engine<'a> {
+	title: &'a str,
+	what: &'a str,
+	mark: &'a str,
+	href: String,
+}
+
+fn mark_of(mark: &Mark<'_>, size: LogoSize) -> Markup {
+	match mark {
+		Mark::Logo(name) => logo(name, size),
+		Mark::Icon(name) => icon(name),
+	}
+}
+
+fn list_item(entry: &Entry<'_>, checked: bool) -> Markup {
+	let id = format!("rt-{}", entry.key);
 	html! {
-		@if let Some(href) = &choice.href {
-			a href=(href) class="ui-pick" autofocus[first] {
-				(mark)
-				span class="flex min-w-0 flex-col gap-0.5" {
-					span class="text-sm font-medium" { (choice.title) }
-					span class="text-xs text-muted-foreground" { (choice.description) }
+		label class="ui-pk-item" for=(id) {
+			input type="radio" name="rtype" value=(entry.key) id=(id) checked[checked];
+			span class="ui-pk-ic" aria-hidden="true" { (mark_of(&entry.mark, LogoSize::Sm)) }
+			span class="ui-pk-t" {
+				b { (entry.title) }
+				small { (entry.summary) }
+			}
+			span class="ui-pk-go" aria-hidden="true" { (icon("chevron-right")) }
+		}
+	}
+}
+
+fn panel(entry: &Entry<'_>, cancel: &str) -> Markup {
+	html! {
+		section class="ui-pk-detail" data-panel=(entry.key) aria-label=(entry.title) {
+			span class="ui-pk-big" aria-hidden="true" { (mark_of(&entry.mark, LogoSize::Lg)) }
+			h2 { (entry.title) }
+			p { (entry.detail) }
+			@if entry.engines.is_empty() {
+				ul class="ui-pk-provide" aria-label="You will provide" {
+					@for item in entry.provide { li { (item) } }
+				}
+			} @else {
+				ul class="ui-pk-engines" aria-label="Engines" {
+					@for e in &entry.engines {
+						li {
+							a href=(e.href) class="ui-pk-engine" {
+								span class="ui-pk-ic" aria-hidden="true" { (logo(e.mark, LogoSize::Sm)) }
+								span class="ui-pk-t" { b { (e.title) } small { (e.what) } }
+								span class="ui-pk-go" aria-hidden="true" { (icon("chevron-right")) }
+							}
+						}
+					}
 				}
 			}
-		} @else {
-			div class="ui-pick" aria-disabled="true" {
-				(mark)
-				span class="flex min-w-0 flex-col gap-0.5" {
-					span class="flex items-center gap-2 text-sm font-medium" {
-						(choice.title)
-						(badge(Tone::Neutral, "Soon"))
+			div class="ui-page-actions" {
+				@if entry.engines.is_empty() {
+					@if let Some(href) = &entry.href {
+						a href=(href) class=(button_class(Variant::Default, Size::Md)) {
+							"Continue" (icon("arrow-right"))
+						}
+					} @else {
+						span class="ui-pk-soon" { (badge(Tone::Neutral, "Soon")) }
 					}
-					span class="text-xs text-muted-foreground" { (choice.description) }
 				}
+				a href=(cancel) class=(button_class(Variant::Ghost, Size::Md)) { "Cancel" }
 			}
 		}
 	}
 }
 
-fn group(heading: &str, choices: &[Choice<'_>], first: &mut bool) -> Markup {
-	html! {
-		@if !choices.is_empty() {
-			section class="flex flex-col gap-2" {
-				h3 class="text-xs font-medium tracking-wide text-muted-foreground uppercase" { (heading) }
-				div class="ui-pick-grid" {
-					@for c in choices {
-						(tile(c, std::mem::take(first) && c.href.is_some()))
-					}
-				}
-			}
-		}
-	}
-}
-
-/// What the caller may create here, as groups of choices.
-fn groups<'a>(
+/// What the caller may create here, in the order of the list.
+fn entries<'a>(
 	ctx: &TeamCtx,
 	team: TeamId,
 	project: ProjectId,
 	env: &Environment,
-) -> Vec<(&'static str, Vec<Choice<'a>>)> {
+) -> Vec<Entry<'a>> {
 	let base = format!("/teams/{team}/projects/{project}");
 	let q = format!("environment={}", env.id);
 	let mut out = Vec::new();
 
-	let mut apps = Vec::new();
 	if ctx.perms.can(Action::Create, Resource::Application) {
-		apps.push(Choice {
+		out.push(Entry {
+			key: "git",
 			title: "Git repository",
-			description: "Build and deploy an application from a Git repository.",
+			summary: "GitHub, GitLab or any Git URL",
+			detail: "Builds a Dockerfile or a Nixpacks plan on every push and deploys it behind a domain.",
+			provide: &["Repository URL", "Branch", "Build method and port"],
 			mark: Mark::Icon("git-branch"),
 			href: Some(format!("{base}/apps/new?{q}")),
+			engines: Vec::new(),
 		});
-		apps.push(Choice {
+		out.push(Entry {
+			key: "image",
 			title: "Docker image",
-			description: "Run an image from a registry.",
+			summary: "From a registry, with auth",
+			detail: "Runs an existing image. It is pulled on deploy; private registries work.",
+			provide: &["Image and tag", "Port", "Registry credentials, if private"],
 			mark: Mark::Logo("docker"),
 			href: Some(format!("{base}/apps/new?{q}&source=image")),
+			engines: Vec::new(),
 		});
 	}
-	out.push(("Application", apps));
-
-	let mut dbs = Vec::new();
 	if ctx.perms.can(Action::Create, Resource::Database) {
-		for (engine, title, mark, what) in [
+		let engines = [
 			(
 				"postgres",
 				"PostgreSQL",
@@ -120,50 +161,66 @@ fn groups<'a>(
 			("mysql", "MySQL", "mysql", "Relational, widely hosted."),
 			("mongodb", "MongoDB", "mongodb", "Document store."),
 			("redis", "Redis", "redis", "In-memory cache and queue."),
-		] {
-			dbs.push(Choice {
-				title,
-				description: what,
-				mark: Mark::Logo(mark),
-				href: Some(format!("{base}/databases/new?{q}&engine={engine}")),
-			});
-		}
+		]
+		.into_iter()
+		.map(|(engine, title, mark, what)| Engine {
+			title,
+			what,
+			mark,
+			href: format!("{base}/databases/new?{q}&engine={engine}"),
+		})
+		.collect();
+		out.push(Entry {
+			key: "db",
+			title: "Database",
+			summary: "Postgres, MySQL, MongoDB, Redis",
+			detail: "A managed container with a volume, scheduled backups and a connection string. Pick the engine to continue.",
+			provide: &[],
+			mark: Mark::Icon("database"),
+			href: Some(format!("{base}/databases/new?{q}&engine=postgres")),
+			engines,
+		});
 	}
-	out.push(("Database", dbs));
-
-	let mut stacks = Vec::new();
 	if ctx.perms.can(Action::Create, Resource::Stack) {
-		stacks.push(Choice {
+		out.push(Entry {
+			key: "stack",
 			title: "Compose",
-			description: "Deploy a stack from a compose file.",
-			mark: Mark::Logo("docker"),
+			summary: "Paste or import docker-compose.yml",
+			detail: "Runs several services as one unit, with shared environment and a status per service.",
+			provide: &["A compose file", "A name for the stack"],
+			mark: Mark::Icon("layers"),
 			href: COMPOSE_HREF.map(|h| format!("{base}{h}?{q}")),
+			engines: Vec::new(),
 		});
 	}
 	if ctx.perms.can(Action::Create, Resource::Stack)
 		|| ctx.perms.can(Action::Create, Resource::Application)
 	{
-		stacks.push(Choice {
+		out.push(Entry {
+			key: "template",
 			title: "Template",
-			description: "Start from a ready-made service in the catalog.",
+			summary: "One-click apps from the catalog",
+			detail: "Curated apps with generated secrets and a ready domain. You pick one from the catalog next.",
+			provide: &["A template from the catalog", "A domain, if you want your own"],
 			mark: Mark::Icon("package"),
 			href: TEMPLATES_HREF.map(|h| format!("{base}{h}?{q}")),
+			engines: Vec::new(),
 		});
 	}
-	out.push(("Compose and templates", stacks));
-
-	let mut models = Vec::new();
 	if ctx.perms.can(Action::Create, Resource::Model) {
-		models.push(Choice {
+		out.push(Entry {
+			key: "model",
 			title: "Model",
-			description: "Pick a model from the catalog, download it, and serve it here.",
+			summary: "llama.cpp, Ollama, vLLM",
+			detail: "Pick a model from the catalog, download its weights and serve it here behind an OpenAI-compatible endpoint.",
+			provide: &["A model from the catalog", "An engine and context size"],
 			mark: Mark::Logo("huggingface"),
 			href: Some(format!(
 				"/teams/{team}/models/catalog?project={project}&{q}"
 			)),
+			engines: Vec::new(),
 		});
 	}
-	out.push(("Model", models));
 	out
 }
 
@@ -179,37 +236,69 @@ pub fn can_create_any(ctx: &TeamCtx) -> bool {
 	.any(|r| ctx.perms.can(Action::Create, r))
 }
 
-/// The button that opens the picker (uses the invoker command, with the Datastar fallback).
-pub fn open_button() -> Markup {
-	crate::ui::components::dialog_open_button(
-		DIALOG_ID,
-		&button_class(Variant::Default, Size::Md),
-		&html! { (icon("plus")) "Create" },
-	)
+/// The button that opens the picker.
+pub fn open_button(href: &str) -> Markup {
+	html! {
+		a href=(href) class=(button_class(Variant::Default, Size::Md)) {
+			(icon("plus")) "Create resource"
+		}
+	}
 }
 
-pub fn dialog(ctx: &TeamCtx, project: ProjectId, env: &Environment) -> Markup {
-	let mut first = true;
-	let groups = groups(ctx, ctx.team.id, project, env);
+/// The body of the picker page.
+pub fn page(ctx: &TeamCtx, project: &Project, env: &Environment) -> Markup {
+	let entries = entries(ctx, ctx.team.id, project.id, env);
+	let cancel = format!(
+		"/teams/{}/projects/{}/{}",
+		ctx.team.id, project.id, env.slug
+	);
+	let first = entries.iter().position(|e| e.href.is_some()).unwrap_or(0);
+	let templates = entries
+		.iter()
+		.find(|e| e.key == "template")
+		.and_then(|e| e.href.clone());
 	html! {
-		dialog id=(DIALOG_ID) class="ui-dialog ui-dialog-wide" closedby="any"
-			aria-labelledby="create-resource-title" aria-describedby="create-resource-description" {
-			div class="flex flex-col gap-5 p-6" {
-				div class="flex flex-col gap-1.5 pr-8" {
-					h2 id="create-resource-title" class="text-lg leading-none font-semibold" { "Create a resource" }
-					p id="create-resource-description" class="text-sm text-muted-foreground" {
-						"It goes in the " strong { (env.name) } " environment."
+		div class="ui-wide ui-pk-page" {
+			header class="ui-page-head" {
+				div class="ui-page-title" {
+					p class="ui-eyebrow" { "Step 1 of 2" }
+					h1 { "Create resource" }
+					p class="ui-lede" {
+						"in " (project.name) " / " (env.name) " · choose what to run"
 					}
 				}
-				@for (heading, choices) in &groups {
-					(group(heading, choices, &mut first))
+				@if let Some(href) = templates {
+					div class="ui-page-actions" {
+						a href=(href) class=(button_class(Variant::Secondary, Size::Md)) {
+							(icon("package")) "Browse templates"
+						}
+					}
 				}
 			}
-			form method="dialog" class="absolute top-3 right-3" {
-				button class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-hidden hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/50" aria-label="Close" {
-					(icon("x"))
+			div class="ui-pk" {
+				fieldset class="ui-pk-list" {
+					legend class="ui-visually-hidden" { "Resource type" }
+					@for (i, entry) in entries.iter().enumerate() {
+						(list_item(entry, i == first))
+					}
+				}
+				div class="ui-pk-panels" {
+					@for entry in &entries { (panel(entry, &cancel)) }
 				}
 			}
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn a_mark_that_is_an_icon_and_one_that_is_a_logo_both_render() {
+		let html = mark_of(&Mark::Icon("package"), LogoSize::Sm).into_string();
+		assert!(html.contains("data-icon=\"package\""), "{html}");
+		let html = mark_of(&Mark::Logo("docker"), LogoSize::Sm).into_string();
+		assert!(html.contains("data-logo="), "{html}");
 	}
 }

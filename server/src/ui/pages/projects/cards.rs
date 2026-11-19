@@ -72,15 +72,40 @@ pub fn in_flight(status: ResourceStatus) -> bool {
 	parts(status).2
 }
 
-/// A dot and the status word. The word is always there, so color is never the only signal.
-pub fn status_line(status: ResourceStatus) -> Markup {
+/// The `data-status` key the stylesheet draws a shape and a color from. A kind's own words
+/// (Queued, Starting, Removing) fold into the seven Quiet statuses by what they mean.
+fn status_key(label: &str, tone: Tone) -> &'static str {
+	match (label, tone) {
+		("Deploying", _) => "deploying",
+		("Pending" | "Queued" | "Not deployed", _) => "pending",
+		(_, Tone::Success) => "running",
+		(_, Tone::Progress | Tone::Warning) => "building",
+		(_, Tone::Danger) => "failed",
+		(_, Tone::Neutral) => "stopped",
+	}
+}
+
+/// The status key of a resource, for `data-status` on its row.
+pub fn status_data(status: ResourceStatus) -> &'static str {
+	let (label, tone, _) = parts(status);
+	status_key(label, tone)
+}
+
+/// A shaped dot and the status word. The word is always there, so color is never the only
+/// signal. `flip` plays the short change animation: it marks a status that just changed.
+pub fn status_badge(status: ResourceStatus, flip: bool) -> Markup {
 	let (label, tone, _) = parts(status);
 	html! {
-		span class="inline-flex items-center gap-2 text-sm" data-status=(label) {
-			span class=(dot_class(tone)) aria-hidden="true" {}
-			(label)
+		span class="ui-badge" data-status=(status_key(label, tone)) data-flip[flip] {
+			span class="ui-dot" aria-hidden="true" {}
+			span { (label) }
 		}
 	}
+}
+
+/// A dot and the status word, at rest.
+pub fn status_line(status: ResourceStatus) -> Markup {
+	status_badge(status, false)
 }
 
 /// `2026-11-18 03:00 UTC`, for a tooltip.
@@ -174,11 +199,28 @@ mod tests {
 		let running =
 			status_line(ResourceStatus::Deployment(DeploymentStatus::Running)).into_string();
 		assert!(
-			running.contains("ui-dot-success") && running.contains("Running"),
+			running.contains("data-status=\"running\"") && running.contains("Running"),
 			"{running}"
 		);
+		assert!(!running.contains("data-flip"), "{running}");
 		let none = status_line(ResourceStatus::NotDeployed).into_string();
 		assert!(none.contains("Not deployed"), "{none}");
+		assert!(none.contains("data-status=\"pending\""), "{none}");
+		let flipped =
+			status_badge(ResourceStatus::Deployment(DeploymentStatus::Running), true).into_string();
+		assert!(flipped.contains("data-flip"), "{flipped}");
+		let building =
+			status_line(ResourceStatus::Deployment(DeploymentStatus::Building)).into_string();
+		assert!(building.contains("data-status=\"building\""), "{building}");
+		let deploying =
+			status_line(ResourceStatus::Deployment(DeploymentStatus::Deploying)).into_string();
+		assert!(
+			deploying.contains("data-status=\"deploying\""),
+			"{deploying}"
+		);
+		let failed =
+			status_line(ResourceStatus::Deployment(DeploymentStatus::Crashed)).into_string();
+		assert!(failed.contains("data-status=\"failed\""), "{failed}");
 		assert!(in_flight(ResourceStatus::Database(DatabaseStatus::Pending)));
 		assert!(!in_flight(ResourceStatus::Database(
 			DatabaseStatus::Running

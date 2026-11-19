@@ -111,6 +111,56 @@ pub struct ResourceCard {
 	pub status: ResourceStatus,
 	/// The newest deployment of an application, or when a model last changed.
 	pub changed_at: Option<OffsetDateTime>,
+	/// The newest CPU and memory sample of a running resource; `None` when it has none
+	/// recent (stopped, not yet sampled).
+	pub usage: Option<Usage>,
+}
+
+/// One resource's latest sample from the metrics sampler.
+#[derive(Debug, Clone, Copy)]
+pub struct Usage {
+	/// Share of the whole host's CPU, 0 to 100.
+	pub cpu: Option<f64>,
+	/// Resident memory, bytes.
+	pub mem: i64,
+}
+
+/// A sample older than this is not "now": the resource stopped or the sampler is behind.
+const USAGE_FRESH_MINUTES: i32 = 5;
+
+/// Fills in each resource's latest sample, in one query for the whole environment.
+async fn attach_usage(db: &PgPool, resources: &mut [ResourceCard]) -> AppResult<()> {
+	if resources.is_empty() {
+		return Ok(());
+	}
+	let kinds: Vec<String> = resources.iter().map(|r| r.kind.slug().to_owned()).collect();
+	let ids: Vec<i64> = resources.iter().map(|r| r.id).collect();
+	let rows = sqlx::query!(
+		r#"
+			SELECT DISTINCT ON (m.kind, m.resource_id)
+				m.kind AS "kind!", m.resource_id AS "resource_id!", m.cpu, m.mem AS "mem!"
+			FROM resource_metrics m
+			JOIN UNNEST($1::text[], $2::bigint[]) AS want(kind, id)
+				ON want.kind = m.kind AND want.id = m.resource_id
+			WHERE NOT m.rollup AND m.at > now() - make_interval(mins => $3)
+			ORDER BY m.kind, m.resource_id, m.at DESC
+		"#,
+		&kinds,
+		&ids,
+		USAGE_FRESH_MINUTES,
+	)
+	.fetch_all(db)
+	.await?;
+	for r in resources {
+		r.usage = rows
+			.iter()
+			.find(|row| row.kind == r.kind.slug() && row.resource_id == r.id)
+			.map(|row| Usage {
+				cpu: row.cpu,
+				mem: row.mem,
+			});
+	}
+	Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -429,6 +479,7 @@ async fn stack_cards(db: &PgPool, environment: EnvironmentId) -> AppResult<Vec<R
 			host,
 			status: ResourceStatus::Stack(st.status),
 			changed_at: Some(st.updated_at),
+			usage: None,
 			name: st.name,
 		});
 	}
@@ -491,6 +542,7 @@ pub async fn environment_view(
 					ResourceStatus::Deployment(l.status)
 				}),
 				changed_at: latest.and_then(|l| l.at),
+				usage: None,
 				name: app.name,
 			});
 		}
@@ -506,6 +558,7 @@ pub async fn environment_view(
 				host: None,
 				status: ResourceStatus::Database(d.status),
 				changed_at: None,
+				usage: None,
 				name: d.name,
 			});
 		}
@@ -521,6 +574,7 @@ pub async fn environment_view(
 				host: None,
 				status: ResourceStatus::Model(m.status),
 				changed_at: Some(m.updated_at),
+				usage: None,
 				name: m.name,
 			});
 		}
@@ -528,6 +582,7 @@ pub async fn environment_view(
 	if can(db, user, team, Resource::Stack).await {
 		resources.extend(stack_cards(db, environment.id).await?);
 	}
+	attach_usage(db, &mut resources).await?;
 
 	Ok(EnvironmentView {
 		project,

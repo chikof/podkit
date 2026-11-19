@@ -10,7 +10,8 @@ use serde_json::json;
 
 use crate::tests::grid::{
 	add_redis_databases, delete_databases, env_id, environment_name, finish_deployments,
-	move_databases_to, set_application_nixpacks, set_database_name, set_database_status,
+	move_databases_to, seed_resource_sample, set_application_nixpacks, set_database_name,
+	set_database_status,
 };
 use crate::tests::{
 	PgPool, app, call, count, db_test, project_id, rename_applications, seed_app_and_database,
@@ -469,7 +470,7 @@ async fn a_member_without_create_and_delete_sees_no_actions_and_forged_posts_fai
 			"Delete",
 			"Rename",
 			"New environment",
-			"Create a resource",
+			"Create resource",
 			"Create environment",
 		] {
 			assert_not_contains(main, action);
@@ -517,7 +518,7 @@ async fn a_member_without_create_and_delete_sees_no_actions_and_forged_posts_fai
 	assert_contains(&body, "Delete");
 	assert_contains(&body, "Rename");
 	let (_, _, body) = get_html(&app, &format!("{list}/{project}"), Some(&owner)).await;
-	assert_contains(&body, "Create a resource");
+	assert_contains(&body, "Create resource");
 	assert_contains(&body, "New environment");
 }
 
@@ -859,27 +860,32 @@ async fn environments_can_be_created_renamed_and_deleted_from_the_ui(db: PgPool)
 // --- the picker -------------------------------------------------------------------------
 
 #[db_test]
-async fn the_picker_routes_each_kind_to_its_create_flow(db: PgPool) {
+async fn the_picker_page_routes_each_kind_to_its_create_flow(db: PgPool) {
 	let app = app(db.clone()).await;
 	let (cookie, team) = ui_session(&app, "alice").await;
 	make_project(&app, &cookie, team, "Shop", "shop").await;
 	let project = project_id(&db, "shop").await;
 	let prod = env_id(&db, project, "production").await;
-	let (_, _, body) = get_html(
-		&app,
-		&format!("/teams/{team}/projects/{project}"),
-		Some(&cookie),
-	)
-	.await;
-	let main = page_main(&body);
-
-	assert_contains(main, "id=\"create-resource\"");
-	assert_contains(
-		main,
-		"command=\"show-modal\" commandfor=\"create-resource\"",
-	);
-	assert_contains(main, "closedby=\"any\"");
 	let base = format!("/teams/{team}/projects/{project}");
+
+	// The environment links to the picker page; the picker is not a dialog any more.
+	let (_, _, body) = get_html(&app, &base, Some(&cookie)).await;
+	let main = page_main(&body);
+	assert_contains(main, &format!("href=\"{base}/production/create\""));
+	assert_not_contains(main, "id=\"create-resource\"");
+
+	let (s, _, body) = get_html(&app, &format!("{base}/production/create"), Some(&cookie)).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_contains(&body, "<title>Create resource");
+	let main = page_main(&body);
+	assert_eq!(main.matches("<h1").count(), 1, "{main}");
+	assert_contains(main, "Step 1 of 2");
+	// Every kind is an entry of the radio group, the first one checked.
+	for key in ["git", "image", "db", "stack", "template", "model"] {
+		assert_contains(main, &format!("value=\"{key}\""));
+		assert_contains(main, &format!("data-panel=\"{key}\""));
+	}
+	assert_eq!(main.matches("checked").count(), 1, "{main}");
 	assert_contains(
 		main,
 		&format!("href=\"{base}/apps/new?environment={prod}\""),
@@ -903,9 +909,133 @@ async fn the_picker_routes_each_kind_to_its_create_flow(db: PgPool) {
 	);
 	assert_not_contains(main, "Soon");
 	// Docker images link to the image create form.
-	assert_contains(main, "Docker image");
 	assert_contains(
 		main,
 		&format!("{base}/apps/new?environment={prod}&amp;source=image"),
 	);
+	// Cancel goes back to the environment.
+	assert_contains(main, &format!("href=\"{base}/production\""));
+}
+
+#[db_test]
+async fn the_picker_page_is_for_people_who_can_create_and_is_the_404_for_other_teams(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (owner_token, team) = user_with_team(&app, "alice").await;
+	let owner = ui_login(&app, "alice").await;
+	let (_, _) = user_with_team(&app, "carol").await;
+	join_as_member(&app, &owner_token, team, "carol").await;
+	let carol = ui_login(&app, "carol").await;
+	make_project(&app, &owner, team, "Shared", "shared").await;
+	let project = project_id(&db, "shared").await;
+	let uri = format!("/teams/{team}/projects/{project}/production/create");
+
+	// A member who cannot create anything reads the project but gets the refusal here.
+	let (s, _, body) = get_html(&app, &uri, Some(&carol)).await;
+	assert_eq!(s, StatusCode::FORBIDDEN);
+	assert_not_contains(&body, "Step 1 of 2");
+	let (s, _, _) = get_html(&app, &uri, Some(&owner)).await;
+	assert_eq!(s, StatusCode::OK);
+
+	// Another team's project and an unknown environment are the 404 page.
+	let (other, other_team) = ui_session(&app, "mallory").await;
+	let (s, _, body) = get_html(&app, &uri, Some(&other)).await;
+	assert_eq!(s, StatusCode::NOT_FOUND);
+	assert_not_contains(&body, "Shared");
+	let _ = other_team;
+	let (s, _, _) = get_html(
+		&app,
+		&format!("/teams/{team}/projects/{project}/nope/create"),
+		Some(&owner),
+	)
+	.await;
+	assert_eq!(s, StatusCode::NOT_FOUND);
+}
+
+// --- the rows --------------------------------------------------------------------------
+
+#[db_test]
+async fn a_resource_is_a_row_with_its_status_shape_and_the_figures_a_hover_reveals(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	make_project(&app, &cookie, team, "Shop", "shop").await;
+	let project = project_id(&db, "shop").await;
+	seed_app_and_database(&db, team, project).await;
+	set_database_status(&db, "running").await;
+	seed_deployment(&db, 5001, "building").await;
+	seed_resource_sample(&db, "application", 5001, Some(38.25), 1_181_116_006, 1).await;
+	// A sample older than the sampler's freshness window is not shown.
+	seed_resource_sample(&db, "database", 6001, Some(1.0), 1_048_576, 30).await;
+	let uri = format!("/teams/{team}/projects/{project}/production");
+
+	let (_, _, body) = get_html(&app, &uri, Some(&cookie)).await;
+	let main = page_main(&body);
+	assert_contains(main, "<ul class=\"ui-res-list\"");
+	assert_eq!(main.matches("<li class=\"ui-res\"").count(), 2, "{main}");
+	assert_contains(main, "data-status=\"building\"");
+	assert_contains(main, "data-status=\"running\"");
+	// Reachable from the keyboard: the figures are in the row, not only in a tooltip.
+	assert_contains(main, "ui-res-metrics");
+	assert_contains(main, "38.2%");
+	assert_contains(main, "1.1 GB");
+	assert_not_contains(main, "1 MB");
+	assert_contains(main, "1 building");
+	assert_contains(main, "1 running");
+	// Skeleton rows wait for the filter, hidden until then.
+	assert_contains(main, "ui-res-skel");
+	assert_contains(main, "data-indicator:_filtering");
+}
+
+#[db_test]
+async fn a_status_that_moved_since_the_last_poll_plays_the_change_animation_once(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	make_project(&app, &cookie, team, "Shop", "shop").await;
+	let project = project_id(&db, "shop").await;
+	seed_app_and_database(&db, team, project).await;
+	set_database_status(&db, "running").await;
+	seed_deployment(&db, 5001, "building").await;
+	let base = format!("/teams/{team}/projects/{project}/production");
+	let poll = |seen: &str| {
+		format!(
+			"{base}/resources?{}",
+			signals_query(&json!({ "q": "", "type": "all", "seen": seen }))
+		)
+	};
+
+	// The first render shows the change of nothing: no animation, and it says what it saw.
+	let (_, _, page) = get_html(&app, &base, Some(&cookie)).await;
+	assert_not_contains(&page, "data-flip");
+	assert_contains(&page, "application:5001=building;database:6001=running");
+
+	// Still building: nothing moved.
+	let (_, _, body) = get_html(
+		&app,
+		&poll("application:5001=building;database:6001=running"),
+		Some(&cookie),
+	)
+	.await;
+	assert_not_contains(&body, "data-flip");
+
+	// The build finished: the application's badge flips, and the page is told what it now shows.
+	finish_deployments(&db).await;
+	let (_, _, body) = get_html(
+		&app,
+		&poll("application:5001=building;database:6001=running"),
+		Some(&cookie),
+	)
+	.await;
+	assert_eq!(body.matches("data-flip").count(), 1, "{body}");
+	assert_contains(&body, "application:5001=running;database:6001=running");
+
+	// The next poll reports the same thing: no second animation.
+	let (_, _, body) = get_html(
+		&app,
+		&poll("application:5001=running;database:6001=running"),
+		Some(&cookie),
+	)
+	.await;
+	assert_not_contains(&body, "data-flip");
+	// No signals at all (a plain request) never animates.
+	let (_, _, body) = get_html(&app, &format!("{base}/resources"), Some(&cookie)).await;
+	assert_not_contains(&body, "data-flip");
 }
