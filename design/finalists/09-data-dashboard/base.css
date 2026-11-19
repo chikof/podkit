@@ -1,0 +1,121 @@
+/* base.css: shared MECHANICS only (reset, a11y, top-layer animation, view transitions,
+   skeleton, live-log/status keyframes, range/tab switches, reduced motion).
+   Every visual decision (colour, type, surface, layout) lives in tokens.css + concept.css. */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;color-scheme:light dark;scroll-behavior:smooth}
+html[data-theme="dark"]{color-scheme:dark}
+html[data-theme="light"]{color-scheme:light}
+body{margin:0;min-height:100dvh;background:var(--bg);color:var(--text);font-family:var(--font-sans);font-size:var(--fs-md);line-height:var(--lh-body);-webkit-font-smoothing:antialiased;text-wrap:pretty}
+h1,h2,h3,h4,p,ul,ol,dl,dd,figure,pre{margin:0;padding:0}
+ul,ol{list-style:none}
+a{color:inherit;text-decoration:none}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+img{display:block;max-width:100%}
+pre{font-family:var(--font-mono)}
+kbd{font-family:var(--font-mono)}
+.ic{width:1em;height:1em;flex:none;fill:none;stroke:currentColor;stroke-width:var(--icon-sw,2);stroke-linecap:round;stroke-linejoin:round;vertical-align:-.125em}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.skip{position:fixed;left:var(--s-3);top:var(--s-3);z-index:99;padding:var(--s-2) var(--s-3);background:var(--accent);color:var(--accent-ink);border-radius:var(--r-sm);transform:translateY(-200%)}
+.skip:focus-visible{transform:none}
+:focus-visible{outline:var(--focus-w,2px) solid var(--focus);outline-offset:var(--focus-off,2px)}
+[hidden]{display:none!important}
+[data-theme="dark"] .only-light,[data-theme="light"] .only-dark{display:none!important}
+
+/* ---------- cross-document view transitions (http only; file:// pages are opaque origins) ---------- */
+@media (prefers-reduced-motion:no-preference){
+  @view-transition{navigation:auto}
+}
+::view-transition-group(*){animation-duration:var(--dur-vt,300ms);animation-timing-function:var(--ease-out)}
+::view-transition-old(root){animation:var(--dur-vt,300ms) var(--ease) both vt-out}
+::view-transition-new(root){animation:var(--dur-vt,300ms) var(--ease-out) both vt-in}
+@keyframes vt-out{to{opacity:0}}
+@keyframes vt-in{from{opacity:0}}
+.chrome{view-transition-name:chrome}
+.page{view-transition-name:page}
+
+/* ---------- top layer: dialog + popover enter/exit (@starting-style + allow-discrete) ---------- */
+dialog{padding:0;border:0;color:inherit;max-width:calc(100vw - var(--s-5));max-height:calc(100dvh - var(--s-5));overflow:auto}
+dialog,[popover]{opacity:0;transition-property:opacity,transform,display,overlay;transition-duration:var(--dur-2);transition-timing-function:var(--ease-out);transition-behavior:allow-discrete}
+dialog{transform:var(--dlg-from)}
+[popover]{transform:var(--pop-from,translateY(-4px))}
+:is(dialog[open],[popover]:popover-open){opacity:1;transform:none}
+@starting-style{
+  :is(dialog[open],[popover]:popover-open){opacity:0;transform:var(--dlg-from)}
+}
+dialog::backdrop,[popover]::backdrop{background:transparent;transition-property:background-color,backdrop-filter,display,overlay;transition-duration:var(--dur-2);transition-timing-function:var(--ease-out);transition-behavior:allow-discrete}
+dialog[open]::backdrop{background:var(--overlay);backdrop-filter:var(--overlay-blur,none)}
+@starting-style{dialog[open]::backdrop{background:transparent;backdrop-filter:none}}
+@supports (position-area:block-end){
+  [popover].anchored{inset:auto;margin:var(--s-1) 0 0;position-area:block-end span-inline-start;position-try-fallbacks:flip-block,flip-inline,flip-block flip-inline}
+}
+@supports not (position-area:block-end){
+  [popover].anchored{position:fixed;inset:auto var(--s-3) var(--s-3) auto}
+}
+
+/* ---------- tab / range switches without JS (radios + :has) ---------- */
+.tabset .tabs input{position:absolute;opacity:0;width:1px;height:1px}
+.tabset .tabs label{cursor:pointer}
+.tabset .tabs input:focus-visible+label{outline:var(--focus-w,2px) solid var(--focus);outline-offset:var(--focus-off,2px)}
+
+/* ---------- charts (inline SVG, non-scaling strokes; axis labels are HTML so they never distort) ---------- */
+.chart-plot{position:relative;height:var(--chart-h,140px)}
+.chart-plot svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.chart-plot svg *{vector-effect:non-scaling-stroke}
+.chart .gridline{stroke:var(--grid);stroke-width:1}
+.chart .line{fill:none;stroke:var(--c,var(--chart-1));stroke-width:var(--chart-sw,1.75);stroke-linejoin:round;stroke-linecap:round}
+.chart .line.s2{stroke:var(--c2,var(--chart-2))}
+.chart .area{fill:var(--c,var(--chart-1));fill-opacity:var(--chart-fill,.16);stroke:none}
+.chart .bar{fill:var(--c,var(--chart-1));fill-opacity:var(--chart-bar-op,.85)}
+.chart .bar.s2{fill:var(--c2,var(--chart-2))}
+.chart .yl{position:absolute;left:0;top:calc(var(--p)*1%);translate:0 -50%;font:var(--fs-xs)/1 var(--font-mono);color:var(--text-3);background:var(--chart-label-bg,transparent);padding-inline:2px}
+.chart .yl[style*="--p:100"]{translate:0 -110%}.chart .yl[style*="--p:0"]{translate:0 20%}
+.chart .xl{display:flex;justify-content:space-between;font:var(--fs-xs)/1 var(--font-mono);color:var(--text-3);margin-top:var(--s-2)}
+@media (prefers-reduced-motion:no-preference){
+  .chart .line{stroke-dasharray:1;stroke-dashoffset:0}
+  .chart .area,.chart .bar{animation:chart-in var(--dur-3) var(--ease-out) both}
+}
+@keyframes chart-in{from{opacity:0;transform:scaleY(.6)}}
+.chart .area,.chart .bar{transform-origin:bottom}
+
+/* ---------- skeleton → content ---------- */
+.sk{display:block;border-radius:var(--r-sm);background:linear-gradient(90deg,var(--skeleton-a) 0,var(--skeleton-b) 50%,var(--skeleton-a) 100%);background-size:200% 100%;animation:sk-shimmer 1.4s linear infinite}
+@keyframes sk-shimmer{to{background-position:-200% 0}}
+[data-loading] .real{display:none!important}
+body:not([data-loading]) .skeleton{display:none!important}
+.reveal>*{animation:reveal var(--dur-3) var(--ease-out) both;animation-delay:calc(var(--i,0)*var(--stagger))}
+@keyframes reveal{from{opacity:0;transform:var(--reveal-from,translateY(6px))}}
+
+/* ---------- status + live log ---------- */
+.badge[data-status] .dot{flex:none}
+.badge[data-status="building"] .dot,.badge[data-status="deploying"] .dot{animation:dot-pulse 1.2s var(--ease) infinite}
+@keyframes dot-pulse{50%{opacity:.25;transform:scale(.7)}}
+.badge[data-flip]{animation:badge-flip var(--dur-3) var(--ease-spring) both}
+@keyframes badge-flip{0%{transform:scale(.8);opacity:.2}60%{transform:scale(1.08)}100%{transform:none;opacity:1}}
+.log-line{animation:var(--log-in,log-in) var(--dur-2) var(--ease-out) both}
+@keyframes log-in{from{opacity:0;transform:translateY(4px)}}
+.progress>span{transition:width var(--dur-3) var(--ease-out)}
+.caret{display:inline-block;width:.6ch;height:1.1em;vertical-align:text-bottom;background:currentColor;animation:caret 1s steps(1) infinite}
+@keyframes caret{50%{opacity:0}}
+.toast-region{position:fixed;z-index:50;display:grid;gap:var(--s-2);pointer-events:none}
+.toast{pointer-events:auto;animation:toast-in var(--dur-3) var(--ease-spring) both}
+.toast[data-out]{animation:toast-out var(--dur-2) var(--ease) both}
+@keyframes toast-in{from{opacity:0;transform:var(--toast-from,translateY(12px))}}
+@keyframes toast-out{to{opacity:0;transform:var(--toast-from,translateY(12px))}}
+details>summary{cursor:pointer;list-style:none}
+details>summary::-webkit-details-marker{display:none}
+details::details-content{block-size:0;overflow:clip;transition:block-size var(--dur-2) var(--ease-out),content-visibility var(--dur-2) allow-discrete}
+details[open]::details-content{block-size:auto}
+@supports (interpolate-size:allow-keywords){:root{interpolate-size:allow-keywords}}
+.btn{transition:background-color var(--dur-1) var(--ease),border-color var(--dur-1) var(--ease),color var(--dur-1) var(--ease),box-shadow var(--dur-1) var(--ease),transform var(--dur-1) var(--ease)}
+.btn:active{transform:scale(var(--press-scale,.97))}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;animation-delay:0s!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+  .sk{animation:none}
+  .caret{animation:none}
+  ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none!important}
+}
+
+/* still mode (screenshots, gallery thumbnails): no motion at all */
+html[data-still] *,html[data-still] *::before,html[data-still] *::after{animation-duration:.001ms!important;animation-delay:0s!important;transition-duration:.001ms!important}

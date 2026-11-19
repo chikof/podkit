@@ -1,0 +1,82 @@
+{
+ "@fontsource-variable/archivo": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/bricolage-grotesque": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/dm-sans": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/figtree": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/fira-code": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/fraunces": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/geist": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/geist-mono": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/hanken-grotesk": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/ibm-plex-sans": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/jetbrains-mono": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/martian-mono": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/newsreader": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/sora": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource-variable/source-code-pro": [
+  "OFL-1.1",
+  "5.3.1"
+ ],
+ "@fontsource-variable/spline-sans-mono": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource/courier-prime": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource/dm-mono": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource/ibm-plex-mono": [
+  "OFL-1.1",
+  "5.3.0"
+ ],
+ "@fontsource/space-mono": [
+  "OFL-1.1",
+  "5.3.0"
+ ]
+}

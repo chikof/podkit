@@ -1,0 +1,197 @@
+dark  text --text         #d9dade on --bg         #0f1115   13.53  need 4.5  ok  body / secondary / meta text
+dark  text --text         #d9dade on --surface    #181b20   12.36  need 4.5  ok  body / secondary / meta text
+dark  text --text         #d9dade on --surface-2  #1f2329   11.30  need 4.5  ok  body / secondary / meta text
+dark  text --text         #d9dade on --surface-3  #282d35    9.91  need 4.5  ok  body / secondary / meta text
+dark  text --text         #d9dade on --log-bg     #0b0d10   13.93  need 4.5  ok  body / secondary / meta text
+dark  text --text         #d9dade on --accent-soft #3a2810   10.08  need 4.5  ok  body / secondary / meta text
+dark  text --text-2       #a5a9b1 on --bg         #0f1115    8.02  need 4.5  ok  body / secondary / meta text
+dark  text --text-2       #a5a9b1 on --surface    #181b20    7.32  need 4.5  ok  body / secondary / meta text
+dark  text --text-2       #a5a9b1 on --surface-2  #1f2329    6.70  need 4.5  ok  body / secondary / meta text
+dark  text --text-2       #a5a9b1 on --surface-3  #282d35    5.87  need 4.5  ok  body / secondary / meta text
+dark  text --text-2       #a5a9b1 on --log-bg     #0b0d10    8.26  need 4.5  ok  body / secondary / meta text
+dark  text --text-2       #a5a9b1 on --accent-soft #3a2810    5.98  need 4.5  ok  body / secondary / meta text
+dark  text --text-3       #9399a2 on --bg         #0f1115    6.59  need 4.5  ok  body / secondary / meta text
+dark  text --text-3       #9399a2 on --surface    #181b20    6.02  need 4.5  ok  body / secondary / meta text
+dark  text --text-3       #9399a2 on --surface-2  #1f2329    5.50  need 4.5  ok  body / secondary / meta text
+dark  text --text-3       #9399a2 on --surface-3  #282d35    4.82  need 4.5  ok  body / secondary / meta text
+dark  text --text-3       #9399a2 on --log-bg     #0b0d10    6.78  need 4.5  ok  body / secondary / meta text
+dark  text --text-3       #9399a2 on --accent-soft #3a2810    4.91  need 4.5  ok  body / secondary / meta text
+dark  text --accent-text  #ffa447 on --bg         #0f1115    9.59  need 4.5  ok  links, active nav, accent text
+dark  text --accent-text  #ffa447 on --surface    #181b20    8.76  need 4.5  ok  links, active nav, accent text
+dark  text --accent-text  #ffa447 on --surface-2  #1f2329    8.01  need 4.5  ok  links, active nav, accent text
+dark  text --accent-text  #ffa447 on --surface-3  #282d35    7.02  need 4.5  ok  links, active nav, accent text
+dark  text --accent-text  #ffa447 on --accent-soft #3a2810    7.15  need 4.5  ok  links, active nav, accent text
+dark  text --err-ink      #0f1115 on --err        #f9697a    6.60  need 4.5  ok  text on destructive button
+dark  text --accent-ink   #111111 on --accent     #ff9830    8.80  need 4.5  ok  text on primary button / status bar
+dark  text --accent-ink   #111111 on --accent-hover #ffad5c   10.24  need 4.5  ok  primary button hover
+dark  text --ok           #73bf69 on --bg         #0f1115    8.45  need 4.5  ok  status text
+dark  text --ok           #73bf69 on --surface    #181b20    7.72  need 4.5  ok  status text
+dark  text --ok           #73bf69 on --surface-2  #1f2329    7.05  need 4.5  ok  status text
+dark  text --ok           #73bf69 on --surface-3  #282d35    6.19  need 4.5  ok  status text
+dark  text --ok           #73bf69 on --ok-soft    #1a2c19    6.62  need 4.5  ok  status text
+dark  text --ok           #73bf69 on --log-bg     #0b0d10    8.70  need 4.5  ok  status text
+dark  text --warn         #f2cc0c on --bg         #0f1115   12.07  need 4.5  ok  status text
+dark  text --warn         #f2cc0c on --surface    #181b20   11.03  need 4.5  ok  status text
+dark  text --warn         #f2cc0c on --surface-2  #1f2329   10.08  need 4.5  ok  status text
+dark  text --warn         #f2cc0c on --surface-3  #282d35    8.85  need 4.5  ok  status text
+dark  text --warn         #f2cc0c on --warn-soft  #322c07    8.95  need 4.5  ok  status text
+dark  text --warn         #f2cc0c on --log-bg     #0b0d10   12.43  need 4.5  ok  status text
+dark  text --err          #f9697a on --bg         #0f1115    6.60  need 4.5  ok  status text
+dark  text --err          #f9697a on --surface    #181b20    6.03  need 4.5  ok  status text
+dark  text --err          #f9697a on --surface-2  #1f2329    5.51  need 4.5  ok  status text
+dark  text --err          #f9697a on --surface-3  #282d35    4.83  need 4.5  ok  status text
+dark  text --err          #f9697a on --err-soft   #35141a    5.79  need 4.5  ok  status text
+dark  text --err          #f9697a on --log-bg     #0b0d10    6.79  need 4.5  ok  status text
+dark  text --info         #5794f2 on --bg         #0f1115    6.23  need 4.5  ok  status text
+dark  text --info         #5794f2 on --surface    #181b20    5.69  need 4.5  ok  status text
+dark  text --info         #5794f2 on --surface-2  #1f2329    5.20  need 4.5  ok  status text
+dark  text --info         #5794f2 on --surface-3  #282d35    4.56  need 4.5  ok  status text
+dark  text --info         #5794f2 on --info-soft  #14233f    5.16  need 4.5  ok  status text
+dark  text --info         #5794f2 on --log-bg     #0b0d10    6.41  need 4.5  ok  status text
+dark  text --accent-text  #ffa447 on --log-bg     #0b0d10    9.87  need 4.5  ok  log STEP level
+dark  text --text         #d9dade on --err-soft   #35141a   11.87  need 4.5  ok  banner text
+dark  text --text-2       #a5a9b1 on --err-soft   #35141a    7.04  need 4.5  ok  banner meta
+dark  text --text         #d9dade on --ok-soft    #1a2c19   10.60  need 4.5  ok  banner text
+dark  text --text         #d9dade on --warn-soft  #322c07   10.03  need 4.5  ok  banner text
+dark  text --text         #d9dade on --info-soft  #14233f   11.20  need 4.5  ok  banner text
+dark  ui   --border-ui    #6d737c on --bg         #0f1115    3.95  need 3  ok  input, select, textarea, button, checkbox, switch outline
+dark  ui   --focus        #5794f2 on --bg         #0f1115    6.23  need 3  ok  focus ring
+dark  ui   --accent       #ff9830 on --bg         #0f1115    8.81  need 3  ok  selected fill: checkbox, switch, tab bar, progress
+dark  ui   --ok           #73bf69 on --bg         #0f1115    8.45  need 3  ok  status dot / icon
+dark  ui   --warn         #f2cc0c on --bg         #0f1115   12.07  need 3  ok  status dot / icon
+dark  ui   --err          #f9697a on --bg         #0f1115    6.60  need 3  ok  status dot / icon
+dark  ui   --info         #5794f2 on --bg         #0f1115    6.23  need 3  ok  status dot / icon
+dark  ui   --chart-1      #73bf69 on --bg         #0f1115    8.45  need 3  ok  chart series stroke
+dark  ui   --chart-2      #5794f2 on --bg         #0f1115    6.23  need 3  ok  chart series stroke
+dark  ui   --chart-3      #f2cc0c on --bg         #0f1115   12.07  need 3  ok  chart series stroke
+dark  ui   --chart-4      #ff9830 on --bg         #0f1115    8.81  need 3  ok  chart series stroke
+dark  ui   --chart-5      #f2495c on --bg         #0f1115    5.29  need 3  ok  chart series stroke
+dark  ui   --chart-6      #b877d9 on --bg         #0f1115    6.01  need 3  ok  chart series stroke
+dark  ui   --border-ui    #6d737c on --surface    #181b20    3.61  need 3  ok  input, select, textarea, button, checkbox, switch outline
+dark  ui   --focus        #5794f2 on --surface    #181b20    5.69  need 3  ok  focus ring
+dark  ui   --accent       #ff9830 on --surface    #181b20    8.04  need 3  ok  selected fill: checkbox, switch, tab bar, progress
+dark  ui   --ok           #73bf69 on --surface    #181b20    7.72  need 3  ok  status dot / icon
+dark  ui   --warn         #f2cc0c on --surface    #181b20   11.03  need 3  ok  status dot / icon
+dark  ui   --err          #f9697a on --surface    #181b20    6.03  need 3  ok  status dot / icon
+dark  ui   --info         #5794f2 on --surface    #181b20    5.69  need 3  ok  status dot / icon
+dark  ui   --chart-1      #73bf69 on --surface    #181b20    7.72  need 3  ok  chart series stroke
+dark  ui   --chart-2      #5794f2 on --surface    #181b20    5.69  need 3  ok  chart series stroke
+dark  ui   --chart-3      #f2cc0c on --surface    #181b20   11.03  need 3  ok  chart series stroke
+dark  ui   --chart-4      #ff9830 on --surface    #181b20    8.04  need 3  ok  chart series stroke
+dark  ui   --chart-5      #f2495c on --surface    #181b20    4.84  need 3  ok  chart series stroke
+dark  ui   --chart-6      #b877d9 on --surface    #181b20    5.49  need 3  ok  chart series stroke
+dark  ui   --border-ui    #6d737c on --surface-2  #1f2329    3.30  need 3  ok  input, select, textarea, button, checkbox, switch outline
+dark  ui   --focus        #5794f2 on --surface-2  #1f2329    5.20  need 3  ok  focus ring
+dark  ui   --accent       #ff9830 on --surface-2  #1f2329    7.35  need 3  ok  selected fill: checkbox, switch, tab bar, progress
+dark  ui   --ok           #73bf69 on --surface-2  #1f2329    7.05  need 3  ok  status dot / icon
+dark  ui   --warn         #f2cc0c on --surface-2  #1f2329   10.08  need 3  ok  status dot / icon
+dark  ui   --err          #f9697a on --surface-2  #1f2329    5.51  need 3  ok  status dot / icon
+dark  ui   --info         #5794f2 on --surface-2  #1f2329    5.20  need 3  ok  status dot / icon
+dark  ui   --chart-1      #73bf69 on --surface-2  #1f2329    7.05  need 3  ok  chart series stroke
+dark  ui   --chart-2      #5794f2 on --surface-2  #1f2329    5.20  need 3  ok  chart series stroke
+dark  ui   --chart-3      #f2cc0c on --surface-2  #1f2329   10.08  need 3  ok  chart series stroke
+dark  ui   --chart-4      #ff9830 on --surface-2  #1f2329    7.35  need 3  ok  chart series stroke
+dark  ui   --chart-5      #f2495c on --surface-2  #1f2329    4.42  need 3  ok  chart series stroke
+dark  ui   --chart-6      #b877d9 on --surface-2  #1f2329    5.02  need 3  ok  chart series stroke
+dark  ui   --accent-ink   #111111 on --accent     #ff9830    8.80  need 3  ok  check mark / switch thumb on accent
+dark  ui   --text-3       #9399a2 on --surface    #181b20    6.02  need 3  ok  icon-only glyph (empty state, input icon)
+light text --text         #1f2329 on --bg         #f1f2f4   14.09  need 4.5  ok  body / secondary / meta text
+light text --text         #1f2329 on --surface    #ffffff   15.78  need 4.5  ok  body / secondary / meta text
+light text --text         #1f2329 on --surface-2  #f6f7f8   14.71  need 4.5  ok  body / secondary / meta text
+light text --text         #1f2329 on --surface-3  #e9ebee   13.21  need 4.5  ok  body / secondary / meta text
+light text --text         #1f2329 on --log-bg     #f6f7f8   14.71  need 4.5  ok  body / secondary / meta text
+light text --text         #1f2329 on --accent-soft #fde5d0   13.00  need 4.5  ok  body / secondary / meta text
+light text --text-2       #4a515c on --bg         #f1f2f4    7.15  need 4.5  ok  body / secondary / meta text
+light text --text-2       #4a515c on --surface    #ffffff    8.01  need 4.5  ok  body / secondary / meta text
+light text --text-2       #4a515c on --surface-2  #f6f7f8    7.47  need 4.5  ok  body / secondary / meta text
+light text --text-2       #4a515c on --surface-3  #e9ebee    6.70  need 4.5  ok  body / secondary / meta text
+light text --text-2       #4a515c on --log-bg     #f6f7f8    7.47  need 4.5  ok  body / secondary / meta text
+light text --text-2       #4a515c on --accent-soft #fde5d0    6.59  need 4.5  ok  body / secondary / meta text
+light text --text-3       #5d6572 on --bg         #f1f2f4    5.25  need 4.5  ok  body / secondary / meta text
+light text --text-3       #5d6572 on --surface    #ffffff    5.88  need 4.5  ok  body / secondary / meta text
+light text --text-3       #5d6572 on --surface-2  #f6f7f8    5.48  need 4.5  ok  body / secondary / meta text
+light text --text-3       #5d6572 on --surface-3  #e9ebee    4.93  need 4.5  ok  body / secondary / meta text
+light text --text-3       #5d6572 on --log-bg     #f6f7f8    5.48  need 4.5  ok  body / secondary / meta text
+light text --text-3       #5d6572 on --accent-soft #fde5d0    4.84  need 4.5  ok  body / secondary / meta text
+light text --accent-text  #a64700 on --bg         #f1f2f4    5.32  need 4.5  ok  links, active nav, accent text
+light text --accent-text  #a64700 on --surface    #ffffff    5.96  need 4.5  ok  links, active nav, accent text
+light text --accent-text  #a64700 on --surface-2  #f6f7f8    5.56  need 4.5  ok  links, active nav, accent text
+light text --accent-text  #a64700 on --surface-3  #e9ebee    4.99  need 4.5  ok  links, active nav, accent text
+light text --accent-text  #a64700 on --accent-soft #fde5d0    4.91  need 4.5  ok  links, active nav, accent text
+light text --err-ink      #ffffff on --err        #c2203a    5.90  need 4.5  ok  text on destructive button
+light text --accent-ink   #ffffff on --accent     #bd5200    4.80  need 4.5  ok  text on primary button / status bar
+light text --accent-ink   #ffffff on --accent-hover #9c4300    6.53  need 4.5  ok  primary button hover
+light text --ok           #1e7a2c on --bg         #f1f2f4    4.84  need 4.5  ok  status text
+light text --ok           #1e7a2c on --surface    #ffffff    5.42  need 4.5  ok  status text
+light text --ok           #1e7a2c on --surface-2  #f6f7f8    5.05  need 4.5  ok  status text
+light text --ok           #1e7a2c on --surface-3  #e9ebee    4.54  need 4.5  ok  status text
+light text --ok           #1e7a2c on --ok-soft    #dcf1dd    4.56  need 4.5  ok  status text
+light text --ok           #1e7a2c on --log-bg     #f6f7f8    5.05  need 4.5  ok  status text
+light text --warn         #7d6500 on --bg         #f1f2f4    5.02  need 4.5  ok  status text
+light text --warn         #7d6500 on --surface    #ffffff    5.62  need 4.5  ok  status text
+light text --warn         #7d6500 on --surface-2  #f6f7f8    5.24  need 4.5  ok  status text
+light text --warn         #7d6500 on --surface-3  #e9ebee    4.71  need 4.5  ok  status text
+light text --warn         #7d6500 on --warn-soft  #f7ecb8    4.73  need 4.5  ok  status text
+light text --warn         #7d6500 on --log-bg     #f6f7f8    5.24  need 4.5  ok  status text
+light text --err          #c2203a on --bg         #f1f2f4    5.26  need 4.5  ok  status text
+light text --err          #c2203a on --surface    #ffffff    5.90  need 4.5  ok  status text
+light text --err          #c2203a on --surface-2  #f6f7f8    5.50  need 4.5  ok  status text
+light text --err          #c2203a on --surface-3  #e9ebee    4.94  need 4.5  ok  status text
+light text --err          #c2203a on --err-soft   #fbdde2    4.64  need 4.5  ok  status text
+light text --err          #c2203a on --log-bg     #f6f7f8    5.50  need 4.5  ok  status text
+light text --info         #1f5fc2 on --bg         #f1f2f4    5.40  need 4.5  ok  status text
+light text --info         #1f5fc2 on --surface    #ffffff    6.04  need 4.5  ok  status text
+light text --info         #1f5fc2 on --surface-2  #f6f7f8    5.64  need 4.5  ok  status text
+light text --info         #1f5fc2 on --surface-3  #e9ebee    5.06  need 4.5  ok  status text
+light text --info         #1f5fc2 on --info-soft  #dbe7fb    4.85  need 4.5  ok  status text
+light text --info         #1f5fc2 on --log-bg     #f6f7f8    5.64  need 4.5  ok  status text
+light text --accent-text  #a64700 on --log-bg     #f6f7f8    5.56  need 4.5  ok  log STEP level
+light text --text         #1f2329 on --err-soft   #fbdde2   12.43  need 4.5  ok  banner text
+light text --text-2       #4a515c on --err-soft   #fbdde2    6.31  need 4.5  ok  banner meta
+light text --text         #1f2329 on --ok-soft    #dcf1dd   13.28  need 4.5  ok  banner text
+light text --text         #1f2329 on --warn-soft  #f7ecb8   13.26  need 4.5  ok  banner text
+light text --text         #1f2329 on --info-soft  #dbe7fb   12.65  need 4.5  ok  banner text
+light ui   --border-ui    #82878e on --bg         #f1f2f4    3.23  need 3  ok  input, select, textarea, button, checkbox, switch outline
+light ui   --focus        #1f5fc2 on --bg         #f1f2f4    5.40  need 3  ok  focus ring
+light ui   --accent       #bd5200 on --bg         #f1f2f4    4.29  need 3  ok  selected fill: checkbox, switch, tab bar, progress
+light ui   --ok           #1e7a2c on --bg         #f1f2f4    4.84  need 3  ok  status dot / icon
+light ui   --warn         #7d6500 on --bg         #f1f2f4    5.02  need 3  ok  status dot / icon
+light ui   --err          #c2203a on --bg         #f1f2f4    5.26  need 3  ok  status dot / icon
+light ui   --info         #1f5fc2 on --bg         #f1f2f4    5.40  need 3  ok  status dot / icon
+light ui   --chart-1      #2a8a38 on --bg         #f1f2f4    3.91  need 3  ok  chart series stroke
+light ui   --chart-2      #1f5fc2 on --bg         #f1f2f4    5.40  need 3  ok  chart series stroke
+light ui   --chart-3      #a37f00 on --bg         #f1f2f4    3.35  need 3  ok  chart series stroke
+light ui   --chart-4      #c25a00 on --bg         #f1f2f4    3.94  need 3  ok  chart series stroke
+light ui   --chart-5      #c2203a on --bg         #f1f2f4    5.26  need 3  ok  chart series stroke
+light ui   --chart-6      #8a3fb0 on --bg         #f1f2f4    5.48  need 3  ok  chart series stroke
+light ui   --border-ui    #82878e on --surface    #ffffff    3.62  need 3  ok  input, select, textarea, button, checkbox, switch outline
+light ui   --focus        #1f5fc2 on --surface    #ffffff    6.04  need 3  ok  focus ring
+light ui   --accent       #bd5200 on --surface    #ffffff    4.80  need 3  ok  selected fill: checkbox, switch, tab bar, progress
+light ui   --ok           #1e7a2c on --surface    #ffffff    5.42  need 3  ok  status dot / icon
+light ui   --warn         #7d6500 on --surface    #ffffff    5.62  need 3  ok  status dot / icon
+light ui   --err          #c2203a on --surface    #ffffff    5.90  need 3  ok  status dot / icon
+light ui   --info         #1f5fc2 on --surface    #ffffff    6.04  need 3  ok  status dot / icon
+light ui   --chart-1      #2a8a38 on --surface    #ffffff    4.38  need 3  ok  chart series stroke
+light ui   --chart-2      #1f5fc2 on --surface    #ffffff    6.04  need 3  ok  chart series stroke
+light ui   --chart-3      #a37f00 on --surface    #ffffff    3.75  need 3  ok  chart series stroke
+light ui   --chart-4      #c25a00 on --surface    #ffffff    4.42  need 3  ok  chart series stroke
+light ui   --chart-5      #c2203a on --surface    #ffffff    5.90  need 3  ok  chart series stroke
+light ui   --chart-6      #8a3fb0 on --surface    #ffffff    6.14  need 3  ok  chart series stroke
+light ui   --border-ui    #82878e on --surface-2  #f6f7f8    3.37  need 3  ok  input, select, textarea, button, checkbox, switch outline
+light ui   --focus        #1f5fc2 on --surface-2  #f6f7f8    5.64  need 3  ok  focus ring
+light ui   --accent       #bd5200 on --surface-2  #f6f7f8    4.48  need 3  ok  selected fill: checkbox, switch, tab bar, progress
+light ui   --ok           #1e7a2c on --surface-2  #f6f7f8    5.05  need 3  ok  status dot / icon
+light ui   --warn         #7d6500 on --surface-2  #f6f7f8    5.24  need 3  ok  status dot / icon
+light ui   --err          #c2203a on --surface-2  #f6f7f8    5.50  need 3  ok  status dot / icon
+light ui   --info         #1f5fc2 on --surface-2  #f6f7f8    5.64  need 3  ok  status dot / icon
+light ui   --chart-1      #2a8a38 on --surface-2  #f6f7f8    4.09  need 3  ok  chart series stroke
+light ui   --chart-2      #1f5fc2 on --surface-2  #f6f7f8    5.64  need 3  ok  chart series stroke
+light ui   --chart-3      #a37f00 on --surface-2  #f6f7f8    3.50  need 3  ok  chart series stroke
+light ui   --chart-4      #c25a00 on --surface-2  #f6f7f8    4.12  need 3  ok  chart series stroke
+light ui   --chart-5      #c2203a on --surface-2  #f6f7f8    5.50  need 3  ok  chart series stroke
+light ui   --chart-6      #8a3fb0 on --surface-2  #f6f7f8    5.73  need 3  ok  chart series stroke
+light ui   --accent-ink   #ffffff on --accent     #bd5200    4.80  need 3  ok  check mark / switch thumb on accent
+light ui   --text-3       #5d6572 on --surface    #ffffff    5.88  need 3  ok  icon-only glyph (empty state, input icon)
+09-data-dashboard dark  text pairs  56  min  4.56 (need 4.5)   ui pairs  41  min  3.30 (need 3.0)
+09-data-dashboard light text pairs  56  min  4.54 (need 4.5)   ui pairs  41  min  3.23 (need 3.0)
+09-data-dashboard: 194 pairs checked, 0 failures
