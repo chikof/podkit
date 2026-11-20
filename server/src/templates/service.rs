@@ -359,7 +359,10 @@ async fn deploy_app(
 		let rendered = render(t, &body.inputs, &place, &mut Os).map_err(invalid)?;
 		let plan = plan_of(s, loaded, &rendered)?;
 		let spec = &plan.services[0].spec;
-		let Some(port) = spec.container_port else {
+		let Some(port) = spec
+			.container_port
+			.or_else(|| t.mcp.as_ref().map(|m| m.port))
+		else {
 			return Err(ServerError::Internal);
 		};
 		let proto::Source::Image { reference, .. } = &spec.source else {
@@ -398,7 +401,17 @@ async fn deploy_app(
 			};
 		let app = created.app;
 		let finished = finish_app(
-			s, user, team, project, server, &app.slug, app.id, &plan, &rendered, body.model,
+			s,
+			user,
+			team,
+			project,
+			server,
+			&app.slug,
+			app.id,
+			&plan,
+			&rendered,
+			body.model,
+			t.mcp.as_ref(),
 		)
 		.await;
 		return match finished {
@@ -406,7 +419,11 @@ async fn deploy_app(
 				kind: Kind::Application,
 				id: app.id.0,
 				name: app.name,
-				urls: urls_of(s, server, &app.slug, &rendered),
+				urls: if t.mcp.is_some() {
+					Vec::new()
+				} else {
+					urls_of(s, server, &app.slug, &rendered)
+				},
 				values: rendered.values,
 				credentials: rendered.reveal,
 				deploy_id: deployment,
@@ -450,6 +467,7 @@ async fn finish_app(
 	plan: &translate::Plan,
 	rendered: &Rendered,
 	model: Option<ModelId>,
+	mcp: Option<&super::Mcp>,
 ) -> AppResult<i64> {
 	let spec = &plan.services[0].spec;
 	for (key, value) in &spec.env {
@@ -467,6 +485,23 @@ async fn finish_app(
 	}
 	if let Some(model) = model {
 		links::service::link(s, user, team, project, app, model, true).await?;
+	}
+	if let Some(mcp) = mcp {
+		let transport =
+			crate::mcp_servers::Transport::parse(&mcp.transport).ok_or(ServerError::Internal)?;
+		crate::mcp_servers::service::register(
+			s,
+			user,
+			team,
+			project,
+			app,
+			&crate::mcp_servers::service::Settings {
+				transport,
+				path: mcp.path.clone(),
+				command: mcp.command.clone(),
+			},
+		)
+		.await?;
 	}
 	let deployment = deployments::service::deploy(s, user, team, project, app).await?;
 	Ok(deployment.id.0)

@@ -1,0 +1,21 @@
+id = "mcp-fetch"
+name = "MCP Fetch"
+description = "Reference MCP server that fetches a URL from the internet and hands the page to the model as markdown. Link it to an agent application to give the agent web access."
+category = "ai"
+tags = [
+    "ai",
+    "mcp",
+    "agents",
+    "web",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://modelcontextprotocol.io"
+docs = "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch#readme"
+source = "https://github.com/modelcontextprotocol/servers"
+# Image: https://hub.docker.com/r/mcp/fetch (no version tags exist; entrypoint mcp-server-fetch, stdio).
+# License: modelcontextprotocol/servers, MIT for older code and Apache-2.0 for new (see its LICENSE).
+
+[mcp]
+transport = "stdio"
+port = 8080

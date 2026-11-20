@@ -686,3 +686,90 @@ async fn mcp_resource_tools_are_listed_live_through_the_gateway(db: PgPool) {
 		.await;
 	assert_eq!(status, StatusCode::CONFLICT, "{body}");
 }
+
+impl Setup {
+	async fn template(&self, id: &str, inputs: Value) -> (StatusCode, Value) {
+		self.api(
+			"POST",
+			&format!("/templates/{id}/deploy"),
+			Some(json!({ "server_id": self.server, "inputs": inputs })),
+		)
+		.await
+	}
+
+	/// Runs the queued deploy job of deployment `id` and returns the agent's spec.
+	async fn run_deployment(&self, id: i64) -> Value {
+		let job = jobs::latest_for(&self.db, JobKind::Deploy, id)
+			.await
+			.unwrap()
+			.expect("a deploy job is queued");
+		let mut log = self.state.logs.open(job.id).await.unwrap();
+		crate::deployments::run::run(&self.state, &job, &CancellationToken::new(), &mut log)
+			.await
+			.unwrap();
+		log.finish().await;
+		self.agent.deploys.lock().unwrap().last().unwrap().clone()
+	}
+}
+
+#[test]
+fn mcp_resource_templates_are_applications_with_an_mcp_section() {
+	for id in ["mcp-fetch", "mcp-filesystem", "mcp-memory", "mcp-github"] {
+		let loaded = crate::templates::find(id).unwrap_or_else(|| panic!("{id} did not load"));
+		assert!(loaded.plain_app, "{id} is deployed as one application");
+		assert!(loaded.template.mcp.is_some(), "{id}");
+		assert_eq!(loaded.template.category, "ai");
+		assert!(loaded.template.tags.iter().any(|t| t == "mcp"));
+		assert!(
+			loaded.template.source.is_some() && loaded.template.docs.is_some(),
+			"{id} says where it comes from"
+		);
+	}
+}
+
+#[sqlx::test]
+async fn mcp_resource_a_template_deploys_as_a_registered_unrouted_server(db: PgPool) {
+	let s = Setup::new(db).await;
+	let deploy = |id: &'static str, inputs: Value| s.template(id, inputs);
+
+	let (status, deployed) = deploy("mcp-filesystem", json!({})).await;
+	assert_eq!(status, StatusCode::ACCEPTED, "{deployed}");
+	assert_eq!(deployed["kind"], "application");
+	assert_eq!(deployed["urls"], json!([]));
+	let id = deployed["id"].as_i64().unwrap();
+	let spec = s
+		.run_deployment(deployed["deploy_id"].as_i64().unwrap())
+		.await;
+	assert!(spec["routing"].is_null());
+	assert_eq!(
+		spec["options"]["mcp_bridge"],
+		json!({ "port": 8080, "path": "/mcp", "command": ["node", "/app/dist/index.js", "/data"] })
+	);
+	assert_eq!(spec["volumes"][0]["path"], "/data");
+
+	let (status, shown) = s.api("GET", &format!("/mcp-servers/{id}"), None).await;
+	assert_eq!(status, StatusCode::OK, "{shown}");
+	assert_eq!(shown["transport"], "stdio");
+	assert_eq!(shown["slug"], "mcp-filesystem");
+
+	// The image's own command is used when the template names none; the token is an answer.
+	let (status, body) = deploy("mcp-github", json!({})).await;
+	assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+	let (status, github) = deploy("mcp-github", json!({ "github_token": "ghp_secret" })).await;
+	assert_eq!(status, StatusCode::ACCEPTED, "{github}");
+	let spec = s
+		.run_deployment(github["deploy_id"].as_i64().unwrap())
+		.await;
+	assert_eq!(
+		spec["options"]["mcp_bridge"],
+		json!({ "port": 8080, "path": "/mcp" })
+	);
+	assert_eq!(
+		value(&env_of(&spec), "GITHUB_PERSONAL_ACCESS_TOKEN"),
+		Some("ghp_secret")
+	);
+	let (_, page) = s
+		.api("GET", &format!("/mcp-servers/{}", github["id"]), None)
+		.await;
+	assert!(!page.to_string().contains("ghp_secret"));
+}

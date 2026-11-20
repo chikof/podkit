@@ -44,6 +44,14 @@ struct Checked {
 	command: Option<String>,
 }
 
+/// Whether `settings` can be stored.
+///
+/// # Errors
+/// `Validation` naming the problem.
+pub fn check_settings(settings: &Settings) -> AppResult<()> {
+	check(settings).map(|_| ())
+}
+
 fn check(settings: &Settings) -> AppResult<Checked> {
 	let bad = |m: &str| Err(ServerError::Validation(m.to_owned()));
 	let path = settings.path.as_deref().unwrap_or(DEFAULT_PATH).trim();

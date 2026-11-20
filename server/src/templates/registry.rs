@@ -274,8 +274,12 @@ fn translate_check(
 		spec.command.is_none()
 			&& spec.gpus.is_none()
 			&& spec.published_ports.is_empty()
-			&& spec.routing.is_some()
-			&& spec.container_port.is_some()
+			// An MCP server is never routed; its port comes from `[mcp]`.
+			&& if template.mcp.is_some() {
+				spec.routing.is_none() && spec.container_port.is_none()
+			} else {
+				spec.routing.is_some() && spec.container_port.is_some()
+			}
 			&& spec.memory_bytes.is_none()
 			&& spec.cpu_cores.is_none()
 			&& plan.services[0].depends_on.is_empty()

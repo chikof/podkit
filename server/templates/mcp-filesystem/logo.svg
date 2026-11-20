@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 160 160">
+  <title>MCP Filesystem</title>
+  <rect width="160" height="160" rx="36" fill="#2b3a55"/>
+  <path d="M34 54 H68 L78 66 H126 V116 H34 Z" fill="#9fc5ff"/>
+  <path d="M34 54 H68 L78 66 H126 V76 H34 Z" fill="#c9deff"/>
+</svg>
