@@ -1,7 +1,9 @@
 //! `podkit-agent`: the per-server daemon the control plane talks to over a unix socket.
 
 mod backup;
+pub mod dbstats;
 pub mod deploy;
+pub mod events;
 pub mod gateway;
 pub mod hardware;
 pub mod ingress;
@@ -10,6 +12,7 @@ pub mod networks;
 pub mod nixpacks;
 pub mod podman;
 pub mod probe;
+pub mod prometheus;
 pub mod registry;
 pub mod routes;
 pub mod scan;

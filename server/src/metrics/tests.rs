@@ -368,6 +368,7 @@ async fn metrics_record_stores_the_host_and_each_resource(db: PgPool) {
 			container("stack", 2, Some("a"), Some(1.0), 10),
 			container("stack", 2, Some("b"), Some(2.0), 20),
 		],
+		..Stats::default()
 	};
 	record(&db, server, at, &stats).await.unwrap();
 	// The same instant twice is one row.
@@ -393,6 +394,7 @@ async fn metrics_record_stores_the_host_and_each_resource(db: PgPool) {
 	let bare = Stats {
 		host: HostStats::default(),
 		containers: vec![],
+		..Stats::default()
 	};
 	record(&db, server, at + Duration::seconds(10), &bare)
 		.await
@@ -551,6 +553,7 @@ async fn metrics_endpoints_serve_the_owner_and_hide_from_other_teams(db: PgPool)
 			container("model", owned.model, None, Some(2.0), 64),
 			container("stack", owned.stack, Some("web"), Some(2.0), 64),
 		],
+		..Stats::default()
 	};
 	let at = OffsetDateTime::now_utc() - Duration::seconds(30);
 	record(&db, server, at, &stats).await.unwrap();

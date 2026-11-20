@@ -887,6 +887,83 @@ impl Podman {
 			.map(|item| item.map_err(PodmanError::from))
 	}
 
+	/// Runs `cmd` in a running container and returns its exit status and stdout. Stderr is
+	/// dropped. Nothing is written to the command's stdin.
+	///
+	/// # Errors
+	/// Podman is unreachable or refuses the exec (no such container, not running).
+	pub async fn exec_output(
+		&self,
+		container: &str,
+		cmd: &[&str],
+	) -> Result<(i64, String), PodmanError> {
+		let created = self
+			.docker
+			.create_exec(
+				container,
+				bollard::exec::CreateExecOptions::<String> {
+					attach_stdout: Some(true),
+					attach_stderr: Some(true),
+					cmd: Some(cmd.iter().map(|c| (*c).to_owned()).collect()),
+					..Default::default()
+				},
+			)
+			.await?;
+		let mut stdout = Vec::new();
+		if let bollard::exec::StartExecResults::Attached { mut output, .. } =
+			self.docker.start_exec(&created.id, None).await?
+		{
+			while let Some(item) = output.next().await {
+				if let LogOutput::StdOut { message } | LogOutput::Console { message } = item? {
+					stdout.extend_from_slice(&message);
+				}
+			}
+		}
+		// Podman can report the exec as still running for a moment after its output closed.
+		for _ in 0..20 {
+			let info = self.docker.inspect_exec(&created.id).await?;
+			if info.running != Some(true) {
+				return Ok((
+					info.exit_code.unwrap_or(-1),
+					String::from_utf8_lossy(&stdout).into_owned(),
+				));
+			}
+			tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+		}
+		Ok((-1, String::from_utf8_lossy(&stdout).into_owned()))
+	}
+
+	/// The container events `since`..`until` (unix seconds) that the charts mark: `die`,
+	/// `oom` and `restart`. Podman's compat API names a death either `die` or `died`, so
+	/// both are asked for. With `until` set the API answers with the past and closes, so
+	/// nothing stays subscribed.
+	///
+	/// # Errors
+	/// Podman is unreachable.
+	pub async fn events_between(
+		&self,
+		since: i64,
+		until: i64,
+	) -> Result<Vec<EventMessage>, PodmanError> {
+		let filters = HashMap::from([
+			("type".to_string(), vec!["container".to_string()]),
+			(
+				"event".to_string(),
+				["die", "died", "oom", "restart"].map(String::from).to_vec(),
+			),
+		]);
+		let mut stream = std::pin::pin!(self.docker.events(Some(EventsOptions {
+			since: Some(since.to_string()),
+			until: Some(until.to_string()),
+			filters: Some(filters),
+		})));
+		let mut out = Vec::new();
+		while let Some(item) = stream.next().await {
+			out.push(item?);
+		}
+		Ok(out)
+	}
+
 	/// Container `die`/`died` events. Podman's compat API may name the event
 	/// either way, so both are subscribed.
 	pub fn die_events(&self) -> impl Stream<Item = Result<EventMessage, PodmanError>> + '_ {

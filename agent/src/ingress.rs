@@ -22,6 +22,51 @@ pub const TRAEFIK_IMAGE: &str = "docker.io/library/traefik:v3.7.19";
 
 const CONFIG_HASH_LABEL: &str = "podkit.config-hash";
 
+/// Where Traefik serves its Prometheus metrics, inside its own container. The address is
+/// loopback: no other container (not even one on a network Traefik joins) can reach it, and
+/// no host port is published for it. The agent reads it with `wget` run in the container.
+pub const METRICS_ADDRESS: &str = "127.0.0.1";
+/// Port of the `metrics` entrypoint.
+pub const METRICS_PORT: u16 = 8082;
+/// Latency buckets in seconds; p50 and p95 are read off them, so they are finer than
+/// Traefik's default (0.1, 0.3, 1.2, 5).
+const LATENCY_BUCKETS: &str = "0.005,0.01,0.025,0.05,0.1,0.25,0.5,1,2.5,5,10";
+
+/// The Traefik command line for `ingress`.
+fn traefik_command(ingress: &Ingress) -> Vec<String> {
+	let mut command = vec![
+		"--providers.docker=true".to_string(),
+		"--providers.docker.endpoint=unix:///var/run/docker.sock".to_string(),
+		"--providers.docker.exposedbydefault=false".to_string(),
+		"--entrypoints.web.address=:80".to_string(),
+		// Prometheus metrics on a loopback-only entrypoint, per service (not per router).
+		format!("--entrypoints.metrics.address={METRICS_ADDRESS}:{METRICS_PORT}"),
+		"--metrics.prometheus=true".to_string(),
+		"--metrics.prometheus.entrypoint=metrics".to_string(),
+		"--metrics.prometheus.addentrypointslabels=false".to_string(),
+		"--metrics.prometheus.addserviceslabels=true".to_string(),
+		format!("--metrics.prometheus.buckets={LATENCY_BUCKETS}"),
+	];
+	if let Some(email) = &ingress.acme_email {
+		command.push("--entrypoints.websecure.address=:443".to_string());
+		command.push(format!("--certificatesresolvers.le.acme.email={email}"));
+		command.push("--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json".to_string());
+		command.push("--certificatesresolvers.le.acme.httpchallenge=true".to_string());
+		command.push("--certificatesresolvers.le.acme.httpchallenge.entrypoint=web".to_string());
+	}
+	command
+}
+
+/// The host ports Traefik publishes: HTTP, and HTTPS with an ACME email. Never the metrics
+/// entrypoint.
+fn published_ports(ingress: &Ingress) -> Vec<PublishedPort> {
+	let mut ports = vec![PublishedPort::tcp(ingress.http_port, 80)];
+	if ingress.acme_email.is_some() {
+		ports.push(PublishedPort::tcp(ingress.https_port, 443));
+	}
+	ports
+}
+
 /// Ensures Traefik runs with the configuration `ingress` describes, using the
 /// docker-label provider on `podman_socket` (bind-mounted into the container).
 /// Idempotent: safe to call on every deploy. A running Traefik whose
@@ -63,24 +108,12 @@ pub async fn ensure_traefik(
 		}
 	}
 
-	let mut command = vec![
-		"--providers.docker=true".to_string(),
-		"--providers.docker.endpoint=unix:///var/run/docker.sock".to_string(),
-		"--providers.docker.exposedbydefault=false".to_string(),
-		"--entrypoints.web.address=:80".to_string(),
-	];
-	let mut published_ports = vec![PublishedPort::tcp(ingress.http_port, 80)];
+	let command = traefik_command(ingress);
+	let published_ports = published_ports(ingress);
 	let mut binds = vec![format!("{podman_socket}:/var/run/docker.sock")];
-
-	if let Some(email) = &ingress.acme_email {
+	if ingress.acme_email.is_some() {
 		let acme_dir = data_dir.join("traefik-acme");
 		tokio::fs::create_dir_all(&acme_dir).await?;
-		command.push("--entrypoints.websecure.address=:443".to_string());
-		command.push(format!("--certificatesresolvers.le.acme.email={email}"));
-		command.push("--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json".to_string());
-		command.push("--certificatesresolvers.le.acme.httpchallenge=true".to_string());
-		command.push("--certificatesresolvers.le.acme.httpchallenge.entrypoint=web".to_string());
-		published_ports.push(PublishedPort::tcp(ingress.https_port, 443));
 		binds.push(format!("{}:/letsencrypt", acme_dir.display()));
 	}
 
@@ -203,7 +236,7 @@ fn wanted_networks(labels: impl Iterator<Item = String>) -> Vec<String> {
 
 fn config_hash(ingress: &Ingress, podman_socket: &str) -> String {
 	let input = format!(
-		"{TRAEFIK_IMAGE}|{}|{}|{:?}|{podman_socket}|per-network-routing",
+		"{TRAEFIK_IMAGE}|{}|{}|{:?}|{podman_socket}|per-network-routing|metrics-v1|{LATENCY_BUCKETS}",
 		ingress.http_port, ingress.https_port, ingress.acme_email
 	);
 	Sha256::digest(input.as_bytes())
@@ -338,6 +371,40 @@ mod tests {
 			Some("podkit-env-9")
 		);
 		assert_eq!(routed_network(None, &["podkit"]), None);
+	}
+
+	#[test]
+	fn traefik_metrics_are_not_exposed_publicly() {
+		for acme in [None, Some("ops@example.com".to_string())] {
+			let ingress = Ingress {
+				acme_email: acme,
+				..ingress(80)
+			};
+			let command = traefik_command(&ingress);
+			// Prometheus is on, on its own entrypoint, bound to the container's loopback.
+			assert!(command.contains(&"--metrics.prometheus=true".to_string()));
+			assert!(command.contains(&"--metrics.prometheus.entrypoint=metrics".to_string()));
+			assert!(command.contains(&format!(
+				"--entrypoints.metrics.address={METRICS_ADDRESS}:{METRICS_PORT}"
+			)));
+			assert_eq!(METRICS_ADDRESS, "127.0.0.1");
+			// Nothing publishes it: only the web and websecure ports leave the container.
+			let ports = published_ports(&ingress);
+			assert!(
+				ports
+					.iter()
+					.all(|p| matches!(p.container, 80 | 443) && p.container != METRICS_PORT),
+				"{ports:?}"
+			);
+			// The metrics entrypoint is not one of the public ones and the dashboard is off.
+			assert!(!command.iter().any(|a| a.starts_with("--api")));
+			assert!(
+				command
+					.iter()
+					.filter(|a| a.contains(&format!(":{METRICS_PORT}")))
+					.all(|a| a.contains(&format!("{METRICS_ADDRESS}:{METRICS_PORT}")))
+			);
+		}
 	}
 
 	#[test]
