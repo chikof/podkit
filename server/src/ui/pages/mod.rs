@@ -9,6 +9,7 @@ pub mod accounts;
 pub mod apps;
 pub mod backups;
 pub mod canvas;
+pub mod cron;
 pub mod databases;
 pub mod git_providers;
 pub mod iac;

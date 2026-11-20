@@ -2253,3 +2253,8 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-list-main p { margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .ui-list-main strong { overflow-wrap: anywhere; }
 .ui-dest-id h3 { overflow: hidden; margin: 0; font-size: var(--fs-md); font-weight: var(--fw-bold); text-overflow: ellipsis; white-space: nowrap; }
+
+/* == cron == */
+/* Scheduled tasks: the overlap policy is a labelled group of three choice cards. */
+.ui-cron-policy { display: flex; flex-direction: column; gap: var(--s-2); min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+.ui-cron-policy legend { padding: 0; margin-block-end: var(--s-2); font-size: var(--fs-sm); font-weight: var(--fw-medium); }

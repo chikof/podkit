@@ -1,4 +1,5 @@
 pub mod apps;
+pub mod cron_ui;
 pub mod dbs;
 pub mod git_providers;
 pub mod grid;

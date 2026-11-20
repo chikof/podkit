@@ -33,6 +33,7 @@ use crate::ui::sse::js_string;
 mod advanced;
 pub mod chrome;
 mod create;
+mod cron_tab;
 mod deployments_tab;
 mod domains;
 mod env;
@@ -63,6 +64,7 @@ pub fn router() -> Router<AppState> {
 		.merge(volumes::router())
 		.merge(models_tab::router())
 		.merge(networks_tab::router())
+		.merge(cron_tab::router())
 		.merge(monitoring::router())
 		.merge(security::router())
 		.merge(webhooks::router())
@@ -128,6 +130,7 @@ enum Tab {
 	Volumes,
 	Models,
 	Networks,
+	Cron,
 	Webhooks,
 	Monitoring,
 	Security,
@@ -136,7 +139,7 @@ enum Tab {
 }
 
 impl Tab {
-	const ALL: [Self; 12] = [
+	const ALL: [Self; 13] = [
 		Self::Deployments,
 		Self::Logs,
 		Self::Env,
@@ -144,6 +147,7 @@ impl Tab {
 		Self::Volumes,
 		Self::Models,
 		Self::Networks,
+		Self::Cron,
 		Self::Webhooks,
 		Self::Monitoring,
 		Self::Security,
@@ -160,6 +164,7 @@ impl Tab {
 			Self::Volumes => "Volumes",
 			Self::Models => "Models",
 			Self::Networks => "Networks",
+			Self::Cron => "Cron",
 			Self::Webhooks => "Webhooks",
 			Self::Monitoring => "Monitoring",
 			Self::Security => "Security",
@@ -179,6 +184,7 @@ impl Tab {
 			Self::Volumes => "/volumes",
 			Self::Models => "/models",
 			Self::Networks => "/networks",
+			Self::Cron => "/cron",
 			Self::Webhooks => "/webhooks",
 			Self::Monitoring => "/monitoring",
 			Self::Security => "/security",
@@ -199,6 +205,7 @@ impl Tab {
 			Self::Models => can(Action::Read, Resource::Model),
 			Self::Networks | Self::Monitoring => can(Action::Read, Resource::Application),
 			Self::Security => can(Action::Read, Resource::Scan),
+			Self::Cron => can(Action::Read, Resource::Cron),
 			Self::Webhooks => can(Action::Update, Resource::Application),
 			Self::Advanced => {
 				can(Action::Update, Resource::Application)

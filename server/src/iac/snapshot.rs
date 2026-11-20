@@ -8,12 +8,15 @@ use std::collections::{BTreeMap, HashMap};
 use serde_json::Value;
 
 use super::doc::{
-	AppDoc, DatabaseDoc, EnvironmentDoc, MemberDoc, ModelDoc, ModelLinkDoc, NetworkDoc, ProjectDoc,
-	StackDoc, StackDomainDoc,
+	AppDoc, CronDoc, DatabaseDoc, EnvironmentDoc, MemberDoc, ModelDoc, ModelLinkDoc, NetworkDoc,
+	ProjectDoc, StackDoc, StackDomainDoc,
 };
-use super::objects::{Key, Kind, Secrets, as_cpu, default_alias, names};
+use super::objects::{
+	DEFAULT_CONCURRENCY, DEFAULT_ZONE, Key, Kind, Secrets, as_cpu, default_alias, names,
+};
 use super::plan::Refs;
 use crate::applications::{self, SourceKind, StoredRegistryAuth};
+use crate::cron::limits::{DEFAULT_BACKOFF_S, DEFAULT_TIMEOUT_S};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ModelFileId, RegistryId, ServerId, SshKeyId, TeamId};
 use crate::networks::ResourceKind;
@@ -157,9 +160,12 @@ pub async fn read(state: &AppState, project: &Project, lookup: &Lookup) -> AppRe
 			databases: BTreeMap::new(),
 			stacks: BTreeMap::new(),
 			models: BTreeMap::new(),
+			cron: BTreeMap::new(),
 		};
 
+		let mut app_names: HashMap<crate::ids::ApplicationId, String> = HashMap::new();
 		for app in applications::list_by_environment(db, env.id).await? {
+			app_names.insert(app.id, app.name.clone());
 			let git = app.source_kind == SourceKind::Git;
 			let mut env_map = BTreeMap::new();
 			for var in env_vars::list(db, app.id).await? {
@@ -339,6 +345,33 @@ pub async fn read(state: &AppState, project: &Project, lookup: &Lookup) -> AppRe
 					gpu: Some(model.gpu),
 					extra_args: model.extra_args.0.clone(),
 					memory_mb: model.memory_limit_mb,
+				},
+			);
+		}
+		for task in crate::cron::store::list_tasks(db, project.id, Some(env.id), None).await? {
+			let app = task.application_id.and_then(|a| app_names.get(&a).cloned());
+			let alone = app.is_none() && task.kind == crate::cron::Kind::Container;
+			ids.objects
+				.insert(Key::of(Kind::Cron, Some(&slug), &task.name), task.id.0);
+			let default = |set: bool, text: &str| set.then(|| text.to_owned());
+			out.cron.insert(
+				task.name.clone(),
+				CronDoc {
+					kind: task.kind.as_str().to_owned(),
+					app,
+					server: alone.then(|| lookup.server(task.server_id)),
+					image: task.image.clone(),
+					command: task.command.clone(),
+					schedule: task.schedule.clone(),
+					timezone: default(task.timezone != DEFAULT_ZONE, &task.timezone),
+					timeout: Some(task.timeout_s).filter(|t| *t != DEFAULT_TIMEOUT_S),
+					concurrency: default(
+						task.concurrency.as_str() != DEFAULT_CONCURRENCY,
+						task.concurrency.as_str(),
+					),
+					retries: Some(task.max_retries).filter(|r| *r != 0),
+					retry_delay: Some(task.retry_backoff_s).filter(|d| *d != DEFAULT_BACKOFF_S),
+					enabled: (!task.enabled).then_some(false),
 				},
 			);
 		}

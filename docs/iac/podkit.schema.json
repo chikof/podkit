@@ -84,7 +84,60 @@
 				"models": {
 					"type": "object",
 					"additionalProperties": { "$ref": "#/$defs/model" }
+				},
+				"cron": {
+					"description": "Scheduled tasks, by name.",
+					"type": "object",
+					"additionalProperties": { "$ref": "#/$defs/cron" }
 				}
+			}
+		},
+		"cron": {
+			"description": "A command on a cron schedule: run inside an application's container (exec), or in a one-shot container that is removed afterwards (container). Defaults are left out of an export.",
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["kind", "command", "schedule"],
+			"allOf": [
+				{
+					"if": { "properties": { "kind": { "const": "exec" } } },
+					"then": { "required": ["app"], "not": { "anyOf": [{ "required": ["image"] }, { "required": ["server"] }] } }
+				},
+				{
+					"if": { "properties": { "kind": { "const": "container" } }, "not": { "required": ["app"] } },
+					"then": { "required": ["image", "server"] }
+				}
+			],
+			"properties": {
+				"kind": { "enum": ["exec", "container"] },
+				"app": {
+					"description": "An application of the same environment: where an exec task runs, and what a container task inherits its environment and networks from. Cannot change once the task exists.",
+					"type": "string",
+					"minLength": 1
+				},
+				"server": {
+					"description": "The server of a container task that has no app.",
+					"$ref": "#/$defs/reference"
+				},
+				"image": {
+					"description": "A container task's image; its app's when left out.",
+					"type": "string",
+					"minLength": 1
+				},
+				"command": { "type": "string", "minLength": 1, "maxLength": 4000 },
+				"schedule": {
+					"description": "Five cron fields: minute hour day-of-month month day-of-week.",
+					"type": "string",
+					"minLength": 1
+				},
+				"timezone": { "description": "An IANA name; UTC by default.", "type": "string", "minLength": 1 },
+				"timeout": { "description": "Seconds before the run is killed; 300 by default.", "type": "integer", "minimum": 1, "maximum": 86400 },
+				"concurrency": {
+					"description": "What happens when a run is due while the last one is still going; skip by default.",
+					"enum": ["skip", "queue", "allow"]
+				},
+				"retries": { "description": "Extra attempts after a failure; 0 by default.", "type": "integer", "minimum": 0, "maximum": 10 },
+				"retry_delay": { "description": "Seconds before the first retry, doubling each time; 60 by default.", "type": "integer", "minimum": 1, "maximum": 3600 },
+				"enabled": { "description": "false pauses the task; true by default.", "type": "boolean" }
 			}
 		},
 		"app": {

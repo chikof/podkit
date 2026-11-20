@@ -7,10 +7,7 @@
 use sqlx::PgPool;
 use time::OffsetDateTime;
 
-use super::limits::{
-	DEFAULT_BACKOFF_S, DEFAULT_TIMEOUT_S, MAX_BACKOFF_S, MAX_COMMAND, MAX_NAME, MAX_RETRIES,
-	MAX_TIMEOUT_S,
-};
+use super::limits::{MAX_BACKOFF_S, MAX_COMMAND, MAX_NAME, MAX_RETRIES, MAX_TIMEOUT_S};
 use super::scheduler::MAX_QUEUED;
 use super::store::{self, NewTask};
 use super::{Concurrency, CronRun, CronTask, Kind, Trigger, schedule};
@@ -54,29 +51,6 @@ pub struct CreateInput {
 	pub max_retries: i32,
 	pub retry_backoff_s: i32,
 	pub enabled: bool,
-}
-
-impl CreateInput {
-	/// A task with the defaults of a new one; the caller fills in the rest.
-	#[must_use]
-	pub fn new(environment: EnvironmentId, name: &str, kind: Kind, command: &str) -> Self {
-		Self {
-			environment,
-			name: name.to_owned(),
-			kind,
-			application: None,
-			server: None,
-			image: None,
-			command: command.to_owned(),
-			schedule: "0 * * * *".to_owned(),
-			timezone: "UTC".to_owned(),
-			timeout_s: DEFAULT_TIMEOUT_S,
-			concurrency: Concurrency::Skip,
-			max_retries: 0,
-			retry_backoff_s: DEFAULT_BACKOFF_S,
-			enabled: true,
-		}
-	}
 }
 
 /// The fields of a task that can change; `None` leaves one as it is.

@@ -17,7 +17,7 @@ macro_rules! task_cols {
 	() => {
 		"id, project_id, environment_id, server_id, application_id, name, kind, image, command, \
 		schedule, timezone, timeout_s, concurrency, max_retries, retry_backoff_s, enabled, \
-		next_run_at, last_outcome, created_at, updated_at"
+		next_run_at, last_outcome"
 	};
 }
 
@@ -32,6 +32,8 @@ macro_rules! run_cols {
 use run_cols;
 pub(crate) use task_cols;
 
+#[cfg(test)]
+mod live_tests;
 #[cfg(test)]
 mod tests;
 
@@ -134,18 +136,6 @@ pub enum RunStatus {
 
 impl RunStatus {
 	#[must_use]
-	pub fn as_str(self) -> &'static str {
-		match self {
-			Self::Queued => "queued",
-			Self::Running => "running",
-			Self::Succeeded => "succeeded",
-			Self::Failed => "failed",
-			Self::Cancelled => "cancelled",
-			Self::Skipped => "skipped",
-		}
-	}
-
-	#[must_use]
 	pub fn label(self) -> &'static str {
 		match self {
 			Self::Queued => "Queued",
@@ -212,8 +202,6 @@ pub struct CronTask {
 	pub enabled: bool,
 	pub next_run_at: Option<OffsetDateTime>,
 	pub last_outcome: Option<String>,
-	pub created_at: OffsetDateTime,
-	pub updated_at: OffsetDateTime,
 }
 
 /// A row of `cron_runs`.

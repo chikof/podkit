@@ -70,6 +70,47 @@ pub struct EnvironmentDoc {
 	/// By model name.
 	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
 	pub models: BTreeMap<String, ModelDoc>,
+	/// By task name.
+	#[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+	pub cron: BTreeMap<String, CronDoc>,
+}
+
+/// A scheduled task. Defaults are left out of an export: `UTC`, 300 seconds, `skip`, no
+/// retries, 60 seconds before the first retry, enabled.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CronDoc {
+	/// `exec` (inside an application's running container) or `container` (a one-shot one).
+	pub kind: String,
+	/// The name of an application of the same environment: where an `exec` task runs, and
+	/// what a `container` task inherits its environment and networks from.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub app: Option<String>,
+	/// The server a `container` task without an `app` runs on.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub server: Option<String>,
+	/// A `container` task's image; its application's when omitted.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub image: Option<String>,
+	pub command: String,
+	/// Five cron fields.
+	pub schedule: String,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub timezone: Option<String>,
+	/// Seconds before the run is killed.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub timeout: Option<i32>,
+	/// `skip`, `queue` or `allow`.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub concurrency: Option<String>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub retries: Option<i32>,
+	/// Seconds before the first retry; it doubles each time.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub retry_delay: Option<i32>,
+	/// `false` pauses the task.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub enabled: Option<bool>,
 }
 
 /// An application: a git repository that is built, or an image that is pulled. Exactly one of
@@ -308,6 +349,7 @@ mod tests {
 			databases: BTreeMap::new(),
 			stacks: BTreeMap::new(),
 			models: BTreeMap::new(),
+			cron: BTreeMap::new(),
 		};
 		environment.apps.insert("web".into(), app);
 		environment.stacks.insert(

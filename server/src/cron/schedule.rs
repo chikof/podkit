@@ -87,6 +87,17 @@ pub fn next_after(
 		.ok_or_else(|| "the schedule never fires".to_owned())
 }
 
+/// `2026-11-21 03:00 CET`: an instant as the wall clock of `timezone` shows it, for the
+/// pages. A zone that is not known falls back to UTC.
+#[must_use]
+pub fn local_text(at: OffsetDateTime, timezone: &str) -> String {
+	let zone = zone(timezone).unwrap_or(TimeZone::UTC);
+	match Timestamp::from_second(at.unix_timestamp()) {
+		Ok(ts) => ts.to_zoned(zone).strftime("%Y-%m-%d %H:%M %Z").to_string(),
+		Err(_) => String::new(),
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use time::macros::datetime;

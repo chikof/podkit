@@ -53,6 +53,7 @@ async fn authorize_reads(state: &AppState, user: UserId, team: TeamId) -> AppRes
 		Resource::Domain,
 		Resource::Volume,
 		Resource::Server,
+		Resource::Cron,
 	] {
 		authorize(&state.db, user, team, Do::Read, resource).await?;
 	}
@@ -188,6 +189,7 @@ fn needed(plan: &Plan, deploy: bool) -> Vec<(Do, Resource)> {
 			Kind::Database => add(action, Resource::Database),
 			Kind::Model => add(action, Resource::Model),
 			Kind::Stack => add(action, Resource::Stack),
+			Kind::Cron => add(action, Resource::Cron),
 			Kind::App => {
 				add(action, Resource::Application);
 				for f in &change.fields {
@@ -310,6 +312,7 @@ fn fresh_project(name: &str) -> ProjectDoc {
 			databases: std::collections::BTreeMap::new(),
 			stacks: std::collections::BTreeMap::new(),
 			models: std::collections::BTreeMap::new(),
+			cron: std::collections::BTreeMap::new(),
 		},
 	);
 	ProjectDoc {
