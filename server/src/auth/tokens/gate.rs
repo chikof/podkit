@@ -64,6 +64,9 @@ pub fn required_scope(method: &Method, segments: &[&str]) -> Scope {
 		Scope::Read
 	} else if method == Method::DELETE {
 		Scope::Delete
+	} else if segments.last() == Some(&"plan") {
+		// A plan compares and changes nothing, so reading is enough to ask for one.
+		Scope::Read
 	} else if segments.last().is_some_and(|s| DEPLOY_VERBS.contains(s)) {
 		Scope::Deploy
 	} else {

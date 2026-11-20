@@ -33,6 +33,7 @@ mod domains;
 mod env_vars;
 mod environments;
 mod error;
+mod iac;
 mod ids;
 mod jobs;
 mod links;

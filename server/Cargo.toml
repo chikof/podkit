@@ -62,4 +62,5 @@ encre-css.workspace = true
 [dev-dependencies]
 # Live model-download test runs the real agent in process.
 agent = { path = "../agent" }
+jsonschema = { version = "=0.61.2", default-features = false }
 tower.workspace = true

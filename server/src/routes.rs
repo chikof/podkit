@@ -9,8 +9,8 @@ use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
 	applications, auth, backups, catalog, databases, deployments, domains, env_vars, environments,
-	links, logos, members, metrics, model_files, models, networks, projects, registries, servers,
-	ssh_keys, stacks, teams, templates, ui, volumes, webhooks,
+	iac, links, logos, members, metrics, model_files, models, networks, projects, registries,
+	servers, ssh_keys, stacks, teams, templates, ui, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -37,6 +37,8 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			"/teams/{team_id}/projects/{project_id}/environments",
 			environments::router(),
 		)
+		.nest("/teams/{team_id}/projects/{project_id}", iac::router())
+		.nest("/teams/{team_id}/import", iac::import_router())
 		.nest("/teams/{team_id}/servers", servers::router())
 		.nest("/teams/{team_id}/ssh-keys", ssh_keys::router())
 		.nest(
