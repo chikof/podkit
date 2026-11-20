@@ -1653,3 +1653,9 @@ code.font-mono { font-size: 0.92em; }
 /* == security pages == */
 /* The badge sits above the row-wide link of a resource list, so it is a link of its own. */
 .ui-res-kind .ui-sev-group { position: relative; z-index: 1; margin-inline-start: var(--s-2); }
+/* The scan facts sit in a row that wraps, like the deployment facts (the generic facts list is a column). */
+.ui-facts.ui-scan-facts { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-3) var(--s-6); }
+.ui-scan-facts code { font-size: var(--fs-sm); }
+/* In a resource row the badge shares the kind line, so it must not make that line taller than a row without one. */
+.ui-res-kind .ui-sev { padding-block: 0; line-height: 1rem; }
+.ui-res-kind .ui-sev-act { padding-block: 0; line-height: 0.875rem; }

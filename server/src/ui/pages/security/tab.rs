@@ -45,6 +45,11 @@ impl TabQuery {
 		self.severity.as_deref().and_then(Severity::parse)
 	}
 
+	/// Whether any filter is chosen, so a list that came up empty says why.
+	fn narrowed(&self) -> bool {
+		self.severity().is_some() || self.act_now || self.fixable || self.ignored
+	}
+
 	fn filter(&self) -> FindingFilter {
 		FindingFilter {
 			severity: self.severity(),
@@ -280,7 +285,7 @@ fn scan_card(
 							span class="ui-lede" { (view.counts.summary()) }
 						}
 					}
-					dl class="ui-facts" aria-label="Scan details" {
+					dl class="ui-facts ui-scan-facts" aria-label="Scan details" {
 						(fact("Image", &html! { code class="break-all" { (scan.image_ref) } }))
 						@if !scan.image_digest.is_empty() {
 							(fact("Digest", &html! { code title=(scan.image_digest) { (digest(&scan.image_digest)) } }))
@@ -417,7 +422,9 @@ fn findings_section(
 	html! {
 		section class="ui-stack" aria-labelledby="findings-title" {
 			h2 id="findings-title" class="ui-sec-h" { "Findings" }
-			(filters(page, query, view))
+			@if !(clean && list.is_empty() && !query.narrowed()) {
+				(filters(page, query, view))
+			}
 			@if list.is_empty() {
 				(empty_state(
 					if clean { "circle-check" } else { "search" },
