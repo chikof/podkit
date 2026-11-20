@@ -718,6 +718,11 @@ pub enum Event {
 	},
 	/// Terminal: success without payload.
 	Done,
+	/// Terminal: a scheduled task's command ran to its end; zero is success.
+	Exited {
+		/// The command's exit code.
+		code: i64,
+	},
 	/// Terminal: failure.
 	Failed {
 		/// Human-readable cause.
@@ -731,7 +736,10 @@ impl Event {
 	pub fn is_terminal(&self) -> bool {
 		matches!(
 			self,
-			Self::Deployed { .. } | Self::DumpWritten { .. } | Self::Done | Self::Failed { .. }
+			Self::Deployed { .. }
+				| Self::DumpWritten { .. }
+				| Self::Done | Self::Exited { .. }
+				| Self::Failed { .. }
 		)
 	}
 }
@@ -947,6 +955,65 @@ impl std::fmt::Debug for ModelDownloadRequest {
 			.field("token", &self.token.as_ref().map(|_| "<redacted>"))
 			.finish()
 	}
+}
+
+/// `POST /v1/cron/run` body. Streams [`Event::Log`] lines of the command's output, then
+/// [`Event::Exited`] with its exit code, or [`Event::Failed`] when it could not be run.
+///
+/// Dropping the connection stops the command: an exec is killed, a container is removed.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct CronRunRequest {
+	/// Names the pid file of an exec and the container of a one-shot run.
+	pub run_id: i64,
+	/// What to run, and where.
+	pub target: CronTarget,
+}
+
+impl std::fmt::Debug for CronRunRequest {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		// The environment of a container task carries secrets.
+		f.debug_struct("CronRunRequest")
+			.field("run_id", &self.run_id)
+			.finish_non_exhaustive()
+	}
+}
+
+/// Where a scheduled command runs.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CronTarget {
+	/// Inside a running container, as `sh -c <command>`.
+	Exec {
+		/// Container name or id.
+		container: String,
+		/// The shell command.
+		command: String,
+	},
+	/// In a new container of `image`, removed afterwards.
+	Container {
+		/// Image reference; pulled when the server does not have it.
+		image: String,
+		/// Registry credentials for the pull.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		auth: Option<RegistryAuth>,
+		/// The shell command; replaces the image's entrypoint and command.
+		command: String,
+		/// Container environment.
+		#[serde(default, skip_serializing_if = "Vec::is_empty")]
+		env: Vec<(String, String)>,
+		/// Networks to join, the first being where it lives. Without aliases.
+		#[serde(default, skip_serializing_if = "Vec::is_empty")]
+		attach: Vec<NetworkAttach>,
+		/// Memory limit in bytes.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		memory_bytes: Option<i64>,
+		/// CPU limit in cores.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		cpu_cores: Option<f64>,
+		/// Volumes to mount, as the application has them.
+		#[serde(default, skip_serializing_if = "Vec::is_empty")]
+		volumes: Vec<VolumeMount>,
+	},
 }
 
 /// `POST /v1/probes` body: one HTTP request to a container's port, made from

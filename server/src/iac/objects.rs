@@ -16,7 +16,10 @@ use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use super::doc::{AppDoc, DatabaseDoc, EnvironmentDoc, ModelDoc, NetworkDoc, ProjectDoc, StackDoc};
+use super::doc::{
+	AppDoc, CronDoc, DatabaseDoc, EnvironmentDoc, ModelDoc, NetworkDoc, ProjectDoc, StackDoc,
+};
+use crate::cron::limits::{DEFAULT_BACKOFF_S, DEFAULT_TIMEOUT_S};
 
 /// The kinds of object a file describes, in the order they are applied: what the others
 /// need comes first.
@@ -29,6 +32,8 @@ pub enum Kind {
 	Model,
 	Stack,
 	App,
+	/// A scheduled task: it names an application of its environment, so it comes after.
+	Cron,
 }
 
 impl Kind {
@@ -41,13 +46,14 @@ impl Kind {
 			Self::Model => "model",
 			Self::Stack => "stack",
 			Self::App => "app",
+			Self::Cron => "cron",
 		}
 	}
 
 	/// Whether the object runs a container that a change replaces.
 	#[must_use]
 	pub fn runs(self) -> bool {
-		!matches!(self, Self::Environment | Self::Network)
+		!matches!(self, Self::Environment | Self::Network | Self::Cron)
 	}
 }
 
@@ -373,6 +379,46 @@ fn model_fields(model: &ModelDoc) -> BTreeMap<String, Fv> {
 	f
 }
 
+/// What a scheduled task gets when the file says nothing.
+pub const DEFAULT_ZONE: &str = "UTC";
+pub const DEFAULT_CONCURRENCY: &str = "skip";
+
+fn cron_fields(task: &CronDoc) -> BTreeMap<String, Fv> {
+	let mut f = BTreeMap::new();
+	val(&mut f, "kind", task.kind.as_str());
+	opt(&mut f, "app", task.app.as_deref());
+	opt(&mut f, "server", task.server.as_deref());
+	opt(
+		&mut f,
+		"image",
+		task.image
+			.as_deref()
+			.map(str::trim)
+			.filter(|i| !i.is_empty()),
+	);
+	val(&mut f, "command", task.command.trim());
+	val(&mut f, "schedule", task.schedule.trim());
+	val(
+		&mut f,
+		"timezone",
+		task.timezone.as_deref().unwrap_or(DEFAULT_ZONE),
+	);
+	val(&mut f, "timeout", task.timeout.unwrap_or(DEFAULT_TIMEOUT_S));
+	val(
+		&mut f,
+		"concurrency",
+		task.concurrency.as_deref().unwrap_or(DEFAULT_CONCURRENCY),
+	);
+	val(&mut f, "retries", task.retries.unwrap_or(0));
+	val(
+		&mut f,
+		"retry_delay",
+		task.retry_delay.unwrap_or(DEFAULT_BACKOFF_S),
+	);
+	val(&mut f, "enabled", task.enabled.unwrap_or(true));
+	f
+}
+
 /// The alias a member answers to when none is given.
 #[must_use]
 pub fn default_alias(name: &str) -> String {
@@ -437,6 +483,9 @@ pub fn flatten(project: &ProjectDoc, secrets: &Secrets) -> Vec<Obj> {
 		}
 		for (name, model) in &env.models {
 			flat.push(Key::of(Kind::Model, Some(slug), name), model_fields(model));
+		}
+		for (name, task) in &env.cron {
+			flat.push(Key::of(Kind::Cron, Some(slug), name), cron_fields(task));
 		}
 	}
 	for network in &project.networks {

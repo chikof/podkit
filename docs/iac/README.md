@@ -53,6 +53,7 @@ projects.<slug>                                      name
     databases.<name>   postgres, mysql, mongodb or redis
     stacks.<name>      a compose file, inline
     models.<name>      an inference engine serving downloaded model files
+    cron.<name>        a command on a cron schedule, in an app or in a one-shot container
   networks[]           user networks that have a member in this project
 ```
 
@@ -73,6 +74,13 @@ What an application, database, stack, model and network can say is in the
   server it is on. The download must already exist: podkit does not fetch weights for you.
 - **Networks** are the user networks (not the automatic one every environment gets). A network lists
   the resources of this project on it, with their aliases.
+- **Scheduled tasks** (`cron`) are `kind = "exec"` (a command inside the running container of the
+  application named in `app`) or `kind = "container"` (a one-shot container from `image`, or from the
+  application's image, started on its `server` or the application's). `schedule` is five cron
+  fields read in `timezone` (UTC by default). `timeout`, `concurrency` (`skip`, `queue`, `allow`),
+  `retries`, `retry_delay` and `enabled` are left out of an export when they are the defaults. What a
+  task runs in (`kind` and `app`) cannot change; rename the task to make a new one. Runs and their logs
+  are history, not configuration, and are not in the file.
 
 ## Secrets
 
@@ -384,6 +392,41 @@ port = 3000
 [[projects.assistant.environments.production.apps.chat.models]]
 model = "tiny"
 default = true
+```
+
+Scheduled tasks: the Laravel scheduler inside an application, and a nightly cleanup in a one-shot
+container:
+
+```toml
+version = 1
+
+[projects.shop]
+name = "Shop"
+
+[projects.shop.environments.production]
+name = "production"
+
+[projects.shop.environments.production.apps.web]
+server = "local"
+slug = "web"
+image = "ghcr.io/example/shop:1"
+port = 8080
+
+[projects.shop.environments.production.cron.scheduler]
+kind = "exec"
+app = "web"
+command = "php artisan schedule:run"
+schedule = "* * * * *"
+
+[projects.shop.environments.production.cron.cleanup]
+kind = "container"
+server = "local"
+image = "docker.io/library/busybox"
+command = "find /tmp -mtime +7 -delete"
+schedule = "0 3 * * *"
+timezone = "Europe/Berlin"
+concurrency = "skip"
+retries = 2
 ```
 
 A file for several projects, for the team import:

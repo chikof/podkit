@@ -39,6 +39,7 @@ fn kind_name(kind: crate::iac::objects::Kind) -> &'static str {
 		crate::iac::objects::Kind::Model => "Model",
 		crate::iac::objects::Kind::Network => "Network",
 		crate::iac::objects::Kind::Environment => "Environment",
+		crate::iac::objects::Kind::Cron => "Scheduled task",
 	}
 }
 

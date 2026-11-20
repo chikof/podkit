@@ -264,7 +264,9 @@ pub async fn rollback(
 	let target = deployments::find(&s.db, app.id, id)
 		.await?
 		.ok_or(ServerError::DeploymentNotFound)?;
-	deployments::queue(s, &app, Some(user), Some(&target)).await
+	let deployment = deployments::queue(s, &app, Some(user), Some(&target)).await?;
+	crate::notifications::hooks::rollback(s, app.id.0, None).await;
+	Ok(deployment)
 }
 
 /// Cancels a deployment that is queued, building or deploying; needs

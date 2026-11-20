@@ -2224,3 +2224,37 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-sev-group, .ui-sev { gap: var(--s-2); }
 .ui-sev { padding-inline: var(--s-3); }
 .ui-sev-act { padding-inline: var(--s-3); }
+
+/* == notifications == */
+/* The bell: the unread count sits on the icon's top-right corner. Not colour alone: the count is
+   also in the link's accessible name. */
+.ui-bell { position: relative; }
+.ui-bell-count { position: absolute; inset-block-start: 2px; inset-inline-end: 0; min-width: 1.25em; padding-inline: 0.3em; border-radius: var(--r-pill); background-color: var(--destructive); color: var(--destructive-foreground); font-size: var(--fs-xs); font-weight: var(--fw-bold); line-height: 1.4; text-align: center; pointer-events: none; }
+
+/* The notification history: one row per event, unread ones tinted. */
+.ui-notes { display: grid; margin: 0; padding: 0; list-style: none; }
+.ui-note { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-2) var(--s-4); align-items: start; padding: var(--s-4) var(--card-pad); border-block-end: var(--bw) solid var(--border); }
+.ui-note:last-child { border-block-end: 0; }
+.ui-note[data-unread] { background-color: var(--primary-soft); }
+.ui-note-main { display: grid; gap: var(--s-1); min-width: 0; }
+.ui-note-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin: 0; font-size: var(--fs-md); font-weight: var(--fw-bold); overflow-wrap: anywhere; }
+.ui-note-body { margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.ui-note-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); color: var(--muted-foreground); font-size: var(--fs-sm); }
+.ui-note-act { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+
+/* Settings → Notifications: a group of checkboxes (events, channels) in columns, and the rows of a
+   rule or alert list that carry their own buttons. */
+.ui-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); gap: var(--s-2) var(--s-4); margin: 0; padding: 0; border: 0; }
+.ui-checks legend { margin-block-end: var(--s-2); padding: 0; font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.ui-checks .ui-check { margin: 0; }
+.ui-list-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-4); padding: var(--s-3) 0; border-block-end: var(--bw) solid var(--border); }
+.ui-list-row:last-child { border-block-end: 0; }
+.ui-list-row > .ui-list-main { flex: 1 1 16rem; min-width: 0; }
+.ui-list-main p { margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.ui-list-main strong { overflow-wrap: anywhere; }
+.ui-dest-id h3 { overflow: hidden; margin: 0; font-size: var(--fs-md); font-weight: var(--fw-bold); text-overflow: ellipsis; white-space: nowrap; }
+
+/* == cron == */
+/* Scheduled tasks: the overlap policy is a labelled group of three choice cards. */
+.ui-cron-policy { display: flex; flex-direction: column; gap: var(--s-2); min-inline-size: 0; margin: 0; padding: 0; border: 0; }
+.ui-cron-policy legend { padding: 0; margin-block-end: var(--s-2); font-size: var(--fs-sm); font-weight: var(--fw-medium); }

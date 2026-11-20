@@ -1,10 +1,12 @@
 pub mod apps;
+pub mod cron_ui;
 pub mod dbs;
 pub mod git_providers;
 pub mod grid;
 pub mod health;
 pub mod infrastructure_ui;
 pub mod models_env;
+pub mod notifications_ui;
 pub mod registries_ui;
 pub mod stacks_ui;
 mod tenancy;

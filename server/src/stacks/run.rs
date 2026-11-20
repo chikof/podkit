@@ -315,6 +315,7 @@ impl Ctx<'_> {
 					Event::Phase { .. }
 					| Event::Progress { .. }
 					| Event::DumpWritten { .. }
+					| Event::Exited { .. }
 					| Event::Done,
 				)) => {}
 				Some(Err(e)) => {

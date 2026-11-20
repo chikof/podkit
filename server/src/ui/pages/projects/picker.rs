@@ -118,6 +118,10 @@ fn panel(entry: &Entry<'_>, cancel: &str) -> Markup {
 }
 
 /// What the caller may create here, in the order of the list.
+#[allow(
+	clippy::too_many_lines,
+	reason = "one entry per kind of resource, in the order of the list"
+)]
 fn entries<'a>(
 	ctx: &TeamCtx,
 	team: TeamId,
@@ -207,6 +211,18 @@ fn entries<'a>(
 			engines: Vec::new(),
 		});
 	}
+	if ctx.perms.can(Action::Create, Resource::Cron) {
+		out.push(Entry {
+			key: "cron",
+			title: "Scheduled task",
+			summary: "A one-shot container on a cron schedule",
+			detail: "Runs a command in a new container on a schedule and removes it afterwards. It can inherit an application's environment and networks. To run a command inside an app instead, use that app's Cron tab.",
+			provide: &["An image or an application", "A command", "A cron schedule and time zone"],
+			mark: Mark::Icon("clock"),
+			href: Some(format!("{base}/cron/new?{q}&kind=container")),
+			engines: Vec::new(),
+		});
+	}
 	if ctx.perms.can(Action::Create, Resource::Model) {
 		out.push(Entry {
 			key: "model",
@@ -231,6 +247,7 @@ pub fn can_create_any(ctx: &TeamCtx) -> bool {
 		Resource::Database,
 		Resource::Model,
 		Resource::Stack,
+		Resource::Cron,
 	]
 	.into_iter()
 	.any(|r| ctx.perms.can(Action::Create, r))

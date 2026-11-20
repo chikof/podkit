@@ -71,11 +71,14 @@ base64 = "=0.23.1"
 flate2 = "=1.1.11"
 tar = "=0.4.46"
 url = "=2.5.8"
-croner = "=4.0.3"
+croner = { version = "=4.0.3", default-features = false, features = ["jiff"] }
+# The zone database is bundled: a minimal container has no /usr/share/zoneinfo.
+jiff = { version = "=0.2.46", default-features = false, features = ["std", "tzdb-bundle-always"] }
 ssh-key = { version = "=0.6.7", default-features = false, features = ["alloc", "std", "ed25519", "rsa", "ecdsa", "getrandom"] }
 rsa = { version = "=0.9.10", default-features = false, features = ["std", "pem"] }
 rusty-s3 = { version = "=0.11.0", default-features = false, features = ["rustcrypto"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider", "stream"] }
+lettre = { version = "=0.11.24", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls", "ring", "webpki-roots"] }
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 tower = { version = "=0.5.3", features = ["util"] }
 tower-http = { version = "=0.6.11", default-features = false, features = ["compression-gzip"] }

@@ -133,9 +133,19 @@ async fn scan(
 		}
 		None => (None, None),
 	};
+	let before = crate::notifications::hooks::severe_findings(&state.db, id).await;
 	store::store_result(&state.db, id, &result, packed, size, false)
 		.await
 		.map_err(|e| db_failure(&e))?;
+	crate::notifications::hooks::vulnerabilities(
+		state,
+		id,
+		scan.team_id,
+		&scan.image_ref,
+		&before,
+		&result,
+	)
+	.await;
 	log.push(
 		proto::Stream::System,
 		&format!("{} findings", result.findings.len()),
@@ -207,9 +217,21 @@ async fn rescan(
 		};
 		match outcome {
 			Ok(result) => {
+				let before = crate::notifications::hooks::severe_findings(&state.db, id).await;
 				store::store_result(&state.db, id, &result, None, None, true)
 					.await
 					.map_err(|e| db_failure(&e))?;
+				if let Ok(Some(scan)) = store::find(&state.db, id).await {
+					crate::notifications::hooks::vulnerabilities(
+						state,
+						id,
+						scan.team_id,
+						&scan.image_ref,
+						&before,
+						&result,
+					)
+					.await;
+				}
 				done += 1;
 			}
 			Err(e) => {

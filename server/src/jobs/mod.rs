@@ -54,6 +54,8 @@ pub enum JobKind {
 	ImageScan,
 	/// `target_id` is a server id. Runs Grype over the stored SBOMs of its running images.
 	ImageRescan,
+	/// `target_id` is a cron run id. Runs a scheduled task's command once.
+	CronRun,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -344,6 +346,21 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 		JobKind::ImageRescan => {
 			tracing::warn!(target_id, ?failure, "daily rescan did not finish");
 			return;
+		}
+		// The run row says how it ended; a cancelled one is the user's doing.
+		JobKind::CronRun => {
+			let (status, message) = match failure {
+				JobFailure::Cancelled => (crate::cron::RunStatus::Cancelled, "cancelled"),
+				JobFailure::Failed(m) => (crate::cron::RunStatus::Failed, m.as_str()),
+			};
+			crate::cron::store::mark_finished(
+				&state.db,
+				crate::ids::CronRunId(target_id),
+				status,
+				None,
+				Some(message),
+			)
+			.await
 		}
 	};
 	if let Err(e) = result {

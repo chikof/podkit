@@ -62,3 +62,37 @@ curl -s -X DELETE -H "Authorization: Bearer $PK_TOKEN" $PODKIT/api/v1/teams/$TEA
 ```
 
 `POST …/registries/test` tries a login without saving it. A registry can only be used for images of its own host.
+
+## Notifications
+
+Channels say where a message goes, rules say which events go to which channels, metric alerts raise events of their own. Settings → Notifications in the web UI manages the same things. Webhook URLs, bot tokens, signing secrets and the SMTP password are write-only: no response ever contains them (a channel lists only its host as `hint`).
+
+```sh
+N=$PODKIT/api/v1/teams/$TEAM/notifications
+curl -s -H "Authorization: Bearer ***" $N/events                       # every event kind a rule can list
+curl -s -X POST -H "Authorization: Bearer ***" -H 'Content-Type: application/json' $N/channels \
+  -d '{"name":"Chat","kind":"discord","url":"https://discord.com/api/webhooks/…"}'
+#   kinds: discord, slack (url) · telegram (token, chat_id) · ntfy (server, topic, token?) ·
+#          email (to) · webhook (url, signing_secret)
+curl -s -X POST -H "Authorization: Bearer ***" $N/channels/5/test      # send a test message now
+curl -s -X PATCH -H "Authorization: Bearer ***" -H 'Content-Type: application/json' \
+  -d '{"enabled":false}' $N/channels/5                                  # blank secret fields keep the stored ones
+curl -s -X PUT -H "Authorization: Bearer ***" -H 'Content-Type: application/json' $N/smtp \
+  -d '{"host":"smtp.example.com","port":587,"security":"starttls","username":"u","password":"…","from_addr":"podkit <podkit@example.com>"}'
+curl -s -X POST -H "Authorization: Bearer ***" -H 'Content-Type: application/json' $N/rules \
+  -d '{"name":"Failures","kinds":["deploy_failed","backup_failed"],"channel_ids":[5],"min_severity":"warning","project_id":null}'
+curl -s -X POST -H "Authorization: Bearer ***" -H 'Content-Type: application/json' $N/alerts \
+  -d '{"name":"Disk","scope":"server","server_id":3,"metric":"disk","threshold":90,"duration_minutes":10}'
+curl -s -X PUT -H "Authorization: Bearer ***" -H 'Content-Type: application/json' $N/settings \
+  -d '{"dedup_minutes":10,"quiet_enabled":true,"quiet_start_min":1320,"quiet_end_min":420,"utc_offset_min":0}'
+curl -s -H "Authorization: Bearer ***" $N/deliveries                    # recent sends and the dead letters
+curl -s -X POST -H "Authorization: Bearer ***" $N/deliveries/9/retry    # put a dead letter back in the queue
+curl -s -H "Authorization: Bearer ***" $N/feed                          # the bell: history and unread count
+curl -s -X POST -H "Authorization: Bearer ***" $N/feed/read-all
+```
+
+A failed send is retried after 30 s, 1, 2, 4 and 8 minutes, then waits as a dead letter. Each channel gets at most 20 messages a minute. The same event inside `dedup_minutes` is sent once, and followed by one "happened N times" message. During quiet hours only critical events are sent at once; the rest leave as one digest when they end. An up/down pair (server unreachable/recovered) that changes state four times in half an hour is reported once as "Flapping" and muted until it settles.
+
+A generic webhook receives a JSON body (`event`, `severity`, `title`, `body`, `link`, `count`, `at`, `team_id`, `project_id`, `environment_id`) with `X-Podkit-Event` and `X-Podkit-Signature: sha256=<hex>`, the HMAC-SHA256 of the raw body keyed with the channel's signing secret. Links in messages need `PUBLIC_URL`; without it they are left out.
+
+Metric alerts: `scope` is `server` (metric `cpu`, `mem`, `disk` or `gpu`, a percent) or `resource` (`resource_kind` application, database, model or stack, with `cpu` as percent of the host or `mem_mb`). An alert fires once the newest sample has been over the threshold for the whole duration, and sends a recovery when it is back under. They are judged after every metrics sample.

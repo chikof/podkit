@@ -14,9 +14,10 @@ use crate::ids::JobId;
 use crate::logs::JobLog;
 use crate::state::AppState;
 
-/// Concurrent running jobs allowed per server. Scans do not count: they have a
-/// lane of their own (one at a time per server, by lock key), so a deploy never
-/// waits for one and one never waits for a deploy.
+/// Concurrent running jobs allowed per server. Scans and cron runs do not count: scans have
+/// a lane of their own (one at a time per server, by lock key), and a run of a scheduled
+/// task is policed by its task's concurrency policy, so a deploy never waits for either and
+/// neither waits for a deploy.
 const MAX_JOBS_PER_SERVER: i64 = 2;
 
 const INTERRUPTED: &str = "interrupted: podkit restarted";
@@ -79,6 +80,9 @@ pub async fn run_dispatcher(state: AppState, shutdown: CancellationToken) {
 				}
 			}
 		}
+		// Not a service of its own: the delivery queue is worked from this loop.
+		crate::notifications::delivery::wake(&state);
+		crate::cron::scheduler::tick(&state).await;
 		tokio::select! {
 			() = state.jobs.notify.notified() => {}
 			() = tokio::time::sleep(Duration::from_secs(5)) => {}
@@ -96,9 +100,9 @@ async fn claim(db: &PgPool, max: i64) -> Result<Option<Job>, sqlx::Error> {
 			SELECT j.id FROM jobs j
 			WHERE j.status = 'queued' AND j.run_after <= NOW()
 				AND NOT EXISTS (SELECT 1 FROM jobs r WHERE r.status = 'running' AND r.lock_key = j.lock_key)
-				AND (j.kind IN ('image_scan', 'image_rescan')
+				AND (j.kind IN ('image_scan', 'image_rescan', 'cron_run')
 					OR (SELECT COUNT(*) FROM jobs r WHERE r.status = 'running' AND r.server_id = j.server_id
-						AND r.kind NOT IN ('image_scan', 'image_rescan')) < $1)
+						AND r.kind NOT IN ('image_scan', 'image_rescan', 'cron_run')) < $1)
 			ORDER BY j.id FOR UPDATE SKIP LOCKED LIMIT 1)
 		RETURNING id, kind, server_id, target_id, lock_key, status, error",
 	)
@@ -134,6 +138,7 @@ async fn run_job(state: AppState, job: Job, token: CancellationToken) {
 	if let Err(failure) = &result {
 		fail_target(&state, job.kind, job.target_id, failure).await;
 	}
+	crate::notifications::hooks::job_finished(&state, &job, &result).await;
 
 	// The log ends only after the final status is stored, so a client that sees
 	// `event: end` and refetches reads a settled state.
@@ -172,6 +177,7 @@ async fn dispatch(
 		JobKind::ImageScan | JobKind::ImageRescan => {
 			crate::scanning::run::run(state, job, token, log).await
 		}
+		JobKind::CronRun => crate::cron::run::run(state, job, token, log).await,
 	}
 }
 

@@ -8,10 +8,10 @@ use tower_http::compression::predicate::{Predicate, SizeAbove};
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
-	applications, auth, avatars, backups, catalog, databases, deployments, domains, env_vars,
+	applications, auth, avatars, backups, catalog, cron, databases, deployments, domains, env_vars,
 	environments, git_providers, iac, links, logos, members, metrics, model_files, models,
-	networks, projects, registries, scanning, servers, ssh_keys, stacks, teams, templates, ui,
-	volumes, webhooks,
+	networks, notifications, projects, registries, scanning, servers, ssh_keys, stacks, teams,
+	templates, ui, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -40,6 +40,10 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			environments::router(),
 		)
 		.nest("/teams/{team_id}/projects/{project_id}", iac::router())
+		.nest(
+			"/teams/{team_id}/projects/{project_id}/cron",
+			cron::router(),
+		)
 		.nest("/teams/{team_id}/import", iac::import_router())
 		.nest("/teams/{team_id}/servers", servers::router())
 		.nest("/teams/{team_id}/ssh-keys", ssh_keys::router())
@@ -51,6 +55,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest("/teams/{team_id}/networks", networks::network_router())
 		.nest("/teams/{team_id}/registries", registries::router())
 		.nest("/teams/{team_id}/api-tokens", auth::tokens::router())
+		.nest("/teams/{team_id}/notifications", notifications::router())
 		.nest(
 			"/teams/{team_id}/servers/{server_id}/metrics",
 			metrics::router(),

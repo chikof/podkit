@@ -651,6 +651,11 @@ async fn render(
 					a class=(button_class(Variant::Ghost, Size::Md)) href={ (project_url(ctx.team.id, view.project.id)) "/canvas" } {
 						(icon("network")) span { "Canvas" }
 					}
+					@if ctx.perms.can(Action::Read, Resource::Cron) {
+						a class=(button_class(Variant::Ghost, Size::Md)) href={ (project_url(ctx.team.id, view.project.id)) "/cron" } {
+							(icon("clock")) span { "Scheduled tasks" }
+						}
+					}
 					@if can_pick {
 						(picker::open_button(&create_url(ctx.team.id, view.project.id, &view.environment.slug)))
 					}

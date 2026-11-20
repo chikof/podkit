@@ -20,14 +20,14 @@ use crate::applications::service::AppInput;
 use crate::change::Change as Set;
 use crate::error::{AppResult, ServerError};
 use crate::ids::{
-	ApplicationId, DatabaseId, EnvironmentId, ModelId, NetworkId, ProjectId, RegistryId, ServerId,
-	StackId, TeamId, UserId,
+	ApplicationId, CronTaskId, DatabaseId, EnvironmentId, ModelId, NetworkId, ProjectId,
+	RegistryId, ServerId, StackId, TeamId, UserId,
 };
 use crate::networks::ResourceKind;
 use crate::state::AppState;
 use crate::{
-	applications, databases, deployments, domains, env_vars, environments, links, models, networks,
-	stacks, volumes,
+	applications, cron, databases, deployments, domains, env_vars, environments, links, models,
+	networks, stacks, volumes,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -193,7 +193,111 @@ impl Cx<'_> {
 			(Kind::Stack, Action::Delete) => self.stack_delete(change).await,
 			(Kind::App, Action::Create | Action::Update) => self.app_set(change).await,
 			(Kind::App, Action::Delete) => self.app_delete(change).await,
+			(Kind::Cron, Action::Create) => self.cron_create(change).await,
+			(Kind::Cron, Action::Update) => self.cron_update(change).await,
+			(Kind::Cron, Action::Delete) => self.cron_delete(change).await,
 		}
+	}
+
+	// ----- scheduled tasks
+
+	fn cron_doc(&self, change: &Change) -> AppResult<&super::doc::CronDoc> {
+		self.env_doc(change)?
+			.cron
+			.get(&change.name)
+			.ok_or_else(|| invalid("the scheduled task is not in the file"))
+	}
+
+	fn cron_app(
+		&self,
+		change: &Change,
+		doc: &super::doc::CronDoc,
+	) -> AppResult<Option<ApplicationId>> {
+		doc.app
+			.as_ref()
+			.map(|name| {
+				self.ids
+					.objects
+					.get(&Key::of(Kind::App, change.environment.as_deref(), name))
+					.copied()
+					.map(ApplicationId)
+					.ok_or_else(|| invalid(format!("application \"{name}\" does not exist")))
+			})
+			.transpose()
+	}
+
+	async fn cron_create(&mut self, change: &Change) -> AppResult<()> {
+		let doc = self.cron_doc(change)?;
+		let kind = cron::Kind::parse(&doc.kind)
+			.ok_or_else(|| invalid(format!("\"{}\" is not a kind of task", doc.kind)))?;
+		let made = cron::service::create(
+			&self.state.db,
+			self.user,
+			self.team,
+			self.project,
+			cron::service::CreateInput {
+				environment: self.environment(change)?,
+				name: change.name.clone(),
+				kind,
+				application: self.cron_app(change, doc)?,
+				server: doc.server.as_deref().map(|s| self.server(s)).transpose()?,
+				image: doc.image.clone(),
+				command: doc.command.clone(),
+				schedule: doc.schedule.clone(),
+				timezone: doc.timezone.clone().unwrap_or_else(|| "UTC".to_owned()),
+				timeout_s: doc.timeout.unwrap_or(cron::limits::DEFAULT_TIMEOUT_S),
+				concurrency: doc
+					.concurrency
+					.as_deref()
+					.and_then(cron::Concurrency::parse)
+					.unwrap_or(cron::Concurrency::Skip),
+				max_retries: doc.retries.unwrap_or(0),
+				retry_backoff_s: doc.retry_delay.unwrap_or(cron::limits::DEFAULT_BACKOFF_S),
+				enabled: doc.enabled.unwrap_or(true),
+			},
+		)
+		.await?;
+		self.ids.objects.insert(Self::key(change), made.id.0);
+		Ok(())
+	}
+
+	async fn cron_update(&mut self, change: &Change) -> AppResult<()> {
+		let id = CronTaskId(self.id_of(change)?);
+		let doc = self.cron_doc(change)?;
+		cron::service::update(
+			&self.state.db,
+			self.user,
+			self.team,
+			self.project,
+			id,
+			cron::service::UpdateInput {
+				name: None,
+				// An empty string removes the image, so the app's is used.
+				image: Some(doc.image.clone().unwrap_or_default()),
+				server: doc.server.as_deref().map(|s| self.server(s)).transpose()?,
+				command: Some(doc.command.clone()),
+				schedule: Some(doc.schedule.clone()),
+				timezone: Some(doc.timezone.clone().unwrap_or_else(|| "UTC".to_owned())),
+				timeout_s: Some(doc.timeout.unwrap_or(cron::limits::DEFAULT_TIMEOUT_S)),
+				concurrency: Some(
+					doc.concurrency
+						.as_deref()
+						.and_then(cron::Concurrency::parse)
+						.unwrap_or(cron::Concurrency::Skip),
+				),
+				max_retries: Some(doc.retries.unwrap_or(0)),
+				retry_backoff_s: Some(doc.retry_delay.unwrap_or(cron::limits::DEFAULT_BACKOFF_S)),
+				enabled: Some(doc.enabled.unwrap_or(true)),
+			},
+		)
+		.await?;
+		Ok(())
+	}
+
+	async fn cron_delete(&mut self, change: &Change) -> AppResult<()> {
+		let id = CronTaskId(self.id_of(change)?);
+		cron::service::remove(self.state, self.user, self.team, self.project, id).await?;
+		Ok(())
 	}
 
 	// ----- environments

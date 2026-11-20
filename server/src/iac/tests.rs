@@ -1075,3 +1075,286 @@ async fn iac_a_real_export_validates_against_the_schema_and_the_secrets_file_of_
 		.expect("the docs show a secrets file");
 	assert!(!super::objects::Secrets::parse(block).unwrap().0.is_empty());
 }
+
+// ----- scheduled tasks
+
+/// [`file`] with an exec task in the web app and a one-shot container.
+fn file_with_cron(server: &str) -> String {
+	let base = without_domains(&file(server));
+	format!(
+		r#"{base}
+[projects.shop.environments.production.cron.laravel]
+kind = "exec"
+app = "web"
+command = "php artisan schedule:run"
+schedule = "* * * * *"
+timezone = "Europe/Berlin"
+retries = 2
+
+[projects.shop.environments.production.cron.cleanup]
+kind = "container"
+server = "{server}"
+image = "docker.io/library/busybox"
+command = "date"
+schedule = "0 3 * * *"
+concurrency = "queue"
+enabled = false
+"#
+	)
+}
+
+fn cron_issue_paths(plan: &Value) -> Vec<String> {
+	plan["issues"]
+		.as_array()
+		.unwrap()
+		.iter()
+		.map(|i| i["path"].as_str().unwrap().to_owned())
+		.collect()
+}
+
+#[db_test]
+async fn iac_cron_tasks_apply_export_and_plan_nothing_the_second_time(db: PgPool) {
+	let w = World::new(db, "alice").await;
+	let text = file_with_cron(&w.server);
+	let plan = w.plan(&text, &secrets(), false).await;
+	assert!(plan["issues"].as_array().unwrap().is_empty(), "{plan}");
+	let created: Vec<&str> = plan["changes"]
+		.as_array()
+		.unwrap()
+		.iter()
+		.filter(|c| c["kind"] == "cron")
+		.map(|c| c["name"].as_str().unwrap())
+		.collect();
+	assert_eq!(created, ["cleanup", "laravel"], "{plan}");
+
+	let (s, applied) = w.apply(&text, &secrets(), false).await;
+	assert_eq!(s, StatusCode::OK, "{applied}");
+	assert!(applied["report"]["failed"].is_null(), "{applied}");
+	assert_eq!(count(&w.db, "cron_tasks").await, 2);
+	let row: (String, String, i32, bool, Option<String>) = sqlx::query_as(
+		"SELECT timezone, kind, max_retries, enabled, image FROM cron_tasks WHERE name = 'laravel'",
+	)
+	.fetch_one(&w.db)
+	.await
+	.unwrap();
+	assert_eq!(row.0, "Europe/Berlin");
+	assert_eq!(
+		(row.1.as_str(), row.2, row.3, row.4),
+		("exec", 2, true, None)
+	);
+	let (policy, enabled, next): (String, bool, Option<time::OffsetDateTime>) = sqlx::query_as(
+		"SELECT concurrency, enabled, next_run_at FROM cron_tasks WHERE name = 'cleanup'",
+	)
+	.fetch_one(&w.db)
+	.await
+	.unwrap();
+	assert_eq!(policy, "queue");
+	assert!(!enabled && next.is_none(), "a paused task has no next run");
+
+	let exported = w.export().await;
+	assert!(exported.contains("[projects.shop.environments.production.cron.laravel]"));
+	assert!(exported.contains("timezone = \"Europe/Berlin\""));
+	assert!(exported.contains("enabled = false"));
+	assert!(
+		!exported.contains("timeout") && !exported.contains("retry_delay"),
+		"defaults are left out:\n{exported}"
+	);
+	assert_eq!(exported, w.export().await);
+
+	// Planning the export again, and applying the file again, change nothing.
+	let again = w.plan(&exported, &secrets(), false).await;
+	assert_eq!(again["changes"].as_array().unwrap().len(), 0, "{again}");
+	let (_, second) = w.apply(&text, &secrets(), false).await;
+	assert_eq!(
+		second["report"]["applied"].as_array().unwrap().len(),
+		0,
+		"{second}"
+	);
+	assert_eq!(count(&w.db, "cron_tasks").await, 2);
+}
+
+#[db_test]
+async fn iac_cron_a_changed_task_updates_and_prune_removes_one(db: PgPool) {
+	let w = World::new(db, "alice").await;
+	let text = file_with_cron(&w.server);
+	w.apply(&text, &secrets(), false).await;
+
+	let edited = text
+		.replace("schedule = \"* * * * *\"", "schedule = \"*/10 * * * *\"")
+		.replace("retries = 2", "retries = 3\ntimeout = 60");
+	let plan = w.plan(&edited, &secrets(), false).await;
+	let change = plan["changes"]
+		.as_array()
+		.unwrap()
+		.iter()
+		.find(|c| c["kind"] == "cron")
+		.unwrap();
+	assert_eq!(change["action"], "update", "{plan}");
+	assert_eq!(change["will_redeploy"], false);
+	let fields: Vec<&str> = change["fields"]
+		.as_array()
+		.unwrap()
+		.iter()
+		.map(|f| f["field"].as_str().unwrap())
+		.collect();
+	assert_eq!(fields, ["retries", "schedule", "timeout"], "{plan}");
+
+	let (s, applied) = w.apply(&edited, &secrets(), false).await;
+	assert_eq!(s, StatusCode::OK, "{applied}");
+	let (schedule, retries, timeout): (String, i32, i32) = sqlx::query_as(
+		"SELECT schedule, max_retries, timeout_s FROM cron_tasks WHERE name = 'laravel'",
+	)
+	.fetch_one(&w.db)
+	.await
+	.unwrap();
+	assert_eq!(
+		(schedule.as_str(), retries, timeout),
+		("*/10 * * * *", 3, 60)
+	);
+
+	// Without the second task: listed, not deleted, unless asked to prune.
+	let (head, _) = edited
+		.split_once("\n[projects.shop.environments.production.cron.cleanup]")
+		.unwrap();
+	let plan = w.plan(head, &secrets(), false).await;
+	assert_eq!(plan["extra"].as_array().unwrap().len(), 1, "{plan}");
+	w.apply(head, &secrets(), false).await;
+	assert_eq!(count(&w.db, "cron_tasks").await, 2);
+	let (s, applied) = w.apply(head, &secrets(), true).await;
+	assert_eq!(s, StatusCode::OK, "{applied}");
+	assert_eq!(count(&w.db, "cron_tasks").await, 1);
+}
+
+#[db_test]
+async fn iac_cron_a_bad_task_is_an_issue_that_stops_the_apply(db: PgPool) {
+	let w = World::new(db, "alice").await;
+	let base = without_domains(&file(&w.server));
+	let task =
+		|body: &str| format!("{base}\n[projects.shop.environments.production.cron.t]\n{body}\n");
+	for (what, body, path) in [
+		(
+			"an exec task without an app",
+			"kind = \"exec\"\ncommand = \"x\"\nschedule = \"* * * * *\"",
+			"app",
+		),
+		(
+			"an app that is not in the file",
+			"kind = \"exec\"\napp = \"ghost\"\ncommand = \"x\"\nschedule = \"* * * * *\"",
+			"app",
+		),
+		(
+			"a schedule that is not cron",
+			"kind = \"exec\"\napp = \"web\"\ncommand = \"x\"\nschedule = \"daily\"",
+			"schedule",
+		),
+		(
+			"a time zone that does not exist",
+			"kind = \"exec\"\napp = \"web\"\ncommand = \"x\"\nschedule = \"* * * * *\"\ntimezone = \"Mars/Base\"",
+			"schedule",
+		),
+		(
+			"a container without an image or app",
+			"kind = \"container\"\ncommand = \"x\"\nschedule = \"* * * * *\"",
+			"image",
+		),
+		(
+			"a policy that does not exist",
+			"kind = \"exec\"\napp = \"web\"\ncommand = \"x\"\nschedule = \"* * * * *\"\nconcurrency = \"always\"",
+			"concurrency",
+		),
+	] {
+		let plan = w.plan(&task(body), &secrets(), false).await;
+		let paths = cron_issue_paths(&plan);
+		assert!(
+			paths.iter().any(|p| p.ends_with(&format!("cron.t.{path}"))),
+			"{what}: {paths:?}"
+		);
+		let (s, applied) = w.apply(&task(body), &secrets(), false).await;
+		assert_ne!(s, StatusCode::OK, "{what}: {applied}");
+	}
+	assert_eq!(count(&w.db, "cron_tasks").await, 0);
+
+	// What a task runs in cannot change in place.
+	w.apply(&file_with_cron(&w.server), &secrets(), false).await;
+	let moved = file_with_cron(&w.server).replace(
+		"kind = \"exec\"\napp = \"web\"",
+		"kind = \"exec\"\napp = \"cache\"",
+	);
+	let plan = w.plan(&moved, &secrets(), false).await;
+	assert!(
+		cron_issue_paths(&plan)
+			.iter()
+			.any(|p| p.ends_with("laravel.app")),
+		"{plan}"
+	);
+}
+
+#[db_test]
+async fn iac_cron_tasks_survive_the_round_trip_into_an_empty_team(db: PgPool) {
+	let a = World::new(db.clone(), "alice").await;
+	let (s, _) = a.apply(&file_with_cron(&a.server), &secrets(), false).await;
+	assert_eq!(s, StatusCode::OK);
+	let first = a.export().await;
+
+	let bob = World::new_empty(db.clone(), "bob").await;
+	let (s, imported) = call(
+		&bob.app,
+		"POST",
+		&format!("/api/v1/teams/{}/import/apply", bob.team),
+		Some(&bob.token),
+		Some(json!({ "file": first, "secrets": secrets() })),
+	)
+	.await;
+	assert_eq!(s, StatusCode::OK, "{imported}");
+	let made = imported["projects"][0]["project_id"].as_i64().unwrap();
+	let (s, second) = text(
+		&bob.app,
+		"GET",
+		&format!("/api/v1/teams/{}/projects/{made}/export", bob.team),
+		&bob.token,
+		"",
+	)
+	.await;
+	assert_eq!(s, StatusCode::OK, "{second}");
+	assert_eq!(first, second, "identical apart from ids and secrets");
+	assert_eq!(count(&db, "cron_tasks").await, 4, "two in each team");
+}
+
+#[db_test]
+async fn iac_cron_a_member_who_may_not_create_tasks_cannot_apply_any_of_the_file(db: PgPool) {
+	let w = World::new(db.clone(), "alice").await;
+	let role = member_role(&db, w.team, "alice").await;
+	revoke_permission(&db, role, "create", "cron").await;
+	let (s, body) = w.apply(&file_with_cron(&w.server), &secrets(), false).await;
+	assert_eq!(s, StatusCode::FORBIDDEN, "{body}");
+	assert_eq!(count(&db, "cron_tasks").await, 0);
+	assert_eq!(
+		count(&db, "applications").await,
+		0,
+		"not even what she may create"
+	);
+	// She can still ask what it would do.
+	let plan = w.plan(&file_with_cron(&w.server), &secrets(), false).await;
+	assert!(plan["changes"].as_array().unwrap().len() > 3);
+}
+
+#[db_test]
+async fn iac_cron_another_teams_tasks_are_not_in_an_export_or_a_plan(db: PgPool) {
+	let a = World::new(db.clone(), "alice").await;
+	a.apply(&file_with_cron(&a.server), &secrets(), false).await;
+	let bob = World::new(db.clone(), "bob").await;
+	let exported = bob.export().await;
+	assert!(
+		!exported.contains("laravel") && !exported.contains("cron"),
+		"{exported}"
+	);
+	let (s, _) = call(
+		&bob.app,
+		"GET",
+		&format!("/api/v1/teams/{}/projects/{}/export", bob.team, a.project),
+		Some(&bob.token),
+		None,
+	)
+	.await;
+	assert_eq!(s, StatusCode::NOT_FOUND);
+}

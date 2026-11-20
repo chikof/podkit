@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Serialize;
 use serde_json::Value;
 
-use super::doc::{ModelDoc, ProjectDoc};
+use super::doc::{CronDoc, EnvironmentDoc, ModelDoc, ProjectDoc};
 use super::objects::{Fv, Key, Kind, Obj, is_collection, is_write_only};
 use crate::validate;
 
@@ -127,6 +127,7 @@ fn immutable(kind: Kind, field: &str) -> bool {
 		Kind::Stack => field == "server",
 		Kind::Model => !is_collection(field),
 		Kind::Network => matches!(field, "server" | "internal"),
+		Kind::Cron => matches!(field, "kind" | "app"),
 		Kind::Environment => false,
 	}
 }
@@ -392,6 +393,107 @@ fn check_model(path: &str, model: &ModelDoc, refs: &Refs, issues: &mut Vec<Issue
 	}
 }
 
+/// A scheduled task: what it runs in must be in the file, and its schedule and numbers must
+/// be ones the service accepts, so an apply does not stop halfway on them.
+fn check_cron(
+	at: &str,
+	env: &EnvironmentDoc,
+	task: &CronDoc,
+	refs: &Refs,
+	issues: &mut Vec<Issue>,
+) {
+	use crate::cron::limits::{MAX_BACKOFF_S, MAX_RETRIES, MAX_TIMEOUT_S};
+	let mut bad = |field: &str, message: String| {
+		issues.push(Issue::new(format!("{at}.{field}"), message));
+	};
+	match task.kind.as_str() {
+		"exec" => {
+			if task.app.is_none() {
+				bad("app", "a task that runs in an app names the app".to_owned());
+			}
+			if task.image.is_some() || task.server.is_some() {
+				bad(
+					"kind",
+					"a task that runs in an app has no image or server of its own".to_owned(),
+				);
+			}
+		}
+		"container" => {
+			if task.app.is_none() {
+				match (&task.image, &task.server) {
+					(None, _) => bad(
+						"image",
+						"a one-shot container needs an image or an app".to_owned(),
+					),
+					(_, None) => bad(
+						"server",
+						"a one-shot container without an app names its server".to_owned(),
+					),
+					(_, Some(server)) if !named(&refs.servers, server) => bad(
+						"server",
+						format!("no server named \"{server}\" in this team"),
+					),
+					_ => {}
+				}
+			} else if task.server.is_some() {
+				bad(
+					"server",
+					"a task with an app runs on the app's server".to_owned(),
+				);
+			}
+		}
+		other => bad(
+			"kind",
+			format!("kind is exec or container, not \"{other}\""),
+		),
+	}
+	if let Some(app) = &task.app
+		&& !env.apps.contains_key(app)
+	{
+		bad(
+			"app",
+			format!("no application named \"{app}\" in this environment of the file"),
+		);
+	}
+	if task.command.trim().is_empty() {
+		bad("command", "the command is empty".to_owned());
+	}
+	if let Err(why) =
+		crate::cron::schedule::validate(&task.schedule, task.timezone.as_deref().unwrap_or("UTC"))
+	{
+		bad("schedule", why);
+	}
+	if let Some(policy) = &task.concurrency
+		&& crate::cron::Concurrency::parse(policy).is_none()
+	{
+		bad(
+			"concurrency",
+			"concurrency is skip, queue or allow".to_owned(),
+		);
+	}
+	if let Some(t) = task.timeout
+		&& !(1..=MAX_TIMEOUT_S).contains(&t)
+	{
+		bad(
+			"timeout",
+			format!("timeout is 1 to {MAX_TIMEOUT_S} seconds"),
+		);
+	}
+	if let Some(r) = task.retries
+		&& !(0..=MAX_RETRIES).contains(&r)
+	{
+		bad("retries", format!("retries is 0 to {MAX_RETRIES}"));
+	}
+	if let Some(d) = task.retry_delay
+		&& !(1..=MAX_BACKOFF_S).contains(&d)
+	{
+		bad(
+			"retry_delay",
+			format!("retry_delay is 1 to {MAX_BACKOFF_S} seconds"),
+		);
+	}
+}
+
 /// What is wrong with a file before it is compared with anything: unknown names, a key that
 /// is not a slug, a link to a model that is not in the file.
 #[must_use]
@@ -536,6 +638,9 @@ pub fn validate_doc(project: &ProjectDoc, refs: &Refs) -> Vec<Issue> {
 			} else {
 				check_model(&at, model, refs, &mut issues);
 			}
+		}
+		for (name, task) in &env.cron {
+			check_cron(&format!("{at}.cron.{name}"), env, task, refs, &mut issues);
 		}
 	}
 	for network in &project.networks {

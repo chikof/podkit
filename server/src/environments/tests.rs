@@ -656,9 +656,11 @@ async fn environments_migration_backfills_and_round_trips(db: PgPool) {
 	let (_token, team) = user_with_team(&app, "alice").await;
 	let server = server_id(&db, team).await;
 
-	// Back to the shape before 0034 (undoing 0040 and 0036, which depend on it, first),
+	// Back to the shape before 0034 (undoing 0052, 0048, 0040 and 0036, which depend on it, first),
 	// then seed it the way it used to be filled.
 	for down in [
+		include_str!("../../migrations/0052_cron.down.sql"),
+		include_str!("../../migrations/0048_notifications.down.sql"),
 		include_str!("../../migrations/0040_networks.down.sql"),
 		include_str!("../../migrations/0036_stacks.down.sql"),
 	] {

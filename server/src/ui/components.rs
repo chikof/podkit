@@ -18,6 +18,7 @@ mod avatar;
 mod avatar_field;
 mod badge;
 mod banner;
+mod bell;
 mod breadcrumb;
 mod button;
 mod card;
@@ -49,6 +50,7 @@ pub use avatar::{avatar, user_avatar, user_avatar_lg};
 pub use avatar_field::{AvatarField, avatar_field};
 pub use badge::{Status, Tone, badge, status_badge, status_dot};
 pub use banner::{BannerKind, banner};
+pub use bell::bell;
 pub use breadcrumb::breadcrumb;
 pub use button::{
 	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, Size, Variant, button, button_class, icon_button,

@@ -11,7 +11,7 @@ use maud::{Markup, html};
 
 use super::sidebar::team_items;
 use crate::ui::components::{
-	MENU_ITEM, MarkSize, dialog_open_button, dropdown_menu, icon, kbd, menu_label, menu_link,
+	MENU_ITEM, MarkSize, bell, dialog_open_button, dropdown_menu, icon, kbd, menu_label, menu_link,
 	menu_separator, team_mark,
 };
 use crate::ui::extract::{ProjectScope, TeamCtx};
@@ -246,6 +246,7 @@ pub fn bar(ctx: &TeamCtx, crumbs: &[Crumb<'_>]) -> Markup {
 					span class="ui-search-label" { "Search or jump to…" }
 					span class="ui-search-kbd" aria-hidden="true" { (kbd("Ctrl K")) }
 				}))
+				(bell(ctx.team.id.0, ctx.unread))
 				(theme_flip())
 			}
 		}
