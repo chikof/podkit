@@ -3,7 +3,14 @@
 # form posts, then checks the pages never show a secret, and deletes it.
 section_applications() {
 	local suffix="$RANDOM$RANDOM" project server app base secret
-	local slug="smoke-app-$suffix" key='-----BEGIN OPENSSH PRIVATE KEY-----smoke-key-material'
+	local slug="smoke-app-$suffix" key keydir keymark
+	# A pasted deploy key must parse (K1), so make a real throwaway one.
+	keydir="$(mktemp -d)"
+	ssh-keygen -q -t ed25519 -N '' -f "$keydir/k" || fail "ssh-keygen"
+	key="$(<"$keydir/k")"
+	keymark="$(sed -n 2p "$keydir/k")"
+	rm -f "$keydir/k" "$keydir/k.pub"
+	rmdir "$keydir"
 	project="$(api POST "/api/v1/teams/$TEAM/projects" \
 		"$(jq -n --arg s "smoke-$suffix" '{name: "Smoke apps", slug: $s}')" | jq -er .id)"
 	server="$(api GET "/api/v1/teams/$TEAM/servers" |
@@ -27,18 +34,18 @@ section_applications() {
 
 	app="$(api GET "/api/v1/teams/$TEAM/projects/$project/applications" | jq -er --arg s "$slug" '.[] | select(.slug == $s) | .id')"
 	expect_page "$base" "Smoke app"
-	expect_absent "$secret" BEGIN "smoke-key-material"
+	expect_absent "$secret" BEGIN "$keymark"
 	expect_page "$base/apps/$app" "Smoke app"
 	expect_page "$base/apps/$app" "$slug"
-	expect_absent "$secret" BEGIN "smoke-key-material" "Webhook secret"
-	expect_page "$base/apps/$app/settings" "Save changes"
-	expect_absent "$secret" BEGIN "smoke-key-material"
-	expect_page "$base/apps/$app/settings" "A deploy key is stored."
+	expect_absent "$secret" BEGIN "$keymark" "Webhook secret"
+	expect_page "$base/apps/$app/settings" "data-save-bar"
+	expect_absent "$secret" BEGIN "$keymark"
+	expect_page "$base/apps/$app/settings" "Uses the key"
 
 	# Blank credentials keep the stored key; a bad URL is an inline message.
 	ui_post "$base/apps/$app/settings" "$(jq '.name = "Smoke app 2" | .deploy_key = ""' <<<"$form")"
 	grep -qF 'Settings saved' "$BODY" || fail "save: no toast: $(head -c 300 "$BODY")"
-	expect_page "$base/apps/$app/settings" "A deploy key is stored."
+	expect_page "$base/apps/$app/settings" "Uses the key"
 	ui_post "$base/apps/$app/settings" "$(jq '.repo_url = "nope"' <<<"$form")"
 	grep -qF "That repository URL isn't valid" "$BODY" || fail "save: bad URL not reported inline"
 	echo "ok   settings save keeps credentials, validation is inline"

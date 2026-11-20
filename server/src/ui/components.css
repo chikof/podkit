@@ -769,7 +769,9 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 	.ui-crumb-link { display: inline-flex; align-items: center; }
 	.ui-crumb-switch { width: 44px; }
 	.ui-search { min-width: 0; width: 44px; height: 44px; padding: 0; justify-content: center; }
-	.ui-search-label, .ui-search-kbd { display: none; }
+	.ui-search-kbd { display: none; }
+	/* Visually hidden, not display:none: the button's accessible name is this label. */
+	.ui-search-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 	.ui-bar-actions .ui-icon-btn { width: 44px; height: 44px; }
 
 	.ui-page { padding: var(--s-4) var(--s-4) calc(var(--tab-h) + var(--s-7)); gap: var(--s-4); }
@@ -2147,4 +2149,16 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 @supports (position-area: inline-end) {
 	.ui-chart-cross { anchor-name: var(--an); }
 	.ui-chart-tip { inset: auto; position-anchor: var(--an); position-area: inline-end; margin-inline: var(--s-3); position-try-fallbacks: flip-inline; }
+}
+
+/* == sidebar rail: nav groups ==
+   The Infrastructure heading is wider than the 56 px rail. In the grid it stretched the column, so the
+   centered icons of that group were pushed past the sidebar edge and clipped. The column is now capped
+   to the sidebar, and the heading folds to a hairline (its text stays in the accessibility tree). */
+.ui-nav-group { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 761px) {
+	.ui-shell-collapsed .ui-nav-heading {
+		height: 1px; margin-block: var(--s-2); padding: 0; overflow: hidden; background-color: var(--border);
+		color: transparent; white-space: nowrap;
+	}
 }
