@@ -16,6 +16,7 @@ pub mod networks;
 pub mod projects;
 pub mod registries;
 pub mod search;
+pub mod security;
 pub mod servers;
 pub mod settings;
 pub mod stacks;

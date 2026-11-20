@@ -6,6 +6,7 @@
 //! list and its one primary action is "Create resource". `/projects/{p}` shows the default
 //! environment; `/projects/{p}/{env_slug}` a named one.
 
+use std::collections::HashMap;
 use std::fmt::Write as _;
 
 use axum::Router;
@@ -25,15 +26,17 @@ use crate::auth::permission::{Action, Resource};
 use crate::environments;
 use crate::ids::{EnvironmentId, ProjectId, TeamId};
 use crate::projects::overview::{self, EnvironmentView, Pick, ResourceCard, ResourceKind};
+use crate::scanning::{Badge, BadgeState, Subject};
 use crate::state::AppState;
 use crate::ui::components::{
 	BUTTON_DANGER, Dismiss, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, SELECT, Size, TabItem, Tone,
 	Variant, button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu, empty_state,
-	icon, menu_label, skeleton_row, tabs,
+	icon, menu_label, security_badge, skeleton_row, tabs,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page, form_error};
 use crate::ui::pages::apps::{app_url, public_link};
+use crate::ui::pages::security;
 use crate::ui::sse::js_string;
 use crate::ui::status::poll;
 use crate::ui::{error, shell, sse};
@@ -252,6 +255,35 @@ fn changed_since(seen: Option<&str>, card: &ResourceCard) -> bool {
 		.is_some_and(|before| before != status_data(card.status))
 }
 
+/// The security badge of each resource the list shows, by what it is. A resource never
+/// scanned is not in it.
+type Badges = HashMap<Subject, Badge>;
+
+/// The thing a security badge is about: a resource card is one of the four kinds scanning
+/// covers.
+const fn subject_of(card: &ResourceCard) -> Subject {
+	match card.kind {
+		ResourceKind::Application => Subject::Application(crate::ids::ApplicationId(card.id)),
+		ResourceKind::Database => Subject::Database(crate::ids::DatabaseId(card.id)),
+		ResourceKind::Model => Subject::Model(crate::ids::ModelId(card.id)),
+		ResourceKind::Stack => Subject::Stack(crate::ids::StackId(card.id)),
+	}
+}
+
+/// One query for the whole list. Empty without `read scan`, so the rows carry no badge.
+async fn badges_of(s: &AppState, ctx: &TeamCtx, view: &EnvironmentView) -> Badges {
+	let subjects: Vec<Subject> = view.resources.iter().map(subject_of).collect();
+	security::row_badges(s, ctx, &subjects)
+		.await
+		.into_iter()
+		.filter(|(_, badge)| badge.state != BadgeState::None)
+		.collect()
+}
+
+#[allow(
+	clippy::too_many_arguments,
+	reason = "one row of the list: what it shows, when, where it sits and whether it just changed"
+)]
 fn row(
 	s: &AppState,
 	ctx: &TeamCtx,
@@ -260,8 +292,13 @@ fn row(
 	now: OffsetDateTime,
 	index: usize,
 	flip: bool,
+	badges: &Badges,
 ) -> Markup {
 	let href = resource_href(ctx.team.id, project, card);
+	let subject = subject_of(card);
+	let badge = badges
+		.get(&subject)
+		.map(|b| security_badge(b, Some(&security::tab_url(ctx.team.id, project, subject))));
 	let when = match (card.kind, card.changed_at) {
 		(ResourceKind::Application, Some(at)) => Some(("Deployed ", at)),
 		(ResourceKind::Model | ResourceKind::Stack, Some(at)) => Some(("Updated ", at)),
@@ -272,7 +309,7 @@ fn row(
 			data-status=(status_data(card.status)) style=(format!("--i:{index}")) {
 			div class="ui-res-logo" { (card_logo(card)) }
 			div class="ui-res-main" {
-				span class="ui-res-kind" { (icon(kind_icon(card.kind))) (card.kind.label()) }
+				span class="ui-res-kind" { (icon(kind_icon(card.kind))) (card.kind.label()) @if let Some(b) = &badge { (b) } }
 				h2 class="ui-res-name" {
 					a href=(href) class="ui-res-link" { (card.name) }
 				}
@@ -316,6 +353,7 @@ fn grid(
 	filter: &Filter,
 	now: OffsetDateTime,
 	seen: Option<&str>,
+	badges: &Badges,
 ) -> Markup {
 	let shown: Vec<&ResourceCard> = view.resources.iter().filter(|c| filter.keeps(c)).collect();
 	let busy = shown.iter().any(|c| in_flight(c.status));
@@ -351,7 +389,7 @@ fn grid(
 				(skeleton_rows())
 				ul class="ui-res-list" "data-show"="!$_filtering" aria-label="Resources" {
 					@for (i, card) in shown.iter().enumerate() {
-						(row(s, ctx, view.project.id, card, now, i, changed_since(seen, card)))
+						(row(s, ctx, view.project.id, card, now, i, changed_since(seen, card), badges))
 					}
 					@if picker::can_create_any(ctx) {
 						li class="ui-res ui-res-new" style=(format!("--i:{}", shown.len())) {
@@ -572,6 +610,7 @@ async fn render(
 		.await
 		.map_err(|e| error::page(ctx, &e))?;
 	let now = OffsetDateTime::now_utc();
+	let badges = badges_of(s, ctx, &view).await;
 	let can_pick = picker::can_create_any(ctx);
 	let can_create_env = ctx.perms.can(Action::Create, Resource::Project);
 	let can_update = ctx.perms.can(Action::Update, Resource::Project);
@@ -615,7 +654,7 @@ async fn render(
 			}
 			(tab_row(ctx, &view))
 			(filter_bar(&view, ctx, filter))
-			(grid(s, ctx, &view, filter, now, None))
+			(grid(s, ctx, &view, filter, now, None, &badges))
 			@if can_create_env { (create_env_dialog(ctx.team.id, view.project.id)) }
 			@if can_update { (rename_env_dialog(ctx.team.id, view.project.id)) }
 			@if can_delete { (delete_env_dialog(ctx.team.id, view.project.id, &view.environment.name)) }
@@ -673,7 +712,16 @@ async fn resources(
 			// The page tells what it last showed; the rows whose status moved play the
 			// change animation, then `seen` catches up so the next poll does not repeat it.
 			let seen = (!sig.seen.is_empty()).then_some(sig.seen.as_str());
-			let markup = grid(&s, &ctx, &view, &filter, OffsetDateTime::now_utc(), seen);
+			let badges = badges_of(&s, &ctx, &view).await;
+			let markup = grid(
+				&s,
+				&ctx,
+				&view,
+				&filter,
+				OffsetDateTime::now_utc(),
+				seen,
+				&badges,
+			);
 			sse::patch(&markup)
 				.and(sse::signals(&json!({ "seen": seen_of(&view.resources) })))
 				.into_response()

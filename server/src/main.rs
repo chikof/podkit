@@ -48,6 +48,7 @@ mod networks;
 mod projects;
 mod registries;
 mod routes;
+mod scanning;
 mod scope;
 mod search;
 mod servers;

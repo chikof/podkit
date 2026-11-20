@@ -10,7 +10,7 @@ use crate::state::AppState;
 use crate::{
 	applications, auth, backups, catalog, databases, deployments, domains, env_vars, environments,
 	git_providers, links, logos, members, metrics, model_files, models, networks, projects,
-	registries, servers, ssh_keys, stacks, teams, templates, ui, volumes, webhooks,
+	registries, scanning, servers, ssh_keys, stacks, teams, templates, ui, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -93,6 +93,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			model_files::token::router(),
 		)
 		.nest(&format!("{DB}/{{database_id}}/backups"), backups::router())
+		.nest("/teams/{team_id}/security", scanning::routes::router())
 		.nest("/webhooks", webhooks::router())
 		// Last, so it wraps every route above: a `pk_` token is resolved and limited here.
 		.layer(axum::middleware::from_fn_with_state(

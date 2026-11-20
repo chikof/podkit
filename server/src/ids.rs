@@ -51,4 +51,6 @@ id!(
 	ApiTokenId,
 	GitProviderId,
 	JobId,
+	ScanId,
+	ScanIgnoreId,
 );

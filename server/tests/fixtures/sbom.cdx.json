@@ -1,0 +1,227 @@
+{
+ "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
+ "bomFormat": "CycloneDX",
+ "specVersion": "1.7",
+ "serialNumber": "urn:uuid:fc87e65d-7060-4b83-8317-bf19ba7d3824",
+ "version": 1,
+ "metadata": {
+  "timestamp": "2026-11-20T00:39:32Z",
+  "tools": {
+   "components": [
+    {
+     "type": "application",
+     "author": "anchore",
+     "name": "syft",
+     "version": "1.57.2"
+    }
+   ]
+  },
+  "component": {
+   "bom-ref": "9efa843ae74ccc26",
+   "type": "container",
+   "name": "/in/img.tar",
+   "version": "sha256:cf3e39a4e2b5b73e9fb764f5c40c9780b6dc9e6da3c4be04609584daabd79a12"
+  },
+  "properties": [
+   {
+    "name": "syft:image:labels:org.opencontainers.image.created",
+    "value": "2025-01-21T09:16:17Z"
+   },
+   {
+    "name": "syft:image:labels:org.opencontainers.image.description",
+    "value": "Tiny Go webserver that prints OS information and HTTP request to output"
+   },
+   {
+    "name": "syft:image:labels:org.opencontainers.image.documentation",
+    "value": "https://github.com/traefik/whoami"
+   },
+   {
+    "name": "syft:image:labels:org.opencontainers.image.revision",
+    "value": "b49779da6892cf6838b3452d436136a63539958d"
+   },
+   {
+    "name": "syft:image:labels:org.opencontainers.image.source",
+    "value": "https://github.com/traefik/whoami"
+   },
+   {
+    "name": "syft:image:labels:org.opencontainers.image.title",
+    "value": "whoami"
+   },
+   {
+    "name": "syft:image:labels:org.opencontainers.image.url",
+    "value": "https://github.com/traefik/whoami"
+   },
+   {
+    "name": "syft:image:labels:org.opencontainers.image.version",
+    "value": "1.10.4"
+   }
+  ]
+ },
+ "components": [
+  {
+   "bom-ref": "pkg:golang/github.com/gorilla/websocket@v1.5.3?package-id=eb02326b655f2942",
+   "type": "library",
+   "name": "github.com/gorilla/websocket",
+   "version": "v1.5.3",
+   "cpe": "cpe:2.3:a:gorilla:websocket:v1.5.3:*:*:*:*:*:*:*",
+   "purl": "pkg:golang/github.com/gorilla/websocket@v1.5.3",
+   "properties": [
+    {
+     "name": "syft:package:foundBy",
+     "value": "go-module-binary-cataloger"
+    },
+    {
+     "name": "syft:package:language",
+     "value": "go"
+    },
+    {
+     "name": "syft:package:type",
+     "value": "go-module"
+    },
+    {
+     "name": "syft:package:metadataType",
+     "value": "go-module-buildinfo-entry"
+    },
+    {
+     "name": "syft:location:0:layerID",
+     "value": "sha256:f72eaf5de0bfe9c047432468b3f2faa1cad6835c74180d1428b45343ca22fc65"
+    },
+    {
+     "name": "syft:location:0:path",
+     "value": "/whoami"
+    },
+    {
+     "name": "syft:metadata:architecture",
+     "value": "amd64"
+    },
+    {
+     "name": "syft:metadata:goCompiledVersion",
+     "value": "go1.23.5"
+    },
+    {
+     "name": "syft:metadata:h1Digest",
+     "value": "h1:saDtZ6Pbx/0u+bgYQ3q96pZgCzfhKXGPqt7kZ72aNNg="
+    },
+    {
+     "name": "syft:metadata:mainModule",
+     "value": "github.com/traefik/whoami"
+    }
+   ]
+  },
+  {
+   "bom-ref": "pkg:golang/github.com/traefik/whoami@v1.10.4?package-id=83b1238048e49c3f",
+   "type": "library",
+   "name": "github.com/traefik/whoami",
+   "version": "v1.10.4",
+   "cpe": "cpe:2.3:a:traefik:whoami:v1.10.4:*:*:*:*:*:*:*",
+   "purl": "pkg:golang/github.com/traefik/whoami@v1.10.4",
+   "properties": [
+    {
+     "name": "syft:package:foundBy",
+     "value": "go-module-binary-cataloger"
+    },
+    {
+     "name": "syft:package:language",
+     "value": "go"
+    },
+    {
+     "name": "syft:package:type",
+     "value": "go-module"
+    },
+    {
+     "name": "syft:package:metadataType",
+     "value": "go-module-buildinfo-entry"
+    },
+    {
+     "name": "syft:location:0:layerID",
+     "value": "sha256:f72eaf5de0bfe9c047432468b3f2faa1cad6835c74180d1428b45343ca22fc65"
+    },
+    {
+     "name": "syft:location:0:path",
+     "value": "/whoami"
+    },
+    {
+     "name": "syft:metadata:architecture",
+     "value": "amd64"
+    },
+    {
+     "name": "syft:metadata:goCompiledVersion",
+     "value": "go1.23.5"
+    },
+    {
+     "name": "syft:metadata:mainModule",
+     "value": "github.com/traefik/whoami"
+    }
+   ]
+  },
+  {
+   "bom-ref": "pkg:golang/stdlib@1.23.5?package-id=ec8f1e3499558e90",
+   "type": "library",
+   "name": "stdlib",
+   "version": "go1.23.5",
+   "licenses": [
+    {
+     "license": {
+      "id": "BSD-3-Clause"
+     }
+    }
+   ],
+   "cpe": "cpe:2.3:a:golang:go:1.23.5:-:*:*:*:*:*:*",
+   "purl": "pkg:golang/stdlib@1.23.5",
+   "properties": [
+    {
+     "name": "syft:package:foundBy",
+     "value": "go-module-binary-cataloger"
+    },
+    {
+     "name": "syft:package:language",
+     "value": "go"
+    },
+    {
+     "name": "syft:package:type",
+     "value": "go-module"
+    },
+    {
+     "name": "syft:package:metadataType",
+     "value": "go-module-buildinfo-entry"
+    },
+    {
+     "name": "syft:location:0:layerID",
+     "value": "sha256:f72eaf5de0bfe9c047432468b3f2faa1cad6835c74180d1428b45343ca22fc65"
+    },
+    {
+     "name": "syft:location:0:path",
+     "value": "/whoami"
+    },
+    {
+     "name": "syft:metadata:goCompiledVersion",
+     "value": "go1.23.5"
+    }
+   ]
+  },
+  {
+   "bom-ref": "a340ea359fd00d6a",
+   "type": "file",
+   "name": "/whoami",
+   "hashes": [
+    {
+     "alg": "SHA-1",
+     "content": "0741316384c4e5e45ab5418ab8f50d9efc3e4195"
+    },
+    {
+     "alg": "SHA-256",
+     "content": "5bd9e85a4725b300d478350d531e9f28f1aa18855640677c5fc559004f9b3e1d"
+    }
+   ]
+  }
+ ],
+ "dependencies": [
+  {
+   "ref": "pkg:golang/github.com/traefik/whoami@v1.10.4?package-id=83b1238048e49c3f",
+   "dependsOn": [
+    "pkg:golang/github.com/gorilla/websocket@v1.5.3?package-id=eb02326b655f2942",
+    "pkg:golang/stdlib@1.23.5?package-id=ec8f1e3499558e90"
+   ]
+  }
+ ]
+}

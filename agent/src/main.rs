@@ -169,6 +169,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	sweep_backups(&args.data_dir.join("backups"));
 
 	let podman = Podman::connect(&args.podman_socket)?;
+	agent::scan::sweep(&podman, &args.data_dir).await;
 	let supervisor = Supervisor::start(podman.clone(), &args.data_dir).await;
 	let gateway_dir = agent::gateway::sidecar::dir(&args.data_dir);
 	let ctx = Arc::new(Ctx {

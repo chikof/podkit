@@ -57,6 +57,8 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/probes", post(probe_route))
 		.route("/v1/ingress/ensure", post(ensure_ingress))
 		.route("/v1/registry-login", post(registry_login_route))
+		.route("/v1/scan", post(scan_route))
+		.route("/v1/scan/resolve", post(scan_resolve_route))
 		.route("/v1/gateway/config", put(gateway_config))
 		.route("/v1/gateway/usage/drain", post(gateway_drain))
 		.route("/v1/gateway/chat", post(gateway_chat))
@@ -626,6 +628,37 @@ async fn registry_login_route(
 		));
 	}
 	Ok(Json(crate::registry::check(&ctx.http, &req).await))
+}
+
+async fn scan_resolve_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::ScanResolveRequest>,
+) -> Result<Json<proto::ScanResolveResponse>, ApiError> {
+	crate::scan::resolve(&ctx.podman(), &req.image)
+		.await
+		.map(|image_id| Json(proto::ScanResolveResponse { image_id }))
+		.map_err(|e| scan_error(&e))
+}
+
+async fn scan_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::ScanRequest>,
+) -> Result<Json<proto::ScanResult>, ApiError> {
+	let config = crate::scan::ScanConfig::new(&ctx.data_dir);
+	crate::scan::run(&ctx.podman(), &config, &req)
+		.await
+		.map(Json)
+		.map_err(|e| scan_error(&e))
+}
+
+fn scan_error(e: &crate::scan::ScanError) -> ApiError {
+	use crate::scan::ScanError;
+	let status = match *e {
+		ScanError::ImageMissing(_) => StatusCode::NOT_FOUND,
+		ScanError::Invalid(_) => StatusCode::BAD_REQUEST,
+		ScanError::Failed(_) => StatusCode::INTERNAL_SERVER_ERROR,
+	};
+	ApiError::new(status, e.to_string())
 }
 
 async fn model_download_route(

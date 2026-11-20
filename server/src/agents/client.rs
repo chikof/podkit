@@ -23,6 +23,8 @@ const HEALTH_TIMEOUT: Duration = Duration::from_secs(5);
 /// `df` and `nvidia-smi` may each take a few seconds on a busy host.
 const HARDWARE_TIMEOUT: Duration = Duration::from_secs(20);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// A scan exports the image and runs two containers; the biggest images take minutes.
+const SCAN_TIMEOUT: Duration = Duration::from_mins(25);
 const MAX_LINE_BYTES: usize = 1024 * 1024;
 const MAX_ERROR_BODY_BYTES: usize = 64 * 1024;
 
@@ -61,6 +63,72 @@ impl AgentClient {
 	pub async fn stats(&self) -> Result<proto::Stats, ServerError> {
 		self.json_within(HARDWARE_TIMEOUT, Method::GET, "/v1/stats", None::<&()>)
 			.await
+	}
+
+	/// Which image id a reference names on the server.
+	///
+	/// # Errors
+	/// `Validation` carrying the agent's message when the image is missing;
+	/// see [`AgentClient::health`] otherwise.
+	pub async fn scan_resolve(&self, image: &str) -> Result<String, ServerError> {
+		let body = proto::ScanResolveRequest {
+			image: image.to_owned(),
+		};
+		let resp: proto::ScanResolveResponse = self
+			.json_within_messages(
+				REQUEST_TIMEOUT,
+				Method::POST,
+				"/v1/scan/resolve",
+				Some(&body),
+			)
+			.await?;
+		Ok(resp.image_id)
+	}
+
+	/// Runs a scan (or a rescan from an SBOM). Takes minutes for a big image.
+	///
+	/// # Errors
+	/// `Validation` carrying the agent's message when the scan fails (an
+	/// out-of-memory scanner says so); see [`AgentClient::health`] otherwise.
+	pub async fn scan(&self, req: &proto::ScanRequest) -> Result<proto::ScanResult, ServerError> {
+		self.json_within_messages(SCAN_TIMEOUT, Method::POST, "/v1/scan", Some(req))
+			.await
+	}
+
+	/// Like `json_within`, but a non-2xx answer keeps the agent's message.
+	async fn json_within_messages<T: DeserializeOwned>(
+		&self,
+		limit: Duration,
+		method: Method,
+		path: &str,
+		body: Option<&(impl Serialize + Sync)>,
+	) -> Result<T, ServerError> {
+		let body = encode(body)?;
+		let request = self.request(method, path, body);
+		with_timeout(limit, async {
+			let resp = request?.await?;
+			let status = resp.status();
+			let bytes = resp
+				.into_body()
+				.collect()
+				.await
+				.map_err(unavailable("read agent response"))?
+				.to_bytes();
+			if status.is_success() {
+				return serde_json::from_slice(&bytes)
+					.map_err(unavailable("decode agent response"));
+			}
+			let message = serde_json::from_slice::<proto::ErrorBody>(&bytes)
+				.ok()
+				.map(|b| b.error);
+			if let Some(message) = message {
+				Err(ServerError::Validation(message))
+			} else {
+				tracing::warn!(%status, "agent returned an error");
+				Err(ServerError::AgentUnavailable)
+			}
+		})
+		.await
 	}
 
 	/// # Errors

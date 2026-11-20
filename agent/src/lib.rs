@@ -12,6 +12,7 @@ pub mod podman;
 pub mod probe;
 pub mod registry;
 pub mod routes;
+pub mod scan;
 pub mod source;
 pub mod stats;
 pub mod supervisor;

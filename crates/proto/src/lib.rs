@@ -998,6 +998,84 @@ pub struct GatewayUsage {
 	pub output_tokens: u64,
 }
 
+/// `POST /v1/scan/resolve` body: which image a reference names right now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScanResolveRequest {
+	/// Image reference or id on the server.
+	pub image: String,
+}
+
+/// `POST /v1/scan/resolve` answer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScanResolveResponse {
+	/// Content id of the image (`sha256:…`): the key scans are cached under.
+	pub image_id: String,
+}
+
+/// `POST /v1/scan` body. With `image` the agent exports the image, runs Syft on
+/// it and Grype on the SBOM; with `sbom` alone it only runs Grype (a rescan,
+/// which never reads the image again).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScanRequest {
+	/// Image to scan; it must exist on the server.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub image: Option<String>,
+	/// `CycloneDX` JSON of an earlier scan, for a rescan.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub sbom: Option<String>,
+	/// CPU cap of each scanner container.
+	pub cpus: f64,
+	/// Memory cap of each scanner container, in MiB.
+	pub memory_mb: u32,
+}
+
+/// One vulnerability found in one package, reduced from Grype's match.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScanFinding {
+	/// `CVE-…`, `GHSA-…` or `GO-…`.
+	pub vuln_id: String,
+	/// Package name.
+	pub package: String,
+	/// Installed version.
+	pub version: String,
+	/// First version that fixes it, when there is one.
+	#[serde(default)]
+	pub fixed_version: Option<String>,
+	/// `critical`, `high`, `medium`, `low` or `unknown`.
+	pub severity: String,
+	/// Highest CVSS base score reported.
+	#[serde(default)]
+	pub cvss: Option<f64>,
+	/// EPSS probability (0 to 1).
+	#[serde(default)]
+	pub epss: Option<f64>,
+	/// Listed in CISA's Known Exploited Vulnerabilities catalog.
+	#[serde(default)]
+	pub kev: bool,
+	/// Where to read about it.
+	#[serde(default)]
+	pub url: Option<String>,
+}
+
+/// `POST /v1/scan` answer.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScanResult {
+	/// Content id of the scanned image; empty for a rescan.
+	#[serde(default)]
+	pub image_id: String,
+	/// `CycloneDX` JSON, set when the agent built it (not for a rescan).
+	#[serde(default)]
+	pub sbom: Option<String>,
+	/// What Grype found.
+	pub findings: Vec<ScanFinding>,
+	/// When the vulnerability database Grype used was built.
+	#[serde(default)]
+	pub db_built: Option<String>,
+	/// `syft@1.57.2 grype@0.122.1`-style versions of the tools that ran.
+	#[serde(default)]
+	pub tools: String,
+}
+
 /// Shown when Hugging Face answers a download or listing with 401 or 403.
 pub const GATED_MODEL_MESSAGE: &str =
 	"gated model: accept the license on huggingface.co and add an HF token";

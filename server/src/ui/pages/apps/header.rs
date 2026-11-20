@@ -24,6 +24,7 @@ use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::metrics::service as metrics;
 use crate::metrics::{Range, ResourcePoint};
 use crate::projects::overview::application_mark;
+use crate::scanning::Subject;
 use crate::state::AppState;
 use crate::ui::components::{
 	BUTTON, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, Size,
@@ -31,6 +32,7 @@ use crate::ui::components::{
 	menu_separator,
 };
 use crate::ui::extract::TeamCtx;
+use crate::ui::pages::security;
 use crate::ui::sse::js_string;
 use crate::ui::status::{Status, poll};
 use crate::ui::{error, sse};
@@ -191,6 +193,8 @@ pub async fn header(
 	let mark = application_mark(app.repo_url.as_deref(), app.build_strategy);
 	let rollback_to = rows.iter().find(|d| d.can_rollback());
 	let point = usage(s, ctx, app).await;
+	let security =
+		security::header_badge(s, ctx, app.project_id, Subject::Application(app.id)).await;
 	let running = app.latest == Some(DeploymentStatus::Running);
 	let dash = || "\u{2014}".to_owned();
 	let figures = [
@@ -235,6 +239,7 @@ pub async fn header(
 				&app.name,
 				&html! {
 					(chrome::dot(shape, word))
+					(security)
 					a href=(link) class="ui-head-url" target="_blank" rel="noopener noreferrer" {
 						span class="truncate" { (link) }
 						(icon("external-link"))
