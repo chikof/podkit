@@ -1766,6 +1766,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 	.ui-todo-row { grid-template-columns: auto minmax(0, 1fr); row-gap: var(--s-2); }
 	.ui-todo-state, .ui-todo-act { grid-column: 2; justify-content: flex-start; }
 	.ui-todo-act a, .ui-todo-act button, .ui-infra-chip { min-height: 2.75rem; }
+}
 /* == iac ========================================================================================= */
 /* Infrastructure as code: the plan as a diff. Tones and spacing are the system's; the colored lines
    also carry a sign and a screen-reader word, so color is never the only cue. */
@@ -1807,6 +1808,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 #iac-result:empty { display: none; }
 @media (prefers-reduced-motion: no-preference) {
 	.ui-iac { animation: ui-vt-in var(--dur-2) var(--ease) both; }
+}
 
 /* == canvas ========================================================================== */
 /* The project canvas (D1, design/canvas/README.md): one transformed world holding frames,
