@@ -16,6 +16,7 @@ use crate::ui::extract::TeamCtx;
 use crate::ui::layout::Crumb;
 
 mod detail;
+mod key_picker;
 mod list;
 mod monitoring;
 #[cfg(test)]

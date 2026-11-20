@@ -1,0 +1,136 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT id AS \"id: SshKeyId\", team_id AS \"team_id: TeamId\", name, algorithm, public_key,\n\t\t\t\tfingerprint, private_key, created_by AS \"created_by: UserId\", created_at, last_used_at\n\t\t\tFROM ssh_keys WHERE team_id = $1 ORDER BY name, id\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: SshKeyId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "ssh_keys",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "team_id: TeamId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "ssh_keys",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "ssh_keys",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "algorithm",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "ssh_keys",
+            "name": "algorithm"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "public_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "ssh_keys",
+            "name": "public_key"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "fingerprint",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "ssh_keys",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "private_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "ssh_keys",
+            "name": "private_key"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_by: UserId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "ssh_keys",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ssh_keys",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "last_used_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "ssh_keys",
+            "name": "last_used_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "7c016570d68dea680bbf7fed4d83e601c0d7f60beb175db249dffe9bbfae1925"
+}

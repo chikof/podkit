@@ -1,7 +1,7 @@
 //! Applications: a git repo built and run as a container on one of the
 //! team's servers.
 
-use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId};
+use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId, SshKeyId};
 use crate::servers::Server;
 
 pub mod routes;
@@ -88,8 +88,8 @@ pub struct Application {
 	pub image: Option<String>,
 	/// age-encrypted JSON `{"username", "password"}` for a private registry.
 	pub registry_auth: Option<Vec<u8>>,
-	/// age-encrypted SSH private key (PEM) for `ssh://`/scp-form repo URLs.
-	pub deploy_key: Option<Vec<u8>>,
+	/// The vault key used as the deploy key for `ssh://`/scp-form repo URLs.
+	pub deploy_key_id: Option<SshKeyId>,
 	/// age-encrypted access token for `https://` repo URLs.
 	pub git_token: Option<Vec<u8>>,
 	pub build_strategy: BuildStrategy,
@@ -119,7 +119,7 @@ pub struct NewApplication {
 	pub source_kind: SourceKind,
 	pub image: Option<String>,
 	pub registry_auth: Option<Vec<u8>>,
-	pub deploy_key: Option<Vec<u8>>,
+	pub deploy_key_id: Option<SshKeyId>,
 	pub git_token: Option<Vec<u8>>,
 	pub build_strategy: BuildStrategy,
 	pub dockerfile_path: String,
@@ -129,7 +129,7 @@ pub struct NewApplication {
 	pub cpu_limit: Option<f32>,
 }
 
-/// Editable fields. `deploy_key`/`git_token`/`registry_auth` of `None`
+/// Editable fields. `deploy_key_id`/`git_token`/`registry_auth` of `None`
 /// leave the stored value untouched. The source kind cannot change.
 pub struct ApplicationUpdate {
 	pub name: String,
@@ -138,7 +138,7 @@ pub struct ApplicationUpdate {
 	pub git_ref: String,
 	pub image: Option<String>,
 	pub registry_auth: Option<Vec<u8>>,
-	pub deploy_key: Option<Vec<u8>>,
+	pub deploy_key_id: Option<SshKeyId>,
 	pub git_token: Option<Vec<u8>>,
 	pub build_strategy: BuildStrategy,
 	pub dockerfile_path: String,
@@ -158,7 +158,7 @@ pub async fn insert(
 		Application,
 		r#"
 			INSERT INTO applications
-				(id, project_id, environment_id, server_id, name, slug, repo_url, git_ref, deploy_key, git_token,
+				(id, project_id, environment_id, server_id, name, slug, repo_url, git_ref, deploy_key_id, git_token,
 				 build_strategy, dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,
 				 source_kind, image, registry_auth)
 			VALUES ($1, $2, $19, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
@@ -166,7 +166,7 @@ pub async fn insert(
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				source_kind AS "source_kind: SourceKind", image, registry_auth,
-				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
+				deploy_key_id AS "deploy_key_id: SshKeyId", git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 		"#,
 		new.id as ApplicationId,
@@ -176,7 +176,7 @@ pub async fn insert(
 		new.slug,
 		new.repo_url,
 		new.git_ref,
-		new.deploy_key,
+		new.deploy_key_id as Option<SshKeyId>,
 		new.git_token,
 		new.build_strategy as BuildStrategy,
 		new.dockerfile_path,
@@ -204,7 +204,7 @@ pub async fn update(
 		r#"
 			UPDATE applications
 			SET name = $2, slug = $3, repo_url = $4, git_ref = $5,
-				deploy_key = COALESCE($6, deploy_key), git_token = COALESCE($7, git_token),
+				deploy_key_id = COALESCE($6, deploy_key_id), git_token = COALESCE($7, git_token),
 				build_strategy = $8, dockerfile_path = $9, container_port = $10,
 				memory_limit_mb = $11, cpu_limit = $12, image = $13,
 				registry_auth = COALESCE($14, registry_auth), updated_at = NOW()
@@ -213,7 +213,7 @@ pub async fn update(
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				source_kind AS "source_kind: SourceKind", image, registry_auth,
-				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
+				deploy_key_id AS "deploy_key_id: SshKeyId", git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 		"#,
 		id as ApplicationId,
@@ -221,7 +221,7 @@ pub async fn update(
 		u.slug,
 		u.repo_url,
 		u.git_ref,
-		u.deploy_key,
+		u.deploy_key_id as Option<SshKeyId>,
 		u.git_token,
 		u.build_strategy as BuildStrategy,
 		u.dockerfile_path,
@@ -248,7 +248,7 @@ pub async fn find_by_id(
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				source_kind AS "source_kind: SourceKind", image, registry_auth,
-				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
+				deploy_key_id AS "deploy_key_id: SshKeyId", git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 			FROM applications WHERE id = $1
 		"#,
@@ -269,7 +269,7 @@ pub async fn list_by_environment(
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				source_kind AS "source_kind: SourceKind", image, registry_auth,
-				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
+				deploy_key_id AS "deploy_key_id: SshKeyId", git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 			FROM applications WHERE environment_id = $1 ORDER BY id
 		"#,

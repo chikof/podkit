@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT a.id AS \"id: ApplicationId\", a.project_id AS \"project_id: ProjectId\", a.environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\ta.server_id AS \"server_id: ServerId\", a.name, a.slug, a.repo_url, a.git_ref,\n\t\t\t\ta.source_kind AS \"source_kind: SourceKind\", a.image, a.registry_auth,\n\t\t\t\ta.deploy_key, a.git_token, a.build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\ta.dockerfile_path, a.container_port, a.webhook_secret, a.memory_limit_mb,\n\t\t\t\ta.cpu_limit\n\t\t\tFROM applications a\n\t\t\tJOIN projects p ON p.id = a.project_id\n\t\t\tWHERE a.id = $3 AND a.project_id = $2 AND p.team_id = $1\n\t\t",
+  "query": "\n\t\t\tSELECT a.id AS \"id: ApplicationId\", a.project_id AS \"project_id: ProjectId\", a.environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\ta.server_id AS \"server_id: ServerId\", a.name, a.slug, a.repo_url, a.git_ref,\n\t\t\t\ta.source_kind AS \"source_kind: SourceKind\", a.image, a.registry_auth,\n\t\t\t\ta.deploy_key_id AS \"deploy_key_id: SshKeyId\", a.git_token, a.build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\ta.dockerfile_path, a.container_port, a.webhook_secret, a.memory_limit_mb,\n\t\t\t\ta.cpu_limit\n\t\t\tFROM applications a\n\t\t\tJOIN projects p ON p.id = a.project_id\n\t\t\tWHERE a.id = $3 AND a.project_id = $2 AND p.team_id = $1\n\t\t",
   "describe": {
     "columns": [
       {
@@ -126,12 +126,12 @@
       },
       {
         "ordinal": 11,
-        "name": "deploy_key",
-        "type_info": "Bytea",
+        "name": "deploy_key_id: SshKeyId",
+        "type_info": "Int8",
         "origin": {
           "Table": {
             "table": "applications",
-            "name": "deploy_key"
+            "name": "deploy_key_id"
           }
         }
       },
@@ -242,5 +242,5 @@
       true
     ]
   },
-  "hash": "d2641abb34fbaf5f49b5fd9cac129e33d9e89214d24ce134e4d1ef2e5cf16865"
+  "hash": "e0bd882935e726165afb7c1dd6e60b30a6165ad08ad2e51b34b9dd968949faab"
 }

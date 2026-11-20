@@ -94,6 +94,9 @@ pub enum ServerError {
 	#[error("stack not found")]
 	StackNotFound,
 
+	#[error("ssh key not found")]
+	SshKeyNotFound,
+
 	/// The request is well-formed but names something podkit does not run,
 	/// e.g. a compose key outside the supported subset. `issues` is shown to
 	/// the caller next to the message.
@@ -165,6 +168,7 @@ impl ServerError {
 			| Self::BackupTargetNotFound
 			| Self::ModelFileNotFound
 			| Self::StackNotFound
+			| Self::SshKeyNotFound
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,
 			Self::Unprocessable { .. } => StatusCode::UNPROCESSABLE_ENTITY,
 			Self::Forbidden | Self::RegistrationClosed => StatusCode::FORBIDDEN,

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT id AS \"id: ServerId\", team_id AS \"team_id: TeamId\", name, hostname, ssh_port,\n\t\t\t\tssh_user, ssh_private_key, podman_socket_path, is_local,\n\t\t\t\tstatus AS \"status: ServerStatus\", host_key, agent_socket_path, agent_version,\n\t\t\t\tarch, status_message,\n\t\t\t\thardware AS \"hardware?: sqlx::types::Json<proto::Hardware>\", hardware_at\n\t\t\tFROM servers\n\t\t\tWHERE id = $1\n\t\t",
+  "query": "\n\t\t\tSELECT id AS \"id: ServerId\", team_id AS \"team_id: TeamId\", name, hostname, ssh_port,\n\t\t\t\tssh_user, ssh_key_id AS \"ssh_key_id: SshKeyId\", podman_socket_path, is_local,\n\t\t\t\tstatus AS \"status: ServerStatus\", host_key, agent_socket_path, agent_version,\n\t\t\t\tarch, status_message,\n\t\t\t\thardware AS \"hardware?: sqlx::types::Json<proto::Hardware>\", hardware_at\n\t\t\tFROM servers\n\t\t\tWHERE id = $2 AND team_id = $1\n\t\t",
   "describe": {
     "columns": [
       {
@@ -71,12 +71,12 @@
       },
       {
         "ordinal": 6,
-        "name": "ssh_private_key",
-        "type_info": "Bytea",
+        "name": "ssh_key_id: SshKeyId",
+        "type_info": "Int8",
         "origin": {
           "Table": {
             "table": "servers",
-            "name": "ssh_private_key"
+            "name": "ssh_key_id"
           }
         }
       },
@@ -193,6 +193,7 @@
     ],
     "parameters": {
       "Left": [
+        "Int8",
         "Int8"
       ]
     },
@@ -216,5 +217,5 @@
       true
     ]
   },
-  "hash": "50e41178fca06c1882c64936bc4a23dadeddb5286003530f56f4e5c64f96f52a"
+  "hash": "7aa879427fa869bdeed28cc88c31641999f9419948319d19ad0cccc97ec9cd54"
 }

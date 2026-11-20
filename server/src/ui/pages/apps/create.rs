@@ -17,7 +17,7 @@ use serde_json::json;
 
 use super::form::{
 	AppSignals, blank_signals, build_fields, clear_credentials, git_source_fields, identity_fields,
-	image_source_fields, runtime_fields,
+	image_source_fields, load_keys, runtime_fields,
 };
 use super::{app_url, crumbs, origin, project_url};
 use crate::applications::SourceKind;
@@ -25,10 +25,11 @@ use crate::applications::service::{self, Created};
 use crate::error::ServerError;
 use crate::ids::{EnvironmentId, ProjectId, ServerId, TeamId};
 use crate::projects;
+use crate::ssh_keys::service::{self as key_service, KeyView};
 use crate::state::AppState;
 use crate::ui::components::{
 	BUTTON_OUTLINE, INPUT, Size, TabItem, Variant, button_class, card, card_content, card_footer,
-	card_section, icon, link_button, tabs,
+	card_section, copy_field, icon, link_button, tabs,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -114,10 +115,11 @@ async fn new_page(
 		"evt.preventDefault(); @post({})",
 		crate::ui::sse::js_string(&format!("{}/apps", project_url(ctx.team.id, project.id)))
 	);
+	let (keys, can_create_key) = load_keys(&s, &ctx).await;
 	let source_fields = if image {
 		html! { (image_source_fields(None)) }
 	} else {
-		html! { (git_source_fields(None)) }
+		html! { (git_source_fields(None, &keys, can_create_key)) }
 	};
 	let body = html! {
 		div class="flex flex-col gap-6" data-signals=(blank_signals(&servers, source, &environment)) {
@@ -173,7 +175,7 @@ pub(super) fn copy_row(label: &str, value: &str) -> Markup {
 
 /// Shown once, in the response to the create request. Nothing here can be fetched again: the
 /// secret exists in plaintext only in this stream.
-fn created_card(ctx: &TeamCtx, origin: &str, created: &Created) -> Markup {
+fn created_card(ctx: &TeamCtx, origin: &str, created: &Created, key: Option<&KeyView>) -> Markup {
 	let app = &created.app;
 	let webhook = format!("{origin}/webhooks/deploy/{}", app.id);
 	html! {
@@ -188,6 +190,10 @@ fn created_card(ctx: &TeamCtx, origin: &str, created: &Created) -> Markup {
 					div class="flex flex-col gap-4" {
 						(copy_row("Webhook URL", &webhook))
 						(copy_row("Webhook secret", &created.webhook_secret))
+						@if let Some(key) = key {
+							(copy_field("deploy-key-public", &format!("Deploy key: public key of {}", key.name), &key.public_key))
+							p class="text-sm text-muted-foreground" { "Add it as a deploy key at your git provider before the first deploy. Read access is enough." }
+						}
 						div class="ui-banner ui-banner-warn" role="status" { (icon("triangle-alert")) div class="ui-banner-body" { b { "Copy the secret now." } " It is shown only this once and can't be recovered." } }
 						p class="text-sm text-muted-foreground" {
 							"Send it as the GitHub signature secret, or in an "
@@ -226,11 +232,26 @@ async fn create(
 		service::create(&s, ctx.user.id, ctx.team.id, project, server, input).await
 	}
 	.await;
+	// A key made or picked for this application: its public half goes on the created card.
+	let key = match &result {
+		Ok(created) => match created.app.deploy_key_id {
+			Some(id) => key_service::get(&s.db, ctx.user.id, ctx.team.id, id)
+				.await
+				.ok(),
+			None => None,
+		},
+		Err(_) => None,
+	};
 	match result {
-		Ok(created) => sse::patch(&created_card(&ctx, &origin(&headers), &created))
-			.and(sse::signals(&clear_credentials()))
-			.and(sse::signals(&json!({ "_error": "" })))
-			.into_response(),
+		Ok(created) => sse::patch(&created_card(
+			&ctx,
+			&origin(&headers),
+			&created,
+			key.as_ref(),
+		))
+		.and(sse::signals(&clear_credentials()))
+		.and(sse::signals(&json!({ "_error": "" })))
+		.into_response(),
 		Err(e) => error::action(&e),
 	}
 }
