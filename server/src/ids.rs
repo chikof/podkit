@@ -36,6 +36,7 @@ id!(
 	ApplicationId,
 	DeploymentId,
 	EnvVarId,
+	SharedVarId,
 	DomainId,
 	VolumeId,
 	DatabaseId,

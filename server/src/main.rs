@@ -55,6 +55,7 @@ mod scanning;
 mod scope;
 mod search;
 mod servers;
+mod shared_env;
 mod ssh_keys;
 mod stacks;
 mod state;

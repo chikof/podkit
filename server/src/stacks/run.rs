@@ -25,6 +25,7 @@ use crate::logs::JobLog;
 use crate::networks;
 use crate::registries;
 use crate::servers;
+use crate::shared_env;
 use crate::stacks;
 use crate::state::AppState;
 
@@ -137,6 +138,18 @@ impl Ctx<'_> {
 		let env = stacks::decrypt_env(&self.state.secrets, self.stack).map_err(|e| {
 			tracing::error!(stack = self.stack.id.0, "{e}");
 			failed("failed to read the stack's variables")
+		})?;
+		// The shared variables sit under the stack's own, so `${KEY}` finds them.
+		let env = shared_env::resolve::stack_inputs(
+			self.state,
+			self.stack.project_id,
+			self.stack.environment_id,
+			env,
+		)
+		.await
+		.map_err(|e| {
+			tracing::error!(stack = self.stack.id.0, "shared variables: {e}");
+			failed(e.to_string())
 		})?;
 		let files = stacks::decrypt_files(&self.state.secrets, self.stack).map_err(|e| {
 			tracing::error!(stack = self.stack.id.0, "{e}");

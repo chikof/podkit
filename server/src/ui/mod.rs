@@ -105,6 +105,7 @@ pub fn router() -> Router<AppState> {
 		.merge(pages::iac::router())
 		.merge(pages::canvas::router())
 		.merge(pages::settings::router())
+		.merge(pages::shared_env::router())
 		.merge(pages::search::router())
 		.merge(pages::security::router())
 		.merge(pages::stacks::router())

@@ -613,6 +613,7 @@ async fn render(
 	let now = OffsetDateTime::now_utc();
 	let badges = badges_of(s, ctx, &view).await;
 	let can_pick = picker::can_create_any(ctx);
+	let can_read_shared = ctx.perms.can(Action::Read, Resource::EnvVar);
 	let can_create_env = ctx.perms.can(Action::Create, Resource::Project);
 	let can_update = ctx.perms.can(Action::Update, Resource::Project);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::Project);
@@ -650,6 +651,11 @@ async fn render(
 				div class="ui-page-actions" {
 					a class=(button_class(Variant::Ghost, Size::Md)) href={ (project_url(ctx.team.id, view.project.id)) "/canvas" } {
 						(icon("network")) span { "Canvas" }
+					}
+					@if can_read_shared {
+						a class=(button_class(Variant::Ghost, Size::Md)) href={ (project_url(ctx.team.id, view.project.id)) "/shared-variables" } {
+							(icon("layers")) span { "Shared variables" }
+						}
 					}
 					@if can_pick {
 						(picker::open_button(&create_url(ctx.team.id, view.project.id, &view.environment.slug)))
