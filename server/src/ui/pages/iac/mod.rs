@@ -385,7 +385,7 @@ async fn import_page(State(_s): State<AppState>, ctx: TeamCtx) -> Result<Markup,
 				(card_section("Plan an import", Some("Nothing is made until you import."), None))
 				(card_content(&html! {
 					form id="iac-form" class="flex flex-col gap-4" "data-on:submit"=(plan_post) "data-indicator:_busy" {
-						(form_fields("An import deletes the empty production environment a new project starts with if the file does not have one."))
+						(form_fields("Not used for new projects. An import still removes the empty production environment a new project starts with, if the file has none."))
 						(form_error())
 						div class="flex justify-end" {
 							button type="submit" class=(BUTTON) "data-attr:disabled"="$_busy" {
