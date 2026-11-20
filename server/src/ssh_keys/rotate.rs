@@ -19,6 +19,7 @@ use super::keygen::{self, Kind};
 use super::service::{KeyView, open_private};
 use super::{SshKey, UsedBy};
 use crate::agents::tunnel::{self, SshTarget};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ServerId, SshKeyId, TeamId, UserId};
@@ -179,6 +180,10 @@ struct Plan<'a> {
 /// `Forbidden` without `update ssh_key` and `update server`; `SshKeyNotFound` for another
 /// team's key; `Validation` for a key nothing uses. Per-server trouble is in the report, not
 /// an error.
+#[allow(
+	clippy::too_many_lines,
+	reason = "the steps of a rotation read better in one place"
+)]
 pub async fn rotate<R: SshRunner>(
 	s: &AppState,
 	runner: &R,
@@ -272,12 +277,37 @@ pub async fn rotate<R: SshRunner>(
 		None
 	};
 
+	let moved_ids: Vec<i64> = servers
+		.iter()
+		.filter(|r| !matches!(r.outcome, Outcome::Failed(_)))
+		.map(|r| r.id.0)
+		.collect();
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"ssh_key.rotate",
+		Target::new("ssh_key", old.id).named(&old.name),
+		Diff::new()
+			.set("new_key_id", new_view.as_ref().map(|k| k.id.0))
+			.set("servers_moved", moved_ids)
+			.set("servers_failed", servers.len() - moved_count(&servers))
+			.secret("private_key"),
+	)
+	.await;
 	Ok(Rotation {
 		new_key: new_view,
 		old_key: old.id,
 		servers,
 		applications: usage.applications,
 	})
+}
+
+fn moved_count(servers: &[ServerReport]) -> usize {
+	servers
+		.iter()
+		.filter(|r| !matches!(r.outcome, Outcome::Failed(_)))
+		.count()
 }
 
 async fn rotate_server<R: SshRunner>(

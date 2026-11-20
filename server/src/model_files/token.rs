@@ -8,6 +8,7 @@ use crypto::age::SecretBox;
 use serde::{Deserialize, Serialize};
 use sqlx::PgExecutor;
 
+use crate::audit::{self, Diff, Target};
 use crate::auth::AuthUser;
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
@@ -95,6 +96,15 @@ pub async fn store(s: &AppState, user: UserId, team: TeamId, token: &str) -> App
 	.bind(blob)
 	.execute(&s.db)
 	.await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"huggingface_token.set",
+		Target::none("huggingface_token"),
+		Diff::new().secret("token"),
+	)
+	.await;
 	Ok(())
 }
 
@@ -108,6 +118,15 @@ pub async fn clear(s: &AppState, user: UserId, team: TeamId) -> AppResult<()> {
 		.bind(team)
 		.execute(&s.db)
 		.await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"huggingface_token.clear",
+		Target::none("huggingface_token"),
+		Diff::new(),
+	)
+	.await;
 	Ok(())
 }
 

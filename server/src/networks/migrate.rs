@@ -11,6 +11,7 @@ use tracing::warn;
 use super::attach::{self, Home};
 use super::service::{default_aliases, parse_container, resource};
 use super::{ResourceKind, importable_name};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::AppResult;
 use crate::ids::{ServerId, TeamId, UserId};
@@ -77,6 +78,17 @@ pub async fn run(
 	if let Err(e) = links::push(state, &client, server.id).await {
 		warn!(server = %server.id, error = %e, "pushing the gateway networks failed");
 	}
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"server.networks_migrate",
+		Target::new("server", server.id).named(&server.name),
+		Diff::new()
+			.set("moved", report.moved.len())
+			.set("redeploy", report.redeploy.len()),
+	)
+	.await;
 	Ok(report)
 }
 

@@ -5,6 +5,7 @@ use sqlx::PgPool;
 use time::{Duration, OffsetDateTime};
 
 use super::{ApiToken, Grant, PREFIX, Scope};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission;
 use crate::db::is_unique_violation;
 use crate::error::{AppResult, ServerError};
@@ -154,8 +155,32 @@ pub async fn create(
 			e.into()
 		}
 	})?;
+	let token: ApiToken = row.into();
+	audit::log(
+		db,
+		user,
+		team,
+		"api_token.create",
+		Target::new("api_token", token.id).named(&token.name),
+		Diff::new()
+			.set("name", token.name.clone())
+			.set(
+				"scopes",
+				token.scopes.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+			)
+			.set(
+				"project_ids",
+				token.project_ids.iter().map(|p| p.0).collect::<Vec<_>>(),
+			)
+			.set(
+				"expires_at",
+				token.expires_at.map(OffsetDateTime::unix_timestamp),
+			)
+			.secret("secret"),
+	)
+	.await;
 	Ok(Created {
-		token: row.into(),
+		token,
 		secret: format!("{PREFIX}{prefix}_{secret}"),
 	})
 }
@@ -205,6 +230,15 @@ pub async fn revoke(
 	if gone == 0 {
 		return Err(ServerError::TokenNotFound);
 	}
+	audit::log(
+		db,
+		user,
+		team,
+		"api_token.revoke",
+		Target::new("api_token", id),
+		Diff::new(),
+	)
+	.await;
 	Ok(id)
 }
 
@@ -249,6 +283,7 @@ pub async fn resolve(db: &PgPool, raw: &str) -> Result<Grant, ServerError> {
 		tracing::warn!("failed to record API token use: {e}");
 	}
 	Ok(Grant {
+		token: row.id,
 		team: row.team_id,
 		user: row.user_id,
 		scopes: parse_scopes(&row.scopes),

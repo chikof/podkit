@@ -4,6 +4,7 @@
 use sqlx::PgPool;
 
 use super::{Domain, HOSTNAME_CONSTRAINT};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::db::is_unique_violation;
 use crate::error::{AppResult, ServerError};
@@ -36,13 +37,27 @@ pub async fn create(
 	if !validate::hostname(&hostname) {
 		return Err(ServerError::Validation("invalid hostname".to_string()));
 	}
-	super::insert(db, app.id, &hostname).await.map_err(|e| {
+	let domain = super::insert(db, app.id, &hostname).await.map_err(|e| {
 		if is_unique_violation(&e, HOSTNAME_CONSTRAINT) {
 			ServerError::DomainTaken
 		} else {
 			e.into()
 		}
-	})
+	})?;
+	audit::log(
+		db,
+		user,
+		team,
+		"domain.create",
+		Target::new("domain", domain.id)
+			.named(&hostname)
+			.in_project(project),
+		Diff::new()
+			.set("application_id", app.id.0)
+			.set("hostname", hostname.clone()),
+	)
+	.await;
+	Ok(domain)
 }
 
 /// An application's custom domains, ordered by hostname, with the server's
@@ -77,5 +92,14 @@ pub async fn remove(
 	if !super::delete(db, app.id, id).await? {
 		return Err(ServerError::DomainNotFound);
 	}
+	audit::log(
+		db,
+		user,
+		team,
+		"domain.delete",
+		Target::new("domain", id).in_project(project),
+		Diff::new().set("application_id", app.id.0),
+	)
+	.await;
 	Ok(id)
 }

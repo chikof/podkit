@@ -12,6 +12,7 @@ use super::{
 	Application, ApplicationUpdate, BuildStrategy, NewApplication, RegistryChoice, SLUG_CONSTRAINT,
 	SourceKind, StoredRegistryAuth, public_hostname,
 };
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::change::Change;
 use crate::deployments::{self, DeploymentStatus};
@@ -552,6 +553,25 @@ pub async fn create(
 	} else {
 		None
 	};
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"app.create",
+		Target::new("application", app.id)
+			.named(&app.slug)
+			.in_project(project),
+		Diff::new()
+			.set("name", app.name.clone())
+			.set("slug", app.slug.clone())
+			.set("server_id", server.id.0)
+			.set("source", app.source_kind.as_str())
+			.set("image", app.image.clone())
+			.set("repo_url", app.repo_url.as_deref().map(audit::scrub_url))
+			.set("git_ref", app.git_ref.clone())
+			.secret("webhook_secret"),
+	)
+	.await;
 	Ok(Created {
 		app: ApplicationView::new(&app, &server, None),
 		webhook_secret: webhook_secret_plain,
@@ -608,6 +628,10 @@ pub async fn get(
 /// Updates an application's configuration (everything set at creation
 /// except the server, which is immutable). Takes effect on the *next*
 /// deploy: a running container isn't touched. Needs `update application`.
+#[allow(
+	clippy::too_many_lines,
+	reason = "the audit diff lists each field that can change"
+)]
 pub async fn update(
 	s: &AppState,
 	user: UserId,
@@ -676,6 +700,52 @@ pub async fn update(
 		}
 	};
 
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"app.update",
+		Target::new("application", updated.id)
+			.named(&updated.slug)
+			.in_project(project),
+		Diff::new()
+			.changed("name", app.name.clone(), updated.name.clone())
+			.changed("slug", app.slug.clone(), updated.slug.clone())
+			.changed("image", app.image.clone(), updated.image.clone())
+			.changed(
+				"repo_url",
+				app.repo_url.as_deref().map(audit::scrub_url),
+				updated.repo_url.as_deref().map(audit::scrub_url),
+			)
+			.changed("git_ref", app.git_ref.clone(), updated.git_ref.clone())
+			.changed("container_port", app.container_port, updated.container_port)
+			.changed(
+				"dockerfile_path",
+				app.dockerfile_path.clone(),
+				updated.dockerfile_path.clone(),
+			)
+			.changed(
+				"memory_limit_mb",
+				app.memory_limit_mb,
+				updated.memory_limit_mb,
+			)
+			.changed(
+				"build_strategy",
+				app.build_strategy.as_str(),
+				updated.build_strategy.as_str(),
+			)
+			.changed(
+				"deploy_key_id",
+				app.deploy_key_id.map(|k| k.0),
+				updated.deploy_key_id.map(|k| k.0),
+			)
+			.changed(
+				"registry_id",
+				app.registry_id.map(|k| k.0),
+				updated.registry_id.map(|k| k.0),
+			),
+	)
+	.await;
 	Ok(ApplicationView::new(&updated, &server, None))
 }
 
@@ -697,6 +767,17 @@ pub async fn rotate_webhook_secret(
 		.encrypt(&plain)
 		.map_err(|e| ServerError::Validation(format!("failed to encrypt webhook secret: {e}")))?;
 	super::set_webhook_secret(&s.db, app.id, &sealed).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"app.webhook_secret.rotate",
+		Target::new("application", app.id)
+			.named(&app.slug)
+			.in_project(project),
+		Diff::new().secret("webhook_secret"),
+	)
+	.await;
 	Ok(plain)
 }
 
@@ -715,6 +796,19 @@ pub async fn remove(
 	remove_service(s, team, &app).await;
 	git_service::before_app_removed(s, &app).await;
 	super::delete(&s.db, app.id).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"app.delete",
+		Target::new("application", app.id)
+			.named(&app.slug)
+			.in_project(project),
+		Diff::new()
+			.set("name", app.name.clone())
+			.set("slug", app.slug.clone()),
+	)
+	.await;
 	Ok(app.id)
 }
 

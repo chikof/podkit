@@ -5,6 +5,7 @@ use proto::Engine;
 use sqlx::PgPool;
 
 use super::{Backup, BackupStatus};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::auth::users;
 use crate::backups;
@@ -50,7 +51,32 @@ pub async fn create(
 	let target = database
 		.backup_target_id
 		.ok_or_else(|| ServerError::Validation("configure a backup target first".to_owned()))?;
-	backups::queue(s, database.id, database.server_id, target, Some(user)).await
+	let backup = backups::queue(s, database.id, database.server_id, target, Some(user)).await?;
+	log(s, user, team, project, &database, "backup.create", &backup).await;
+	Ok(backup)
+}
+
+/// Records an action on one backup of `database`.
+async fn log(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	database: &Database,
+	action: &str,
+	backup: &backups::Backup,
+) {
+	audit::log(
+		&s.db,
+		user,
+		team,
+		action,
+		Target::new("backup", backup.id)
+			.named(&database.name)
+			.in_project(project),
+		Diff::new().set("database_id", database.id.0),
+	)
+	.await;
 }
 
 fn startable(database: &Database) -> Result<(), ServerError> {
@@ -136,7 +162,9 @@ pub async fn restore(
 ) -> AppResult<Backup> {
 	authorize(&s.db, user, team, Action::Update, Resource::Database).await?;
 	let database = scope::database(&s.db, team, project, database).await?;
-	queue_restore(s, &database, id).await
+	let backup = queue_restore(s, &database, id).await?;
+	log(s, user, team, project, &database, "backup.restore", &backup).await;
+	Ok(backup)
 }
 
 /// [`restore`], for callers that make the user confirm first: nothing is
@@ -158,7 +186,9 @@ pub async fn restore_confirmed(
 			"The name doesn't match. Type the database name exactly to restore.".to_owned(),
 		));
 	}
-	queue_restore(s, &database, id).await
+	let backup = queue_restore(s, &database, id).await?;
+	log(s, user, team, project, &database, "backup.restore", &backup).await;
+	Ok(backup)
 }
 
 async fn queue_restore(s: &AppState, database: &Database, id: BackupId) -> AppResult<Backup> {
@@ -209,5 +239,6 @@ pub async fn remove(
 		return Err(ServerError::Conflict("backup is in progress".to_owned()));
 	}
 	backups::purge(s, &backup).await?;
+	log(s, user, team, project, &database, "backup.delete", &backup).await;
 	Ok(backup.id)
 }

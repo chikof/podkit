@@ -112,6 +112,13 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 		format!("{base}/settings/api-tokens"),
 		"terminal",
 	));
+	if can(Resource::Audit) {
+		items.push(item(
+			"Audit log",
+			format!("{base}/settings/audit"),
+			"history",
+		));
+	}
 	items.push(item(
 		"Appearance",
 		format!("{base}/settings/appearance"),

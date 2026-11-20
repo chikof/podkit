@@ -4,6 +4,7 @@
 use sqlx::PgPool;
 
 use super::Project;
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ProjectId, TeamId, UserId};
@@ -56,13 +57,25 @@ pub async fn create(
 		));
 	}
 
-	super::insert(db, team, &name, slug).await.map_err(|e| {
+	let project = super::insert(db, team, &name, slug).await.map_err(|e| {
 		if crate::db::is_unique_violation(&e, SLUG_UNIQUE) {
 			ServerError::Conflict("A project with that slug already exists.".to_owned())
 		} else {
 			e.into()
 		}
-	})
+	})?;
+	audit::log(
+		db,
+		user,
+		team,
+		"project.create",
+		Target::new("project", project.id)
+			.named(&project.slug)
+			.in_project(project.id),
+		Diff::new().set("name", name).set("slug", slug),
+	)
+	.await;
+	Ok(project)
 }
 
 /// Lists a team's projects; needs `read project`.
@@ -94,5 +107,14 @@ pub async fn remove(db: &PgPool, user: UserId, team: TeamId, id: ProjectId) -> A
 	authorize(db, user, team, Action::Delete, Resource::Project).await?;
 	let project = scope::project(db, team, id).await?;
 	super::delete(db, team, project.id).await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"project.delete",
+		Target::new("project", project.id).named(&project.slug),
+		Diff::new().set("name", project.name.clone()),
+	)
+	.await;
 	Ok(project)
 }

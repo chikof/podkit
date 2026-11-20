@@ -227,6 +227,26 @@ pub async fn queue(
 		}
 		return Err(e.into());
 	}
+	if triggered_by.is_none()
+		&& let Some(ctx) = crate::audit::system_in_project(&state.db, app.project_id).await
+	{
+		crate::audit::record(
+			&state.db,
+			&ctx,
+			if reuse.is_some() {
+				"app.rollback"
+			} else {
+				"app.deploy"
+			},
+			crate::audit::Target::new("application", app.id)
+				.named(&app.slug)
+				.in_project(app.project_id),
+			crate::audit::Diff::new()
+				.set("deployment_id", deployment.id.0)
+				.set("trigger", "push"),
+		)
+		.await;
+	}
 	Ok(deployment)
 }
 

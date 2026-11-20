@@ -19,6 +19,11 @@ pub fn spawn(state: AppState) {
 			if let Err(e) = purge_jobs(&state).await {
 				tracing::warn!("failed to purge old jobs: {e}");
 			}
+			match crate::audit::service::purge_expired(&state.db).await {
+				Ok(0) => {}
+				Ok(n) => tracing::info!("purged {n} audit events past their retention"),
+				Err(e) => tracing::warn!("failed to purge audit events: {e}"),
+			}
 			purge_orphan_logs(&state).await;
 			crate::metrics::maintain(&state.db).await;
 			crate::scanning::queue_daily_rescans(&state).await;

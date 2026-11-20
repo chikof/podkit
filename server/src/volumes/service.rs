@@ -5,6 +5,7 @@ use axum::http::Method;
 use sqlx::PgPool;
 
 use super::{MOUNT_PATH_CONSTRAINT, Volume};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::db::is_unique_violation;
 use crate::error::{AppResult, ServerError};
@@ -30,13 +31,27 @@ pub async fn create(
 			"mount_path must be an absolute path other than /".to_string(),
 		));
 	}
-	super::insert(db, app.id, mount_path).await.map_err(|e| {
+	let volume = super::insert(db, app.id, mount_path).await.map_err(|e| {
 		if is_unique_violation(&e, MOUNT_PATH_CONSTRAINT) {
 			ServerError::Conflict("a volume is already mounted at that path".to_string())
 		} else {
 			e.into()
 		}
-	})
+	})?;
+	audit::log(
+		db,
+		user,
+		team,
+		"volume.create",
+		Target::new("volume", volume.id)
+			.named(mount_path)
+			.in_project(project),
+		Diff::new()
+			.set("application_id", app.id.0)
+			.set("mount_path", mount_path),
+	)
+	.await;
+	Ok(volume)
 }
 
 /// An application's volumes, ordered by mount path; needs `read volume`.
@@ -83,5 +98,14 @@ pub async fn remove(
 		})?;
 
 	super::delete(&s.db, app.id, volume.id).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"volume.delete",
+		Target::new("volume", volume.id).in_project(project),
+		Diff::new().set("application_id", app.id.0),
+	)
+	.await;
 	Ok(volume.id)
 }

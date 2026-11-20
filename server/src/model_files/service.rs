@@ -6,6 +6,7 @@ use axum::http::Method;
 
 use super::hf::{self, Selection};
 use super::{ModelFile, ModelFileStatus, NewModelFile};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{JobId, ModelFileId, ServerId, TeamId, UserId};
@@ -136,7 +137,33 @@ pub async fn create(
 		model_files::delete(&s.db, file.id).await?;
 		return Err(e);
 	}
+	log(
+		s,
+		user,
+		team,
+		&file,
+		"model_file.create",
+		Diff::new()
+			.set("repo", file.repo.clone())
+			.set("revision", file.revision.clone())
+			.set("server_id", file.server_id.0)
+			.set("total_bytes", file.total_bytes),
+	)
+	.await;
 	Ok(file)
+}
+
+/// Records an action on a model file.
+async fn log(s: &AppState, user: UserId, team: TeamId, file: &ModelFile, action: &str, diff: Diff) {
+	audit::log(
+		&s.db,
+		user,
+		team,
+		action,
+		Target::new("model_file", file.id).named(&file.repo),
+		diff,
+	)
+	.await;
 }
 
 /// The team's model files, newest first.
@@ -211,6 +238,7 @@ pub async fn retry(
 	model_files::enqueue(s, &file).await.inspect_err(|_| {
 		tracing::error!(model_file = file.id.0, "retry could not queue its job");
 	})?;
+	log(s, user, team, &file, "model_file.retry", Diff::new()).await;
 	scoped(s, team, id).await
 }
 
@@ -232,6 +260,7 @@ pub async fn cancel(
 	if let Some(job) = jobs::latest_for(&s.db, JobKind::ModelDownload, file.id.0).await? {
 		jobs::worker::cancel(s, job.id).await?;
 	}
+	log(s, user, team, &file, "model_file.cancel", Diff::new()).await;
 	scoped(s, team, id).await
 }
 
@@ -272,5 +301,14 @@ pub async fn remove(
 			e => e,
 		})?;
 	model_files::delete(&s.db, file.id).await?;
+	log(
+		s,
+		user,
+		team,
+		&file,
+		"model_file.delete",
+		Diff::new().set("repo", file.repo.clone()),
+	)
+	.await;
 	Ok(file.id)
 }

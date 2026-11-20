@@ -8,10 +8,10 @@ use tower_http::compression::predicate::{Predicate, SizeAbove};
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
-	applications, auth, avatars, backups, catalog, databases, deployments, domains, env_vars,
-	environments, git_providers, iac, links, logos, members, metrics, model_files, models,
-	networks, projects, registries, scanning, servers, ssh_keys, stacks, teams, templates, ui,
-	volumes, webhooks,
+	applications, audit, auth, avatars, backups, catalog, databases, deployments, domains,
+	env_vars, environments, git_providers, iac, links, logos, members, metrics, model_files,
+	models, networks, projects, registries, scanning, servers, ssh_keys, stacks, teams, templates,
+	ui, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -34,6 +34,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.merge(avatars::api_router())
 		.nest("/teams", teams::router())
 		.nest("/teams/{team_id}", members::router())
+		.nest("/teams/{team_id}/audit", audit::router())
 		.nest("/teams/{team_id}/projects", projects::router())
 		.nest(
 			"/teams/{team_id}/projects/{project_id}/environments",
@@ -114,6 +115,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest("/webhooks", webhooks::router())
 		.fallback(ui::not_found)
 		.layer(CookieManagerLayer::new())
+		.layer(axum::middleware::from_fn(audit::layer))
 		.layer(compression())
 		.with_state(state))
 }

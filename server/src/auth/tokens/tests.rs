@@ -619,6 +619,7 @@ async fn api_tokens_creation_is_validated_and_tokens_are_private_to_their_user(d
 
 fn grant(scopes: &[Scope], projects: &[i64]) -> Grant {
 	Grant {
+		token: crate::ids::ApiTokenId(1),
 		team: TeamId(7),
 		user: UserId(1),
 		scopes: scopes.to_vec(),

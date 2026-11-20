@@ -151,9 +151,14 @@ async fn run(
 			} => {
 				let (consumer, provider) = plan.ends();
 				debug_assert_eq!(consumer, *key);
-				let connection =
-					databases::service::reveal(s, user, team, project, DatabaseId(provider.id))
-						.await?;
+				let connection = crate::audit::quiet(databases::service::reveal(
+					s,
+					user,
+					team,
+					project,
+					DatabaseId(provider.id),
+				))
+				.await?;
 				env_vars::service::upsert(
 					s,
 					user,

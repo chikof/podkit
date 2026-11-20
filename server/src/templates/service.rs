@@ -10,6 +10,7 @@ use super::render::{Placement, Rendered, render};
 use super::{Invalid, Loaded};
 use crate::applications::service::AppInput;
 use crate::applications::{self, public_hostname};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::change::Change;
 use crate::error::{AppResult, ServerError};
@@ -150,34 +151,64 @@ pub async fn deploy(
 		));
 	}
 	let name = project_name(body.name.as_deref().unwrap_or(&loaded.template.name))?;
+	let template_id = loaded.template.id.clone();
+	let version = loaded.template.version.clone();
 
-	if as_app {
-		deploy_app(
-			s,
-			user,
-			team,
-			project,
-			environment,
-			&server,
-			loaded,
-			&name,
-			body,
+	// The pieces of a template (application, volumes, stack, domains) are one deploy to
+	// the log, not one event each.
+	let deployed = audit::quiet(async {
+		if as_app {
+			deploy_app(
+				s,
+				user,
+				team,
+				project,
+				environment,
+				&server,
+				loaded,
+				&name,
+				body,
+			)
+			.await
+		} else {
+			deploy_stack(
+				s,
+				user,
+				team,
+				project,
+				environment,
+				&server,
+				loaded,
+				&name,
+				body,
+			)
+			.await
+		}
+	})
+	.await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"template.deploy",
+		Target::new(
+			match deployed.kind {
+				Kind::Application => "application",
+				Kind::Stack => "stack",
+			},
+			deployed.id,
 		)
-		.await
-	} else {
-		deploy_stack(
-			s,
-			user,
-			team,
-			project,
-			environment,
-			&server,
-			loaded,
-			&name,
-			body,
-		)
-		.await
-	}
+		.named(&deployed.name)
+		.in_project(project),
+		Diff::new()
+			.set("template", template_id)
+			.set("version", version)
+			.set("server_id", server.id.0)
+			.set("name", deployed.name.clone())
+			.secret("credentials"),
+	)
+	.await;
+	Ok(deployed)
 }
 
 #[allow(clippy::too_many_arguments)]

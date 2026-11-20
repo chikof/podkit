@@ -269,11 +269,20 @@ async fn page(
 	content: &Markup,
 ) -> Markup {
 	let rows = recent_deployments(s, ctx, app).await;
+	// The log of this application, on its landing tab, for people who may read it.
+	let activity = if active == Tab::Deployments {
+		crate::ui::pages::settings::activity(s, ctx, "application", app.id.0).await
+	} else {
+		None
+	};
 	let body = html! {
 		div class="flex flex-col gap-6" data-signals="{_action_error: '', _acting: false, _rb: '', _close: '', confirm: '', _delete_error: ''}" {
 			(header::header(s, ctx, app, &rows).await)
 			(tab_row(ctx, app, active))
 			(content)
+			@if let Some((events, all)) = &activity {
+				(crate::ui::components::activity_card(ctx.team.id, events, all))
+			}
 			(header::dialogs(ctx, app))
 		}
 	};

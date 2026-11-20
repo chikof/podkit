@@ -43,6 +43,7 @@ pub async fn gate(State(state): State<AppState>, mut req: Request, next: Next) -
 	.await;
 	match result {
 		Ok(grant) => {
+			crate::audit::note_token(grant.token);
 			req.extensions_mut().insert(grant);
 			next.run(req).await
 		}
