@@ -151,6 +151,10 @@ async fn ensure_networks(podman: &Podman, spec: &DeploySpec) -> Result<(), Strin
 	Ok(())
 }
 
+#[allow(
+	clippy::too_many_lines,
+	reason = "one deploy is one flow: create, start, wait, swap, clean up"
+)]
 async fn execute(
 	ctx: &Ctx,
 	spec: &DeploySpec,
@@ -198,7 +202,10 @@ async fn execute(
 			.await
 			.map_err(|e| format!("volume {} setup failed: {e}", volume.name))?;
 	}
-	let file_binds = write_files(&ctx.data_dir, spec).await?;
+	let mut file_binds = write_files(&ctx.data_dir, spec).await?;
+	if let Some(gate) = &spec.health {
+		file_binds.extend(crate::health::binds(gate, &crate::health::agent_exe()?));
+	}
 
 	let mut old = Vec::new();
 	let existing = podman
@@ -206,7 +213,7 @@ async fn execute(
 		.await
 		.map_err(|e| format!("listing containers failed: {e}"))?;
 	for name in existing.iter().filter_map(crate::podman::summary_name) {
-		if spec.strategy == Strategy::Recreate || name == new_name {
+		if retires_first(spec.strategy, name, &new_name) {
 			retire(&podman, &ctx.supervisor, name, true).await;
 		} else {
 			old.push(name.to_string());
@@ -227,8 +234,22 @@ async fn execute(
 	}
 
 	phase(tx, Phase::HealthCheck).await?;
-	if let Err(message) = health_check(&podman, &new_name).await {
+	let healthy = match &spec.health {
+		Some(gate) => crate::health::wait_healthy(&podman, &new_name, gate, tx)
+			.await
+			.map_err(|why| format!("the new container did not become healthy: {why}")),
+		None => health_check(&podman, &new_name).await,
+	};
+	if let Err(message) = healthy {
 		report_container_tail(&podman, &new_name, tx).await;
+		if !old.is_empty() {
+			log(
+				tx,
+				Stream::System,
+				"the previous container is still serving",
+			)
+			.await?;
+		}
 		return Err(message);
 	}
 
@@ -239,7 +260,7 @@ async fn execute(
 		}
 		if !old.is_empty() {
 			if spec.routing.is_some() {
-				tokio::time::sleep(SWAP_DELAY).await;
+				tokio::time::sleep(drain_delay(spec)).await;
 			}
 			for name in &old {
 				retire(&podman, &ctx.supervisor, name, true).await;
@@ -259,6 +280,20 @@ async fn execute(
 		container_id,
 		image,
 		commit_sha,
+	})
+}
+
+/// Whether an existing container of the service goes before the new one starts. Recreate
+/// frees what only one container can hold (a volume); a container with the new one's name
+/// is a leftover of a retried deploy. Everything else is retired after the new one is up.
+fn retires_first(strategy: Strategy, existing: &str, new_name: &str) -> bool {
+	strategy == Strategy::Recreate || existing == new_name
+}
+
+/// How long the old containers keep serving once the new one has taken over.
+fn drain_delay(spec: &DeploySpec) -> Duration {
+	spec.health.as_ref().map_or(SWAP_DELAY, |gate| {
+		Duration::from_secs(u64::from(gate.drain_s))
 	})
 }
 
@@ -367,6 +402,9 @@ fn validate(spec: &DeploySpec) -> Result<(), String> {
 		return Err("routing requires container_port".to_string());
 	}
 	validate_options(spec)?;
+	if let Some(gate) = &spec.health {
+		crate::health::validate(gate)?;
+	}
 	for volume in &spec.volumes {
 		if !valid_name(&volume.name, b"_.-") {
 			return Err(format!("invalid volume name {:?}", volume.name));
@@ -485,7 +523,13 @@ fn container_spec(
 		entrypoint: spec.entrypoint.clone(),
 		shm_bytes: spec.shm_bytes,
 		stop_timeout_s: spec.stop_timeout_s,
-		options: spec.options.clone(),
+		options: {
+			let mut options = spec.options.clone();
+			if let Some(gate) = &spec.health {
+				options.healthcheck = Some(crate::health::podman_check(gate));
+			}
+			options
+		},
 	}
 }
 
@@ -706,6 +750,7 @@ mod tests {
 			networks: Vec::new(),
 			options: proto::ContainerOptions::default(),
 			attach: Vec::new(),
+			health: None,
 		}
 	}
 
@@ -906,6 +951,73 @@ mod tests {
 			prune_candidates(&images, &used, "app-1"),
 			["podkit-app-1:4", "podkit-app-1:6"]
 		);
+	}
+
+	fn gate() -> proto::HealthGate {
+		proto::HealthGate {
+			check: proto::HealthCheck::Http {
+				path: "/up".to_string(),
+				status: 200,
+				port: 8080,
+			},
+			interval_ms: 2000,
+			timeout_ms: 1000,
+			retries: 2,
+			start_period_ms: 0,
+			gate_timeout_s: 30,
+			drain_s: 7,
+		}
+	}
+
+	#[test]
+	fn health_gate_becomes_a_podman_healthcheck_on_the_container() {
+		let mut gated = spec();
+		gated.health = Some(gate());
+		assert!(validate(&gated).is_ok());
+		let container = container_spec(&gated, "img", "c", &[]);
+		let check = container.options.healthcheck.expect("healthcheck");
+		assert_eq!(check.test[1], crate::health::PROBE_PATH);
+		assert_eq!(check.interval_ms, Some(2000));
+		assert_eq!(check.retries, Some(2));
+		// Without a gate the container has no check of its own.
+		assert!(
+			container_spec(&spec(), "img", "c", &[])
+				.options
+				.healthcheck
+				.is_none()
+		);
+		// A gate that cannot run is refused before anything is started.
+		gated.health.as_mut().unwrap().gate_timeout_s = 0;
+		assert!(validate(&gated).is_err());
+	}
+
+	#[test]
+	fn health_gate_old_container_stays_until_the_new_one_took_over() {
+		// Rolling: the old container is kept, so a failed gate leaves it serving.
+		assert!(!retires_first(
+			Strategy::Rolling,
+			"podkit-app-1-8",
+			"podkit-app-1-9"
+		));
+		// Recreate frees the volume first; a leftover with the same name always goes.
+		assert!(retires_first(
+			Strategy::Recreate,
+			"podkit-app-1-8",
+			"podkit-app-1-9"
+		));
+		assert!(retires_first(
+			Strategy::Rolling,
+			"podkit-app-1-9",
+			"podkit-app-1-9"
+		));
+	}
+
+	#[test]
+	fn health_gate_drain_comes_from_the_spec() {
+		let mut gated = spec();
+		assert_eq!(drain_delay(&gated), SWAP_DELAY);
+		gated.health = Some(gate());
+		assert_eq!(drain_delay(&gated), Duration::from_secs(7));
 	}
 
 	fn stack_spec() -> DeploySpec {

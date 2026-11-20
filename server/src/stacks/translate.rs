@@ -272,6 +272,7 @@ fn translate(stack: i64, s: &Service, settings: &Settings<'_>) -> Result<DeployS
 		networks: vec![network_name(stack)],
 		options,
 		attach: Vec::new(),
+		health: None,
 	})
 }
 

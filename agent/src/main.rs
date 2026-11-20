@@ -143,6 +143,11 @@ fn gateway_args() -> Option<Result<(PathBuf, String), String>> {
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
+	// A container's health check is this binary: one request, then exit.
+	let args: Vec<String> = std::env::args().skip(1).collect();
+	if let Some(code) = agent::health::probe_cli(&args) {
+		std::process::exit(code);
+	}
 	if let Some(gateway) = gateway_args() {
 		let (dir, listen) = gateway?;
 		better_tracing::fmt().init();

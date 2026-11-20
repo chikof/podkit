@@ -15,6 +15,7 @@ use tracing::warn;
 use super::{Deployment, DeploymentStatus};
 use crate::applications::{self, Application, BuildStrategy, SourceKind, StoredRegistryAuth};
 use crate::error::ServerError;
+use crate::health_gate::machine::{Machine, Signal};
 use crate::ids::{DeploymentId, TeamId};
 use crate::jobs::{Job, JobFailure};
 use crate::logs::JobLog;
@@ -40,6 +41,10 @@ fn db_failure(e: &sqlx::Error) -> JobFailure {
 /// # Errors
 /// [`JobFailure::Cancelled`] when `cancel` fires, otherwise
 /// [`JobFailure::Failed`] with a message safe to show the deployment owner.
+#[allow(
+	clippy::too_many_lines,
+	reason = "the deploy stream is one loop over the agent's events"
+)]
 pub async fn run(
 	state: &AppState,
 	job: &Job,
@@ -76,14 +81,25 @@ pub async fn run(
 		})?;
 
 	let mut deploying = false;
+	// Only a deploy with a health gate has a health to follow.
+	let mut health = spec
+		.health
+		.is_some()
+		.then(|| Machine::new(0, std::time::Duration::ZERO, false, false));
 	loop {
 		let event = tokio::select! {
-			() = cancel.cancelled() => return Err(JobFailure::Cancelled),
+			() = cancel.cancelled() => {
+				settle_health(state, &deployment, None).await;
+				return Err(JobFailure::Cancelled);
+			}
 			event = events.next() => event,
 		};
 		match event {
 			Some(Ok(Event::Log { stream, line })) => log.push(stream, &line).await,
 			Some(Ok(Event::Phase { phase })) => {
+				if phase == Phase::HealthCheck {
+					follow_health(state, &deployment, &mut health, Signal::Started, None).await;
+				}
 				if !deploying
 					&& matches!(
 						phase,
@@ -98,6 +114,7 @@ pub async fn run(
 				image,
 				commit_sha,
 			})) => {
+				follow_health(state, &deployment, &mut health, Signal::Deployed, None).await;
 				if !deploying {
 					advance(state, &mut deployment, DeploymentStatus::Deploying).await?;
 				}
@@ -131,14 +148,67 @@ pub async fn run(
 				}
 				return Ok(());
 			}
-			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),
+			Some(Ok(Event::Failed { message })) => {
+				follow_health(
+					state,
+					&deployment,
+					&mut health,
+					Signal::DeployFailed,
+					Some(&message),
+				)
+				.await;
+				settle_health(state, &deployment, Some(&message)).await;
+				return Err(JobFailure::Failed(message));
+			}
 			Some(Ok(Event::DumpWritten { .. } | Event::Progress { .. } | Event::Done)) => {}
 			Some(Err(e)) => {
 				warn!(deployment = deployment.id.0, "deploy stream failed: {e}");
+				settle_health(state, &deployment, None).await;
 				return Err(failed(LOST_CONNECTION));
 			}
-			None => return Err(failed(LOST_CONNECTION)),
+			None => {
+				settle_health(state, &deployment, None).await;
+				return Err(failed(LOST_CONNECTION));
+			}
 		}
+	}
+}
+
+/// Feeds the health machine and stores the state it reaches. Best effort: the deploy itself
+/// does not depend on this row.
+async fn follow_health(
+	state: &AppState,
+	deployment: &Deployment,
+	health: &mut Option<Machine>,
+	signal: Signal,
+	detail: Option<&str>,
+) {
+	let Some(machine) = health else {
+		return;
+	};
+	let before = machine.state;
+	machine.on(signal, std::time::Duration::ZERO);
+	let Some(now) = machine.state.filter(|s| Some(*s) != before) else {
+		return;
+	};
+	if let Err(e) = crate::health_gate::set_state(&state.db, deployment.id, now, detail).await {
+		warn!(
+			deployment = deployment.id.0,
+			"failed to store health state: {e}"
+		);
+	}
+}
+
+/// A deploy that ends without a verdict (cancelled, lost connection) must not stay "waiting
+/// for health". Without a detail the row goes; a rollback's row stays, as unhealthy, so the
+/// timeline keeps saying what it was.
+async fn settle_health(state: &AppState, deployment: &Deployment, detail: Option<&str>) {
+	let result = crate::health_gate::settle_waiting(&state.db, deployment.id, detail).await;
+	if let Err(e) = result {
+		warn!(
+			deployment = deployment.id.0,
+			"failed to settle health state: {e}"
+		);
 	}
 }
 
@@ -167,7 +237,7 @@ async fn load_server(state: &AppState, application: &Application) -> Result<Serv
 	clippy::too_many_lines,
 	reason = "the merged cards each added a step; one flow reads better unsplit"
 )]
-async fn build_spec(
+pub(crate) async fn build_spec(
 	state: &AppState,
 	application: &Application,
 	deployment: &Deployment,
@@ -236,6 +306,13 @@ async fn build_spec(
 	} else {
 		Strategy::Recreate
 	};
+	let health = crate::health_gate::config(&state.db, application.id)
+		.await
+		.map_err(|e| {
+			tracing::error!("failed to load health settings: {e}");
+			failed("failed to load the health settings")
+		})?
+		.map(|config| config.to_gate(container_port));
 
 	Ok(DeploySpec {
 		service: format!("app-{}", application.id),
@@ -282,6 +359,7 @@ async fn build_spec(
 			https_port: state.config.https_port,
 			acme_email: state.config.acme_email.clone(),
 		},
+		health,
 	})
 }
 

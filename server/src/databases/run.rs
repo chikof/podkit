@@ -225,6 +225,7 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 		networks: Vec::new(),
 		options: proto::ContainerOptions::default(),
 		attach: Vec::new(),
+		health: None,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,

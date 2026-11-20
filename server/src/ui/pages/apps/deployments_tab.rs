@@ -36,7 +36,7 @@ use crate::ui::live::{error_line, job_log};
 use crate::ui::pages::projects::cards::relative_time;
 use crate::ui::pages::security;
 use crate::ui::sse::js_string;
-use crate::ui::status::{Status, poll};
+use crate::ui::status::poll;
 use crate::ui::{error, sse};
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/apps/{app_id}";
@@ -93,6 +93,7 @@ fn trigger_label(t: &Trigger) -> &'static str {
 	match t {
 		Trigger::User => "Manual",
 		Trigger::Webhook => "Webhook",
+		Trigger::AutoRollback => "Automatic rollback",
 	}
 }
 
@@ -101,10 +102,33 @@ fn title_of(d: &DeploymentView) -> &'static str {
 	match d.trigger {
 		Trigger::User => "Deployed by hand",
 		Trigger::Webhook => "Deployed by webhook",
+		Trigger::AutoRollback => "Rolled back automatically",
 	}
 }
 
 // --- the timeline -----------------------------------------------------------------------------
+
+/// One line under a row when the health gate has something to say: why a release was put
+/// back, what a rollback replaced, or that the deploy kept the old container.
+fn health_note(d: &DeploymentView) -> Option<String> {
+	use crate::health_gate::State;
+	if let Some(replaced) = d.rollback_of {
+		return Some(format!("Replaced #{replaced}, which went bad"));
+	}
+	let gate = d.gate.as_ref()?;
+	match gate.state {
+		State::RolledBack => Some(format!(
+			"Rolled back: {}",
+			gate.detail
+				.as_deref()
+				.unwrap_or("it failed its health check")
+		)),
+		State::Unhealthy => {
+			Some("Never became healthy; the previous container kept serving".to_owned())
+		}
+		State::Waiting | State::Healthy => None,
+	}
+}
 
 /// The button that opens the rollback dialog for deployment `id`.
 fn rollback_button(id: DeploymentId) -> Markup {
@@ -126,12 +150,8 @@ fn timeline_row(
 	can_update: bool,
 ) -> Markup {
 	let url = deployment_url(base, d.id);
-	let shape = chrome::deployment_shape(d.status);
-	let state = if d.in_flight() {
-		format!("{}\u{2026}", d.status.label())
-	} else {
-		d.status.label().to_owned()
-	};
+	let (shape, state) = chrome::deployment_state(d);
+	let note = health_note(d);
 	html! {
 		li class="ui-timeline-item" data-status=(shape.key()) data-current=[selected.then_some("")] {
 			span class="ui-timeline-node" data-status=(shape.key()) aria-hidden="true" {
@@ -145,6 +165,9 @@ fn timeline_row(
 				}
 				@if let Some(sha) = &d.commit_sha {
 					p class="ui-tl-meta" { code { (short_sha(sha)) } }
+				}
+				@if let Some(note) = &note {
+					p class="ui-tl-meta" { (note) }
 				}
 				p class="ui-tl-meta2" {
 					span class="ui-tl-state" { (state) }
@@ -393,8 +416,14 @@ fn status_card(
 		div id="deployment-status" class="flex flex-col gap-3" {
 			(poll(&format!("{url}/status"), d.in_flight()))
 			dl class="ui-facts" aria-label={ "Deployment #" (d.id) } {
-				(fact("Status", &chrome::dot(chrome::deployment_shape(d.status), d.status.label())))
+				(fact("Status", &{
+					let (shape, word) = chrome::deployment_state(d);
+					chrome::dot(shape, &word)
+				}))
 				(fact("Trigger", &html! { (trigger_label(&d.trigger)) }))
+				@if let Some(note) = health_note(d) {
+					(fact("Health", &html! { (note) }))
+				}
 				// An image application is never cloned: there is no commit to name.
 				@if app.source_kind == SourceKind::Git {
 					(fact("Commit", &html! {

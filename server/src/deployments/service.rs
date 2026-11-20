@@ -26,6 +26,15 @@ pub enum Trigger {
 	User,
 	/// A push to the git provider, which has no acting user.
 	Webhook,
+	/// The health watch put the previous image back after a release went bad.
+	AutoRollback,
+}
+
+/// What the health gate recorded about a deployment.
+#[derive(Debug, Clone)]
+pub struct GateView {
+	pub state: crate::health_gate::State,
+	pub detail: Option<String>,
 }
 
 /// A deployment as the UI lists it: its row plus who started it and when.
@@ -38,6 +47,10 @@ pub struct DeploymentView {
 	pub has_image: bool,
 	pub error_message: Option<String>,
 	pub trigger: Trigger,
+	/// The health gate's verdict; `None` when the application has no gate.
+	pub gate: Option<GateView>,
+	/// The deployment an automatic rollback replaced.
+	pub rollback_of: Option<DeploymentId>,
 	pub created_at: OffsetDateTime,
 	pub started_at: Option<OffsetDateTime>,
 	pub finished_at: Option<OffsetDateTime>,
@@ -69,6 +82,24 @@ impl DeploymentView {
 		self.has_image && !self.in_flight() && self.status != DeploymentStatus::Running
 	}
 
+	/// The new container runs and the deploy waits for its health check; the old one serves.
+	#[must_use]
+	pub fn waiting_for_health(&self) -> bool {
+		self.in_flight()
+			&& self
+				.gate
+				.as_ref()
+				.is_some_and(|g| g.state == crate::health_gate::State::Waiting)
+	}
+
+	/// The release went live, failed, and the previous image was put back.
+	#[must_use]
+	pub fn rolled_back(&self) -> bool {
+		self.gate
+			.as_ref()
+			.is_some_and(|g| g.state == crate::health_gate::State::RolledBack)
+	}
+
 	/// How long the build and start took, once it has finished.
 	#[must_use]
 	pub fn duration(&self) -> Option<time::Duration> {
@@ -87,6 +118,9 @@ struct Row {
 	created_at: OffsetDateTime,
 	started_at: Option<OffsetDateTime>,
 	finished_at: Option<OffsetDateTime>,
+	health_state: Option<crate::health_gate::State>,
+	health_detail: Option<String>,
+	rollback_of: Option<i64>,
 }
 
 impl From<Row> for DeploymentView {
@@ -99,9 +133,16 @@ impl From<Row> for DeploymentView {
 			error_message: r.error_message,
 			trigger: if r.triggered_by.is_some() {
 				Trigger::User
+			} else if r.rollback_of.is_some() {
+				Trigger::AutoRollback
 			} else {
 				Trigger::Webhook
 			},
+			gate: r.health_state.map(|state| GateView {
+				state,
+				detail: r.health_detail,
+			}),
+			rollback_of: r.rollback_of.map(DeploymentId),
 			created_at: r.created_at,
 			started_at: r.started_at,
 			finished_at: r.finished_at,
@@ -142,7 +183,7 @@ pub async fn list(
 	)
 	.await?;
 	let rows = sqlx::query_as::<_, Row>(
-		"SELECT id, status, commit_sha, image_tag, error_message, triggered_by, created_at, started_at, finished_at FROM deployments WHERE application_id = $1 ORDER BY id DESC LIMIT 50",
+		"SELECT d.id, d.status, d.commit_sha, d.image_tag, d.error_message, d.triggered_by, d.created_at, d.started_at, d.finished_at, h.state AS health_state, h.detail AS health_detail, h.rollback_of FROM deployments d LEFT JOIN deployment_health h ON h.deployment_id = d.id WHERE d.application_id = $1 ORDER BY d.id DESC LIMIT 50",
 	)
 	.bind(app.id.0)
 	.fetch_all(db)
@@ -170,7 +211,7 @@ pub async fn get(
 	)
 	.await?;
 	sqlx::query_as::<_, Row>(
-		"SELECT id, status, commit_sha, image_tag, error_message, triggered_by, created_at, started_at, finished_at FROM deployments WHERE id = $1 AND application_id = $2",
+		"SELECT d.id, d.status, d.commit_sha, d.image_tag, d.error_message, d.triggered_by, d.created_at, d.started_at, d.finished_at, h.state AS health_state, h.detail AS health_detail, h.rollback_of FROM deployments d LEFT JOIN deployment_health h ON h.deployment_id = d.id WHERE d.id = $1 AND d.application_id = $2",
 	)
 	.bind(id.0)
 	.bind(app.id.0)

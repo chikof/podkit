@@ -16,12 +16,14 @@ use super::form::{
 	registry_hint, runtime_fields,
 };
 use super::header::header;
+use super::health;
 use super::provider_source::{provider_fields, provider_label};
 use super::{AppPath, Tab, app_url, load, page, toast_ok};
 use crate::applications::service::{self, ApplicationView};
 use crate::applications::{BuildStrategy, SourceKind};
 use crate::auth::permission::{Action, Resource};
 use crate::git_providers;
+use crate::health_gate::{self, HealthConfig};
 use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::registries::Registry;
 use crate::ssh_keys::service::KeyView;
@@ -67,7 +69,11 @@ fn fact(label: &str, value: &Markup) -> Markup {
 }
 
 /// The source, build and limits as text, for someone who may not change them.
-fn summary(app: &ApplicationView, provider: Option<&str>) -> Markup {
+fn summary(
+	app: &ApplicationView,
+	provider: Option<&str>,
+	health_config: Option<&HealthConfig>,
+) -> Markup {
 	html! {
 		(card(&html! {
 			(card_section("Source", None, None))
@@ -125,6 +131,10 @@ fn summary(app: &ApplicationView, provider: Option<&str>) -> Markup {
 				}
 			}))
 		}))
+		(card(&html! {
+			(card_section("Health", None, None))
+			(card_content(&health::summary(health_config)))
+		}))
 	}
 }
 
@@ -135,6 +145,18 @@ fn section(title: &str, description: Option<&str>, fields: &Markup) -> Markup {
 	})
 }
 
+/// Every signal the form's fields are bound to: the application's, and the Health section's.
+fn form_signals(app: &ApplicationView, health: Option<&HealthConfig>) -> String {
+	let mut signals: serde_json::Map<String, serde_json::Value> =
+		serde_json::from_str(&prefilled_signals(app)).unwrap_or_default();
+	signals.extend(health::signals(health));
+	serde_json::Value::Object(signals).to_string()
+}
+
+#[allow(
+	clippy::too_many_arguments,
+	reason = "the page hands the form what it loaded: the application, its vault and registries, its provider and its health"
+)]
 fn edit_form(
 	base: &str,
 	app: &ApplicationView,
@@ -143,13 +165,15 @@ fn edit_form(
 	registries: &[Registry],
 	team: TeamId,
 	provider: Option<&str>,
+	health_config: Option<&HealthConfig>,
 ) -> Markup {
 	let save = format!(
 		"evt.preventDefault(); @post({})",
 		crate::ui::sse::js_string(&format!("{base}/settings"))
 	);
+	let watched: Vec<&str> = SAVE_FIELDS.iter().chain(health::FIELDS).copied().collect();
 	html! {
-		div class="flex flex-col gap-6" data-signals=(prefilled_signals(app)) {
+		div class="flex flex-col gap-6" data-signals=(form_signals(app, health_config)) {
 			form class="flex flex-col gap-6" "data-on:submit"=(save) {
 				(section(
 					"Application",
@@ -170,7 +194,12 @@ fn edit_form(
 					}
 				}
 				(section("Runtime", None, &runtime_fields()))
-				(save_bar(SAVE_FIELDS))
+				(section(
+					"Health",
+					Some("Deploys wait for the new container to be healthy before it takes over. Applies from the next deploy."),
+					&health::fields(),
+				))
+				(save_bar(&watched))
 			}
 		}
 	}
@@ -191,6 +220,11 @@ async fn general_page(
 			.map(|p| p.name),
 		None => None,
 	};
+	let health_config =
+		health_gate::service::get(&s.db, ctx.user.id, ctx.team.id, project.id, app.id)
+			.await
+			.ok()
+			.flatten();
 	let content = if ctx.perms.can(Action::Update, Resource::Application) {
 		let (keys, can_create_key) = load_keys(&s, &ctx).await;
 		let registries = crate::registries::service::list(&s.db, ctx.user.id, ctx.team.id)
@@ -204,9 +238,10 @@ async fn general_page(
 			&registries,
 			ctx.team.id,
 			provider.as_deref(),
+			health_config.as_ref(),
 		)
 	} else {
-		html! { div class="flex flex-col gap-6" { (summary(&app, provider.as_deref())) } }
+		html! { div class="flex flex-col gap-6" { (summary(&app, provider.as_deref(), health_config.as_ref())) } }
 	};
 	Ok(page(&s, &ctx, &project, &app, Tab::Settings, &content).await)
 }
@@ -222,7 +257,21 @@ async fn save(
 		// The stored kind decides the fields; a client cannot change it.
 		let current = service::get(&s.db, ctx.user.id, ctx.team.id, project, app).await?;
 		let input = sig.input(Some(current.source_kind))?;
+		// The health fields are checked before anything is stored, so a bad number cannot
+		// leave the application half saved.
+		let health = health::input(&sig).map(|form| form.parse()).transpose()?;
 		service::update(&s, ctx.user.id, ctx.team.id, project, app, input).await?;
+		if let Some(parsed) = health {
+			health_gate::service::save(
+				&s.db,
+				ctx.user.id,
+				ctx.team.id,
+				project,
+				app,
+				parsed.as_ref(),
+			)
+			.await?;
+		}
 		service::get(&s.db, ctx.user.id, ctx.team.id, project, app).await
 	}
 	.await;

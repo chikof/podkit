@@ -128,7 +128,7 @@ fn current_exe() -> Result<(PathBuf, String), String> {
 }
 
 /// Whether the binary's ELF interpreter lives in the Nix store (it is among the first bytes).
-fn needs_nix_store(exe: &Path) -> bool {
+pub(crate) fn needs_nix_store(exe: &Path) -> bool {
 	use std::io::Read;
 	let mut head = [0u8; 2048];
 	let Ok(mut file) = std::fs::File::open(exe) else {
