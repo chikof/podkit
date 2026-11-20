@@ -110,6 +110,11 @@ impl Setup {
 	async fn new(db: PgPool) -> Self {
 		let state = state(db.clone());
 		let agent = fake_agent(&state);
+		Self::on(db, state, agent).await
+	}
+
+	/// The same project on `state`, whatever answers on its agent socket.
+	async fn on(db: PgPool, state: AppState, agent: Arc<FakeAgent>) -> Self {
 		let app = crate::routes::routes(state.clone()).await.unwrap();
 		let (token, team) = user_with_team(&app, "alice").await;
 		let (project, server) = Self::project_and_server(&app, &token, team).await;
@@ -904,5 +909,291 @@ mod pages {
 			status.is_redirection() || status == StatusCode::UNAUTHORIZED,
 			"{status}"
 		);
+	}
+}
+
+/// The live test: a real agent, a real Podman, a real template MCP server.
+///
+/// It runs its own private `podman system service` on a store under `/tmp/pk-t_b31c4e6e`, so it
+/// never touches the containers or images of a running podkit. It needs the `podkit-agent`
+/// binary built next to the test binary (`cargo build -p agent`), `podman` on the PATH (or named
+/// by `PODMAN`), and the network for `docker.io/mcp/fetch`, `nginx:alpine`, traefik and python.
+///
+/// ```text
+/// cargo build -p agent && cargo test -p server --all-features -- --ignored mcp_resource_live
+/// ```
+mod live {
+	use std::path::PathBuf;
+	use std::process::{Child, Command, Output, Stdio};
+	use std::time::Duration;
+
+	use super::*;
+
+	const ROOT: &str = "/tmp/pk-t_b31c4e6e";
+	const INGRESS_PORT: u16 = 21853;
+	const HTTPS_PORT: u16 = 21854;
+
+	fn podman_bin() -> String {
+		std::env::var("PODMAN").unwrap_or_else(|_| "podman".to_owned())
+	}
+
+	/// A private Podman service; the images stay in its store for the next run.
+	struct Private {
+		service: Child,
+	}
+
+	impl Private {
+		fn start() -> Self {
+			let root = PathBuf::from(ROOT);
+			std::fs::create_dir_all(&root).unwrap();
+			let _ = std::fs::remove_file(root.join("podman.sock"));
+			let service = Command::new(podman_bin())
+				.arg("--root")
+				.arg(root.join("store"))
+				.arg("--runroot")
+				.arg(root.join("run"))
+				.args(["system", "service", "--time=0"])
+				.arg(format!("unix://{}", root.join("podman.sock").display()))
+				.stdout(Stdio::null())
+				.stderr(Stdio::null())
+				.spawn()
+				.expect("podman system service");
+			Self { service }
+		}
+
+		fn socket() -> PathBuf {
+			PathBuf::from(ROOT).join("podman.sock")
+		}
+
+		fn podman(args: &[&str]) -> Output {
+			Command::new(podman_bin())
+				.arg("--url")
+				.arg(format!("unix://{}", Self::socket().display()))
+				.args(args)
+				.output()
+				.expect("podman")
+		}
+
+		fn text(args: &[&str]) -> String {
+			let out = Self::podman(args);
+			format!(
+				"{}{}",
+				String::from_utf8_lossy(&out.stdout),
+				String::from_utf8_lossy(&out.stderr)
+			)
+		}
+	}
+
+	impl Drop for Private {
+		fn drop(&mut self) {
+			// Everything this test started is named `podkit-*`; the store holds nothing else.
+			let _ = Self::podman(&["rm", "-f", "-t", "0", "-a"]);
+			let networks = Self::text(&["network", "ls", "--format", "{{.Name}}"]);
+			for n in networks.lines().filter(|n| n.starts_with("podkit")) {
+				let _ = Self::podman(&["network", "rm", "-f", n]);
+			}
+			let _ = self.service.kill();
+			let _ = self.service.wait();
+		}
+	}
+
+	fn agent_binary() -> PathBuf {
+		let exe = std::env::current_exe().unwrap();
+		let binary = exe
+			.parent()
+			.and_then(|deps| deps.parent())
+			.unwrap()
+			.join("podkit-agent");
+		assert!(
+			binary.exists(),
+			"{} is missing; run `cargo build -p agent` first",
+			binary.display()
+		);
+		binary
+	}
+
+	/// Runs `script` in `container`; the output on success, the failure text otherwise.
+	fn exec(container: &str, script: &str) -> Result<String, String> {
+		let out = Private::podman(&["exec", container, "sh", "-c", script]);
+		let text = String::from_utf8_lossy(&out.stdout).into_owned();
+		if out.status.success() {
+			Ok(text)
+		} else {
+			Err(format!("{text}{}", String::from_utf8_lossy(&out.stderr)))
+		}
+	}
+
+	/// An MCP call from inside the app, with the link's own variables.
+	fn call_mcp(container: &str, body: &str) -> Result<String, String> {
+		// https://modelcontextprotocol.io/specification/2025-06-18/basic/transports#streamable-http:
+		// a client POSTs JSON-RPC and accepts both `application/json` and `text/event-stream`.
+		exec(
+			container,
+			&format!(
+				"wget -q -O- -T 20 --header \"Authorization: Bearer $MCP_MCP_FETCH_KEY\" \
+				 --header 'Content-Type: application/json' \
+				 --header 'Accept: application/json, text/event-stream' \
+				 --post-data '{body}' \"$MCP_MCP_FETCH_URL\""
+			),
+		)
+	}
+
+	async fn run_deploy(s: &Setup, deployment: i64) {
+		let job = jobs::latest_for(&s.db, JobKind::Deploy, deployment)
+			.await
+			.unwrap()
+			.expect("a deploy job is queued");
+		let mut log = s.state.logs.open(job.id).await.unwrap();
+		let result =
+			crate::deployments::run::run(&s.state, &job, &CancellationToken::new(), &mut log).await;
+		log.finish().await;
+		if let Err(e) = result {
+			let text = std::fs::read_to_string(s.state.logs.path(job.id)).unwrap_or_default();
+			panic!("deploy {deployment} failed: {e:?}\n{text}");
+		}
+	}
+
+	fn container_of(prefix: &str) -> String {
+		let out = Private::text(&[
+			"ps",
+			"--filter",
+			&format!("name={prefix}"),
+			"--format",
+			"{{.Names}}",
+		]);
+		let names: Vec<&str> = out.lines().filter(|n| n.starts_with(prefix)).collect();
+		assert_eq!(names.len(), 1, "one container named {prefix}*: {out}");
+		names[0].to_owned()
+	}
+
+	#[sqlx::test]
+	#[ignore = "needs podman and the podkit-agent binary; pulls mcp/fetch, nginx:alpine, traefik and python:3.13-slim into /tmp/pk-t_b31c4e6e; binds 21853 and 21854"]
+	async fn mcp_resource_live_a_linked_app_lists_tools_through_the_gateway(db: PgPool) {
+		let private = Private::start();
+		for _ in 0..40 {
+			if Private::socket().exists() && Private::podman(&["info"]).status.success() {
+				break;
+			}
+			tokio::time::sleep(Duration::from_millis(500)).await;
+		}
+		assert!(
+			Private::podman(&["info"]).status.success(),
+			"the private podman service never answered"
+		);
+
+		let mut state = state(db.clone());
+		{
+			let config = Arc::make_mut(&mut state.config);
+			config.ingress_port = INGRESS_PORT;
+			config.https_port = HTTPS_PORT;
+		}
+		let agent_dir = tempfile::tempdir().unwrap().keep();
+		let mut agent = tokio::process::Command::new(agent_binary())
+			.arg("--data-dir")
+			.arg(&agent_dir)
+			.arg("--podman-socket")
+			.arg(Private::socket())
+			.arg("--socket")
+			.arg(&state.config.local_agent_socket)
+			.stdout(Stdio::null())
+			.stderr(Stdio::inherit())
+			.kill_on_drop(true)
+			.spawn()
+			.expect("start podkit-agent");
+		for _ in 0..50 {
+			if state.config.local_agent_socket.exists() {
+				break;
+			}
+			tokio::time::sleep(Duration::from_millis(100)).await;
+		}
+
+		let s = Setup::on(db, state, Arc::new(FakeAgent::default())).await;
+		let result =
+			futures_util::FutureExt::catch_unwind(std::panic::AssertUnwindSafe(scenario(&s))).await;
+		let _ = agent.kill().await;
+		drop(private);
+		if let Err(panic) = result {
+			std::panic::resume_unwind(panic);
+		}
+	}
+
+	async fn scenario(s: &Setup) {
+		// An agent application on the same environment, from an image with `wget`.
+		let (status, app) = s
+			.api(
+				"POST",
+				"/applications",
+				Some(json!({
+					"name": "chat", "slug": "chat", "server_id": s.server,
+					"image": "docker.io/library/nginx:alpine", "container_port": 80,
+				})),
+			)
+			.await;
+		assert_eq!(status, StatusCode::OK, "{app}");
+		let app = app["id"].as_i64().unwrap();
+
+		// The MCP server comes from a template, behind the agent's stdio bridge.
+		let (status, deployed) = s.template("mcp-fetch", json!({})).await;
+		assert_eq!(status, StatusCode::ACCEPTED, "{deployed}");
+		let mcp = deployed["id"].as_i64().unwrap();
+		run_deploy(s, deployed["deploy_id"].as_i64().unwrap()).await;
+
+		let (status, link) = s
+			.api(
+				"POST",
+				&format!("/applications/{app}/mcp"),
+				Some(json!({ "mcp_server_id": mcp })),
+			)
+			.await;
+		assert_eq!(status, StatusCode::CREATED, "{link}");
+
+		// The next deploy of the app carries the link's variables.
+		let (status, deployment) = s
+			.api("POST", &format!("/applications/{app}/deployments"), None)
+			.await;
+		assert_eq!(status, StatusCode::ACCEPTED, "{deployment}");
+		run_deploy(s, deployment["id"].as_i64().unwrap()).await;
+		let container = container_of(&format!("podkit-app-{app}-"));
+
+		let url = exec(&container, "echo \"$MCP_MCP_FETCH_URL\"").unwrap();
+		assert_eq!(
+			url.trim(),
+			"http://llm.podkit.internal:8088/mcp/mcp-fetch",
+			"the app got its link URL"
+		);
+
+		// The first answer waits for the image's server to start.
+		let mut initialized = Err(String::new());
+		for _ in 0..60 {
+			initialized = call_mcp(
+				&container,
+				r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"live","version":"1"}}}"#,
+			);
+			if initialized.is_ok() {
+				break;
+			}
+			tokio::time::sleep(Duration::from_secs(1)).await;
+		}
+		let initialized = initialized.unwrap_or_else(|e| panic!("initialize never answered: {e}"));
+		assert!(initialized.contains("protocolVersion"), "{initialized}");
+
+		let tools = call_mcp(
+			&container,
+			r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+		)
+		.unwrap();
+		assert!(tools.contains("\"tools\""), "{tools}");
+		assert!(
+			tools.contains("\"fetch\""),
+			"the fetch server lists its fetch tool: {tools}"
+		);
+
+		// A wrong key is refused by the gateway.
+		let refused = exec(
+			&container,
+			"wget -q -O- -T 10 --header 'Authorization: Bearer nope' \
+			 --post-data '{}' \"$MCP_MCP_FETCH_URL\" 2>&1",
+		);
+		assert!(refused.is_err(), "a wrong key must not be served");
 	}
 }
