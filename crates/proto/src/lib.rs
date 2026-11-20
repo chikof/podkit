@@ -493,6 +493,39 @@ impl std::fmt::Debug for RegistryAuth {
 	}
 }
 
+/// `POST /v1/registry-login` body: asks the agent to log in to a registry the
+/// way a pull would, so a wrong password is found before a deploy.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegistryLogin {
+	/// Registry user.
+	pub username: String,
+	/// Registry password or access token.
+	pub password: String,
+	/// Registry host, with the port when it is not the default (`ghcr.io`,
+	/// `127.0.0.1:5000`).
+	pub server: String,
+}
+
+impl std::fmt::Debug for RegistryLogin {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("RegistryLogin")
+			.field("username", &self.username)
+			.field("password", &"<redacted>")
+			.field("server", &self.server)
+			.finish()
+	}
+}
+
+/// `POST /v1/registry-login` response. A refused login is an answer, not an
+/// error: `ok` is false and `message` says why. The password is never in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegistryLoginResult {
+	/// Whether the registry accepted the login.
+	pub ok: bool,
+	/// One line for the user.
+	pub message: String,
+}
+
 /// Git credentials.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]

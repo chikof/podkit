@@ -23,8 +23,9 @@ use crypto::age::SecretBox;
 use sqlx::PgExecutor;
 use time::OffsetDateTime;
 
+use crate::change::Change;
 use crate::error::ServerError;
-use crate::ids::{EnvironmentId, ProjectId, ServerId, StackId, StackServiceId, TeamId};
+use crate::ids::{EnvironmentId, ProjectId, RegistryId, ServerId, StackId, StackServiceId, TeamId};
 use crate::jobs::{self, JobKind};
 use crate::state::AppState;
 
@@ -90,6 +91,8 @@ pub struct Stack {
 	pub files: Vec<u8>,
 	/// `raw`, or `template:<id>@<version>`.
 	pub source: String,
+	/// The saved registry the stack's images are pulled with.
+	pub registry_id: Option<RegistryId>,
 	pub status: StackStatus,
 	pub status_message: Option<String>,
 	pub created_at: OffsetDateTime,
@@ -113,7 +116,8 @@ pub struct StackService {
 }
 
 const STACK_COLUMNS: &str = "s.id, s.project_id, s.environment_id, s.server_id, s.name, s.slug,
-	s.compose_yaml, s.env, s.files, s.source, s.status, s.status_message, s.created_at, s.updated_at";
+	s.compose_yaml, s.env, s.files, s.source, s.registry_id, s.status, s.status_message, s.created_at,
+	s.updated_at";
 const SERVICE_COLUMNS: &str = "id, stack_id, name, image, container_id, status, status_message,
 	health, domain, domain_port, spec_hash";
 
@@ -129,13 +133,15 @@ pub struct NewStack {
 	pub env: Vec<u8>,
 	pub files: Vec<u8>,
 	pub source: String,
+	pub registry_id: Option<RegistryId>,
 }
 
 pub async fn insert(db: impl PgExecutor<'_>, new: NewStack) -> Result<Stack, sqlx::Error> {
 	sqlx::query_as::<_, Stack>(sqlx::AssertSqlSafe(format!(
 		"INSERT INTO stacks AS s
-			(id, project_id, environment_id, server_id, name, slug, compose_yaml, env, files, source)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			(id, project_id, environment_id, server_id, name, slug, compose_yaml, env, files, source,
+			 registry_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		RETURNING {STACK_COLUMNS}"
 	)))
 	.bind(new.id)
@@ -148,6 +154,7 @@ pub async fn insert(db: impl PgExecutor<'_>, new: NewStack) -> Result<Stack, sql
 	.bind(new.env)
 	.bind(new.files)
 	.bind(new.source)
+	.bind(new.registry_id)
 	.fetch_one(db)
 	.await
 }
@@ -204,15 +211,19 @@ pub async fn update(
 	name: &str,
 	compose_yaml: &str,
 	env: &[u8],
+	registry: Change<RegistryId>,
 ) -> Result<Stack, sqlx::Error> {
 	sqlx::query_as::<_, Stack>(sqlx::AssertSqlSafe(format!(
-		"UPDATE stacks AS s SET name = $2, compose_yaml = $3, env = $4, updated_at = NOW()
+		"UPDATE stacks AS s SET name = $2, compose_yaml = $3, env = $4, updated_at = NOW(),
+			registry_id = CASE WHEN $5 THEN $6 ELSE s.registry_id END
 		WHERE s.id = $1 RETURNING {STACK_COLUMNS}"
 	)))
 	.bind(id)
 	.bind(name)
 	.bind(compose_yaml)
 	.bind(env)
+	.bind(registry.is_touched())
+	.bind(registry.value())
 	.fetch_one(db)
 	.await
 }

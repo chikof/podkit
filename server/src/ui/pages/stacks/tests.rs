@@ -10,7 +10,9 @@ use crate::tests::stacks_ui::{
 	job_kinds, newest_stack, service_domain, set_service, set_service_message, set_stack_status,
 	stack_compose, stack_name, stack_status, stack_variable,
 };
-use crate::tests::{PgPool, call, count, db_test, local_server_id, project_id, user_with_team};
+use crate::tests::{
+	PgPool, call, count, db_test, local_server_id, project_id, registries_ui, user_with_team,
+};
 use crate::ui::testing::{
 	assert_contains, assert_not_contains, get_html, page_main, post_signals, send, ui_login,
 	ui_session,
@@ -909,4 +911,44 @@ async fn a_stack_outside_the_first_environment_is_named_in_the_breadcrumb(db: Pg
 	assert_eq!(s, StatusCode::OK);
 	assert_contains(&body, "class=\"ui-crumb-link\">Staging</a>");
 	assert_not_contains(&body, "class=\"ui-crumb-link\">production</a>");
+}
+
+#[db_test]
+async fn a_stack_can_pick_a_saved_registry_and_a_foreign_one_is_refused(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	let new = format!("{}/new", f.base());
+
+	// No saved registries: the picker says so and points at where to add one.
+	let (_, body) = f.get(&new).await;
+	assert_contains(page_main(&body), "No saved registries yet.");
+
+	let (s, _, _) = post_signals(
+		&f.app,
+		&format!("/teams/{}/registries", f.team),
+		Some(&f.cookie),
+		&json!({ "name": "GitHub <b>", "url": "ghcr.io", "username": "robot", "password": "pw-secret" }),
+	)
+	.await;
+	assert_eq!(s, StatusCode::OK);
+	let registry = registries_ui::registry_id(&db).await;
+	let (_, body) = f.get(&new).await;
+	let main = page_main(&body);
+	assert_contains(main, "GitHub &lt;b&gt; · ghcr.io");
+	assert_not_contains(main, "pw-secret");
+	assert_contains(main, "data-bind:registry_id");
+
+	let mut signals = f.create_signals("db", COMPOSE);
+	signals["registry_id"] = json!(registry.to_string());
+	f.post(&f.base(), &signals).await;
+	let used = registries_ui::stack_registry(&db).await;
+	assert_eq!(used, Some(registry));
+
+	// An id that is not the team's, or not a number, makes nothing.
+	for bad in ["999999", "x"] {
+		let mut signals = f.create_signals("other", COMPOSE);
+		signals["registry_id"] = json!(bad);
+		let (s, _, _) = post_signals(&f.app, &f.base(), Some(&f.cookie), &signals).await;
+		assert_eq!(s, StatusCode::OK);
+	}
+	assert_eq!(count(&db, "stacks").await, 1);
 }

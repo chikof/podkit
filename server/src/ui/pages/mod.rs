@@ -13,6 +13,7 @@ pub mod keys;
 pub mod models;
 pub mod networks;
 pub mod projects;
+pub mod registries;
 pub mod search;
 pub mod servers;
 pub mod settings;

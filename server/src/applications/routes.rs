@@ -13,10 +13,11 @@ use tracing::warn;
 
 use super::service::{self, AppInput, ApplicationView};
 use crate::auth::AuthUser;
+use crate::change::Change;
 use crate::deployments::{self, DeploymentResponse};
 use crate::environments::EnvironmentFilter;
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId, TeamId};
+use crate::ids::{ApplicationId, EnvironmentId, ProjectId, RegistryId, ServerId, TeamId};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -56,6 +57,10 @@ pub struct CreateApplicationRequest {
 	pub registry_username: Option<String>,
 	#[serde(default)]
 	pub registry_password: Option<String>,
+	/// A saved registry (`/teams/{team}/registries`) to pull with. Omitted keeps the current
+	/// one on update; `null` clears it.
+	#[serde(default)]
+	pub registry_id: Change<RegistryId>,
 	#[serde(default = "default_git_ref")]
 	pub git_ref: String,
 	/// SSH private key to import into the vault as this application's deploy key, for
@@ -104,6 +109,10 @@ pub struct UpdateApplicationRequest {
 	pub registry_username: Option<String>,
 	#[serde(default)]
 	pub registry_password: Option<String>,
+	/// A saved registry (`/teams/{team}/registries`) to pull with. Omitted keeps the current
+	/// one on update; `null` clears it.
+	#[serde(default)]
+	pub registry_id: Change<RegistryId>,
 	#[serde(default = "default_git_ref")]
 	pub git_ref: String,
 	/// Omitted or empty leaves the stored deploy key untouched (it's
@@ -147,6 +156,8 @@ pub struct ApplicationResponse {
 	pub image: Option<String>,
 	/// Whether registry credentials are stored; they never leave the server.
 	pub has_registry_auth: bool,
+	/// The saved registry the image is pulled with.
+	pub registry_id: Option<RegistryId>,
 	pub git_ref: String,
 	pub build_strategy: String,
 	pub dockerfile_path: String,
@@ -181,6 +192,7 @@ impl From<&ApplicationView> for ApplicationResponse {
 			repo_url: app.repo_url.clone(),
 			image: app.image.clone(),
 			has_registry_auth: app.has_registry_auth,
+			registry_id: app.registry_id,
 			git_ref: app.git_ref.clone(),
 			build_strategy: app.build_strategy.as_str().to_string(),
 			dockerfile_path: app.dockerfile_path.clone(),
@@ -216,6 +228,7 @@ pub async fn create(
 			image: body.image,
 			registry_username: body.registry_username,
 			registry_password: body.registry_password,
+			registry: body.registry_id,
 			git_ref: body.git_ref,
 			deploy_key: body.deploy_key,
 			deploy_key_id: body.deploy_key_id,
@@ -271,6 +284,7 @@ pub async fn update(
 			image: body.image,
 			registry_username: body.registry_username,
 			registry_password: body.registry_password,
+			registry: body.registry_id,
 			git_ref: body.git_ref,
 			deploy_key: body.deploy_key,
 			deploy_key_id: body.deploy_key_id,

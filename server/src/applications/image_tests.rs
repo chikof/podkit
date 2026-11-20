@@ -634,3 +634,220 @@ async fn image_app_live_whoami_answers_through_ingress(db: PgPool) {
 		std::panic::resume_unwind(panic);
 	}
 }
+
+/// The `podman` binary: on `PATH`, or where NixOS puts it.
+fn podman_bin() -> &'static str {
+	["podman", "/run/current-system/sw/bin/podman"]
+		.into_iter()
+		.find(|b| {
+			std::process::Command::new(b)
+				.arg("--version")
+				.output()
+				.is_ok()
+		})
+		.expect("a podman binary")
+}
+
+/// Runs the `podman` CLI; the live test below uses it to start and fill a registry.
+fn podman_cli(args: &[&str]) -> std::process::Output {
+	std::process::Command::new(podman_bin())
+		.args(args)
+		.output()
+		.unwrap()
+}
+
+/// An image app pulls from a local `registry:2` that demands a login, using a saved
+/// registry. The image is pushed there first and removed locally, so the only way to get
+/// it is an authenticated pull.
+///
+/// `cargo test -p server --all-features -- --ignored image_app_live_saved_registry`
+#[sqlx::test]
+#[ignore = "starts registry:2 on 127.0.0.1:15000, pulls traefik/whoami, traefik and registry:2 with a real podman.sock, binds ports 28080 and 28443"]
+async fn image_app_live_saved_registry_pulls_from_a_registry_that_needs_a_login(db: PgPool) {
+	const REGISTRY: &str = "127.0.0.1:15000";
+	const NAME: &str = "pk-k2-live-registry";
+	let image = format!("{REGISTRY}/whoami:1");
+	let dir = tempfile::tempdir().unwrap();
+	// `robot` / `pk-registry-pass`, bcrypt, made with `htpasswd -Bbn`.
+	let htpasswd = dir.path().join("htpasswd");
+	std::fs::write(
+		&htpasswd,
+		"robot:$2y$05$IpccLqNPVtpEcaIPWeuduOnGeZl7Lra24Ei0if7papqttUMdzHkdK\n",
+	)
+	.unwrap();
+	let authfile = dir.path().join("auth.json");
+	let sock_dir = dir.path().join("sock");
+	std::fs::create_dir_all(&sock_dir).unwrap();
+	let socket = sock_dir.join("podman.sock");
+	let mut service: Option<std::process::Child> = None;
+	let cleanup = |service: &mut Option<std::process::Child>| {
+		podman_cli(&["container", "rm", "-f", NAME]);
+		podman_cli(&["image", "rm", "-f", &image]);
+		if let Some(child) = service.as_mut() {
+			let _ = child.kill();
+			let _ = child.wait();
+		}
+	};
+	cleanup(&mut service);
+
+	// The registry speaks plain HTTP, so the podman that pulls from it is told it is
+	// insecure. That is a private service on its own socket with its own registries.conf, so
+	// the user's podman configuration is never touched.
+	let conf = dir.path().join("registries.conf");
+	std::fs::write(
+		&conf,
+		format!("[[registry]]\nlocation = \"{REGISTRY}\"\ninsecure = true\n"),
+	)
+	.unwrap();
+	service = Some(
+		std::process::Command::new(podman_bin())
+			.env("CONTAINERS_REGISTRIES_CONF", &conf)
+			.args(["system", "service", "--time=0"])
+			.arg(format!("unix://{}", socket.display()))
+			.stdout(std::process::Stdio::null())
+			.stderr(std::process::Stdio::null())
+			.spawn()
+			.expect("start a private podman service"),
+	);
+	for _ in 0..50 {
+		if socket.exists() {
+			break;
+		}
+		tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+	}
+
+	let mount = format!("{}:/auth/htpasswd:ro,Z", htpasswd.display());
+	let started = podman_cli(&[
+		"run",
+		"-d",
+		"--name",
+		NAME,
+		"-p",
+		"127.0.0.1:15000:5000",
+		"-v",
+		&mount,
+		"-e",
+		"REGISTRY_AUTH=htpasswd",
+		"-e",
+		"REGISTRY_AUTH_HTPASSWD_REALM=podkit",
+		"-e",
+		"REGISTRY_AUTH_HTPASSWD_PATH=/auth/htpasswd",
+		"docker.io/library/registry:2",
+	]);
+	assert!(started.status.success(), "{started:?}");
+
+	let mut state = state(db.clone());
+	{
+		let config = Arc::make_mut(&mut state.config);
+		config.ingress_port = 28080;
+		config.https_port = 28443;
+	}
+	let socket_str = socket.to_str().unwrap().to_owned();
+	let podman =
+		agent::podman::Podman::connect(&socket_str).expect("connect to the private service");
+	let data_dir = tempfile::tempdir().unwrap().keep();
+	let ctx = Arc::new(agent::Ctx {
+		docker: podman.docker().clone(),
+		supervisor: agent::supervisor::Supervisor::start(podman.clone(), &data_dir).await,
+		data_dir,
+		podman_socket: socket_str.clone(),
+		http: reqwest::Client::new(),
+	});
+	let listener = tokio::net::UnixListener::bind(&state.config.local_agent_socket).unwrap();
+	tokio::spawn(async move {
+		axum::serve(listener, agent::routes::router(ctx))
+			.await
+			.unwrap();
+	});
+	let s = Setup::with_state(db, state).await;
+
+	let outcome = std::panic::AssertUnwindSafe(async {
+		// Fill the registry, with the login, then forget the image locally.
+		tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+		let auth = authfile.to_str().unwrap();
+		for args in [
+			vec!["pull", "docker.io/traefik/whoami"],
+			vec!["tag", "docker.io/traefik/whoami", &image],
+			vec![
+				"login",
+				"--tls-verify=false",
+				"--authfile",
+				auth,
+				"-u",
+				"robot",
+				"-p",
+				"pk-registry-pass",
+				REGISTRY,
+			],
+			vec!["push", "--tls-verify=false", "--authfile", auth, &image],
+			vec!["image", "rm", &image],
+		] {
+			let out = podman_cli(&args);
+			assert!(out.status.success(), "podman {args:?}: {out:?}");
+		}
+
+		// Save the registry, then deploy an image app that picks it.
+		let (status, saved) = call(
+			&s.app,
+			"POST",
+			&format!("/api/v1/teams/{}/registries", s.team),
+			Some(&s.token),
+			Some(
+				json!({ "name": "local", "url": REGISTRY, "username": "robot",
+				"password": "pk-registry-pass" }),
+			),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{saved}");
+		let (status, test) = call(
+			&s.app,
+			"POST",
+			&format!("/api/v1/teams/{}/registries/{}/test", s.team, saved["id"]),
+			Some(&s.token),
+			None,
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{test}");
+		assert_eq!(
+			test["ok"], true,
+			"the registry accepts the saved login: {test}"
+		);
+
+		let (status, created) = s
+			.create(
+				"whoami-registry",
+				json!({ "image": image, "registry_id": saved["id"] }),
+			)
+			.await;
+		assert_eq!(status, StatusCode::OK, "{created}");
+		let id = created["id"].as_i64().unwrap();
+		let deployed = s.deploy(id, None).await;
+		assert!(
+			deployed
+				.image_tag
+				.as_deref()
+				.is_some_and(|tag| tag.contains("@sha256:")),
+			"the pull with the saved login recorded a digest: {:?}",
+			deployed.image_tag
+		);
+		id
+	});
+	let result = futures_util::FutureExt::catch_unwind(outcome).await;
+
+	if let Ok(id) = &result {
+		for container in podman
+			.service_containers(&format!("app-{id}"))
+			.await
+			.unwrap_or_default()
+		{
+			if let Some(name) = agent::podman::summary_name(&container) {
+				let _ = podman.remove(name).await;
+			}
+		}
+	}
+	let _ = podman.remove(agent::ingress::TRAEFIK_CONTAINER_NAME).await;
+	cleanup(&mut service);
+	if let Err(panic) = result {
+		std::panic::resume_unwind(panic);
+	}
+}

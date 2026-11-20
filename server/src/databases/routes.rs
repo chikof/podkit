@@ -174,7 +174,8 @@ async fn get_one(
 	let (database, connection) =
 		service::get_with_connection(&s, user.id, team, project, id).await?;
 	let mut response = DatabaseResponse::from(&database);
-	response.connection = connection;
+	// Passwords come out only for a session or a token with `read:sensitive`.
+	response.connection = connection.filter(|_| user.can_reveal());
 	Ok(Json(response))
 }
 

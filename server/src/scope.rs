@@ -10,7 +10,8 @@ use crate::databases::{Database, DatabaseStatus, EngineKind};
 use crate::environments::Environment;
 use crate::error::{AppResult, ServerError};
 use crate::ids::{
-	ApplicationId, BackupTargetId, DatabaseId, EnvironmentId, ProjectId, ServerId, SshKeyId, TeamId,
+	ApplicationId, BackupTargetId, DatabaseId, EnvironmentId, ProjectId, RegistryId, ServerId,
+	SshKeyId, TeamId,
 };
 use crate::projects::Project;
 use crate::servers::{Server, ServerStatus};
@@ -66,7 +67,7 @@ pub async fn application(
 		r#"
 			SELECT a.id AS "id: ApplicationId", a.project_id AS "project_id: ProjectId", a.environment_id AS "environment_id: EnvironmentId",
 				a.server_id AS "server_id: ServerId", a.name, a.slug, a.repo_url, a.git_ref,
-				a.source_kind AS "source_kind: SourceKind", a.image, a.registry_auth,
+				a.source_kind AS "source_kind: SourceKind", a.image, a.registry_auth, a.registry_id AS "registry_id: RegistryId",
 				a.deploy_key_id AS "deploy_key_id: SshKeyId", a.git_token, a.build_strategy AS "build_strategy: BuildStrategy",
 				a.dockerfile_path, a.container_port, a.webhook_secret, a.memory_limit_mb,
 				a.cpu_limit
@@ -160,6 +161,27 @@ pub async fn backup_target(
 	.fetch_optional(db)
 	.await?
 	.ok_or(ServerError::BackupTargetNotFound)
+}
+
+pub async fn registry(
+	db: &PgPool,
+	team: TeamId,
+	id: crate::ids::RegistryId,
+) -> AppResult<crate::registries::Registry> {
+	sqlx::query_as!(
+		crate::registries::Registry,
+		r#"
+			SELECT id AS "id: crate::ids::RegistryId", name, url,
+				username, password, created_at
+			FROM registries
+			WHERE id = $2 AND team_id = $1
+		"#,
+		team as TeamId,
+		id as crate::ids::RegistryId
+	)
+	.fetch_optional(db)
+	.await?
+	.ok_or(ServerError::RegistryNotFound)
 }
 
 pub async fn model(

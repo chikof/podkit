@@ -9,6 +9,7 @@ mod frame;
 mod members;
 mod registration;
 mod team;
+mod tokens;
 
 /// The settings frame, for pages of other areas that sit among them (the Hugging Face token).
 pub use frame::{settings_body, settings_crumbs};
@@ -19,4 +20,5 @@ pub fn router() -> Router<AppState> {
 		.merge(members::router())
 		.merge(registration::router())
 		.merge(appearance::router())
+		.merge(tokens::router())
 }

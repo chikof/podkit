@@ -2,6 +2,7 @@ pub mod apps;
 pub mod dbs;
 pub mod grid;
 pub mod models_env;
+pub mod registries_ui;
 pub mod stacks_ui;
 mod tenancy;
 

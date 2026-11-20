@@ -41,6 +41,9 @@ pub fn main_items(ctx: &TeamCtx) -> Vec<NavItem> {
 			"cloud",
 		));
 	}
+	if can(Resource::Registry) {
+		items.push(item("Registries", format!("{base}/registries"), "package"));
+	}
 	items
 }
 
@@ -64,6 +67,11 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 			"key-round",
 		));
 	}
+	items.push(item(
+		"API tokens",
+		format!("{base}/settings/api-tokens"),
+		"terminal",
+	));
 	items.push(item(
 		"Appearance",
 		format!("{base}/settings/appearance"),

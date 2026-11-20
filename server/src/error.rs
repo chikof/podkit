@@ -96,6 +96,17 @@ pub enum ServerError {
 
 	#[error("ssh key not found")]
 	SshKeyNotFound,
+	#[error("registry not found")]
+	RegistryNotFound,
+
+	#[error("API token not found")]
+	TokenNotFound,
+
+	#[error("this API token has expired")]
+	TokenExpired,
+
+	#[error("this API token lacks the {0} scope")]
+	MissingScope(&'static str),
 
 	/// The request is well-formed but names something podkit does not run,
 	/// e.g. a compose key outside the supported subset. `issues` is shown to
@@ -147,7 +158,9 @@ impl ServerError {
 			| Self::Validation(_)
 			| Self::RoleNotAllowed
 			| Self::CannotDeleteLocalServer => StatusCode::BAD_REQUEST,
-			Self::InvalidToken | Self::InvalidCredentials => StatusCode::UNAUTHORIZED,
+			Self::InvalidToken | Self::InvalidCredentials | Self::TokenExpired => {
+				StatusCode::UNAUTHORIZED
+			}
 			Self::EmailTaken
 			| Self::AlreadyMember
 			| Self::DomainTaken
@@ -169,9 +182,13 @@ impl ServerError {
 			| Self::ModelFileNotFound
 			| Self::StackNotFound
 			| Self::SshKeyNotFound
+			| Self::RegistryNotFound
+			| Self::TokenNotFound
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,
 			Self::Unprocessable { .. } => StatusCode::UNPROCESSABLE_ENTITY,
-			Self::Forbidden | Self::RegistrationClosed => StatusCode::FORBIDDEN,
+			Self::Forbidden | Self::MissingScope(_) | Self::RegistrationClosed => {
+				StatusCode::FORBIDDEN
+			}
 			Self::AgentUnavailable | Self::HuggingFaceUnavailable => StatusCode::BAD_GATEWAY,
 		}
 	}
