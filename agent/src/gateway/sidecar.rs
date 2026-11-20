@@ -261,11 +261,43 @@ pub async fn apply(
 		.await
 		.map_err(|e| format!("inspecting the gateway failed: {e}"))?
 		.is_some();
-	if !config.keys.is_empty() || exists {
-		ensure_running(podman, supervisor, data_dir).await?;
-		sync_networks(podman, &config.networks).await?;
+	match lazy_action(!config.keys.is_empty(), exists) {
+		Lazy::Run => {
+			ensure_running(podman, supervisor, data_dir).await?;
+			sync_networks(podman, &config.networks).await?;
+		}
+		Lazy::Remove => {
+			supervisor.remove(CONTAINER).await;
+			podman
+				.remove(CONTAINER)
+				.await
+				.map_err(|e| format!("removing the idle gateway failed: {e}"))?;
+			info!("gateway sidecar removed: no model link needs it");
+		}
+		Lazy::Nothing => {}
 	}
 	Ok(())
+}
+
+/// What the routing table asks of the sidecar container.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Lazy {
+	/// A link exists: the sidecar must run.
+	Run,
+	/// The last link is gone: the sidecar is removed and its memory freed.
+	Remove,
+	/// No link and no sidecar: nothing is ever started.
+	Nothing,
+}
+
+/// The gateway is lazy: it exists only while some key can reach a model.
+#[must_use]
+pub fn lazy_action(has_keys: bool, exists: bool) -> Lazy {
+	match (has_keys, exists) {
+		(true, _) => Lazy::Run,
+		(false, true) => Lazy::Remove,
+		(false, false) => Lazy::Nothing,
+	}
 }
 
 /// The environment networks the sidecar should be on out of what the server
@@ -461,6 +493,14 @@ mod tests {
 		assert_eq!(read_config(dir.path()).await, Some(config.clone()));
 		config.keys.clear();
 		assert!(write_config(dir.path(), &config).await.unwrap());
+	}
+
+	#[test]
+	fn gateway_lazy_runs_only_while_a_link_exists() {
+		assert_eq!(lazy_action(false, false), Lazy::Nothing);
+		assert_eq!(lazy_action(true, false), Lazy::Run);
+		assert_eq!(lazy_action(true, true), Lazy::Run);
+		assert_eq!(lazy_action(false, true), Lazy::Remove);
 	}
 
 	#[test]

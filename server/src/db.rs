@@ -3,8 +3,18 @@
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
 
+/// Connections the pool may hold at most.
+const MAX_CONNECTIONS: u32 = 5;
+
 pub async fn connect(url: &str) -> Result<PgPool, sqlx::Error> {
-	PgPoolOptions::new().max_connections(10).connect(url).await
+	// Every Postgres backend costs the database server a few MB, so the pool is
+	// small and gives idle connections back after half a minute.
+	PgPoolOptions::new()
+		.max_connections(MAX_CONNECTIONS)
+		.min_connections(0)
+		.idle_timeout(std::time::Duration::from_secs(30))
+		.connect(url)
+		.await
 }
 
 pub async fn migrate(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateError> {

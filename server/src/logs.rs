@@ -19,7 +19,8 @@ use crate::state::AppState;
 
 const MAX_LINE_BYTES: usize = 8 * 1024;
 const MAX_JOB_LOG_BYTES: u64 = 10 << 20;
-const BROADCAST_CAPACITY: usize = 1024;
+/// Lines a live follower may lag behind (at most 256 x 8 KiB = 2 MiB per running job).
+const BROADCAST_CAPACITY: usize = 256;
 
 type Live = Arc<Mutex<HashMap<JobId, broadcast::Sender<LogLine>>>>;
 
