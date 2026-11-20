@@ -15,8 +15,9 @@ use super::{
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::deployments::{self, DeploymentStatus};
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId, TeamId, UserId};
+use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId, SshKeyId, TeamId, UserId};
 use crate::servers::Server;
+use crate::ssh_keys::service::{self as ssh_key_service, KeyChoice};
 use crate::state::AppState;
 use crate::{db, environments, scope, servers, validate, volumes};
 
@@ -46,6 +47,8 @@ pub struct ApplicationView {
 	/// The generated public hostname.
 	pub url: String,
 	pub has_deploy_key: bool,
+	/// The vault key used as the deploy key.
+	pub deploy_key_id: Option<SshKeyId>,
 	pub has_git_token: bool,
 	/// Whether registry credentials are stored (their contents never leave
 	/// the server).
@@ -78,7 +81,8 @@ impl ApplicationView {
 			memory_limit_mb: app.memory_limit_mb,
 			cpu_limit: app.cpu_limit,
 			url: public_hostname(&app.slug, server),
-			has_deploy_key: app.deploy_key.is_some(),
+			has_deploy_key: app.deploy_key_id.is_some(),
+			deploy_key_id: app.deploy_key_id,
 			has_git_token: app.git_token.is_some(),
 			has_registry_auth: app.registry_auth.is_some(),
 			latest,
@@ -100,7 +104,12 @@ pub struct AppInput {
 	pub registry_username: Option<String>,
 	pub registry_password: Option<String>,
 	pub git_ref: String,
+	/// A pasted SSH private key, imported into the vault under the application's name.
 	pub deploy_key: Option<String>,
+	/// A key from the vault.
+	pub deploy_key_id: Option<SshKeyId>,
+	/// A new Ed25519 key, made for this application.
+	pub generate_deploy_key: bool,
 	pub git_token: Option<String>,
 	pub build_strategy: String,
 	pub dockerfile_path: String,
@@ -139,6 +148,23 @@ impl ResolvedSource {
 	}
 }
 
+impl AppInput {
+	/// Whether any deploy key was asked for: a vault key, a pasted one, or a new one.
+	fn has_key(&self) -> bool {
+		self.deploy_key_id.is_some()
+			|| self.generate_deploy_key
+			|| given(self.deploy_key.as_deref()).is_some()
+	}
+
+	fn key_choice(&self) -> AppResult<Option<KeyChoice>> {
+		KeyChoice::from_request(
+			self.deploy_key_id,
+			self.deploy_key.clone(),
+			self.generate_deploy_key,
+		)
+	}
+}
+
 fn given(v: Option<&str>) -> Option<&str> {
 	v.map(str::trim).filter(|v| !v.is_empty())
 }
@@ -164,7 +190,7 @@ fn resolve_source(body: &AppInput, existing: Option<SourceKind>) -> AppResult<Re
 			validate_source(
 				repo_url,
 				&body.dockerfile_path,
-				body.deploy_key.as_deref(),
+				body.has_key(),
 				body.git_token.as_deref(),
 			)?;
 			if given(body.registry_username.as_deref()).is_some()
@@ -184,9 +210,7 @@ fn resolve_source(body: &AppInput, existing: Option<SourceKind>) -> AppResult<Re
 					"invalid image reference".to_string(),
 				));
 			}
-			if given(body.deploy_key.as_deref()).is_some()
-				|| given(body.git_token.as_deref()).is_some()
-			{
+			if body.has_key() || given(body.git_token.as_deref()).is_some() {
 				return Err(ServerError::Validation(
 					"deploy_key and git_token only apply to git applications".to_string(),
 				));
@@ -222,7 +246,7 @@ fn resolve_source(body: &AppInput, existing: Option<SourceKind>) -> AppResult<Re
 fn validate_source(
 	repo_url: &str,
 	dockerfile_path: &str,
-	deploy_key: Option<&str>,
+	deploy_key: bool,
 	git_token: Option<&str>,
 ) -> AppResult<()> {
 	if !validate::repo_url(repo_url) {
@@ -234,7 +258,7 @@ fn validate_source(
 		));
 	}
 	let https = repo_url.starts_with("https://");
-	if deploy_key.is_some_and(|k| !k.is_empty()) && https {
+	if deploy_key && https {
 		return Err(ServerError::Validation(
 			"deploy_key requires an ssh:// or scp-form repo_url, use git_token for https://"
 				.to_string(),
@@ -353,7 +377,19 @@ pub async fn create(
 
 	validate_basics(&body)?;
 	let source = resolve_source(&body, None)?;
-	let deploy_key = seal(s, body.deploy_key.as_deref(), "deploy key")?;
+	let key = match body.key_choice()? {
+		Some(choice) => Some(
+			ssh_key_service::resolve(
+				s,
+				user,
+				team,
+				choice,
+				&format!("Deploy key for {}", body.name.trim()),
+			)
+			.await?,
+		),
+		None => None,
+	};
 	let git_token = seal(s, body.git_token.as_deref(), "git token")?;
 	let (repo_url, image, registry_auth) = split_source(s, source)?;
 
@@ -381,7 +417,7 @@ pub async fn create(
 			image,
 			registry_auth,
 			git_ref: body.git_ref,
-			deploy_key,
+			deploy_key_id: key.map(|k| k.id),
 			git_token,
 			build_strategy: BuildStrategy::parse(&body.build_strategy),
 			dockerfile_path: body.dockerfile_path,
@@ -392,7 +428,16 @@ pub async fn create(
 		},
 	)
 	.await
-	.map_err(slug_conflict)?;
+	.map_err(slug_conflict);
+	let app = match app {
+		Ok(app) => app,
+		Err(e) => {
+			if let Some(key) = key {
+				ssh_key_service::discard(s, team, key).await;
+			}
+			return Err(e);
+		}
+	};
 
 	Ok(Created {
 		app: ApplicationView::new(&app, &server, None),
@@ -463,7 +508,19 @@ pub async fn update(
 
 	validate_basics(&body)?;
 	let source = resolve_source(&body, Some(app.source_kind))?;
-	let deploy_key = seal(s, body.deploy_key.as_deref(), "deploy key")?;
+	let key = match body.key_choice()? {
+		Some(choice) => Some(
+			ssh_key_service::resolve(
+				s,
+				user,
+				team,
+				choice,
+				&format!("Deploy key for {}", body.name.trim()),
+			)
+			.await?,
+		),
+		None => None,
+	};
 	let git_token = seal(s, body.git_token.as_deref(), "git token")?;
 	let (repo_url, image, registry_auth) = split_source(s, source)?;
 
@@ -477,7 +534,7 @@ pub async fn update(
 			image,
 			registry_auth,
 			git_ref: body.git_ref,
-			deploy_key,
+			deploy_key_id: key.map(|k| k.id),
 			git_token,
 			build_strategy: BuildStrategy::parse(&body.build_strategy),
 			dockerfile_path: body.dockerfile_path,
@@ -487,7 +544,16 @@ pub async fn update(
 		},
 	)
 	.await
-	.map_err(slug_conflict)?;
+	.map_err(slug_conflict);
+	let updated = match updated {
+		Ok(updated) => updated,
+		Err(e) => {
+			if let Some(key) = key {
+				ssh_key_service::discard(s, team, key).await;
+			}
+			return Err(e);
+		}
+	};
 
 	Ok(ApplicationView::new(&updated, &server, None))
 }

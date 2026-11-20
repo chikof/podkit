@@ -10,7 +10,7 @@ use crate::databases::{Database, DatabaseStatus, EngineKind};
 use crate::environments::Environment;
 use crate::error::{AppResult, ServerError};
 use crate::ids::{
-	ApplicationId, BackupTargetId, DatabaseId, EnvironmentId, ProjectId, ServerId, TeamId,
+	ApplicationId, BackupTargetId, DatabaseId, EnvironmentId, ProjectId, ServerId, SshKeyId, TeamId,
 };
 use crate::projects::Project;
 use crate::servers::{Server, ServerStatus};
@@ -67,7 +67,7 @@ pub async fn application(
 			SELECT a.id AS "id: ApplicationId", a.project_id AS "project_id: ProjectId", a.environment_id AS "environment_id: EnvironmentId",
 				a.server_id AS "server_id: ServerId", a.name, a.slug, a.repo_url, a.git_ref,
 				a.source_kind AS "source_kind: SourceKind", a.image, a.registry_auth,
-				a.deploy_key, a.git_token, a.build_strategy AS "build_strategy: BuildStrategy",
+				a.deploy_key_id AS "deploy_key_id: SshKeyId", a.git_token, a.build_strategy AS "build_strategy: BuildStrategy",
 				a.dockerfile_path, a.container_port, a.webhook_secret, a.memory_limit_mb,
 				a.cpu_limit
 			FROM applications a
@@ -83,12 +83,22 @@ pub async fn application(
 	.ok_or(ServerError::ApplicationNotFound)
 }
 
+pub async fn ssh_key(
+	db: &PgPool,
+	team: TeamId,
+	id: SshKeyId,
+) -> AppResult<crate::ssh_keys::SshKey> {
+	crate::ssh_keys::find(db, team, id)
+		.await?
+		.ok_or(ServerError::SshKeyNotFound)
+}
+
 pub async fn server(db: &PgPool, team: TeamId, id: ServerId) -> AppResult<Server> {
 	sqlx::query_as!(
 		Server,
 		r#"
 			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
-				ssh_user, ssh_private_key, podman_socket_path, is_local,
+				ssh_user, ssh_key_id AS "ssh_key_id: SshKeyId", podman_socket_path, is_local,
 				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
 				arch, status_message,
 				hardware AS "hardware?: sqlx::types::Json<proto::Hardware>", hardware_at

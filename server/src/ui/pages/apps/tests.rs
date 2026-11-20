@@ -23,7 +23,7 @@ use crate::ui::testing::{
 	assert_contains, assert_not_contains, get_html, page_main, post_signals, ui_login, ui_session,
 };
 
-const KEY: &str = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----";
+const KEY: &str = crate::tests::SSH_KEY;
 const TOKEN: &str = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
 /// A value that must never come back out, whatever the page.
 const SECRET: &str = "S3CR3T-0b9a1c5e-6f0e-4d0e-9a52-7c1d2f3a4b5c";
@@ -389,7 +389,8 @@ async fn credentials_are_stored_but_never_rendered(db: PgPool) {
 	}
 	let id = application_id(&db, "keyed").await;
 	let (_, page) = f.get(&format!("{}/{id}/settings", f.base())).await;
-	assert_contains(&page, "A deploy key is stored.");
+	assert_contains(&page, "Uses the key");
+	assert_contains(&page, "ssh-ed25519 ");
 	let id = application_id(&db, "regged").await;
 	let (_, page) = f.get(&format!("{}/{id}/settings", f.base())).await;
 	assert_contains(&page, "Registry credentials are stored.");

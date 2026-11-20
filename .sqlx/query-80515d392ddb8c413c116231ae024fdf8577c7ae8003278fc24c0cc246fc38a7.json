@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tINSERT INTO applications\n\t\t\t\t(id, project_id, environment_id, server_id, name, slug, repo_url, git_ref, deploy_key, git_token,\n\t\t\t\t build_strategy, dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,\n\t\t\t\t source_kind, image, registry_auth)\n\t\t\tVALUES ($1, $2, $19, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)\n\t\t\tRETURNING\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key, git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t",
+  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key_id AS \"deploy_key_id: SshKeyId\", git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t\tFROM applications WHERE id = $1\n\t\t",
   "describe": {
     "columns": [
       {
@@ -126,12 +126,12 @@
       },
       {
         "ordinal": 11,
-        "name": "deploy_key",
-        "type_info": "Bytea",
+        "name": "deploy_key_id: SshKeyId",
+        "type_info": "Int8",
         "origin": {
           "Table": {
             "table": "applications",
-            "name": "deploy_key"
+            "name": "deploy_key_id"
           }
         }
       },
@@ -215,24 +215,6 @@
     ],
     "parameters": {
       "Left": [
-        "Int8",
-        "Int8",
-        "Int8",
-        "Varchar",
-        "Varchar",
-        "Text",
-        "Varchar",
-        "Bytea",
-        "Bytea",
-        "Varchar",
-        "Varchar",
-        "Int4",
-        "Bytea",
-        "Int4",
-        "Float4",
-        "Text",
-        "Text",
-        "Bytea",
         "Int8"
       ]
     },
@@ -258,5 +240,5 @@
       true
     ]
   },
-  "hash": "1aee3aeffc0e7f4a51f5aa92ccdc36c9a0b062ccf265ac176f0b0f5702f466a0"
+  "hash": "80515d392ddb8c413c116231ae024fdf8577c7ae8003278fc24c0cc246fc38a7"
 }

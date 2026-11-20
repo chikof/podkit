@@ -158,7 +158,7 @@ async fn build_spec(
 	let container_port = u16::try_from(application.container_port)
 		.map_err(|_| failed("application container_port is out of range"))?;
 
-	let source = app_source(state, application, deployment)?;
+	let source = app_source(state, application, deployment).await?;
 
 	let custom_domains = domains::list(&state.db, application.id)
 		.await
@@ -253,7 +253,7 @@ async fn build_spec(
 /// and built, and an image app pulls its reference again, so a redeploy or a
 /// registry webhook picks up a moved tag. After a pull the agent reports the
 /// digest reference, which is what a later rollback runs.
-pub(crate) fn app_source(
+pub(crate) async fn app_source(
 	state: &AppState,
 	application: &Application,
 	deployment: &Deployment,
@@ -280,7 +280,7 @@ pub(crate) fn app_source(
 				.clone()
 				.ok_or_else(|| failed("application has no repository"))?,
 			git_ref: application.git_ref.clone(),
-			auth: git_auth(state, application)?,
+			auth: git_auth(state, application).await?,
 			build: match application.build_strategy {
 				BuildStrategy::Dockerfile => Build::Dockerfile {
 					path: application.dockerfile_path.clone(),
@@ -319,7 +319,7 @@ fn registry_auth(
 
 /// One credential per application: an ssh key for ssh repo urls, a token
 /// for https ones. `create`/`update` only ever store the matching one.
-fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth, JobFailure> {
+async fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth, JobFailure> {
 	let decrypt = |sealed: &[u8]| {
 		state.secrets.decrypt(sealed).map_err(|e| {
 			tracing::error!(
@@ -329,9 +329,20 @@ fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth, JobF
 			failed("failed to decrypt repository credential")
 		})
 	};
-	if let Some(sealed) = application.deploy_key.as_deref() {
+	if let Some(key) = application.deploy_key_id {
+		let sealed = crate::ssh_keys::sealed_private_key(&state.db, key)
+			.await
+			.map_err(|e| {
+				tracing::error!(
+					application = application.id.0,
+					"deploy key lookup failed: {e}"
+				);
+				failed("failed to load the deploy key")
+			})?
+			.ok_or_else(|| failed("the application's deploy key no longer exists"))?;
+		let _ = crate::ssh_keys::touch(&state.db, key).await;
 		return Ok(GitAuth::SshKey {
-			private_key: decrypt(sealed)?,
+			private_key: decrypt(&sealed)?,
 		});
 	}
 	if let Some(sealed) = application.git_token.as_deref() {

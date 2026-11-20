@@ -46,5 +46,6 @@ id!(
 	StackId,
 	StackServiceId,
 	NetworkId,
+	SshKeyId,
 	JobId,
 );

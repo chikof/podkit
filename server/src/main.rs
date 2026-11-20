@@ -48,6 +48,7 @@ mod routes;
 mod scope;
 mod search;
 mod servers;
+mod ssh_keys;
 mod stacks;
 mod state;
 mod teams;
@@ -111,6 +112,14 @@ async fn main() -> AppResult<()> {
 		shutdown: shutdown.clone(),
 		config: Arc::new(runtime_config),
 	};
+
+	// Keys the 0041 migration moved into the vault have no public key yet; only this process
+	// can decrypt them to derive it.
+	match ssh_keys::service::derive_missing(&state).await {
+		Ok(0) => {}
+		Ok(n) => info!("derived the public key of {n} vault key(s)"),
+		Err(e) => warn!("failed to derive vault public keys: {e}"),
+	}
 
 	worker::recover(&state).await?;
 	if let Err(e) = servers::bootstrap::enqueue_outdated(&state).await {

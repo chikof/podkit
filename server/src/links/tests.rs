@@ -383,14 +383,16 @@ async fn links_refuse_what_cannot_work(db: PgPool) {
 
 	// A model on another server.
 	let other_server = crypto::generate_id();
+	let other_key = crate::tests::seed_key(&db, s.team, "remote key").await;
 	sqlx::query(
-		"INSERT INTO servers (id, team_id, name, hostname, ssh_port, ssh_user, ssh_private_key,
+		"INSERT INTO servers (id, team_id, name, hostname, ssh_port, ssh_user, ssh_key_id,
 			podman_socket_path, is_local, status)
-		VALUES ($1, $2, 'remote', 'remote.example', 22, 'root', decode('00', 'hex'),
+		VALUES ($1, $2, 'remote', 'remote.example', 22, 'root', $3,
 			'/run/podman.sock', FALSE, 'active')",
 	)
 	.bind(other_server)
 	.bind(s.team)
+	.bind(other_key)
 	.execute(&db)
 	.await
 	.unwrap();

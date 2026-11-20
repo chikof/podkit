@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tUPDATE applications\n\t\t\tSET name = $2, slug = $3, repo_url = $4, git_ref = $5,\n\t\t\t\tdeploy_key = COALESCE($6, deploy_key), git_token = COALESCE($7, git_token),\n\t\t\t\tbuild_strategy = $8, dockerfile_path = $9, container_port = $10,\n\t\t\t\tmemory_limit_mb = $11, cpu_limit = $12, image = $13,\n\t\t\t\tregistry_auth = COALESCE($14, registry_auth), updated_at = NOW()\n\t\t\tWHERE id = $1\n\t\t\tRETURNING\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key, git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t",
+  "query": "\n\t\t\tINSERT INTO applications\n\t\t\t\t(id, project_id, environment_id, server_id, name, slug, repo_url, git_ref, deploy_key_id, git_token,\n\t\t\t\t build_strategy, dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,\n\t\t\t\t source_kind, image, registry_auth)\n\t\t\tVALUES ($1, $2, $19, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)\n\t\t\tRETURNING\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key_id AS \"deploy_key_id: SshKeyId\", git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t",
   "describe": {
     "columns": [
       {
@@ -126,12 +126,12 @@
       },
       {
         "ordinal": 11,
-        "name": "deploy_key",
-        "type_info": "Bytea",
+        "name": "deploy_key_id: SshKeyId",
+        "type_info": "Int8",
         "origin": {
           "Table": {
             "table": "applications",
-            "name": "deploy_key"
+            "name": "deploy_key_id"
           }
         }
       },
@@ -216,19 +216,24 @@
     "parameters": {
       "Left": [
         "Int8",
+        "Int8",
+        "Int8",
         "Varchar",
         "Varchar",
         "Text",
         "Varchar",
-        "Bytea",
+        "Int8",
         "Bytea",
         "Varchar",
         "Varchar",
         "Int4",
+        "Bytea",
         "Int4",
         "Float4",
         "Text",
-        "Bytea"
+        "Text",
+        "Bytea",
+        "Int8"
       ]
     },
     "nullable": [
@@ -253,5 +258,5 @@
       true
     ]
   },
-  "hash": "e1ba66e69329ba58a2f54f4c0bf59e25549f19ffbd090ffa0ef963793efe9bac"
+  "hash": "f72dc7939fc720c222bc2fbebd21405c8fbdfeadf4f10358f6fece5049ceb64b"
 }

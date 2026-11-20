@@ -339,6 +339,8 @@ async fn deploy_app(
 			registry_password: None,
 			git_ref: "main".to_string(),
 			deploy_key: None,
+			deploy_key_id: None,
+			generate_deploy_key: false,
 			git_token: None,
 			build_strategy: "dockerfile".to_string(),
 			dockerfile_path: "Dockerfile".to_string(),

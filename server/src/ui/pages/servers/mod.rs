@@ -17,6 +17,7 @@ use crate::ui::layout::Crumb;
 
 mod detail;
 pub(in crate::ui) use detail::header;
+mod key_picker;
 mod list;
 mod monitoring;
 #[cfg(test)]
