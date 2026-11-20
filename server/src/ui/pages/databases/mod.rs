@@ -36,6 +36,7 @@ mod general;
 mod header;
 mod logs;
 mod monitoring;
+mod networks_tab;
 
 pub(in crate::ui) use general::{SettingsSignals, schedule_hint};
 pub(in crate::ui) use header::reloaded;
@@ -51,6 +52,7 @@ pub fn router() -> Router<AppState> {
 		.merge(connection::router())
 		.merge(logs::router())
 		.merge(monitoring::router())
+		.merge(networks_tab::router())
 		.merge(advanced::router())
 }
 
@@ -181,16 +183,18 @@ pub(in crate::ui) enum Tab {
 	Connection,
 	Backups,
 	Monitoring,
+	Networks,
 	Logs,
 	Advanced,
 }
 
 impl Tab {
-	const ALL: [Self; 6] = [
+	const ALL: [Self; 7] = [
 		Self::General,
 		Self::Connection,
 		Self::Backups,
 		Self::Monitoring,
+		Self::Networks,
 		Self::Logs,
 		Self::Advanced,
 	];
@@ -201,6 +205,7 @@ impl Tab {
 			Self::Connection => "Connection",
 			Self::Backups => "Backups",
 			Self::Monitoring => "Monitoring",
+			Self::Networks => "Networks",
 			Self::Logs => "Logs",
 			Self::Advanced => "Advanced",
 		}
@@ -213,6 +218,7 @@ impl Tab {
 			Self::Connection => "/connection",
 			Self::Backups => "/backups",
 			Self::Monitoring => "/monitoring",
+			Self::Networks => "/networks",
 			Self::Logs => "/logs",
 			Self::Advanced => "/advanced",
 		}
@@ -225,7 +231,7 @@ impl Tab {
 			Self::General | Self::Logs => true,
 			Self::Connection => can(Action::Update, Resource::Database),
 			Self::Backups => can(Action::Read, Resource::Backup),
-			Self::Monitoring => can(Action::Read, Resource::Database),
+			Self::Monitoring | Self::Networks => can(Action::Read, Resource::Database),
 			Self::Advanced => {
 				can(Action::Update, Resource::Database) || can(Action::Delete, Resource::Database)
 			}

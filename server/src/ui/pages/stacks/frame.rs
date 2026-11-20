@@ -38,6 +38,7 @@ pub(super) enum Tab {
 	Deployments,
 	Logs,
 	Monitoring,
+	Networks,
 	Advanced,
 }
 
@@ -51,6 +52,7 @@ impl Tab {
 			Self::Deployments => "Deployments",
 			Self::Logs => "Logs",
 			Self::Monitoring => "Monitoring",
+			Self::Networks => "Networks",
 			Self::Advanced => "Advanced",
 		}
 	}
@@ -64,11 +66,12 @@ impl Tab {
 			Self::Deployments => "/deployments",
 			Self::Logs => "/logs",
 			Self::Monitoring => "/monitoring",
+			Self::Networks => "/networks",
 			Self::Advanced => "/advanced",
 		}
 	}
 
-	const ALL: [Self; 8] = [
+	const ALL: [Self; 9] = [
 		Self::Services,
 		Self::Compose,
 		Self::Environment,
@@ -76,6 +79,7 @@ impl Tab {
 		Self::Deployments,
 		Self::Logs,
 		Self::Monitoring,
+		Self::Networks,
 		Self::Advanced,
 	];
 }

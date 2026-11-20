@@ -45,5 +45,6 @@ id!(
 	ModelId,
 	StackId,
 	StackServiceId,
+	NetworkId,
 	JobId,
 );

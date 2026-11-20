@@ -66,6 +66,7 @@ enum Tab {
 	Playground,
 	Monitoring,
 	Links,
+	Networks,
 	Usage,
 	Logs,
 	Advanced,
@@ -78,6 +79,7 @@ impl Tab {
 			Self::Playground => "playground",
 			Self::Monitoring => "monitoring",
 			Self::Links => "links",
+			Self::Networks => "networks",
 			Self::Usage => "usage",
 			Self::Logs => "logs",
 			Self::Advanced => "advanced",
@@ -90,6 +92,7 @@ impl Tab {
 			Self::Playground => "Playground",
 			Self::Monitoring => "Monitoring",
 			Self::Links => "Links",
+			Self::Networks => "Networks",
 			Self::Usage => "Usage",
 			Self::Logs => "Logs",
 			Self::Advanced => "Advanced",
@@ -101,6 +104,7 @@ impl Tab {
 			Some("playground") => Self::Playground,
 			Some("monitoring") => Self::Monitoring,
 			Some("links") => Self::Links,
+			Some("networks") => Self::Networks,
 			Some("usage") => Self::Usage,
 			Some("logs") => Self::Logs,
 			Some("advanced") => Self::Advanced,
@@ -130,6 +134,7 @@ fn visible_tabs(ctx: &TeamCtx) -> Vec<Tab> {
 	tabs.extend([
 		Tab::Monitoring,
 		Tab::Links,
+		Tab::Networks,
 		Tab::Usage,
 		Tab::Logs,
 		Tab::Advanced,
@@ -541,6 +546,16 @@ async fn page(
 			usage_tab(&usage)
 		}
 		Tab::Logs => logs_tab(&ctx, &model),
+		Tab::Networks => {
+			crate::ui::pages::networks::panel::content(
+				&s,
+				&ctx,
+				project,
+				crate::networks::ResourceKind::Model,
+				model_id.0,
+			)
+			.await?
+		}
 		Tab::Advanced => advanced_tab(&ctx, &model),
 	};
 	let hrefs: Vec<(Tab, String)> = allowed.iter().map(|t| (*t, t.href(&ctx, &model))).collect();

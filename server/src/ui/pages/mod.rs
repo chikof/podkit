@@ -10,6 +10,7 @@ pub mod apps;
 pub mod backups;
 pub mod databases;
 pub mod models;
+pub mod networks;
 pub mod projects;
 pub mod search;
 pub mod servers;

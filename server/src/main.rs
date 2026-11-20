@@ -42,6 +42,7 @@ mod members;
 mod metrics;
 mod model_files;
 mod models;
+mod networks;
 mod projects;
 mod routes;
 mod scope;

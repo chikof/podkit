@@ -120,6 +120,16 @@ pub async fn user_with_team(app: &Router, name: &str) -> (String, i64) {
 	(token, team["id"].as_i64().unwrap())
 }
 
+/// The one `i64` that `sql` selects (`$1` bound to `arg` when given). For tests of
+/// the UI, which must not carry queries themselves.
+pub async fn scalar(db: &PgPool, sql: &'static str, arg: Option<i64>) -> i64 {
+	let query = sqlx::query_scalar(sql);
+	match arg {
+		Some(arg) => query.bind(arg).fetch_one(db).await.unwrap(),
+		None => query.fetch_one(db).await.unwrap(),
+	}
+}
+
 /// Rows in `table`. For asserting that a refused request changed nothing.
 pub async fn count(db: &PgPool, table: &str) -> i64 {
 	sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT COUNT(*) FROM {table}")))

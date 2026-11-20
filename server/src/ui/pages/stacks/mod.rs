@@ -19,6 +19,7 @@ mod env;
 mod frame;
 mod issues;
 mod monitoring;
+mod networks;
 mod runs;
 mod services;
 #[cfg(test)]
@@ -51,6 +52,7 @@ pub fn router() -> Router<AppState> {
 		.route(&at("/logs/stream"), get(runs::logs_stream))
 		.route(&at("/monitoring"), get(monitoring::page))
 		.route(&at("/monitoring/charts"), get(monitoring::charts))
+		.route(&at("/networks"), get(networks::page))
 		.route(&at("/advanced"), get(danger::page))
 		.route(&at("/remove"), post(danger::remove))
 }

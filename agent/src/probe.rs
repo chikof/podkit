@@ -12,7 +12,6 @@ use std::time::Duration;
 use futures_util::StreamExt;
 use proto::{ProbeRequest, ProbeResponse};
 
-use crate::ingress::NETWORK;
 use crate::model_download::IMAGE;
 use crate::podman::{ContainerSpec, Podman};
 
@@ -91,14 +90,14 @@ pub fn script_args(req: &ProbeRequest) -> Vec<String> {
 	args
 }
 
-fn container_spec(req: &ProbeRequest, name: &str) -> ContainerSpec {
+fn container_spec(req: &ProbeRequest, name: &str, network: &str) -> ContainerSpec {
 	let mut command = vec!["python3".to_owned(), "-c".to_owned(), SCRIPT.to_owned()];
 	command.extend(script_args(req));
 	ContainerSpec {
 		name: name.to_owned(),
 		image: IMAGE.to_owned(),
 		command: Some(command),
-		network: NETWORK.to_owned(),
+		network: network.to_owned(),
 		labels: vec![("podkit.probe".to_owned(), req.container_id.clone())],
 		memory_bytes: Some(MEMORY_BYTES),
 		..Default::default()
@@ -117,6 +116,14 @@ pub async fn run(podman: &Podman, req: &ProbeRequest) -> Result<ProbeResponse, S
 		.await
 		.map_err(|e| format!("inspect failed: {e}"))?
 		.ok_or_else(|| format!("container {} not found", req.container_id))?;
+	// The probe joins the network the container lives on: its environment's.
+	let network = crate::networks::probe_network(
+		info.network_settings
+			.as_ref()
+			.and_then(|n| n.networks.as_ref())
+			.map(|n| n.keys().map(String::as_str).collect::<Vec<_>>())
+			.unwrap_or_default(),
+	);
 	if info.state.and_then(|s| s.running) != Some(true) {
 		return Ok(ProbeResponse {
 			running: false,
@@ -144,7 +151,7 @@ pub async fn run(podman: &Podman, req: &ProbeRequest) -> Result<ProbeResponse, S
 	);
 	let result = tokio::time::timeout(
 		Duration::from_secs(u64::from(req.timeout_s)) + SLACK,
-		execute(podman, req, &name),
+		execute(podman, req, &name, &network),
 	)
 	.await
 	.unwrap_or_else(|_| Err("probe container did not finish".to_owned()));
@@ -159,9 +166,14 @@ pub async fn run(podman: &Podman, req: &ProbeRequest) -> Result<ProbeResponse, S
 	})
 }
 
-async fn execute(podman: &Podman, req: &ProbeRequest, name: &str) -> Result<Output, String> {
+async fn execute(
+	podman: &Podman,
+	req: &ProbeRequest,
+	name: &str,
+	network: &str,
+) -> Result<Output, String> {
 	podman
-		.create_container(container_spec(req, name))
+		.create_container(container_spec(req, name, network))
 		.await
 		.map_err(|e| format!("probe create failed: {e}"))?;
 	podman
@@ -210,8 +222,8 @@ mod tests {
 				r#"{"model":"a'b"}"#
 			]
 		);
-		let spec = container_spec(&req, "podkit-probe-x");
-		assert_eq!(spec.network, "podkit");
+		let spec = container_spec(&req, "podkit-probe-x", "podkit-env-4");
+		assert_eq!(spec.network, "podkit-env-4");
 		assert!(!spec.command.unwrap()[2].contains("model-qwen"));
 	}
 

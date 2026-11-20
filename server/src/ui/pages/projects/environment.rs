@@ -134,6 +134,21 @@ struct FilterSignals {
 	seen: String,
 }
 
+/// "Private network podkit-env-7 on this server": where the environment's resources can
+/// reach each other and nothing else. Nothing until a resource of it has been deployed.
+fn network_line(team: TeamId, networks: &[crate::networks::service::NetworkView]) -> Markup {
+	html! {
+		@for view in networks {
+			p class="ui-lede" {
+				"Private network " code class="font-mono" { (view.network.podman_name) } " · "
+				a class="hover:underline" href={ "/teams/" (team) "/servers/" (view.network.server_id) "/networks" } {
+					(view.members.len()) @if view.members.len() == 1 { " resource" } @else { " resources" }
+				}
+			}
+		}
+	}
+}
+
 /// "6 resources in production · 4 running · 1 building": the environment at a glance.
 fn summary_line(view: &EnvironmentView) -> String {
 	let n = view.resources.len();
@@ -561,6 +576,16 @@ async fn render(
 	let can_create_env = ctx.perms.can(Action::Create, Resource::Project);
 	let can_update = ctx.perms.can(Action::Update, Resource::Project);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::Project);
+	// An environment's private network, one per server it has resources on.
+	let env_networks = crate::networks::service::for_environment(
+		s,
+		ctx.user.id,
+		ctx.team.id,
+		view.project.id,
+		view.environment.id,
+	)
+	.await
+	.unwrap_or_default();
 	let signals = json!({
 		"q": filter.q,
 		"type": filter.kind.map_or("all", ResourceKind::slug),
@@ -580,6 +605,7 @@ async fn render(
 					p class="ui-eyebrow" { "Project" }
 					h1 { (view.project.name) }
 					p class="ui-lede" { (summary_line(&view)) }
+					(network_line(ctx.team.id, &env_networks))
 				}
 				@if can_pick {
 					div class="ui-page-actions" {

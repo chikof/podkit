@@ -121,12 +121,26 @@ async fn phase(tx: &mpsc::Sender<Event>, phase: Phase) -> Result<(), String> {
 	emit(tx, Event::Phase { phase }).await
 }
 
+/// Keeps Traefik on the networks of the routed containers. A failure only
+/// delays routing until the next deploy, so it is logged and not fatal.
+pub(crate) async fn sync_ingress_networks(podman: &Podman) {
+	if let Err(e) = ingress::sync_networks(podman).await {
+		tracing::warn!(error = %e, "syncing Traefik's networks failed");
+	}
+}
+
 async fn ensure_networks(podman: &Podman, spec: &DeploySpec) -> Result<(), String> {
-	if !spec.options.isolated {
+	if !spec.options.isolated && spec.attach.is_empty() {
 		podman
 			.ensure_network(NETWORK)
 			.await
 			.map_err(|e| format!("network setup failed: {e}"))?;
+	}
+	for attach in &spec.attach {
+		podman
+			.create_network(&attach.name, attach.internal)
+			.await
+			.map_err(|e| format!("network {} setup failed: {e}", attach.name))?;
 	}
 	for network in &spec.networks {
 		podman
@@ -220,6 +234,9 @@ async fn execute(
 
 	if spec.strategy == Strategy::Rolling {
 		phase(tx, Phase::Swapping).await?;
+		if spec.routing.is_some() {
+			sync_ingress_networks(&podman).await;
+		}
 		if !old.is_empty() {
 			if spec.routing.is_some() {
 				tokio::time::sleep(SWAP_DELAY).await;
@@ -230,6 +247,9 @@ async fn execute(
 		}
 	}
 	cleanup.disarm();
+	if spec.routing.is_some() {
+		sync_ingress_networks(&podman).await;
+	}
 
 	if matches!(spec.source, Source::Git { .. }) {
 		prune_images(&podman, service).await;
@@ -267,6 +287,14 @@ fn validate_options(spec: &DeploySpec) -> Result<(), String> {
 	}
 	if o.isolated && (spec.networks.is_empty() || spec.routing.is_some()) {
 		return Err("an isolated container needs a stack network and no routing".to_string());
+	}
+	for attach in &spec.attach {
+		if !crate::networks::valid_member_network(&attach.name) {
+			return Err(format!("invalid network name {:?}", attach.name));
+		}
+		if let Some(alias) = attach.aliases.iter().find(|a| !valid_name(a, b"_.-")) {
+			return Err(format!("invalid network alias {alias:?}"));
+		}
 	}
 	for alias in spec.network_aliases.iter().chain(&o.net_aliases) {
 		if !valid_name(alias, b"_.-") {
@@ -377,6 +405,14 @@ fn container_spec(
 ) -> ContainerSpec {
 	let mut labels = vec![("podkit.service".to_string(), spec.service.clone())];
 	if let (Some(routing), Some(port)) = (&spec.routing, spec.container_port) {
+		// Traefik reaches the container on the network it lives on.
+		labels.push((
+			ingress::NETWORK_LABEL.to_string(),
+			spec.attach
+				.first()
+				.map_or(NETWORK, |a| a.name.as_str())
+				.to_string(),
+		));
 		labels.extend(ingress::routing_labels(
 			&spec.service,
 			&routing.http_hosts,
@@ -389,13 +425,33 @@ fn container_spec(
 	}
 	// Where the container lives: the stack network alone when isolated,
 	// otherwise `podkit` first and the stack networks after it.
+	let attached = |skip: usize| {
+		spec.attach
+			.iter()
+			.skip(skip)
+			.map(|a| (a.name.clone(), a.aliases.clone()))
+			.collect::<Vec<_>>()
+	};
+	let stack_networks = || {
+		spec.networks
+			.iter()
+			.filter(|n| !spec.attach.iter().any(|a| &a.name == *n))
+			.map(|n| (n.clone(), spec.options.net_aliases.clone()))
+			.collect::<Vec<_>>()
+	};
 	let (network, aliases, extra_networks) = if spec.options.isolated {
 		let mut networks = spec.networks.iter();
 		let first = networks.next().cloned().unwrap_or_default();
-		let rest = networks
+		let mut rest: Vec<_> = networks
 			.map(|n| (n.clone(), spec.options.net_aliases.clone()))
 			.collect();
+		// A stack service linked to other resources also sits on their network.
+		rest.extend(attached(0));
 		(first, spec.options.net_aliases.clone(), rest)
+	} else if let Some(first) = spec.attach.first() {
+		let mut rest = attached(1);
+		rest.extend(stack_networks());
+		(first.name.clone(), first.aliases.clone(), rest)
 	} else {
 		let rest = spec
 			.networks
@@ -649,6 +705,7 @@ mod tests {
 			stop_timeout_s: None,
 			networks: Vec::new(),
 			options: proto::ContainerOptions::default(),
+			attach: Vec::new(),
 		}
 	}
 
@@ -723,6 +780,90 @@ mod tests {
 			read_only: false,
 		}];
 		assert!(validate(&bad).is_err());
+	}
+
+	fn attach(name: &str, aliases: &[&str]) -> proto::NetworkAttach {
+		proto::NetworkAttach {
+			name: name.to_string(),
+			aliases: aliases.iter().map(|a| (*a).to_string()).collect(),
+			internal: false,
+		}
+	}
+
+	#[test]
+	fn a_container_lives_on_its_environment_network_not_podkit() {
+		let mut s = spec();
+		s.attach = vec![
+			attach("podkit-env-A", &["db"]),
+			attach("podkit-net-3", &["pg"]),
+		];
+		let c = container_spec(&s, "alpine:3", "podkit-app-1-9", &[]);
+		assert_eq!(c.network, "podkit-env-A");
+		assert_eq!(c.aliases, ["db"]);
+		assert_eq!(
+			c.extra_networks,
+			[("podkit-net-3".to_string(), vec!["pg".to_string()])]
+		);
+		let all: Vec<&str> = std::iter::once(c.network.as_str())
+			.chain(c.extra_networks.iter().map(|(n, _)| n.as_str()))
+			.collect();
+		assert!(!all.contains(&"podkit"));
+		assert!(!all.contains(&"podkit-env-B"));
+	}
+
+	#[test]
+	fn routed_containers_name_the_network_traefik_reaches_them_on() {
+		let mut s = spec();
+		s.attach = vec![attach("podkit-env-A", &[])];
+		let c = container_spec(&s, "alpine:3", "n", &[]);
+		assert!(c.labels.contains(&(
+			"traefik.docker.network".to_string(),
+			"podkit-env-A".to_string()
+		)));
+		// Without an environment network (older servers) it is the shared one.
+		let legacy = container_spec(&spec(), "alpine:3", "n", &[]);
+		assert!(
+			legacy
+				.labels
+				.contains(&("traefik.docker.network".to_string(), "podkit".to_string()))
+		);
+		// No routing, no label.
+		s.routing = None;
+		assert!(
+			container_spec(&s, "alpine:3", "n", &[])
+				.labels
+				.iter()
+				.all(|(k, _)| k != "traefik.docker.network")
+		);
+	}
+
+	#[test]
+	fn a_linked_stack_service_also_joins_the_environment_network() {
+		let mut s = stack_spec();
+		s.attach = vec![attach("podkit-env-A", &["stack-db"])];
+		let c = container_spec(&s, "postgres:17", "n", &[]);
+		assert_eq!(c.network, "podkit-stack-7");
+		assert_eq!(
+			c.extra_networks,
+			[("podkit-env-A".to_string(), vec!["stack-db".to_string()])]
+		);
+	}
+
+	#[test]
+	fn attached_networks_are_validated() {
+		let bad = |network: &str| {
+			let mut s = spec();
+			s.attach = vec![attach(network, &[])];
+			validate_options(&s).is_err()
+		};
+		for name in ["podkit", "host", "bridge", "a/b", ""] {
+			assert!(bad(name), "{name}");
+		}
+		assert!(!bad("podkit-env-1"));
+		assert!(!bad("imported_net"));
+		let mut s = spec();
+		s.attach = vec![attach("podkit-env-1", &["bad alias"])];
+		assert!(validate_options(&s).is_err());
 	}
 
 	#[test]
