@@ -116,18 +116,18 @@ fn storefront() -> Graph {
 		count: 1,
 	});
 	let mut worker = app(2, 1, "checkout-worker");
-	worker.nets = vec![net(10, "podkit-env-1", true)];
+	worker.nets = vec![net(10, "Production (shop)", true)];
 	let mut pg = dbn(1, 1, "postgres-16");
-	pg.nets = vec![net(10, "podkit-env-1", true)];
+	pg.nets = vec![net(10, "Production (shop)", true)];
 	let mut redis = dbn(2, 1, "redis-cache");
 	redis.var = Some("REDIS_URL".to_owned());
-	redis.nets = vec![net(10, "podkit-env-1", true)];
+	redis.nets = vec![net(10, "Production (shop)", true)];
 	let qwen = node(ResourceKind::Model, 1, 1, "qwen3-4b");
 	let obs = node(ResourceKind::Stack, 1, 1, "observability");
 	let mut sapi = app(3, 2, "storefront-api");
-	sapi.nets = vec![net(20, "podkit-env-2", true)];
+	sapi.nets = vec![net(20, "Staging (shop)", true)];
 	let mut spg = dbn(3, 2, "postgres-16");
-	spg.nets = vec![net(20, "podkit-env-2", true)];
+	spg.nets = vec![net(20, "Staging (shop)", true)];
 	let edges = vec![
 		edge(&api, &qwen, EdgeKind::Gateway, "gateway"),
 		edge(&worker, &pg, EdgeKind::Variable, "DATABASE_URL"),
@@ -417,8 +417,8 @@ fn graph_rules_say_why_a_wire_is_refused() {
 		why(&g, a(1), m(1)),
 		"Already linked through the model gateway"
 	);
-	assert_eq!(why(&g, d(1), d(2)), "Already on network podkit-env-1");
-	assert_eq!(why(&g, a(1), a(2)), "Already on network podkit-env-1");
+	assert_eq!(why(&g, d(1), d(2)), "Already on network Production (shop)");
+	assert_eq!(why(&g, a(1), a(2)), "Already on network Production (shop)");
 	// Another environment, by name.
 	assert_eq!(
 		why(&g, a(1), d(3)),
@@ -469,11 +469,11 @@ fn graph_rules_a_stack_joins_the_environment_network() {
 		panic!("a stack and a database are wired by network");
 	};
 	assert_eq!(join, vec![s(1)]);
-	assert_eq!(network, "podkit-env-1");
+	assert_eq!(network, "Production (shop)");
 	// Once it is on the environment's network there is nothing left to do.
 	let at = g.nodes.iter().position(|n| n.key == s(1)).unwrap();
-	g.nodes[at].nets = vec![net(10, "podkit-env-1", true)];
-	assert_eq!(why(&g, s(1), d(1)), "Already on network podkit-env-1");
+	g.nodes[at].nets = vec![net(10, "Production (shop)", true)];
+	assert_eq!(why(&g, s(1), d(1)), "Already on network Production (shop)");
 }
 
 #[test]

@@ -134,10 +134,16 @@ fn refuse<T>(text: impl Into<String>) -> Result<T, Refusal> {
 	Err(Refusal(text.into()))
 }
 
-/// The name of an environment's own network, as the lists show it.
+/// The name of an environment's own network, as the lists show it: `production (shop)`, the
+/// same name the network is made with.
 fn env_network(graph: &Graph, node: &Node) -> String {
-	let _ = graph;
-	crate::networks::environment_podman_name(node.environment)
+	let env = graph
+		.environment(node.environment)
+		.map_or("environment", |e| e.name.as_str());
+	format!("{env} ({})", graph.project.name)
+		.chars()
+		.take(60)
+		.collect()
 }
 
 fn on_env_network(node: &Node) -> bool {

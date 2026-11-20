@@ -288,8 +288,8 @@ async fn memberships(
 	team: TeamId,
 	project: ProjectId,
 ) -> Result<Vec<(NodeKey, NetRef)>, sqlx::Error> {
-	let rows: Vec<(String, i64, NetworkId, String, String, String)> = sqlx::query_as(
-		"SELECT rn.resource_kind, rn.resource_id, n.id, n.kind, n.name, n.podman_name
+	let rows: Vec<(String, i64, NetworkId, String, String)> = sqlx::query_as(
+		"SELECT rn.resource_kind, rn.resource_id, n.id, n.kind, n.name
 		FROM resource_networks rn JOIN networks n ON n.id = rn.network_id
 		WHERE n.team_id = $1 AND (
 			(rn.resource_kind = 'application' AND rn.resource_id IN
@@ -308,14 +308,14 @@ async fn memberships(
 	.await?;
 	Ok(rows
 		.into_iter()
-		.filter_map(|(kind, id, net, net_kind, name, podman)| {
+		.filter_map(|(kind, id, net, net_kind, name)| {
 			let kind = ResourceKind::from_slug(&kind)?;
 			let auto = net_kind == crate::networks::KIND_ENVIRONMENT;
 			Some((
 				NodeKey::new(kind, id),
 				NetRef {
 					id: net,
-					label: if auto { podman } else { name },
+					label: name,
 					auto,
 				},
 			))
