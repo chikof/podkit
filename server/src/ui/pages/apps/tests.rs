@@ -2146,7 +2146,8 @@ async fn health_gate_another_team_cannot_reach_or_change_the_settings(db: PgPool
 	);
 	let (s, _, body) = get_html(&f.app, &theirs, Some(&bob_cookie)).await;
 	assert_eq!(s, StatusCode::NOT_FOUND);
-	assert_not_contains(&body, "/up");
+	// Not "/up": the Uptime nav link ("/uptime") is on every page, even a 404.
+	assert_not_contains(&body, "value=\"/up\"");
 	let mut forged = f.form("web", json!({}));
 	merge(&mut forged, health_form(json!({ "hc_mode": "off" })));
 	let (_, _, body) = post_signals(&f.app, &theirs, Some(&bob_cookie), &forged).await;
