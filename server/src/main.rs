@@ -44,6 +44,7 @@ mod links;
 mod logos;
 mod logs;
 mod maintenance;
+mod mcp;
 mod members;
 mod metrics;
 mod model_files;

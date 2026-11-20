@@ -9,7 +9,7 @@ use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
 	applications, audit, auth, avatars, backups, catalog, databases, deployments, domains,
-	env_vars, environments, git_providers, iac, links, logos, members, metrics, model_files,
+	env_vars, environments, git_providers, iac, links, logos, mcp, members, metrics, model_files,
 	models, networks, projects, registries, scanning, servers, ssh_keys, stacks, teams, templates,
 	ui, volumes, webhooks,
 };
@@ -105,8 +105,12 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			state.clone(),
 			auth::tokens::gate,
 		));
+	// The MCP endpoint sends its tool calls through this same router, so the token gate
+	// and RBAC decide them.
+	let mcp = mcp::router(api.clone().with_state(state.clone()));
 	Ok(Router::new()
 		.merge(ui::router())
+		.merge(mcp)
 		.merge(logos::router())
 		.merge(git_providers::public_router())
 		.merge(avatars::public_router())

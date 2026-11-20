@@ -75,6 +75,13 @@ struct RequestMeta {
 tokio::task_local! {
 	static REQUEST: Arc<RequestMeta>;
 	static QUIET: ();
+	static MCP: ();
+}
+
+/// Runs `work` as the MCP server: calls it makes with an API token are logged with actor
+/// kind `mcp` instead of `token`.
+pub async fn as_mcp<F: std::future::Future>(work: F) -> F::Output {
+	MCP.scope((), work).await
 }
 
 /// Runs `work` without recording anything. A flow that makes many changes (applying a
@@ -181,7 +188,9 @@ pub fn by(user: UserId, team: TeamId) -> Ctx {
 		team,
 		user: Some(user),
 		token,
-		kind: if token.is_some() {
+		kind: if token.is_some() && MCP.try_with(|()| ()).is_ok() {
+			ActorKind::Mcp
+		} else if token.is_some() {
 			ActorKind::Token
 		} else {
 			ActorKind::User
