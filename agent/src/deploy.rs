@@ -178,6 +178,14 @@ async fn execute(
 
 	let service = &spec.service;
 	let new_name = format!("podkit-{service}-{}", spec.instance_id);
+	let resolved;
+	let spec = if let Some(with_command) = with_bridge_command(&podman, spec, &image).await? {
+		resolved = with_command;
+		&resolved
+	} else {
+		spec
+	};
+	let service = &spec.service;
 
 	phase(tx, Phase::Starting).await?;
 	ensure_networks(&podman, spec).await?;
@@ -325,7 +333,86 @@ fn validate_options(spec: &DeploySpec) -> Result<(), String> {
 			return Err(format!("file mount {:?} is too large", file.path));
 		}
 	}
+	if let Some(bridge) = &o.mcp_bridge {
+		if bridge.port == 0
+			|| !bridge.path.starts_with('/')
+			|| bridge.path.contains(char::is_whitespace)
+		{
+			return Err("invalid MCP bridge endpoint".to_string());
+		}
+		if bridge.command.iter().any(|a| a.contains('\0')) {
+			return Err("invalid MCP bridge command".to_string());
+		}
+		if spec.entrypoint.is_some() || spec.command.is_some() {
+			return Err("an MCP bridge replaces the entrypoint and the command".to_string());
+		}
+	}
 	Ok(())
+}
+
+/// Where the agent binary appears inside a container that runs a bridge.
+const BRIDGE_EXE: &str = "/podkit-agent";
+
+/// The spec with the bridge's command filled in from the image's own
+/// entrypoint and command when the spec names none. `None` when the container
+/// runs no bridge or already has its command.
+async fn with_bridge_command(
+	podman: &Podman,
+	spec: &DeploySpec,
+	image: &str,
+) -> Result<Option<DeploySpec>, String> {
+	let Some(bridge) = spec
+		.options
+		.mcp_bridge
+		.as_ref()
+		.filter(|b| b.command.is_empty())
+	else {
+		return Ok(None);
+	};
+	let config = podman
+		.inspect_image(image)
+		.await
+		.map_err(|e| format!("cannot read the image's command: {e}"))?
+		.and_then(|i| i.config);
+	let command: Vec<String> = config
+		.iter()
+		.flat_map(|c| c.entrypoint.iter().flatten().chain(c.cmd.iter().flatten()))
+		.cloned()
+		.collect();
+	if command.is_empty() {
+		return Err(
+			"the image has no entrypoint or command to run behind the bridge; \
+			give the MCP server a command"
+				.to_string(),
+		);
+	}
+	let mut spec = spec.clone();
+	spec.options.mcp_bridge = Some(proto::McpBridge {
+		command,
+		..bridge.clone()
+	});
+	Ok(Some(spec))
+}
+
+/// The container's entrypoint and the mounts for a bridge: the agent binary,
+/// and for a dev build linked against the Nix store, the store.
+fn bridge_parts(bridge: &proto::McpBridge) -> (Vec<String>, Vec<String>) {
+	let mut binds = Vec::new();
+	if let Ok((path, _)) = crate::gateway::sidecar::current_exe() {
+		binds.push(format!("{}:{BRIDGE_EXE}:ro", path.display()));
+		if crate::gateway::sidecar::needs_nix_store(&path) {
+			binds.push("/nix/store:/nix/store:ro".to_string());
+		}
+	}
+	let mut entrypoint = vec![
+		BRIDGE_EXE.to_string(),
+		"--mcp-bridge".to_string(),
+		format!("--listen=0.0.0.0:{}", bridge.port),
+		format!("--path={}", bridge.path),
+		"--".to_string(),
+	];
+	entrypoint.extend(bridge.command.iter().cloned());
+	(entrypoint, binds)
 }
 
 /// Writes the spec's file mounts below `<data_dir>/stack-files/<service>/` and
@@ -460,6 +547,7 @@ fn container_spec(
 			.collect();
 		(NETWORK.to_string(), spec.network_aliases.clone(), rest)
 	};
+	let bridge = spec.options.mcp_bridge.as_ref().map(bridge_parts);
 	ContainerSpec {
 		name: name.to_string(),
 		image: image.to_string(),
@@ -478,11 +566,14 @@ fn container_spec(
 				format!("{}:{}{mode}", v.name, v.path)
 			})
 			.chain(file_binds.iter().cloned())
+			.chain(bridge.iter().flat_map(|(_, binds)| binds.iter().cloned()))
 			.collect(),
 		memory_bytes: spec.memory_bytes,
 		cpu_cores: spec.cpu_cores,
 		gpus: spec.gpus.clone(),
-		entrypoint: spec.entrypoint.clone(),
+		entrypoint: bridge
+			.map(|(entrypoint, _)| entrypoint)
+			.or_else(|| spec.entrypoint.clone()),
 		shm_bytes: spec.shm_bytes,
 		stop_timeout_s: spec.stop_timeout_s,
 		options: spec.options.clone(),
@@ -864,6 +955,46 @@ mod tests {
 		let mut s = spec();
 		s.attach = vec![attach("podkit-env-1", &["bad alias"])];
 		assert!(validate_options(&s).is_err());
+	}
+
+	#[test]
+	fn an_mcp_bridge_replaces_the_entrypoint_and_mounts_the_agent() {
+		let mut s = spec();
+		s.options.mcp_bridge = Some(proto::McpBridge {
+			port: 8080,
+			path: "/mcp".to_string(),
+			command: vec!["node".to_string(), "server.js".to_string()],
+		});
+		assert!(validate(&s).is_ok());
+		let c = container_spec(&s, "img", "n", &[]);
+		let entrypoint = c.entrypoint.unwrap();
+		assert_eq!(
+			entrypoint,
+			[
+				"/podkit-agent",
+				"--mcp-bridge",
+				"--listen=0.0.0.0:8080",
+				"--path=/mcp",
+				"--",
+				"node",
+				"server.js"
+			]
+		);
+		assert!(c.command.is_none());
+		assert!(c.binds.iter().any(|b| b.ends_with(":/podkit-agent:ro")));
+
+		let mut bad = s.clone();
+		bad.entrypoint = Some(vec!["x".to_string()]);
+		assert!(validate(&bad).is_err(), "the bridge owns the entrypoint");
+		for edit in [
+			(|b: &mut proto::McpBridge| b.port = 0) as fn(&mut proto::McpBridge),
+			|b| b.path = "mcp".to_string(),
+			|b| b.path = "/a b".to_string(),
+		] {
+			let mut bad = s.clone();
+			edit(bad.options.mcp_bridge.as_mut().unwrap());
+			assert!(validate(&bad).is_err());
+		}
 	}
 
 	#[test]

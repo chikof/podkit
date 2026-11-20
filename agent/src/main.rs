@@ -13,7 +13,7 @@ use agent::{Ctx, routes};
 use tracing::{info, warn};
 
 const BACKUP_MAX_AGE: Duration = Duration::from_hours(24);
-const USAGE: &str = "usage: podkit-agent [--data-dir <dir>] [--podman-socket <path>] [--socket <path>] [--version]\n       podkit-agent --gateway [--gateway-dir <dir>] [--listen <addr>]";
+const USAGE: &str = "usage: podkit-agent [--data-dir <dir>] [--podman-socket <path>] [--socket <path>] [--version]\n       podkit-agent --gateway [--gateway-dir <dir>] [--listen <addr>]\n       podkit-agent --mcp-bridge [--listen <addr>] [--path <path>] -- <command...>";
 
 struct Args {
 	data_dir: PathBuf,
@@ -142,7 +142,53 @@ fn gateway_args() -> Option<Result<(PathBuf, String), String>> {
 	)))
 }
 
+/// `--mcp-bridge [--listen <addr>] [--path <path>] -- <command...>`: a stdio MCP
+/// server behind streamable HTTP, run in the server's own container. It is
+/// recognised by being the first argument, so a command that itself contains
+/// `--gateway` is not mistaken for the sidecar.
+fn mcp_bridge_args() -> Option<Result<(String, String, Vec<String>), String>> {
+	let mut args = std::env::args().skip(1);
+	if args.next()? != "--mcp-bridge" {
+		return None;
+	}
+	let (mut listen, mut path) = (None, None);
+	while let Some(arg) = args.next() {
+		if arg == "--" {
+			let command: Vec<String> = args.collect();
+			if command.is_empty() {
+				return Some(Err(format!(
+					"--mcp-bridge needs a command after --\n{USAGE}"
+				)));
+			}
+			return Some(Ok((
+				listen.unwrap_or_else(|| "0.0.0.0:8080".to_owned()),
+				path.unwrap_or_else(|| "/mcp".to_owned()),
+				command,
+			)));
+		}
+		let (flag, inline) = match arg.split_once('=') {
+			Some((flag, value)) => (flag.to_owned(), Some(value.to_owned())),
+			None => (arg, None),
+		};
+		let slot = match flag.as_str() {
+			"--listen" => &mut listen,
+			"--path" => &mut path,
+			_ => return Some(Err(format!("unknown argument {flag}\n{USAGE}"))),
+		};
+		match inline.or_else(|| args.next()) {
+			Some(value) => *slot = Some(value),
+			None => return Some(Err(format!("{flag} needs a value\n{USAGE}"))),
+		}
+	}
+	Some(Err(format!("--mcp-bridge needs -- and a command\n{USAGE}")))
+}
+
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
+	if let Some(bridge) = mcp_bridge_args() {
+		let (listen, path, command) = bridge?;
+		better_tracing::fmt().init();
+		return Ok(agent::mcp_bridge::serve(&listen, &path, &command).await?);
+	}
 	if let Some(gateway) = gateway_args() {
 		let (dir, listen) = gateway?;
 		better_tracing::fmt().init();
@@ -185,7 +231,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	// A sidecar from before a restart or an upgrade is replaced by one of this binary.
 	if let Some(config) = agent::gateway::sidecar::read_config(&gateway_dir)
 		.await
-		.filter(|c| !c.keys.is_empty())
+		.filter(|c| !c.keys.is_empty() || !c.mcp_keys.is_empty())
 	{
 		let podman = ctx.podman();
 		if let Err(e) =

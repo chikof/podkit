@@ -77,7 +77,7 @@ pub async fn drain_usage(dir: &Path) -> Vec<GatewayUsage> {
 	let Ok(mut entries) = tokio::fs::read_dir(&usage_dir).await else {
 		return Vec::new();
 	};
-	let mut merged: HashMap<(String, i64, i64), GatewayUsage> = HashMap::new();
+	let mut merged: HashMap<(String, i64, i64, bool), GatewayUsage> = HashMap::new();
 	while let Ok(Some(entry)) = entries.next_entry().await {
 		let path = entry.path();
 		if path.extension().is_none_or(|e| e != "json") {
@@ -97,7 +97,7 @@ pub async fn drain_usage(dir: &Path) -> Vec<GatewayUsage> {
 		}
 		for row in rows {
 			let slot = merged
-				.entry((row.key_hash.clone(), row.model_id, row.hour))
+				.entry((row.key_hash.clone(), row.model_id, row.hour, row.mcp))
 				.or_insert_with(|| GatewayUsage {
 					requests: 0,
 					input_tokens: 0,
@@ -114,7 +114,7 @@ pub async fn drain_usage(dir: &Path) -> Vec<GatewayUsage> {
 
 /// The agent binary as a path the host can bind-mount, and a label that
 /// changes when the binary does.
-fn current_exe() -> Result<(PathBuf, String), String> {
+pub(crate) fn current_exe() -> Result<(PathBuf, String), String> {
 	let exe = std::env::current_exe().map_err(|e| format!("cannot find the agent binary: {e}"))?;
 	// A replaced binary is reported as "<path> (deleted)".
 	let exe = PathBuf::from(exe.to_string_lossy().trim_end_matches(" (deleted)"));
@@ -128,7 +128,7 @@ fn current_exe() -> Result<(PathBuf, String), String> {
 }
 
 /// Whether the binary's ELF interpreter lives in the Nix store (it is among the first bytes).
-fn needs_nix_store(exe: &Path) -> bool {
+pub(crate) fn needs_nix_store(exe: &Path) -> bool {
 	use std::io::Read;
 	let mut head = [0u8; 2048];
 	let Ok(mut file) = std::fs::File::open(exe) else {
@@ -261,7 +261,7 @@ pub async fn apply(
 		.await
 		.map_err(|e| format!("inspecting the gateway failed: {e}"))?
 		.is_some();
-	if !config.keys.is_empty() || exists {
+	if !config.keys.is_empty() || !config.mcp_keys.is_empty() || exists {
 		ensure_running(podman, supervisor, data_dir).await?;
 		sync_networks(podman, &config.networks).await?;
 	}
@@ -417,6 +417,7 @@ mod tests {
 			requests,
 			input_tokens: 10 * requests,
 			output_tokens: 2 * requests,
+			mcp: false,
 		}
 	}
 
@@ -455,6 +456,7 @@ mod tests {
 			}],
 			other_models: Vec::new(),
 			networks: Vec::new(),
+			..Default::default()
 		};
 		assert!(write_config(dir.path(), &config).await.unwrap());
 		assert!(!write_config(dir.path(), &config).await.unwrap());
