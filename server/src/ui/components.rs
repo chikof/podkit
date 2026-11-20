@@ -32,6 +32,7 @@ mod logo;
 mod menu;
 mod metrics;
 mod progress;
+mod security_badge;
 mod skeleton;
 mod stepper;
 mod table;
@@ -74,6 +75,7 @@ pub use metrics::{
 	resource_charts,
 };
 pub use progress::progress;
+pub use security_badge::{act_now_marker, security_badge, severity_chip};
 pub use skeleton::{skeleton, skeleton_row};
 pub use stepper::{Current, stepper};
 pub use table::table;
