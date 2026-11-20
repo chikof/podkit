@@ -159,6 +159,8 @@ async fn provision(
 				Event::Phase { .. }
 				| Event::Progress { .. }
 				| Event::DumpWritten { .. }
+				| Event::VolumeDumped { .. }
+				| Event::PartsUploaded { .. }
 				| Event::Done,
 			)) => {}
 			Some(Err(e)) => {

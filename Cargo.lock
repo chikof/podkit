@@ -2152,6 +2152,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "instant-xml"
+version = "0.7.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0201956651e8e4b5a78978dd2840bbb3797227a262a74f47b3576ef053b53bb"
+dependencies = [
+ "instant-xml-macros",
+ "xmlparser",
+]
+
+[[package]]
+name = "instant-xml-macros"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0f38f6d268cc5e23813c7b2b5bae70317626bf4a95c6de1136b96a221c45148f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.10",
+]
+
+[[package]]
 name = "intl-memoizer"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3543,6 +3564,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1af5b74b316ee483ae486bd3cb206c8caa5dbb3cf0eab7269a868ae43aeece03"
 dependencies = [
  "hmac 0.13.0",
+ "instant-xml",
  "jiff",
  "percent-encoding",
  "sha2 0.11.1",
@@ -5250,6 +5272,12 @@ dependencies = [
  "libc",
  "rustix",
 ]
+
+[[package]]
+name = "xmlparser"
+version = "0.13.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
 
 [[package]]
 name = "yoke"

@@ -132,7 +132,13 @@ pub async fn run(
 				return Ok(());
 			}
 			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),
-			Some(Ok(Event::DumpWritten { .. } | Event::Progress { .. } | Event::Done)) => {}
+			Some(Ok(
+				Event::DumpWritten { .. }
+				| Event::VolumeDumped { .. }
+				| Event::PartsUploaded { .. }
+				| Event::Progress { .. }
+				| Event::Done,
+			)) => {}
 			Some(Err(e)) => {
 				warn!(deployment = deployment.id.0, "deploy stream failed: {e}");
 				return Err(failed(LOST_CONNECTION));

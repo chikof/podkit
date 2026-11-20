@@ -11,7 +11,7 @@ use crate::{
 	applications, auth, avatars, backups, catalog, databases, deployments, domains, env_vars,
 	environments, git_providers, iac, links, logos, members, metrics, model_files, models,
 	networks, projects, registries, scanning, servers, ssh_keys, stacks, teams, templates, ui,
-	volumes, webhooks,
+	volume_backups, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -76,6 +76,14 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest(&format!("{APP}/env-vars"), env_vars::router())
 		.nest(&format!("{APP}/domains"), domains::router())
 		.nest(&format!("{APP}/volumes"), volumes::router())
+		.nest(
+			&format!("{APP}/volumes/{{volume_id}}/backups"),
+			volume_backups::app_router(),
+		)
+		.nest(
+			&format!("{STACKS}/{{stack_id}}/volumes/{{volume_key}}/backups"),
+			volume_backups::stack_router(),
+		)
 		.nest(&format!("{APP}/models"), links::router())
 		.nest(
 			"/teams/{team_id}/backup-targets",

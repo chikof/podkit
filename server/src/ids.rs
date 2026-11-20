@@ -53,4 +53,7 @@ id!(
 	JobId,
 	ScanId,
 	ScanIgnoreId,
+	VolumePolicyId,
+	VolumeBackupId,
+	VolumeRestoreId,
 );

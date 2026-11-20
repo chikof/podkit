@@ -670,6 +670,24 @@ pub enum Event {
 		/// Hex SHA-256 of the compressed file.
 		sha256: String,
 	},
+	/// Terminal: a volume was archived to a gzip file on the agent host.
+	VolumeDumped {
+		/// Path of the gzip file.
+		path: String,
+		/// Compressed size in bytes.
+		size: u64,
+		/// Hex SHA-256 of the compressed file.
+		sha256: String,
+		/// Entries (files, directories, links) in the tar stream.
+		entries: u64,
+		/// Bytes of the tar stream before compression.
+		raw_bytes: u64,
+	},
+	/// Terminal: every part of a multipart upload is stored.
+	PartsUploaded {
+		/// The `ETag` response header of each part, in part order.
+		etags: Vec<String>,
+	},
 	/// Terminal: success without payload.
 	Done,
 	/// Terminal: failure.
@@ -685,7 +703,11 @@ impl Event {
 	pub fn is_terminal(&self) -> bool {
 		matches!(
 			self,
-			Self::Deployed { .. } | Self::DumpWritten { .. } | Self::Done | Self::Failed { .. }
+			Self::Deployed { .. }
+				| Self::DumpWritten { .. }
+				| Self::VolumeDumped { .. }
+				| Self::PartsUploaded { .. }
+				| Self::Done | Self::Failed { .. }
 		)
 	}
 }
@@ -869,6 +891,43 @@ pub struct RestoreRequest {
 	pub engine: Engine,
 	/// Presigned GET url of the gzip dump.
 	pub url: String,
+}
+
+/// `POST /v1/volume-backups/dump` body. Streams [`Event::Log`], then
+/// [`Event::VolumeDumped`] or [`Event::Failed`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VolumeDumpRequest {
+	/// Names the archive file `<data_dir>/backups/{backup_id}.tar.gz`.
+	pub backup_id: i64,
+	/// Podman volume to archive; mounted read-only into a helper container.
+	pub volume: String,
+}
+
+/// `POST /v1/volume-backups/upload` body: the file is sent as the parts of an
+/// S3 multipart upload the control plane created, then deleted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadPartsRequest {
+	/// Archive path returned in [`Event::VolumeDumped`].
+	pub path: String,
+	/// Bytes of every part but the last, which takes the rest.
+	pub part_size: u64,
+	/// Presigned `UploadPart` urls, in part order.
+	pub urls: Vec<String>,
+}
+
+/// `POST /v1/volume-backups/restore` body. Streams [`Event::Log`], then
+/// [`Event::Done`] or [`Event::Failed`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VolumeRestoreRequest {
+	/// Podman volume to fill; created when missing.
+	pub volume: String,
+	/// Presigned GET url of the gzip archive.
+	pub url: String,
+	/// Hex SHA-256 the downloaded archive must have; checked before anything is
+	/// deleted from the volume.
+	pub sha256: String,
+	/// Empty the volume before extracting.
+	pub wipe: bool,
 }
 
 /// `POST /v1/model-downloads` body. Streams [`Event::Log`] and

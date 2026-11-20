@@ -54,6 +54,10 @@ pub enum JobKind {
 	ImageScan,
 	/// `target_id` is a server id. Runs Grype over the stored SBOMs of its running images.
 	ImageRescan,
+	/// `target_id` is a volume backup id.
+	VolumeBackup,
+	/// `target_id` is a volume restore id.
+	VolumeRestore,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -344,6 +348,12 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 		JobKind::ImageRescan => {
 			tracing::warn!(target_id, ?failure, "daily rescan did not finish");
 			return;
+		}
+		JobKind::VolumeBackup => {
+			crate::volume_backups::fail_backup(state, target_id, failure).await
+		}
+		JobKind::VolumeRestore => {
+			crate::volume_backups::fail_restore(state, target_id, failure).await
 		}
 	};
 	if let Err(e) = result {

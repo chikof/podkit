@@ -314,7 +314,7 @@ async fn delete_row(db: impl PgExecutor<'_>, id: BackupId) -> Result<(), sqlx::E
 
 /// Looks up a target by id alone, with no team check. Only for jobs and for
 /// backups, whose target belongs to the database's team by construction.
-async fn find_target(
+pub(crate) async fn find_target(
 	db: impl PgExecutor<'_>,
 	id: BackupTargetId,
 ) -> Result<Option<BackupTarget>, sqlx::Error> {
@@ -331,7 +331,7 @@ async fn find_target(
 	.await
 }
 
-fn decrypt_secret(
+pub(crate) fn decrypt_secret(
 	secrets: &SecretBox,
 	target: &BackupTarget,
 ) -> Result<Zeroizing<String>, AgeError> {
@@ -367,11 +367,11 @@ pub async fn purge(state: &AppState, backup: &Backup) -> Result<(), ServerError>
 	Ok(())
 }
 
-fn failed(message: impl Into<String>) -> JobFailure {
+pub(crate) fn failed(message: impl Into<String>) -> JobFailure {
 	JobFailure::Failed(message.into())
 }
 
-fn db_failure(e: &sqlx::Error) -> JobFailure {
+pub(crate) fn db_failure(e: &sqlx::Error) -> JobFailure {
 	tracing::error!("backup job database error: {e}");
 	failed("database error")
 }
@@ -388,7 +388,7 @@ struct Prepared {
 	client: AgentClient,
 }
 
-async fn team_of(db: &PgPool, project: ProjectId) -> Result<TeamId, JobFailure> {
+pub(crate) async fn team_of(db: &PgPool, project: ProjectId) -> Result<TeamId, JobFailure> {
 	sqlx::query_scalar!(
 		r#"SELECT team_id AS "team_id!: TeamId" FROM projects WHERE id = $1"#,
 		project.0,
@@ -462,7 +462,7 @@ async fn prepare(state: &AppState, job: &Job) -> Result<Prepared, JobFailure> {
 /// Posts `body` to a streaming agent endpoint and returns its terminal event,
 /// mirroring log lines onto the job log on the way. Dropping the stream on
 /// cancel closes the connection, which stops the agent's work.
-async fn call(
+pub(crate) async fn call(
 	client: &AgentClient,
 	path: &str,
 	body: &(impl Serialize + Sync),
