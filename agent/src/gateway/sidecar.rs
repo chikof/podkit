@@ -243,7 +243,7 @@ pub async fn ensure_running(
 }
 
 /// Applies a routing table: stores it and, when it has keys, makes sure the
-/// sidecar runs.
+/// sidecar runs. The sidecar is put on exactly the networks the table names.
 ///
 /// # Errors
 /// Writing the file or starting the sidecar failed.
@@ -263,6 +263,65 @@ pub async fn apply(
 		.is_some();
 	if !config.keys.is_empty() || exists {
 		ensure_running(podman, supervisor, data_dir).await?;
+		sync_networks(podman, &config.networks).await?;
+	}
+	Ok(())
+}
+
+/// The environment networks the sidecar should be on out of what the server
+/// asked for: only networks podkit made for environments, deduplicated.
+#[must_use]
+pub fn wanted_networks(requested: &[String]) -> Vec<String> {
+	let mut out: Vec<String> = requested
+		.iter()
+		.filter(|n| crate::networks::is_managed(n) && n.starts_with(proto::ENV_NETWORK_PREFIX))
+		.cloned()
+		.collect();
+	out.sort();
+	out.dedup();
+	out
+}
+
+/// Joins the sidecar to the environment networks in `requested`, under the
+/// gateway alias, and takes it off the environment networks that are not.
+///
+/// # Errors
+/// Podman refuses to create, connect or disconnect.
+pub async fn sync_networks(podman: &Podman, requested: &[String]) -> Result<(), String> {
+	let Some(info) = podman
+		.inspect(CONTAINER)
+		.await
+		.map_err(|e| format!("inspecting the gateway failed: {e}"))?
+	else {
+		return Ok(());
+	};
+	let on: Vec<String> = info
+		.network_settings
+		.and_then(|n| n.networks)
+		.map(|n| n.into_keys().collect())
+		.unwrap_or_default();
+	let want = wanted_networks(requested);
+	let alias = [GATEWAY_HOST.to_owned()];
+	for name in &want {
+		if !on.contains(name) {
+			podman
+				.create_network(name, false)
+				.await
+				.map_err(|e| format!("creating {name} failed: {e}"))?;
+			podman
+				.connect_network(name, CONTAINER, &alias)
+				.await
+				.map_err(|e| format!("joining {name} failed: {e}"))?;
+		}
+	}
+	for name in on
+		.iter()
+		.filter(|n| n.starts_with(proto::ENV_NETWORK_PREFIX) && !want.contains(n))
+	{
+		podman
+			.disconnect_network(name, CONTAINER)
+			.await
+			.map_err(|e| format!("leaving {name} failed: {e}"))?;
 	}
 	Ok(())
 }
@@ -395,12 +454,33 @@ mod tests {
 				}],
 			}],
 			other_models: Vec::new(),
+			networks: Vec::new(),
 		};
 		assert!(write_config(dir.path(), &config).await.unwrap());
 		assert!(!write_config(dir.path(), &config).await.unwrap());
 		assert_eq!(read_config(dir.path()).await, Some(config.clone()));
 		config.keys.clear();
 		assert!(write_config(dir.path(), &config).await.unwrap());
+	}
+
+	#[test]
+	fn the_sidecar_joins_only_environment_networks_the_server_names() {
+		let requested = [
+			"podkit-env-2",
+			"podkit-env-1",
+			"podkit-env-2",
+			"podkit-net-5",
+			"podkit-stack-1",
+			"podkit",
+			"host",
+			"podkit-env-../x",
+		]
+		.map(String::from);
+		assert_eq!(
+			wanted_networks(&requested),
+			["podkit-env-1", "podkit-env-2"]
+		);
+		assert!(wanted_networks(&[]).is_empty());
 	}
 
 	#[test]

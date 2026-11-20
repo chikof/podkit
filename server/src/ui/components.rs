@@ -15,6 +15,7 @@
 //! Later cards add NEW files under `components/` instead of editing these.
 
 mod avatar;
+mod avatar_field;
 mod badge;
 mod banner;
 mod breadcrumb;
@@ -32,15 +33,20 @@ mod logo;
 mod menu;
 mod metrics;
 mod progress;
+mod registry_select;
+mod save_bar;
+mod security_badge;
 mod skeleton;
 mod stepper;
 mod table;
 mod tabs;
+mod team_mark;
 mod theme_toggle;
 mod toast;
 mod tooltip;
 
-pub use avatar::avatar;
+pub use avatar::{avatar, user_avatar, user_avatar_lg};
+pub use avatar_field::{AvatarField, avatar_field};
 pub use badge::{Status, Tone, badge, status_badge, status_dot};
 pub use banner::{BannerKind, banner};
 pub use breadcrumb::breadcrumb;
@@ -53,7 +59,7 @@ pub use card::{
 	card_title, link_card,
 };
 pub use chip::{chip, chip_group};
-pub use dialog::{Dismiss, dialog, dialog_cancel, dialog_open_button};
+pub use dialog::{dialog, dialog_cancel, dialog_open_button, discard_confirm};
 pub use empty_state::empty_state;
 pub use field::{
 	CHECKBOX, INPUT, LABEL, SELECT, SWITCH, TEXTAREA, checkbox_field, copy_field, error_text,
@@ -74,10 +80,14 @@ pub use metrics::{
 	resource_charts,
 };
 pub use progress::progress;
+pub use registry_select::{registry_choice, registry_select};
+pub use save_bar::{save_bar, saved as save_bar_saved};
+pub use security_badge::{act_now_marker, security_badge, severity_chip};
 pub use skeleton::{skeleton, skeleton_row};
 pub use stepper::{Current, stepper};
 pub use table::table;
 pub use tabs::{RadioTab, TabItem, radio_tabs, tabs};
+pub use team_mark::{MarkSize, team_mark};
 pub use theme_toggle::theme_toggle;
 pub use toast::{toast, toast_region, toast_region_with};
 pub use tooltip::tooltip;

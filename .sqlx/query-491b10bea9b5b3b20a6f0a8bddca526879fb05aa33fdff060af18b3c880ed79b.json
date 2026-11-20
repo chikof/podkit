@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mime, bytes, hash FROM user_avatars WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mime",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_avatars",
+            "name": "mime"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "bytes",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "user_avatars",
+            "name": "bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_avatars",
+            "name": "hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "491b10bea9b5b3b20a6f0a8bddca526879fb05aa33fdff060af18b3c880ed79b"
+}

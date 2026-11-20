@@ -21,7 +21,7 @@ use crate::stacks::{self, StackStatus};
 use crate::{scope, servers};
 
 /// The three kinds of thing an environment holds.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ResourceKind {
 	Application,
 	Database,

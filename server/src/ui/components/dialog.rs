@@ -5,8 +5,14 @@
 //!
 //! Browsers without invoker commands get the same open through a Datastar fallback on the
 //! button (`data-on:click`) and through `page.js`; both do nothing where the command already
-//! worked. `closedby="any"` (light dismiss) has a `page.js` fallback too; a form keeps
-//! `closedby="closerequest"` (Esc only) so a stray click outside cannot lose what was typed.
+//! worked.
+//!
+//! Every dialog uses `closedby="any"`: Esc and a click outside both close it (`page.js` does
+//! the click outside where the attribute is unsupported, by sending the same `cancel` event
+//! Esc does). That includes a dialog with a form. When something typed in it has not been
+//! submitted, `guard.js` (loaded by `dialog` itself) holds the close back and asks "Discard
+//! changes?" (`discard_confirm`), so a stray click cannot lose input; the dialog's own Close
+//! and Cancel buttons are deliberate and close at once.
 //!
 //! Put `autofocus` on the safe action (Cancel, Keep) of a destructive confirmation, or on
 //! the first field of a form. Close with `dialog_cancel` (a `<form method="dialog">`) or
@@ -14,17 +20,10 @@
 
 use maud::{Markup, html};
 
+use super::button::{Size, Variant, button_class};
 use super::icon::icon;
+use crate::ui::assets::guard_script;
 use crate::ui::sse::js_string;
-
-/// How a dialog may be dismissed besides its own buttons.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Dismiss {
-	/// Esc (and the back gesture) only. Use for confirmations and forms with input.
-	Esc,
-	/// Esc and a click outside. Use for read-only content.
-	EscOrOutside,
-}
 
 /// The button that opens the dialog `id`. `class` is a button class list.
 pub fn dialog_open_button(id: &str, class: &str, label: &Markup) -> Markup {
@@ -54,18 +53,13 @@ pub fn dialog(
 	id: &str,
 	title: &str,
 	description: Option<&str>,
-	dismiss: Dismiss,
 	body: &Markup,
 	footer: &Markup,
 ) -> Markup {
 	let title_id = format!("{id}-title");
 	let description_id = format!("{id}-description");
-	let closedby = match dismiss {
-		Dismiss::Esc => "closerequest",
-		Dismiss::EscOrOutside => "any",
-	};
 	html! {
-		dialog id=(id) class="ui-dialog" closedby=(closedby) aria-labelledby=(title_id)
+		dialog id=(id) class="ui-dialog" closedby="any" aria-labelledby=(title_id)
 			aria-describedby=[description.map(|_| description_id.as_str())] {
 			div class="ui-dialog-head" {
 				div {
@@ -83,6 +77,28 @@ pub fn dialog(
 				div class="ui-dialog-foot" { (footer) }
 			}
 		}
+		(guard_script())
+	}
+}
+
+/// The "Discard changes?" question `guard.js` asks before a dialog with unsaved input is
+/// closed by Esc or a click outside, or before the page is left with unsaved changes. One
+/// per page, in the shell; it answers through its `returnValue` (`keep` or `discard`).
+pub fn discard_confirm() -> Markup {
+	html! {
+		dialog id="discard-confirm" class="ui-dialog" closedby="any"
+			aria-labelledby="discard-confirm-title" aria-describedby="discard-confirm-description" {
+			div class="ui-dialog-head" {
+				div {
+					h2 id="discard-confirm-title" class="ui-dialog-title" { "Discard changes?" }
+					p id="discard-confirm-description" class="ui-dialog-desc" { "What you changed has not been saved." }
+				}
+			}
+			div class="ui-dialog-foot" {
+				form method="dialog" { button value="keep" class=(button_class(Variant::Outline, Size::Md)) autofocus { "Keep editing" } }
+				form method="dialog" { button value="discard" class=(button_class(Variant::Destructive, Size::Md)) { "Discard" } }
+			}
+		}
 	}
 }
 
@@ -90,12 +106,11 @@ pub fn dialog(
 mod tests {
 	use super::*;
 
-	fn sample(dismiss: Dismiss) -> String {
+	fn sample() -> String {
 		dialog(
 			"del",
 			"Delete \"api\"?",
 			Some("This cannot be undone."),
-			dismiss,
 			&html! { "Type the name." },
 			&html! { (dialog_cancel("b", &html! { "Cancel" })) },
 		)
@@ -104,7 +119,7 @@ mod tests {
 
 	#[test]
 	fn a_dialog_is_named_and_described_without_redundant_roles() {
-		let html = sample(Dismiss::Esc);
+		let html = sample();
 		assert!(html.starts_with("<dialog id=\"del\""), "{html}");
 		assert!(html.contains("aria-labelledby=\"del-title\""), "{html}");
 		assert!(
@@ -117,31 +132,70 @@ mod tests {
 	}
 
 	#[test]
-	fn the_dismiss_mode_sets_closedby() {
-		assert!(sample(Dismiss::Esc).contains("closedby=\"closerequest\""));
-		assert!(sample(Dismiss::EscOrOutside).contains("closedby=\"any\""));
+	fn every_dialog_closes_on_a_click_outside() {
+		assert!(sample().contains("closedby=\"any\""));
+		assert!(!sample().contains("closerequest"));
+		assert!(discard_confirm().into_string().contains("closedby=\"any\""));
+	}
+
+	#[test]
+	fn no_dialog_in_the_ui_opts_out_of_light_dismiss() {
+		// A `<dialog>` written by hand in a page must say `closedby="any"` too.
+		fn walk(dir: &std::path::Path, bad: &mut Vec<String>) {
+			for entry in std::fs::read_dir(dir).unwrap() {
+				let path = entry.unwrap().path();
+				if path.is_dir() {
+					walk(&path, bad);
+				} else if path.extension().is_some_and(|e| e == "rs") {
+					let src = std::fs::read_to_string(&path).unwrap();
+					for needle in [
+						"closedby=\"closerequest\"",
+						"closedby=\"none\"",
+						"closedby=(\"",
+						"Dismiss::",
+					] {
+						// This test names them; every other file must not.
+						if !path.ends_with("dialog.rs") && src.contains(needle) {
+							bad.push(format!("{}: {needle}", path.display()));
+						}
+					}
+				}
+			}
+		}
+		let mut bad = Vec::new();
+		walk(
+			&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/ui"),
+			&mut bad,
+		);
+		assert!(bad.is_empty(), "{bad:?}");
 	}
 
 	#[test]
 	fn a_dialog_without_a_description_has_no_describedby() {
-		let html = dialog("d", "T", None, Dismiss::Esc, &html! {}, &html! {}).into_string();
+		let html = dialog("d", "T", None, &html! {}, &html! {}).into_string();
 		assert!(!html.contains("aria-describedby"), "{html}");
 	}
 
 	#[test]
 	fn the_title_is_escaped_and_the_close_button_is_named() {
-		let html = dialog(
-			"d",
-			"<script>x</script>",
-			None,
-			Dismiss::Esc,
-			&html! {},
-			&html! {},
-		)
-		.into_string();
+		let html = dialog("d", "<script>x</script>", None, &html! {}, &html! {}).into_string();
 		assert!(!html.contains("<script>"), "{html}");
 		assert!(html.contains("aria-label=\"Close\""), "{html}");
 		assert!(html.contains("<form method=\"dialog\""), "{html}");
+	}
+
+	#[test]
+	fn the_discard_question_offers_keep_first_and_discard() {
+		let html = discard_confirm().into_string();
+		assert!(html.contains("Discard changes?"), "{html}");
+		assert!(html.contains("value=\"keep\""), "{html}");
+		assert!(html.contains("value=\"discard\""), "{html}");
+		// The safe answer holds focus: `autofocus` sits between "keep" and "discard".
+		let keep = html.find("value=\"keep\"").unwrap();
+		let discard = html.find("value=\"discard\"").unwrap();
+		let focus = html.find("autofocus").unwrap();
+		assert!(keep < focus && focus < discard, "{html}");
+		assert_eq!(html.matches("autofocus").count(), 1, "{html}");
 	}
 
 	#[test]

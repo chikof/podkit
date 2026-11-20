@@ -15,7 +15,7 @@ type HmacSha256 = Hmac<Sha256>;
 /// True when `header` is `sha256=<hex>` and the hex is the HMAC-SHA256 of
 /// `body` under `secret`. The final comparison is done by
 /// [`Mac::verify_slice`], which is constant time.
-fn verify_github_signature(secret: &str, body: &[u8], header: &str) -> bool {
+pub(crate) fn verify_github_signature(secret: &str, body: &[u8], header: &str) -> bool {
 	let Some(tag) = header.strip_prefix("sha256=").and_then(decode_hex) else {
 		return false;
 	};
@@ -24,6 +24,31 @@ fn verify_github_signature(secret: &str, body: &[u8], header: &str) -> bool {
 	};
 	mac.update(body);
 	mac.verify_slice(&tag).is_ok()
+}
+
+/// True when `header` is the bare hex HMAC-SHA256 of `body` under `secret`, as Gitea's
+/// `X-Gitea-Signature` sends it. Constant time, like [`verify_github_signature`].
+fn verify_hex_signature(secret: &str, body: &[u8], header: &str) -> bool {
+	let Some(tag) = decode_hex(header) else {
+		return false;
+	};
+	let Ok(mut mac) = HmacSha256::new_from_slice(secret.as_bytes()) else {
+		return false;
+	};
+	mac.update(body);
+	mac.verify_slice(&tag).is_ok()
+}
+
+/// The id a provider gave this delivery, which it repeats on a redelivery.
+pub(crate) fn delivery_id(headers: &HeaderMap) -> Option<&str> {
+	[
+		"x-github-delivery",
+		"x-gitea-delivery",
+		"x-gitlab-event-uuid",
+	]
+	.into_iter()
+	.find_map(|name| header(headers, name))
+	.filter(|id| !id.is_empty() && id.len() <= 100)
 }
 
 fn decode_hex(s: &str) -> Option<Vec<u8>> {
@@ -40,12 +65,12 @@ fn decode_hex(s: &str) -> Option<Vec<u8>> {
 		.collect()
 }
 
-fn header<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+pub(crate) fn header<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
 	headers.get(name)?.to_str().ok()
 }
 
 /// True when the request carries any one valid credential for `secret`:
-/// a matching `X-Hub-Signature-256`, `X-Gitlab-Token`, or
+/// a matching `X-Hub-Signature-256` or `X-Gitea-Signature`, `X-Gitlab-Token`, or
 /// `X-Webhook-Secret`.
 fn is_authorized(headers: &HeaderMap, body: &[u8], secret: &str) -> bool {
 	let signed = header(headers, "x-hub-signature-256")
@@ -53,7 +78,10 @@ fn is_authorized(headers: &HeaderMap, body: &[u8], secret: &str) -> bool {
 	let token =
 		|name: &str| header(headers, name).is_some_and(|v| crypto::constant_time_eq(v, secret));
 
-	signed || token("x-gitlab-token") || token("x-webhook-secret")
+	let gitea_signed = header(headers, "x-gitea-signature")
+		.is_some_and(|sig| verify_hex_signature(secret, body, sig));
+
+	signed || gitea_signed || token("x-gitlab-token") || token("x-webhook-secret")
 }
 
 #[cfg(test)]

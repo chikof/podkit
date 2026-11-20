@@ -1,7 +1,10 @@
 pub mod apps;
 pub mod dbs;
+pub mod git_providers;
 pub mod grid;
+pub mod infrastructure_ui;
 pub mod models_env;
+pub mod registries_ui;
 pub mod stacks_ui;
 mod tenancy;
 
@@ -60,6 +63,7 @@ pub fn state(db: PgPool) -> AppState {
 			local_agent_socket,
 			data_dir,
 			registration: Registration::Open,
+			public_url: None,
 		}),
 	}
 }
@@ -118,6 +122,16 @@ pub async fn user_with_team(app: &Router, name: &str) -> (String, i64) {
 	.await;
 	assert!(s.is_success(), "create team {name}: {s}");
 	(token, team["id"].as_i64().unwrap())
+}
+
+/// The one `i64` that `sql` selects (`$1` bound to `arg` when given). For tests of
+/// the UI, which must not carry queries themselves.
+pub async fn scalar(db: &PgPool, sql: &'static str, arg: Option<i64>) -> i64 {
+	let query = sqlx::query_scalar(sql);
+	match arg {
+		Some(arg) => query.bind(arg).fetch_one(db).await.unwrap(),
+		None => query.fetch_one(db).await.unwrap(),
+	}
 }
 
 /// Rows in `table`. For asserting that a refused request changed nothing.
@@ -373,13 +387,35 @@ pub async fn local_server_id(db: &PgPool, team: i64) -> i64 {
 		.unwrap()
 }
 
+/// A real, unencrypted Ed25519 key, for what is sent through the API and the forms.
+pub const SSH_KEY: &str = include_str!("../ssh_keys/fixtures/ed25519_openssh");
+
+/// A vault entry of `team` holding placeholder key bytes, for rows that only need the foreign
+/// key. Returns its id.
+pub async fn seed_key(db: &PgPool, team: i64, name: &str) -> i64 {
+	let id = crypto::generate_id();
+	sqlx::query(
+		"INSERT INTO ssh_keys (id, team_id, name, algorithm, private_key)
+		 VALUES ($1, $2, $3, 'ed25519', decode('00', 'hex'))",
+	)
+	.bind(id)
+	.bind(team)
+	.bind(name)
+	.execute(db)
+	.await
+	.unwrap();
+	id
+}
+
 /// Adds a server of `team` that is not active, to check it can't be picked.
 pub async fn add_pending_server(db: &PgPool, team: i64) -> i64 {
+	let key = seed_key(db, team, "builder key").await;
 	sqlx::query_scalar(
-		"INSERT INTO servers (id, team_id, name, hostname, ssh_user, ssh_private_key, podman_socket_path, is_local, status)
-		 VALUES (7001, $1, 'builder', '203.0.113.9', 'root', decode('00', 'hex'), '/x', FALSE, 'pending') RETURNING id",
+		"INSERT INTO servers (id, team_id, name, hostname, ssh_user, ssh_key_id, podman_socket_path, is_local, status)
+		 VALUES (7001, $1, 'builder', '203.0.113.9', 'root', $2, '/x', FALSE, 'pending') RETURNING id",
 	)
 	.bind(team)
+	.bind(key)
 	.fetch_one(db)
 	.await
 	.unwrap()
@@ -389,7 +425,7 @@ pub async fn add_pending_server(db: &PgPool, team: i64) -> i64 {
 /// and webhook secret. The values themselves never leave the database.
 pub async fn stored_secrets(db: &PgPool, slug: &str) -> (bool, bool, bool) {
 	sqlx::query_as(
-		"SELECT deploy_key IS NOT NULL, git_token IS NOT NULL, webhook_secret IS NOT NULL
+		"SELECT deploy_key_id IS NOT NULL, git_token IS NOT NULL, webhook_secret IS NOT NULL
 		 FROM applications WHERE slug = $1",
 	)
 	.bind(slug)

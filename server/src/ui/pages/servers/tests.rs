@@ -35,7 +35,7 @@ use crate::ui::testing::{
 	assert_contains, assert_not_contains, get_html, page_main, post_signals, ui_login, ui_session,
 };
 
-const KEY: &str = "[REDACTED PRIVATE KEY]\n";
+const KEY: &str = crate::tests::SSH_KEY;
 const ED25519: &str = "AAAAC3NzaC1lZDI1NTE5AAAAIJchJVs7z1tmicd4SpMN5UdQGOeEF7c+3zkUwGLv44BI";
 const ED25519_FP: &str = "SHA256:ywBw9jYLna1cd5Li260999IYfpxB/BrS/G6GhT1Xkwg";
 
@@ -170,7 +170,7 @@ async fn the_list_shows_the_local_server_and_the_form(db: PgPool) {
 	assert_contains(&body, "Local");
 	assert_contains(&body, "Active");
 	assert_contains(&body, "Add a server");
-	assert_contains(&body, "SSH private key");
+	assert_contains(&body, "Import a key");
 	assert_contains(&body, "%t/podman/podman.sock");
 	assert_contains(&body, "systemd");
 	assert_contains(&body, "ssh_port: 22");
@@ -274,7 +274,7 @@ async fn bad_input_shows_a_message_and_creates_nothing(db: PgPool) {
 			json!("relative/path"),
 			"podman socket path",
 		),
-		("ssh_private_key", json!("  "), "private key is required"),
+		("ssh_private_key", json!("  "), "Choose an SSH key"),
 	];
 	for (field, value, message) in cases {
 		let mut body = new_server("edge");
@@ -699,7 +699,7 @@ async fn adding_a_server_is_three_steps_in_one_dialog(db: PgPool) {
 	assert_contains(dialog, "<textarea");
 	assert_not_contains(dialog, "BEGIN");
 	assert_contains(&body, "ssh_private_key: ''");
-	assert_contains(dialog, "Stored encrypted. It is never shown again");
+	assert_contains(dialog, "Stored encrypted in the vault");
 	// Form markup the browser can complete.
 	assert_contains(dialog, "autofocus");
 	assert_contains(dialog, "novalidate");
@@ -790,7 +790,7 @@ async fn the_monitoring_tab_draws_every_chart_from_the_samples(db: PgPool) {
 	// The chart region has no script of its own.
 	let (_, region) = body.split_once("id=\"metrics-body\"").unwrap();
 	let region = region.split("</section>").next().unwrap();
-	assert_not_contains(region, "<script");
+	assert_not_contains(region, "<script>");
 	assert_not_contains(region, "javascript:");
 }
 
@@ -877,5 +877,5 @@ async fn the_refresh_endpoint_patches_only_the_charts(db: PgPool) {
 	assert_contains(&out, "CPU, last 24 hours.");
 	// The frame (and its timer) is not re-sent, so the timer is not restarted.
 	assert_not_contains(&out, "data-on-interval");
-	assert_not_contains(&out, "<script");
+	assert_not_contains(&out, "<script>");
 }

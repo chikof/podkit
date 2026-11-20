@@ -15,6 +15,7 @@ use crate::error::ServerError;
 use crate::ids::DatabaseId;
 use crate::jobs::{Job, JobFailure, JobKind};
 use crate::logs::JobLog;
+use crate::networks;
 use crate::servers::{self, Server};
 use crate::state::AppState;
 
@@ -98,7 +99,19 @@ async fn provision(
 		.await
 		.map_err(|e| db_failure(&e))?;
 
-	let spec = build_spec(state, job, database)?;
+	let mut spec = build_spec(state, job, database)?;
+	spec.attach = networks::attach::for_resource(
+		&state.db,
+		networks::attach::Home {
+			kind: networks::ResourceKind::Database,
+			id: database.id.0,
+			environment: database.environment_id,
+			server: database.server_id,
+		},
+		&spec.network_aliases,
+	)
+	.await
+	.map_err(|e| db_failure(&e))?;
 	let mut events = client
 		.stream(Method::POST, "/v1/deploy", Some(&spec))
 		.await
@@ -114,7 +127,11 @@ async fn provision(
 		};
 		match event {
 			Some(Ok(Event::Log { stream, line })) => log.push(stream, &line).await,
-			Some(Ok(Event::Deployed { container_id, .. })) => {
+			Some(Ok(Event::Deployed {
+				container_id,
+				image,
+				..
+			})) => {
 				sqlx::query!(
 					"UPDATE databases SET container_id = $2, status = 'running', status_message = NULL,
 						updated_at = NOW() WHERE id = $1",
@@ -124,6 +141,17 @@ async fn provision(
 				.execute(&state.db)
 				.await
 				.map_err(|e| db_failure(&e))?;
+				crate::scanning::queue(
+					state,
+					database.server_id,
+					crate::scanning::Target {
+						kind: crate::scanning::ResourceKind::Database,
+						resource_id: database.id.0,
+						image_ref: &image,
+						deployment: None,
+					},
+				)
+				.await;
 				return Ok(());
 			}
 			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),
@@ -196,6 +224,7 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 		stop_timeout_s: None,
 		networks: Vec::new(),
 		options: proto::ContainerOptions::default(),
+		attach: Vec::new(),
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,

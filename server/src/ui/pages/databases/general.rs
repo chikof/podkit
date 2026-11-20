@@ -22,10 +22,10 @@ use crate::error::ServerError;
 use crate::ids::{BackupTargetId, DatabaseId, ProjectId, TeamId};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, INPUT, LABEL, card, card_content, card_footer, card_section, empty_state, log_viewer,
+	INPUT, LABEL, card, card_content, card_section, empty_state, log_viewer, save_bar,
+	save_bar_saved,
 };
 use crate::ui::extract::TeamCtx;
-use crate::ui::layout::form_error;
 use crate::ui::live::job_log;
 use crate::ui::sse::js_string;
 use crate::ui::{error, sse};
@@ -81,8 +81,8 @@ async fn general_page(
 				}))
 			}))
 			@if can_update {
-				(card(&html! {
-					form "data-on:submit"=(save) {
+				form "data-on:submit"=(save) {
+					(card(&html! {
 						(card_section("Network and limits", Some("Changing the public port or a limit recreates the container; its data is kept."), None))
 						(card_content(&html! {
 							label class=(LABEL) {
@@ -100,13 +100,10 @@ async fn general_page(
 									input class=(INPUT) type="text" inputmode="decimal" placeholder="No limit" "data-bind:cpu_limit";
 								}
 							}
-							(form_error())
 						}))
-						(card_footer(&html! {
-							button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Save changes" }
-						}))
-					}
-				}))
+					}))
+					(save_bar(&["public_port", "memory_limit_mb", "cpu_limit"]))
+				}
 			}
 			}
 			(card(&html! {
@@ -258,6 +255,7 @@ async fn save(
 		Ok(Ok(((_, false), runs))) => sse::patch(&schedule_hint(runs.as_ref()))
 			.and(sse::signals(&json!({ "_error": "" })))
 			.and(sse::toast("Settings saved"))
+			.and(save_bar_saved())
 			.into_response(),
 		Err(e) => error::action(&e),
 	}

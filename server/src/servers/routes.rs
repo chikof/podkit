@@ -7,8 +7,9 @@ use serde::{Deserialize, Serialize};
 use super::service::{self, DEFAULT_PODMAN_SOCKET_PATH, DEFAULT_SSH_PORT, NewServer};
 use super::{Server, ServerStatus, host_key_fingerprint};
 use crate::auth::AuthUser;
-use crate::error::AppResult;
-use crate::ids::{ServerId, TeamId};
+use crate::error::{AppResult, ServerError};
+use crate::ids::{ServerId, SshKeyId, TeamId};
+use crate::ssh_keys::service::KeyChoice;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -33,8 +34,16 @@ struct CreateServerRequest {
 	#[serde(default = "default_ssh_port")]
 	ssh_port: i32,
 	ssh_user: String,
-	/// Plaintext on the wire (TLS-protected); encrypted at rest before storage.
-	ssh_private_key: String,
+	/// A key already in the vault.
+	#[serde(default)]
+	ssh_key_id: Option<SshKeyId>,
+	/// A private key to import into the vault under the server's name; plaintext on the wire,
+	/// encrypted at rest, never returned.
+	#[serde(default)]
+	ssh_private_key: Option<String>,
+	/// Make a new Ed25519 key for this server; its public key is in the ssh-keys list.
+	#[serde(default)]
+	generate_key: bool,
 	#[serde(default = "default_podman_socket_path")]
 	podman_socket_path: String,
 }
@@ -54,6 +63,7 @@ struct ServerResponse {
 	hostname: String,
 	ssh_port: i32,
 	ssh_user: Option<String>,
+	ssh_key_id: Option<SshKeyId>,
 	podman_socket_path: String,
 	is_local: bool,
 	status: ServerStatus,
@@ -76,6 +86,7 @@ impl From<&Server> for ServerResponse {
 			hostname: server.hostname.clone(),
 			ssh_port: server.ssh_port,
 			ssh_user: server.ssh_user.clone(),
+			ssh_key_id: server.ssh_key_id,
 			podman_socket_path: server.podman_socket_path.clone(),
 			is_local: server.is_local,
 			status: server.status,
@@ -108,6 +119,12 @@ async fn create(
 	Path(team): Path<TeamId>,
 	Json(body): Json<CreateServerRequest>,
 ) -> AppResult<(StatusCode, Json<ServerResponse>)> {
+	let key = KeyChoice::from_request(body.ssh_key_id, body.ssh_private_key, body.generate_key)?
+		.ok_or_else(|| {
+			ServerError::Validation(
+				"An SSH key is required: ssh_key_id, ssh_private_key or generate_key.".to_owned(),
+			)
+		})?;
 	let server = service::create(
 		&s,
 		user.id,
@@ -117,7 +134,7 @@ async fn create(
 			hostname: body.hostname,
 			ssh_port: body.ssh_port,
 			ssh_user: body.ssh_user,
-			ssh_private_key: body.ssh_private_key,
+			key,
 			podman_socket_path: body.podman_socket_path,
 		},
 	)

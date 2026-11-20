@@ -25,15 +25,17 @@ use crate::models::service::{self as models_service, LogSource};
 use crate::models::{Model, ModelStatus, engines};
 use crate::projects;
 use crate::projects::overview::model_mark;
+use crate::scanning::Subject;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, BUTTON_OUTLINE, Dismiss, LABEL, LogoSize, MetricsSection, SELECT, Size, TabItem,
-	Tone, Variant, badge, button_class, card, card_content, card_section, dialog,
-	dialog_open_button, empty_state, icon, logo, metrics_section, resource_charts, table, tabs,
+	BUTTON_DANGER, BUTTON_OUTLINE, LABEL, LogoSize, MetricsSection, SELECT, Size, TabItem, Tone,
+	Variant, badge, button_class, card, card_content, card_section, dialog, dialog_open_button,
+	empty_state, icon, logo, metrics_section, resource_charts, table, tabs,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
 use crate::ui::live::{container_log, job_log, log_view};
+use crate::ui::pages::security;
 use crate::ui::sse::js_string;
 use crate::ui::status::{Status, poll, status_badge};
 use crate::ui::{error, sse};
@@ -65,7 +67,9 @@ enum Tab {
 	General,
 	Playground,
 	Monitoring,
+	Security,
 	Links,
+	Networks,
 	Usage,
 	Logs,
 	Advanced,
@@ -77,7 +81,9 @@ impl Tab {
 			Self::General => "general",
 			Self::Playground => "playground",
 			Self::Monitoring => "monitoring",
+			Self::Security => "security",
 			Self::Links => "links",
+			Self::Networks => "networks",
 			Self::Usage => "usage",
 			Self::Logs => "logs",
 			Self::Advanced => "advanced",
@@ -89,7 +95,9 @@ impl Tab {
 			Self::General => "General",
 			Self::Playground => "Playground",
 			Self::Monitoring => "Monitoring",
+			Self::Security => "Security",
 			Self::Links => "Links",
+			Self::Networks => "Networks",
 			Self::Usage => "Usage",
 			Self::Logs => "Logs",
 			Self::Advanced => "Advanced",
@@ -100,7 +108,9 @@ impl Tab {
 		match s {
 			Some("playground") => Self::Playground,
 			Some("monitoring") => Self::Monitoring,
+			Some("security") => Self::Security,
 			Some("links") => Self::Links,
+			Some("networks") => Self::Networks,
 			Some("usage") => Self::Usage,
 			Some("logs") => Self::Logs,
 			Some("advanced") => Self::Advanced,
@@ -127,9 +137,13 @@ fn visible_tabs(ctx: &TeamCtx) -> Vec<Tab> {
 	if ctx.perms.can(Action::Update, Resource::Model) {
 		tabs.push(Tab::Playground);
 	}
+	tabs.push(Tab::Monitoring);
+	if ctx.perms.can(Action::Read, Resource::Scan) {
+		tabs.push(Tab::Security);
+	}
 	tabs.extend([
-		Tab::Monitoring,
 		Tab::Links,
+		Tab::Networks,
 		Tab::Usage,
 		Tab::Logs,
 		Tab::Advanced,
@@ -141,7 +155,13 @@ fn visible_tabs(ctx: &TeamCtx) -> Vec<Tab> {
 
 /// Logo, name, status and the buttons. The whole block is replaced by every poll and every
 /// action, so it ends the polling itself once the status settles.
-fn header(ctx: &TeamCtx, model: &Model, files: Option<&ModelFile>, project_name: &str) -> Markup {
+fn header(
+	ctx: &TeamCtx,
+	model: &Model,
+	files: Option<&ModelFile>,
+	project_name: &str,
+	security: &Markup,
+) -> Markup {
 	let post = |action: &str| {
 		format!(
 			"@post({})",
@@ -167,6 +187,7 @@ fn header(ctx: &TeamCtx, model: &Model, files: Option<&ModelFile>, project_name:
 						h1 { (model.name) }
 						ul class="ui-chips" aria-label="Model details" {
 							li { (status_badge(model.status)) }
+							@if !security.0.is_empty() { li { (security) } }
 							li { (badge(Tone::Neutral, spec.label)) }
 							@if let Some(f) = files {
 								li { (badge(Tone::Neutral, &f.repo)) }
@@ -269,7 +290,6 @@ fn advanced_tab(ctx: &TeamCtx, model: &Model) -> Markup {
 					"remove-dialog",
 					&format!("Remove {}?", model.name),
 					Some("Applications linked to it lose it on their next deploy. The downloaded files stay."),
-					Dismiss::Esc,
 					&html! {},
 					&html! {
 						form method="dialog" class="flex flex-col-reverse gap-2 sm:flex-row" {
@@ -481,11 +501,16 @@ async fn monitoring_tab(
 	))
 }
 
+#[allow(
+	clippy::too_many_lines,
+	reason = "one handler per page: it loads, picks the tab, and frames it"
+)]
 async fn page(
 	State(s): State<AppState>,
 	mut ctx: TeamCtx,
 	Path((_, project, model_id)): Ids,
 	Query(q): Query<PageQuery>,
+	Query(scan_query): Query<security::TabQuery>,
 ) -> Result<Response, Response> {
 	let model = models_service::get(&s, ctx.user.id, ctx.team.id, project, model_id)
 		.await
@@ -521,6 +546,18 @@ async fn page(
 		Tab::Monitoring => monitoring_tab(&s, &ctx, project, model_id, q.range.as_deref())
 			.await
 			.map_err(|e| error::page(&ctx, &e))?,
+		Tab::Security => {
+			let page_url = url(&ctx, project, model_id, "?tab=security");
+			security::content(
+				&s,
+				&ctx,
+				project,
+				Subject::Model(model_id),
+				&page_url,
+				&scan_query,
+			)
+			.await?
+		}
 		Tab::Links => {
 			let links = if ctx.perms.can(Action::Read, Resource::Application) {
 				links_service::for_model(&s, ctx.user.id, ctx.team.id, project, model_id)
@@ -541,8 +578,19 @@ async fn page(
 			usage_tab(&usage)
 		}
 		Tab::Logs => logs_tab(&ctx, &model),
+		Tab::Networks => {
+			crate::ui::pages::networks::panel::content(
+				&s,
+				&ctx,
+				project,
+				crate::networks::ResourceKind::Model,
+				model_id.0,
+			)
+			.await?
+		}
 		Tab::Advanced => advanced_tab(&ctx, &model),
 	};
+	let badge = security::header_badge(&s, &ctx, model.project_id, Subject::Model(model.id)).await;
 	let hrefs: Vec<(Tab, String)> = allowed.iter().map(|t| (*t, t.href(&ctx, &model))).collect();
 	let items: Vec<TabItem<'_>> = hrefs
 		.iter()
@@ -555,7 +603,7 @@ async fn page(
 
 	let body = html! {
 		div class="ui-page-body" data-signals="{linkApp: '', linkDefault: false, _error: ''}" {
-			(header(&ctx, &model, files.as_ref(), &project_row.project.name))
+			(header(&ctx, &model, files.as_ref(), &project_row.project.name, &badge))
 			(tabs("Model sections", &items))
 			(content)
 		}
@@ -595,8 +643,8 @@ async fn status(
 ) -> Response {
 	match models_service::get(&s, ctx.user.id, ctx.team.id, project, model_id).await {
 		Ok(model) => {
-			let (files, project_name) = header_inputs(&s, &ctx, &model).await;
-			let events = sse::patch(&header(&ctx, &model, files.as_ref(), &project_name));
+			let (files, project_name, badge) = header_inputs(&s, &ctx, &model).await;
+			let events = sse::patch(&header(&ctx, &model, files.as_ref(), &project_name, &badge));
 			if q.logs == 0 && model.container_id.is_some() {
 				events
 					.and(sse::patch(&logs_tab(&ctx, &model)))
@@ -613,7 +661,11 @@ async fn status(
 
 /// What the header shows besides the model: its files and its project's name. Best effort,
 /// since the header is about the model and these are only the line under its name.
-async fn header_inputs(s: &AppState, ctx: &TeamCtx, model: &Model) -> (Option<ModelFile>, String) {
+async fn header_inputs(
+	s: &AppState,
+	ctx: &TeamCtx,
+	model: &Model,
+) -> (Option<ModelFile>, String, Markup) {
 	let files = crate::model_files::service::get(s, ctx.user.id, ctx.team.id, model.model_files_id)
 		.await
 		.ok();
@@ -621,7 +673,8 @@ async fn header_inputs(s: &AppState, ctx: &TeamCtx, model: &Model) -> (Option<Mo
 		.await
 		.map(|p| p.project.name)
 		.unwrap_or_default();
-	(files, name)
+	let badge = security::header_badge(s, ctx, model.project_id, Subject::Model(model.id)).await;
+	(files, name, badge)
 }
 
 async fn logs(
@@ -645,8 +698,8 @@ async fn act(
 ) -> Response {
 	match result {
 		Ok(model) => {
-			let (files, project_name) = header_inputs(s, ctx, &model).await;
-			sse::patch(&header(ctx, &model, files.as_ref(), &project_name))
+			let (files, project_name, badge) = header_inputs(s, ctx, &model).await;
+			sse::patch(&header(ctx, &model, files.as_ref(), &project_name, &badge))
 				.and(sse::toast(done))
 				.into_response()
 		}

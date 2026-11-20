@@ -17,16 +17,19 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::Place;
+use crate::auth::permission::{Action, Resource};
 use crate::environments::{self, Environment};
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId, TeamId};
 use crate::projects::Project;
+use crate::registries::{self, Registry};
 use crate::servers::{self, Server, ServerStatus};
 use crate::state::AppState;
 use crate::templates::service::{DeployInput, Deployed, Kind};
 use crate::templates::{self, Loaded, VariableInfo};
 use crate::ui::components::{
 	BUTTON, BUTTON_OUTLINE, INPUT, LABEL, SELECT, Size, Variant, icon, link_button,
+	registry_choice, registry_select,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::form_error;
@@ -42,6 +45,8 @@ pub(super) struct Targets {
 	environments: Vec<Environment>,
 	environment: Option<EnvironmentId>,
 	servers: Vec<Server>,
+	/// The team's saved registries; empty when the user may not read them.
+	registries: Vec<Registry>,
 }
 
 pub(super) async fn load_targets(
@@ -72,12 +77,18 @@ pub(super) async fn load_targets(
 		.into_iter()
 		.filter(|x| x.status == ServerStatus::Active)
 		.collect();
+	let registries = if ctx.perms.can(Action::Read, Resource::Registry) {
+		registries::service::list(&s.db, ctx.user.id, ctx.team.id).await?
+	} else {
+		Vec::new()
+	};
 	Ok(Targets {
 		projects,
 		project,
 		environments,
 		environment,
 		servers,
+		registries,
 	})
 }
 
@@ -143,6 +154,7 @@ fn signals(t: &Loaded, vars: &[VariableInfo], targets: &Targets) -> Value {
 		"environment": targets.environment.map(|e| e.0.to_string()).unwrap_or_default(),
 		"server": targets.servers.first().map(|x| x.id.0.to_string()).unwrap_or_default(),
 		"name": t.template.name,
+		"registry_id": "",
 		"_error": "",
 	});
 	for (i, v) in asked(vars).iter().enumerate() {
@@ -175,7 +187,7 @@ pub(super) fn dialog(place: Place, l: &Loaded, vars: &[VariableInfo], targets: &
 	let change = format!("@get({})", js_string(&envs_url));
 	let blocked = no_target(targets);
 	html! {
-		dialog id=(DIALOG_ID) class="ui-dialog ui-dialog-wide" closedby="closerequest"
+		dialog id=(DIALOG_ID) class="ui-dialog ui-dialog-wide" closedby="any"
 			aria-labelledby="tpl-deploy-title" aria-describedby="tpl-deploy-description"
 			"data-signals"=(signals(l, vars, targets).to_string()) {
 			div id="tpl-deploy-panel" class="ui-dlg-panel" {
@@ -217,6 +229,9 @@ pub(super) fn dialog(place: Place, l: &Loaded, vars: &[VariableInfo], targets: &
 										option value=(x.id.0) { (x.name) }
 									}
 								}
+							}
+							@if !targets.registries.is_empty() {
+								(registry_select(&targets.registries, place.team))
 							}
 							label class=(LABEL) {
 								"Name"
@@ -293,6 +308,7 @@ pub(super) struct DeploySignals {
 	environment: String,
 	server: String,
 	name: String,
+	registry_id: String,
 	/// `v0`, `v1`, ...: the answers, in the order of the page's list.
 	#[serde(flatten)]
 	rest: BTreeMap<String, Value>,
@@ -391,6 +407,7 @@ pub(super) async fn deploy(
 				name,
 				inputs,
 				model: None,
+				registry: registry_choice(&sig.registry_id)?,
 			},
 		)
 		.await?;

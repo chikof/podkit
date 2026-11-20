@@ -10,7 +10,7 @@ use maud::{Markup, html};
 use serde::Deserialize;
 
 use super::detail::header;
-use super::{crumbs, monitoring_url};
+use super::{ServerTab, crumbs, monitoring_url};
 use crate::ids::{ServerId, TeamId};
 use crate::metrics::{Range, ServerPoint, service as metrics_service};
 use crate::servers::{Server, service};
@@ -211,7 +211,7 @@ async fn page(
 	crumbs.push(("Monitoring", None));
 	let body = html! {
 		div class="ui-page-body" {
-			(header(ctx.team.id, server, true, &html! {}))
+			(header(ctx.team.id, server, ServerTab::Monitoring, &html! {}))
 			(metrics_section(&section, &server_charts(server, &points, range, now())))
 		}
 	};

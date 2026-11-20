@@ -54,10 +54,20 @@ impl AgentPool {
 			return Ok(client_for(tunnel));
 		}
 
-		let target = SshTarget::for_server(server, &state.secrets).map_err(|e| {
-			tracing::warn!(server_id = %server.id, error = %e, "cannot build ssh target");
+		let unavailable = |what: &str, e: &dyn std::fmt::Display| {
+			tracing::warn!(server_id = %server.id, error = %e, "{what}");
 			ServerError::AgentUnavailable
-		})?;
+		};
+		let Some(key) = server.ssh_key_id else {
+			return Err(unavailable("cannot build ssh target", &"no ssh key"));
+		};
+		let sealed = crate::ssh_keys::sealed_private_key(&state.db, key)
+			.await
+			.map_err(|e| unavailable("cannot load the ssh key", &e))?
+			.ok_or_else(|| unavailable("cannot load the ssh key", &"the key is gone"))?;
+		let target = SshTarget::for_server(server, &sealed, &state.secrets)
+			.map_err(|e| unavailable("cannot build ssh target", &e))?;
+		let _ = crate::ssh_keys::touch(&state.db, key).await;
 		let opened = SshTunnel::open(&target, agent_socket).await.map_err(|e| {
 			tracing::warn!(server_id = %server.id, error = %e, "ssh tunnel failed");
 			ServerError::AgentUnavailable

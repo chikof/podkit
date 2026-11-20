@@ -356,7 +356,7 @@ async fn a_read_only_member_sees_no_secrets_or_actions(db: PgPool) {
 		"Reveal password",
 		"Connection",
 		"Restart",
-		"Save changes",
+		"Unsaved changes",
 		"Advanced",
 		"delete-dialog",
 	] {
@@ -587,7 +587,7 @@ async fn changing_the_port_or_a_limit_recreates_the_container(db: PgPool) {
 	let (_, page) = f.get(&f.url(id)).await;
 	assert_contains(&page, "Network and limits");
 	assert_contains(&page, "15433");
-	assert_contains(&page, "Save changes");
+	assert_contains(&page, "Unsaved changes");
 }
 
 #[db_test]

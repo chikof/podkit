@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM git_providers WHERE id = $2 AND team_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e0fe3e79a6153b06f336a88968bb21dbd7a246fd31a6c881069169cc4a660bf1"
+}

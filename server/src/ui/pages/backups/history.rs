@@ -25,7 +25,7 @@ use crate::error::ServerError;
 use crate::ids::{BackupId, DatabaseId, ProjectId, TeamId};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_DANGER, Dismiss, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, SELECT, Size,
+	BUTTON, BUTTON_DANGER, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, SELECT, Size,
 	Status as Shape, Variant, button_class, card, card_content, card_section, dialog,
 	dropdown_menu, empty_state, icon, table,
 };
@@ -310,7 +310,6 @@ fn restore_dialog(base: &str, name: &str) -> Markup {
 		"restore-dialog",
 		"Restore this backup?",
 		None,
-		Dismiss::Esc,
 		&html! {
 			(closer("restore-dialog"))
 			div class="flex flex-col gap-3" {
@@ -348,7 +347,6 @@ fn delete_dialog(base: &str) -> Markup {
 		"delete-backup-dialog",
 		"Delete this backup?",
 		Some("Its file is removed from the destination. This can't be undone."),
-		Dismiss::Esc,
 		&html! {
 			(closer("delete-backup-dialog"))
 			(dialog_error())

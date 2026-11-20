@@ -43,8 +43,7 @@ pub fn router() -> Router<AppState> {
 		)
 }
 
-const ROW: &str =
-	"flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-3";
+const ROW: &str = "ui-card-row";
 
 /// What a custom domain is served over, as a badge: the word is always there.
 fn https_badge(https: bool) -> Markup {
@@ -59,16 +58,14 @@ fn domain_list(base: &str, domains: &[Domain], can_delete: bool, https: bool) ->
 	html! {
 		div id="domain-list" {
 			@if domains.is_empty() {
-				div class="border-t border-border px-6 pt-6" {
-					(empty_state(
-						"globe",
-						"No custom domains yet.",
-						Some("Point a hostname at this application and add it below."),
-						None,
-					))
-				}
+				(empty_state(
+					"globe",
+					"No custom domains yet.",
+					Some("Point a hostname at this application and add it below."),
+					None,
+				))
 			} @else {
-				ul aria-label="Custom domains" {
+				ul class="ui-card-rows" aria-label="Custom domains" {
 					@for domain in domains {
 						li class=(ROW) {
 							div class="flex min-w-0 flex-wrap items-center gap-3" {
@@ -163,8 +160,8 @@ async fn domains_page(
 			(default_address(&s, &app))
 			(card(&html! {
 				(card_section("Custom domains", Some("Hostnames that route to this application, besides its generated one."), None))
-				div class="flex flex-col gap-2" {
-					div class="px-6" { (form_error()) }
+				div class="ui-card-list" {
+					div class="ui-card-slot" { (form_error()) }
 					(domain_list(&base, &list.domains, can_delete, https))
 				}
 			}))

@@ -83,6 +83,9 @@ async fn every_team_page_renders_inside_the_shell(db: PgPool) {
 	for path in [
 		format!("/teams/{team}/projects"),
 		format!("/teams/{team}/servers"),
+		format!("/teams/{team}/infrastructure"),
+		format!("/teams/{team}/infrastructure/networks"),
+		format!("/teams/{team}/infrastructure/setup"),
 		format!("/teams/{team}/models"),
 		format!("/teams/{team}/models/catalog"),
 		format!("/teams/{team}/models/settings"),
@@ -123,9 +126,15 @@ async fn the_sidebar_lists_the_places_and_marks_the_current_one(db: PgPool) {
 	for label in [
 		"Projects",
 		"Templates",
-		"Servers",
 		"Models",
-		"S3 Destinations",
+		"Overview",
+		"Servers",
+		"Networks",
+		"Keys",
+		"Registries",
+		"Git providers",
+		"Security",
+		"S3 destinations",
 		"Settings",
 	] {
 		assert_contains(
@@ -144,10 +153,20 @@ async fn the_sidebar_lists_the_places_and_marks_the_current_one(db: PgPool) {
 			&format!("<span class=\"ui-nav-label\">{label}</span>"),
 		);
 	}
-	// The one current link, in the sidebar and in the tab bar, and no other.
+	// The Infrastructure section has its own heading and list.
+	assert_contains(
+		&body,
+		"<p class=\"ui-nav-heading\" id=\"nav-infrastructure\">Infrastructure</p>",
+	);
+	// The one current link of the sidebar is the page itself; the tab bar, which has no room
+	// for the section's pages, marks "Infrastructure" instead.
 	let current =
 		format!("href=\"/teams/{team}/servers\" class=\"ui-nav-link\" aria-current=\"page\"");
-	assert_eq!(body.matches(&current).count(), 2, "{body}");
+	assert_eq!(body.matches(&current).count(), 1, "{body}");
+	let tab = format!(
+		"href=\"/teams/{team}/infrastructure\" class=\"ui-nav-link\" aria-current=\"page\""
+	);
+	assert_eq!(body.matches(&tab).count(), 1, "{body}");
 	// The user menu has the theme choice and sign out.
 	assert_contains(&body, "action=\"/logout\"");
 	assert_contains(&body, "name=\"theme\" value=\"dark\"");
@@ -186,7 +205,8 @@ async fn the_tab_bar_has_five_places_and_keeps_settings_last(db: PgPool) {
 		bar.rfind("Settings").unwrap() > bar.rfind("Models").unwrap(),
 		"{bar}"
 	);
-	assert_not_contains(bar, "S3 Destinations");
+	assert_contains(bar, "Infrastructure");
+	assert_not_contains(bar, "S3 destinations");
 }
 
 #[db_test]
@@ -203,9 +223,15 @@ async fn a_link_the_role_may_not_use_is_not_rendered(db: PgPool) {
 	assert_eq!(s, StatusCode::OK);
 	assert_contains(&body, "<span class=\"ui-nav-label\">Projects</span>");
 	for hidden in [
+		"Overview",
 		"Servers",
+		"Networks",
+		"Keys",
+		"Registries",
+		"Git providers",
+		"Security",
 		"Models",
-		"S3 Destinations",
+		"S3 destinations",
 		"Members",
 		"Hugging Face token",
 	] {
@@ -214,6 +240,9 @@ async fn a_link_the_role_may_not_use_is_not_rendered(db: PgPool) {
 			&format!("<span class=\"ui-nav-label\">{hidden}</span>"),
 		);
 	}
+	// With nothing to read there is no Infrastructure section at all.
+	assert_not_contains(&body, "ui-nav-heading");
+	assert_not_contains(&body, "<span class=\"ui-nav-label\">Infrastructure</span>");
 	// The palette offers no action the role may not take either.
 	for hidden in ["Create project", "Add server", "Add S3 destination"] {
 		assert_not_contains(&body, hidden);
@@ -439,7 +468,7 @@ async fn search_offers_pages_and_actions_the_role_may_use(db: PgPool) {
 		"Add server",
 		"Add S3 destination",
 		"Members",
-		"S3 Destinations",
+		"S3 destinations",
 	] {
 		assert_contains(&body, text);
 	}
@@ -670,4 +699,27 @@ async fn creating_a_team_leaves_a_message_for_its_first_page(db: PgPool) {
 	assert_contains(&body, "window.location.assign('/teams/");
 	let flash = flash_cookie(&h).expect("a flash cookie");
 	assert_contains(&flash, "Second");
+}
+
+#[db_test]
+async fn the_sidebar_cookie_renders_the_rail_and_a_toggle(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	let path = format!("/teams/{team}/projects");
+	let (_, _, open) = get_html(&app, &path, Some(&cookie)).await;
+	assert_contains(&open, "class=\"ui-shell\"");
+	assert_not_contains(&open, "ui-shell-collapsed\" data-signals");
+	assert_contains(&open, "{_side: false}");
+	assert_contains(&open, "data-side-toggle");
+	assert_contains(&open, "aria-keyshortcuts=\"[\"");
+	let (_, _, rail) = get_html(&app, &path, Some(&format!("{cookie}; sidebar=collapsed"))).await;
+	assert_contains(&rail, "class=\"ui-shell ui-shell-collapsed\"");
+	assert_contains(&rail, "{_side: true}");
+	assert_contains(&rail, "aria-label=\"Expand sidebar\"");
+	// Every place has a tooltip for the rail, and the discard question is on the page.
+	assert_contains(&rail, "id=\"nav-tip-0\"");
+	assert_contains(&rail, "id=\"discard-confirm\"");
+	// Any other value of the cookie is the open sidebar.
+	let (_, _, junk) = get_html(&app, &path, Some(&format!("{cookie}; sidebar=nonsense"))).await;
+	assert_contains(&junk, "class=\"ui-shell\"");
 }

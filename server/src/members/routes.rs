@@ -37,6 +37,8 @@ struct MemberResponse {
 	role_id: RoleId,
 	role_name: String,
 	joined_at: String,
+	/// Where the member's picture is served, if they have one.
+	avatar_url: Option<String>,
 }
 
 impl From<&MemberDetail> for MemberResponse {
@@ -48,6 +50,10 @@ impl From<&MemberDetail> for MemberResponse {
 			role_id: m.role_id,
 			role_name: m.role_name.clone(),
 			joined_at: m.joined_at.to_string(),
+			avatar_url: m
+				.avatar
+				.as_deref()
+				.map(|h| crate::avatars::user_url(m.user_id, h)),
 		}
 	}
 }

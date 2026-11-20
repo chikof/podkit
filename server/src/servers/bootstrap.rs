@@ -196,8 +196,16 @@ pub async fn run(
 	}
 
 	pin_host_key(state, cancel, log, &mut server).await?;
-	let target =
-		SshTarget::for_server(&server, &state.secrets).map_err(|e| failed(e.to_string()))?;
+	let key = server
+		.ssh_key_id
+		.ok_or_else(|| failed("server has no ssh key"))?;
+	let sealed = crate::ssh_keys::sealed_private_key(&state.db, key)
+		.await
+		.map_err(|e| db_failed(&e))?
+		.ok_or_else(|| failed("the server's ssh key no longer exists"))?;
+	let target = SshTarget::for_server(&server, &sealed, &state.secrets)
+		.map_err(|e| failed(e.to_string()))?;
+	let _ = crate::ssh_keys::touch(&state.db, key).await;
 
 	note(log, "probing server").await;
 	let output = exec(&target, cancel, "probe", PROBE_CMD, None).await?;

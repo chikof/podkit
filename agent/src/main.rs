@@ -169,6 +169,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	sweep_backups(&args.data_dir.join("backups"));
 
 	let podman = Podman::connect(&args.podman_socket)?;
+	agent::scan::sweep(&podman, &args.data_dir).await;
 	let supervisor = Supervisor::start(podman.clone(), &args.data_dir).await;
 	let gateway_dir = agent::gateway::sidecar::dir(&args.data_dir);
 	let ctx = Arc::new(Ctx {
@@ -182,14 +183,20 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	});
 
 	// A sidecar from before a restart or an upgrade is replaced by one of this binary.
-	if agent::gateway::sidecar::read_config(&gateway_dir)
+	if let Some(config) = agent::gateway::sidecar::read_config(&gateway_dir)
 		.await
-		.is_some_and(|c| !c.keys.is_empty())
-		&& let Err(e) =
-			agent::gateway::sidecar::ensure_running(&ctx.podman(), &ctx.supervisor, &ctx.data_dir)
-				.await
+		.filter(|c| !c.keys.is_empty())
 	{
-		warn!(error = %e, "starting the gateway sidecar failed");
+		let podman = ctx.podman();
+		if let Err(e) =
+			agent::gateway::sidecar::ensure_running(&podman, &ctx.supervisor, &ctx.data_dir).await
+		{
+			warn!(error = %e, "starting the gateway sidecar failed");
+		} else if let Err(e) =
+			agent::gateway::sidecar::sync_networks(&podman, &config.networks).await
+		{
+			warn!(error = %e, "joining the gateway sidecar to its networks failed");
+		}
 	}
 
 	match std::fs::remove_file(&args.socket) {

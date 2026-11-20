@@ -22,6 +22,8 @@ use crate::error::ServerError;
 use crate::ids::{StackId, StackServiceId};
 use crate::jobs::{Job, JobFailure, JobKind};
 use crate::logs::JobLog;
+use crate::networks;
+use crate::registries;
 use crate::servers;
 use crate::stacks;
 use crate::state::AppState;
@@ -131,7 +133,7 @@ struct Ctx<'a> {
 
 impl Ctx<'_> {
 	/// Parses and translates the stack's current compose file and variables.
-	fn plan(&self, services: &[StackService]) -> Result<translate::Plan, JobFailure> {
+	async fn plan(&self, services: &[StackService]) -> Result<translate::Plan, JobFailure> {
 		let env = stacks::decrypt_env(&self.state.secrets, self.stack).map_err(|e| {
 			tracing::error!(stack = self.stack.id.0, "{e}");
 			failed("failed to read the stack's variables")
@@ -163,7 +165,7 @@ impl Ctx<'_> {
 				})
 			})
 			.collect();
-		translate::plan(
+		let mut plan = translate::plan(
 			&compose,
 			&Settings {
 				stack: self.stack.id.0,
@@ -175,7 +177,13 @@ impl Ctx<'_> {
 				domains: &domains,
 			},
 		)
-		.map_err(|issues| failed(describe(&issues)))
+		.map_err(|issues| failed(describe(&issues)))?;
+		// The stack's own network, plus the ones it was attached to.
+		let linked = networks::attach::stack_links(&self.state.db, self.stack.id)
+			.await
+			.map_err(|e| db_failure(&e))?;
+		translate::link_networks(&mut plan, &linked);
+		Ok(plan)
 	}
 
 	async fn services(&self) -> Result<Vec<StackService>, JobFailure> {
@@ -189,7 +197,7 @@ impl Ctx<'_> {
 			.await
 			.map_err(|e| db_failure(&e))?;
 		let rows = self.services().await?;
-		let plan = self.plan(&rows)?;
+		let plan = self.plan(&rows).await?;
 
 		// Services dropped from the compose file go first.
 		for row in rows.iter().filter(|r| r.status == ServiceStatus::Removing) {
@@ -240,6 +248,10 @@ impl Ctx<'_> {
 	}
 
 	/// Deploys one service and stores the result on its row.
+	#[allow(
+		clippy::too_many_lines,
+		reason = "the merged cards each added a step; one flow reads better unsplit"
+	)]
 	async fn deploy_service(
 		&self,
 		log: &mut JobLog,
@@ -250,6 +262,28 @@ impl Ctx<'_> {
 			.await;
 		let mut spec = planned.spec.clone();
 		spec.instance_id = self.job.id.0;
+		// The login is added after the plan is hashed: rotating a password must not
+		// redeploy services that run fine.
+		if let (
+			Some(id),
+			proto::Source::Image {
+				auth, reference, ..
+			},
+		) = (self.stack.registry_id, &mut spec.source)
+		{
+			let login = registries::service::auth_for(self.state, id)
+				.await
+				.map_err(|e| {
+					warn!(stack = self.stack.id.0, "saved registry unusable: {e}");
+					failed("failed to load the saved registry login")
+				})?;
+			// Only the registry it belongs to ever sees the login: a stack's services may
+			// come from several.
+			if login.server.as_deref() == Some(registries::service::image_host(reference).as_str())
+			{
+				*auth = Some(login);
+			}
+		}
 		let mut events = self
 			.client
 			.stream(Method::POST, "/v1/deploy", Some(&spec))
@@ -271,7 +305,11 @@ impl Ctx<'_> {
 				Some(Ok(Event::Log { stream, line })) => {
 					log.push(stream, &format!("{}: {line}", planned.name)).await;
 				}
-				Some(Ok(Event::Deployed { container_id, .. })) => break Ok(container_id),
+				Some(Ok(Event::Deployed {
+					container_id,
+					image,
+					..
+				})) => break Ok((container_id, image)),
 				Some(Ok(Event::Failed { message })) => break Err(message),
 				Some(Ok(
 					Event::Phase { .. }
@@ -287,7 +325,7 @@ impl Ctx<'_> {
 			}
 		};
 		match outcome {
-			Ok(container_id) => {
+			Ok((container_id, image)) => {
 				stacks::set_service_state(
 					&self.state.db,
 					row.id,
@@ -295,6 +333,17 @@ impl Ctx<'_> {
 				)
 				.await
 				.map_err(|e| db_failure(&e))?;
+				crate::scanning::queue(
+					self.state,
+					self.stack.server_id,
+					crate::scanning::Target {
+						kind: crate::scanning::ResourceKind::StackService,
+						resource_id: row.id.0,
+						image_ref: &image,
+						deployment: None,
+					},
+				)
+				.await;
 				let mut row = row.clone();
 				row.container_id = Some(container_id);
 				row.status = ServiceStatus::Running;
@@ -449,7 +498,7 @@ impl Ctx<'_> {
 	/// Recreates one service from the stack's current configuration.
 	async fn restart(&self, log: &mut JobLog, service: &StackService) -> Result<(), JobFailure> {
 		let rows = self.services().await?;
-		let plan = self.plan(&rows)?;
+		let plan = self.plan(&rows).await?;
 		let planned = plan
 			.services
 			.iter()
@@ -467,7 +516,10 @@ impl Ctx<'_> {
 		// The volumes of the compose file as it is now. A volume dropped from
 		// the file earlier is not known any more and stays.
 		let volumes = if purge {
-			self.plan(&rows).map(|p| p.volumes).unwrap_or_default()
+			self.plan(&rows)
+				.await
+				.map(|p| p.volumes)
+				.unwrap_or_default()
 		} else {
 			Vec::new()
 		};

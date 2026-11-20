@@ -170,6 +170,31 @@ mod tests {
 	}
 
 	#[test]
+	fn an_empty_state_in_a_card_nests_no_second_card_or_border_wrapper() {
+		use crate::ui::components::empty_state;
+		let html = card(&html! {
+			(card_section("Environment variables", None, None))
+			(empty_state("key-round", "None yet.", Some("Add one."), None))
+		})
+		.into_string();
+		assert_eq!(html.matches("ui-card\"").count(), 1, "{html}");
+		assert_eq!(html.matches("class=\"ui-empty\"").count(), 1, "{html}");
+		// The empty state is the card's own content: no utility border or inset wraps it.
+		assert!(
+			!html.contains("border-t") && !html.contains("px-6"),
+			"{html}"
+		);
+		// And the stylesheet draws it flush on the card's inset, not as a dashed box of its own.
+		let css = include_str!("../components.css");
+		assert!(
+			css.contains(
+				".ui-card .ui-empty { border: 0; border-radius: 0; padding: var(--s-7) var(--card-pad); }"
+			),
+			"an empty state inside a card must be flush"
+		);
+	}
+
+	#[test]
 	fn a_link_card_href_cannot_break_out_of_its_attribute() {
 		let html = link_card("/x\" onclick=\"y", &html! {}, "T", None, None).into_string();
 		assert!(!html.contains("onclick=\"y"), "{html}");

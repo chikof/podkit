@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO user_avatars (user_id, mime, bytes, hash)\n\t\t\tVALUES ($1, $2, $3, $4)\n\t\t\tON CONFLICT (user_id) DO UPDATE\n\t\t\tSET mime = $2, bytes = $3, hash = $4, updated_at = NOW()\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6282b1e0ab752fe2bad5aa053d2293d8bc5b8769a00eb240a659d4b995ed30c5"
+}

@@ -82,6 +82,11 @@ pub async fn register(
 	}
 }
 
+/// The email a person signs in with, for their account page.
+pub async fn email_of(db: &PgPool, id: crate::ids::UserId) -> AppResult<Option<String>> {
+	Ok(users::email_of(db, id).await?)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::register;

@@ -23,7 +23,7 @@ use crate::ui::testing::{
 	assert_contains, assert_not_contains, get_html, page_main, post_signals, ui_login, ui_session,
 };
 
-const KEY: &str = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAA\n-----END OPENSSH PRIVATE KEY-----";
+const KEY: &str = crate::tests::SSH_KEY;
 const TOKEN: &str = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
 /// A value that must never come back out, whatever the page.
 const SECRET: &str = "S3CR3T-0b9a1c5e-6f0e-4d0e-9a52-7c1d2f3a4b5c";
@@ -389,7 +389,8 @@ async fn credentials_are_stored_but_never_rendered(db: PgPool) {
 	}
 	let id = application_id(&db, "keyed").await;
 	let (_, page) = f.get(&format!("{}/{id}/settings", f.base())).await;
-	assert_contains(&page, "A deploy key is stored.");
+	assert_contains(&page, "Uses the key");
+	assert_contains(&page, "ssh-ed25519 ");
 	let id = application_id(&db, "regged").await;
 	let (_, page) = f.get(&format!("{}/{id}/settings", f.base())).await;
 	assert_contains(&page, "Registry credentials are stored.");
@@ -701,7 +702,7 @@ async fn the_general_tab_is_prefilled_and_saving_toasts(db: PgPool) {
 	assert_contains(&page, "&quot;memory_limit_mb&quot;:&quot;256&quot;");
 	assert_contains(&page, "&quot;cpu_limit&quot;:&quot;0.5&quot;");
 	assert_contains(&page, "&quot;build_strategy&quot;:&quot;nixpacks&quot;");
-	assert_contains(&page, "Save changes");
+	assert_contains(&page, "Unsaved changes");
 	assert_not_contains(&page, "&quot;server_id&quot;");
 
 	let body = f
@@ -924,7 +925,7 @@ async fn a_read_only_member_sees_no_actions_and_forged_posts_fail(db: PgPool) {
 	assert_contains(&page, "Shared");
 	// The page shows the facts, with no form and none of the tabs that need more than reading.
 	let main = page_main(&page);
-	assert_not_contains(main, "Save changes");
+	assert_not_contains(main, "Unsaved changes");
 	assert_not_contains(main, "Advanced");
 	assert_not_contains(main, "Webhooks");
 	assert_not_contains(main, "Delete");
@@ -968,7 +969,7 @@ async fn a_read_only_member_sees_no_actions_and_forged_posts_fail(db: PgPool) {
 
 	// The owner has the form, the tabs and the delete dialog.
 	let (_, page) = f.get(&format!("{}/{id}/settings", f.base())).await;
-	assert_contains(&page, "Save changes");
+	assert_contains(&page, "Unsaved changes");
 	assert_contains(&page, "Advanced");
 	assert_contains(&page, "Webhooks");
 	assert_contains(&page, "id=\"delete-dialog\"");

@@ -25,6 +25,7 @@ use crate::auth::permission::{Action, Resource};
 use crate::deployments::service::{self, DeploymentView, Trigger};
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, DeploymentId, ProjectId, TeamId};
+use crate::scanning::service::ScanView;
 use crate::state::AppState;
 use crate::ui::components::{
 	BUTTON_OUTLINE, BannerKind, Size, Variant, banner, button_class, empty_state, icon,
@@ -33,6 +34,7 @@ use crate::ui::components::{
 use crate::ui::extract::TeamCtx;
 use crate::ui::live::{error_line, job_log};
 use crate::ui::pages::projects::cards::relative_time;
+use crate::ui::pages::security;
 use crate::ui::sse::js_string;
 use crate::ui::status::{Status, poll};
 use crate::ui::{error, sse};
@@ -199,6 +201,17 @@ async fn history_rows(
 	service::list(&s.db, ctx.user.id, ctx.team.id, project, app).await
 }
 
+/// The scans of these deployments, for the line each deploy page shows. Informational: a
+/// failed lookup is an empty answer, never a failed page.
+async fn scans_of(
+	s: &AppState,
+	ctx: &TeamCtx,
+	rows: &[DeploymentView],
+) -> security::DeploymentScans {
+	let ids: Vec<DeploymentId> = rows.iter().map(|d| d.id).collect();
+	security::deployment_scans(s, ctx, &ids).await
+}
+
 /// What the page shows: the history, and the facts and log of `selected` (the newest when
 /// nothing was chosen).
 fn view(
@@ -206,6 +219,7 @@ fn view(
 	app: &ApplicationView,
 	rows: &[DeploymentView],
 	chosen: Option<DeploymentId>,
+	scans: &security::DeploymentScans,
 ) -> Markup {
 	let current = chosen
 		.and_then(|id| rows.iter().find(|d| d.id == id))
@@ -219,7 +233,7 @@ fn view(
 					(table(ctx, app, rows, Some(d.id)))
 				}
 				div class="ui-dep-main" {
-					(status_card(ctx, app, d))
+					(status_card(ctx, app, d, scans.get(&d.id)))
 					(log_viewer_titled(
 						"build-log",
 						"Build log",
@@ -249,7 +263,8 @@ async fn overview(
 	let rows = history_rows(&s, &ctx, project.id, app.id)
 		.await
 		.map_err(|e| error::page(&ctx, &e))?;
-	let content = view(&ctx, &app, &rows, None);
+	let scans = scans_of(&s, &ctx, &rows).await;
+	let content = view(&ctx, &app, &rows, None, &scans);
 	Ok(page(&s, &ctx, &project, &app, Tab::Deployments, &content).await)
 }
 
@@ -267,7 +282,8 @@ async fn detail(
 	let rows = history_rows(&s, &ctx, project.id, app.id)
 		.await
 		.map_err(|e| error::page(&ctx, &e))?;
-	let content = view(&ctx, &app, &rows, Some(id));
+	let scans = scans_of(&s, &ctx, &rows).await;
+	let content = view(&ctx, &app, &rows, Some(id), &scans);
 	Ok(page(&s, &ctx, &project, &app, Tab::Deployments, &content).await)
 }
 
@@ -364,7 +380,12 @@ fn fact(label: &str, value: &Markup) -> Markup {
 
 /// Status, times and the Cancel button of the deployment being read. `#deployment-status` is
 /// what polling re-renders while it is in flight.
-fn status_card(ctx: &TeamCtx, app: &ApplicationView, d: &DeploymentView) -> Markup {
+fn status_card(
+	ctx: &TeamCtx,
+	app: &ApplicationView,
+	d: &DeploymentView,
+	scan: Option<&ScanView>,
+) -> Markup {
 	let base = app_url(ctx.team.id, app.project_id, app.id);
 	let url = deployment_url(&base, d.id);
 	let can_update = ctx.perms.can(Action::Update, Resource::Deployment);
@@ -397,6 +418,7 @@ fn status_card(ctx: &TeamCtx, app: &ApplicationView, d: &DeploymentView) -> Mark
 			@if let Some(message) = &d.error_message {
 				(banner(BannerKind::Error, Some("This deployment failed."), message, None))
 			}
+			(security::scan_line(ctx, d.id, scan))
 		}
 	}
 }
@@ -416,7 +438,8 @@ async fn status_fragment(
 		// The header's status and buttons depend on the latest status too.
 		Ok((view, d)) => {
 			let rows = recent_deployments(&s, &ctx, &view).await;
-			sse::patch(&status_card(&ctx, &view, &d))
+			let scans = security::deployment_scans(&s, &ctx, &[d.id]).await;
+			sse::patch(&status_card(&ctx, &view, &d, scans.get(&d.id)))
 				.and(sse::patch(&header(&s, &ctx, &view, &rows).await))
 				.into_response()
 		}

@@ -20,14 +20,16 @@ use crate::error::ServerError;
 use crate::ids::{DatabaseId, ProjectId, TeamId};
 use crate::metrics::service as metrics;
 use crate::metrics::{Range, ResourcePoint};
+use crate::scanning::Subject;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, CHECKBOX, Dismiss, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER,
-	Size, Status as Shape, Variant, button_class, dialog, dropdown_menu, icon, logo, menu_label,
+	BUTTON, BUTTON_OUTLINE, CHECKBOX, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, Size,
+	Status as Shape, Variant, button_class, dialog, dropdown_menu, icon, logo, menu_label,
 	menu_separator,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::pages::apps::chrome;
+use crate::ui::pages::security;
 use crate::ui::sse::js_string;
 use crate::ui::status::{Status, poll};
 use crate::ui::{error, sse};
@@ -139,6 +141,8 @@ pub async fn header(s: &AppState, ctx: &TeamCtx, d: &DatabaseDetail) -> Markup {
 	let busy = busy(d);
 	let running = database.status == DatabaseStatus::Running;
 	let point = usage(s, ctx, database).await;
+	let security =
+		security::header_badge(s, ctx, database.project_id, Subject::Database(database.id)).await;
 	let dash = || "\u{2014}".to_owned();
 	let figures = [
 		(
@@ -177,6 +181,7 @@ pub async fn header(s: &AppState, ctx: &TeamCtx, d: &DatabaseDetail) -> Markup {
 					@if busy && !Status::in_flight(database.status) {
 						span { "A job is running" }
 					}
+					(security)
 					@if let Some(message) = &database.status_message {
 						span class="ui-head-ref" { (message) }
 					}
@@ -202,7 +207,6 @@ pub fn dialogs(ctx: &TeamCtx, database: &Database) -> Markup {
 				"delete-dialog",
 				"Delete this database?",
 				Some("Deleting stops and removes the database's container."),
-				Dismiss::Esc,
 				&html! {
 					div class="flex flex-col gap-3" {
 						label class=(LABEL) {

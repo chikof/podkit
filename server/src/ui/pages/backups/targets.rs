@@ -20,8 +20,8 @@ use crate::backups::targets::service::{self as targets, CreateInput};
 use crate::ids::{BackupTargetId, TeamId};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, CHECKBOX, Dismiss, INPUT, LABEL, LogoSize, Size, Variant, button_class,
-	card, card_content, card_footer, card_section, dialog, empty_state, icon, logo,
+	BUTTON, BUTTON_OUTLINE, CHECKBOX, INPUT, LABEL, LogoSize, Size, Variant, button_class, card,
+	card_content, card_footer, card_section, dialog, empty_state, icon, logo,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -201,7 +201,6 @@ fn delete_dialog(team: TeamId) -> Markup {
 		Some(
 			"Databases using it stop backing up, and backups already made to it can no longer be restored.",
 		),
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				p { "Delete " strong class="break-all" "data-text"="$_del_name" {} "?" }

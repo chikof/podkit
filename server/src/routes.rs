@@ -8,9 +8,10 @@ use tower_http::compression::predicate::{Predicate, SizeAbove};
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
-	applications, auth, backups, catalog, databases, deployments, domains, env_vars, environments,
-	links, logos, members, metrics, model_files, models, projects, servers, stacks, teams,
-	templates, ui, volumes, webhooks,
+	applications, auth, avatars, backups, catalog, databases, deployments, domains, env_vars,
+	environments, git_providers, iac, links, logos, members, metrics, model_files, models,
+	networks, projects, registries, scanning, servers, ssh_keys, stacks, teams, templates, ui,
+	volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -30,6 +31,7 @@ async fn health() -> &'static str {
 pub async fn routes(state: AppState) -> AppResult<Router> {
 	let api = Router::new()
 		.nest("/auth", auth::router())
+		.merge(avatars::api_router())
 		.nest("/teams", teams::router())
 		.nest("/teams/{team_id}", members::router())
 		.nest("/teams/{team_id}/projects", projects::router())
@@ -37,7 +39,18 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			"/teams/{team_id}/projects/{project_id}/environments",
 			environments::router(),
 		)
+		.nest("/teams/{team_id}/projects/{project_id}", iac::router())
+		.nest("/teams/{team_id}/import", iac::import_router())
 		.nest("/teams/{team_id}/servers", servers::router())
+		.nest("/teams/{team_id}/ssh-keys", ssh_keys::router())
+		.nest("/teams/{team_id}/git-providers", git_providers::router())
+		.nest(
+			"/teams/{team_id}/servers/{server_id}/networks",
+			networks::router(),
+		)
+		.nest("/teams/{team_id}/networks", networks::network_router())
+		.nest("/teams/{team_id}/registries", registries::router())
+		.nest("/teams/{team_id}/api-tokens", auth::tokens::router())
 		.nest(
 			"/teams/{team_id}/servers/{server_id}/metrics",
 			metrics::router(),
@@ -84,10 +97,18 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			model_files::token::router(),
 		)
 		.nest(&format!("{DB}/{{database_id}}/backups"), backups::router())
-		.nest("/webhooks", webhooks::router());
+		.nest("/teams/{team_id}/security", scanning::routes::router())
+		.nest("/webhooks", webhooks::router())
+		// Last, so it wraps every route above: a `pk_` token is resolved and limited here.
+		.layer(axum::middleware::from_fn_with_state(
+			state.clone(),
+			auth::tokens::gate,
+		));
 	Ok(Router::new()
 		.merge(ui::router())
 		.merge(logos::router())
+		.merge(git_providers::public_router())
+		.merge(avatars::public_router())
 		.route("/health", get(health))
 		.nest("/api/v1", api)
 		.nest("/webhooks", webhooks::router())

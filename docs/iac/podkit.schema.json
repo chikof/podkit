@@ -1,0 +1,291 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$id": "https://podkit.dev/schema/podkit.schema.json",
+	"title": "podkit.toml",
+	"description": "A podkit project, or several, as a file. Secrets are never values: they are ${secret:NAME} placeholders filled in from a separate secrets file when the file is applied.",
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["version"],
+	"properties": {
+		"version": {
+			"description": "The version of this format. Only 1 exists.",
+			"const": 1
+		},
+		"projects": {
+			"description": "The projects, by slug. An export holds one; a team-level import may hold several.",
+			"type": "object",
+			"propertyNames": { "$ref": "#/$defs/slug" },
+			"additionalProperties": { "$ref": "#/$defs/project" }
+		}
+	},
+	"$defs": {
+		"slug": {
+			"description": "Lowercase letters, digits and hyphens, not starting or ending with a hyphen.",
+			"type": "string",
+			"pattern": "^[a-z0-9]([a-z0-9-]{0,58}[a-z0-9])?$"
+		},
+		"name": {
+			"description": "A name of 1 to 60 characters.",
+			"type": "string",
+			"minLength": 1,
+			"maxLength": 60
+		},
+		"secret": {
+			"description": "Text that may hold ${secret:NAME} placeholders. A placeholder is replaced by the value the secrets file gives NAME; any other text is the value itself.",
+			"type": "string"
+		},
+		"reference": {
+			"description": "The name of a server, SSH key or registry of the team. It must exist where the file is applied.",
+			"type": "string",
+			"minLength": 1
+		},
+		"secrets": {
+			"description": "Values by name, each a string.",
+			"type": "object",
+			"additionalProperties": { "$ref": "#/$defs/secret" }
+		},
+		"project": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["name"],
+			"properties": {
+				"name": { "$ref": "#/$defs/name" },
+				"environments": {
+					"description": "By environment slug.",
+					"type": "object",
+					"propertyNames": { "$ref": "#/$defs/slug" },
+					"additionalProperties": { "$ref": "#/$defs/environment" }
+				},
+				"networks": {
+					"description": "User networks that have a member in this project, ordered by server and name.",
+					"type": "array",
+					"items": { "$ref": "#/$defs/network" }
+				}
+			}
+		},
+		"environment": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["name"],
+			"properties": {
+				"name": { "$ref": "#/$defs/name" },
+				"apps": {
+					"type": "object",
+					"additionalProperties": { "$ref": "#/$defs/app" }
+				},
+				"databases": {
+					"type": "object",
+					"additionalProperties": { "$ref": "#/$defs/database" }
+				},
+				"stacks": {
+					"type": "object",
+					"additionalProperties": { "$ref": "#/$defs/stack" }
+				},
+				"models": {
+					"type": "object",
+					"additionalProperties": { "$ref": "#/$defs/model" }
+				}
+			}
+		},
+		"app": {
+			"description": "An application: a git repository that is built (repo), or an image that is pulled (image). Exactly one of the two.",
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["server", "slug", "port"],
+			"oneOf": [{ "required": ["repo"] }, { "required": ["image"] }],
+			"properties": {
+				"server": { "$ref": "#/$defs/reference" },
+				"slug": {
+					"description": "The public subdomain, unique on its server.",
+					"$ref": "#/$defs/slug"
+				},
+				"repo": { "type": "string", "minLength": 1 },
+				"ref": {
+					"description": "Branch, tag or commit. Git applications only; main by default.",
+					"type": "string"
+				},
+				"build": {
+					"description": "Git applications only; dockerfile by default.",
+					"enum": ["dockerfile", "nixpacks"]
+				},
+				"dockerfile": {
+					"description": "Git applications only; Dockerfile by default.",
+					"type": "string"
+				},
+				"image": { "type": "string", "minLength": 1 },
+				"port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+				"memory_mb": { "type": "integer", "minimum": 1 },
+				"cpu": { "type": "number", "exclusiveMinimum": 0 },
+				"deploy_key": {
+					"description": "The name of an SSH key of the team, to clone an ssh:// repository.",
+					"$ref": "#/$defs/reference"
+				},
+				"registry": {
+					"description": "The name of a saved registry the image is pulled with.",
+					"$ref": "#/$defs/reference"
+				},
+				"git_token": {
+					"description": "Secret: a token for an https:// repository.",
+					"$ref": "#/$defs/secret"
+				},
+				"registry_username": { "$ref": "#/$defs/secret" },
+				"registry_password": { "$ref": "#/$defs/secret" },
+				"domains": {
+					"description": "Custom hostnames. Each is routed to one application on the whole install.",
+					"type": "array",
+					"items": { "type": "string", "minLength": 1 },
+					"uniqueItems": true
+				},
+				"volumes": {
+					"description": "Mount paths of persistent volumes.",
+					"type": "array",
+					"items": { "type": "string", "pattern": "^/." },
+					"uniqueItems": true
+				},
+				"env": {
+					"description": "Environment variables. Values are secrets: ${secret:NAME} placeholders when exported.",
+					"type": "object",
+					"additionalProperties": { "$ref": "#/$defs/secret" }
+				},
+				"models": {
+					"description": "Models of the same project the application is linked to.",
+					"type": "array",
+					"items": {
+						"type": "object",
+						"additionalProperties": false,
+						"required": ["model"],
+						"properties": {
+							"model": { "type": "string", "minLength": 1 },
+							"default": { "type": "boolean" }
+						}
+					}
+				}
+			}
+		},
+		"database": {
+			"description": "A managed database. Its credentials are generated by podkit and are not in the file.",
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["server", "engine"],
+			"properties": {
+				"server": { "$ref": "#/$defs/reference" },
+				"engine": { "enum": ["postgres", "mysql", "mongodb", "redis"] },
+				"version": {
+					"description": "The engine's default version when left out.",
+					"type": "string"
+				},
+				"public_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+				"memory_mb": { "type": "integer", "minimum": 1 },
+				"cpu": { "type": "number", "exclusiveMinimum": 0 }
+			}
+		},
+		"stack": {
+			"description": "A compose stack with its compose file inline.",
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["server", "compose"],
+			"properties": {
+				"server": { "$ref": "#/$defs/reference" },
+				"compose": { "type": "string", "minLength": 1 },
+				"source": {
+					"description": "Where it came from: raw, or template:<id>@<version>. Informational.",
+					"type": "string"
+				},
+				"registry": { "$ref": "#/$defs/reference" },
+				"env": {
+					"description": "Variables of the stack. Values are secrets.",
+					"type": "object",
+					"additionalProperties": { "$ref": "#/$defs/secret" }
+				},
+				"files": {
+					"description": "Files a template mounts, by path. Contents are secrets.",
+					"type": "object",
+					"additionalProperties": { "$ref": "#/$defs/secret" }
+				},
+				"domains": {
+					"description": "Hostnames routed to a service, by service name.",
+					"type": "object",
+					"additionalProperties": {
+						"type": "object",
+						"additionalProperties": false,
+						"required": ["host"],
+						"properties": {
+							"host": { "type": "string", "minLength": 1 },
+							"port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+						}
+					}
+				}
+			}
+		},
+		"model": {
+			"description": "An inference engine serving model files that are already downloaded to the server. A model is not edited in place.",
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["server", "repo", "revision", "engine"],
+			"properties": {
+				"server": { "$ref": "#/$defs/reference" },
+				"repo": {
+					"description": "The Hugging Face repository of the download.",
+					"type": "string",
+					"minLength": 1
+				},
+				"revision": { "type": "string", "minLength": 1 },
+				"engine": {
+					"enum": [
+						"llama_cpu",
+						"llama_cuda",
+						"llama_vulkan",
+						"ollama",
+						"vllm",
+						"colibri",
+						"custom"
+					]
+				},
+				"image": { "description": "The custom engine only.", "type": "string" },
+				"port": {
+					"description": "The custom engine only.",
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 65535
+				},
+				"model_path": { "type": "string" },
+				"served_name": { "type": "string" },
+				"context_size": { "type": "integer", "minimum": 256 },
+				"gpu": { "type": "boolean" },
+				"extra_args": { "type": "array", "items": { "type": "string" } },
+				"memory_mb": { "type": "integer", "minimum": 256 }
+			}
+		},
+		"network": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["name", "server"],
+			"properties": {
+				"name": { "$ref": "#/$defs/name" },
+				"server": { "$ref": "#/$defs/reference" },
+				"internal": {
+					"description": "No outbound access.",
+					"type": "boolean"
+				},
+				"members": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"additionalProperties": false,
+						"required": ["environment", "kind", "name"],
+						"properties": {
+							"environment": { "$ref": "#/$defs/slug" },
+							"kind": { "enum": ["application", "database", "model", "stack"] },
+							"name": { "type": "string", "minLength": 1 },
+							"aliases": {
+								"description": "The names it answers to on the network; its own name when left out.",
+								"type": "array",
+								"items": { "type": "string" }
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}

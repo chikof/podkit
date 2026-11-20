@@ -18,8 +18,7 @@
 	const at = (e) => (e.target instanceof Element ? e.target : null);
 	const triggerOf = (pop) => $(`[commandfor="${CSS.escape(pop.id)}"]`);
 
-	/* Without CSS anchor positioning a popover is centered by the browser: put it under its
-	   trigger (above if no room), clamped to the viewport. */
+	/* No anchor positioning: put the popover under its trigger (above if no room), inside the viewport. */
 	const place = (pop, anchor, centered) => {
 		if (native.anchor || !anchor) return;
 		pop.style.cssText += ";position:fixed;position-area:none;position-try-fallbacks:none;inset:auto;margin:0";
@@ -30,8 +29,7 @@
 		pop.style.top = `${Math.max(8, below ? a.bottom + 6 : a.top - 6 - h)}px`;
 	};
 
-	/* Invoker commands: native activation is cancelled so a browser that has them cannot toggle
-	   twice. A popover light dismissal just closed stays closed. */
+	/* Invoker commands, run here when the browser lacks them. A popover just light-dismissed stays closed. */
 	let wasOpen = false, kb = false;
 	const dialogBack = new WeakMap();
 	d.addEventListener("pointerdown", (e) => {
@@ -43,7 +41,7 @@
 		if (!b) return;
 		kb = e.detail === 0;
 		const t = d.getElementById(b.getAttribute("commandfor")), c = b.getAttribute("command");
-		/* A dialog opened from a menu item returns focus to the menu's button: the item is gone by then. */
+		/* A dialog opened from a menu item gives focus back to the menu button. */
 		const menu = b.closest(".ui-menu");
 		if (t && c === "show-modal" && menu) dialogBack.set(t, triggerOf(menu));
 		if (native.invoker || !t) return;
@@ -57,7 +55,8 @@
 		if (back) setTimeout(() => d.activeElement === d.body && back.focus(), 0);
 	}, true);
 
-	/* `closedby="any"`: a click outside closes the dialog (press and release both outside). */
+	/* `closedby="any"`: a click outside closes the dialog (press and release both outside). It asks with a
+	   `cancel` event first, as Esc does, so guard.js can hold it back. */
 	if (!native.closedby) {
 		let pressed = null;
 		const outside = (e, dlg) => {
@@ -69,7 +68,7 @@
 			pressed = dlg && dlg.matches('[closedby="any"]') && outside(e, dlg) ? dlg : null;
 		}, true);
 		d.addEventListener("pointerup", (e) => {
-			if (pressed && outside(e, pressed)) pressed.close();
+			if (pressed && outside(e, pressed) && pressed.dispatchEvent(new Event("cancel", { cancelable: true }))) pressed.close();
 			pressed = null;
 		}, true);
 	}
@@ -102,7 +101,7 @@
 		if (!m) return;
 		const trigger = triggerOf(m);
 		m.hidePopover();
-		/* A link navigates away; after a command focus returns, with no ring after a pointer. */
+		/* After a command, focus returns to the trigger (no ring after a pointer). */
 		if (item.tagName === "BUTTON" && !item.matches("[commandfor]")) trigger?.focus({ focusVisible: e.detail === 0 });
 	});
 

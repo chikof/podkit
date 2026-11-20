@@ -44,6 +44,8 @@ fn main() {
 	let components =
 		fs::read_to_string(Path::new(UI_DIR).join("components.css")).expect("read components.css");
 	let own_classes = css_classes(&components);
+	assert_balanced("theme.css", &theme);
+	assert_balanced("components.css", &components);
 	let tokens = color_tokens(&theme);
 	let full = encre_config(&tokens, encre_css::Preflight::default());
 	let check = encre_config(&tokens, encre_css::Preflight::None);
@@ -63,13 +65,84 @@ fn main() {
 		"neither encre-css nor components.css generates CSS for these classes in src/ui: {unknown:?}"
 	);
 
-	let utilities = encre_css::generate(sources.iter().map(String::as_str), &full);
+	let utilities = without_moz_focusring(&encre_css::generate(
+		sources.iter().map(String::as_str),
+		&full,
+	));
 	let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("app.css");
 	fs::write(
 		out,
 		format!("{}\n{}\n{utilities}", squeeze(&theme), squeeze(&components)),
 	)
 	.expect("write app.css");
+}
+
+/// Removes the preflight rule `:-moz-focusring { outline: auto }`. Only Firefox knows that
+/// pseudo-class, and the utilities come after `theme.css` and `components.css`, so at equal
+/// specificity the rule beat every focus style of ours there: the command palette input got
+/// a thick native ring inside the palette's own, and `outline: none` was ignored. Without it
+/// the cascade is the same in every engine (`:focus-visible` in `theme.css`).
+fn without_moz_focusring(css: &str) -> String {
+	let mut out = String::with_capacity(css.len());
+	let mut rest = css;
+	while let Some(at) = rest.find(":-moz-focusring") {
+		let Some(end) = rest[at..].find('}') else {
+			break;
+		};
+		out.push_str(&rest[..at]);
+		rest = &rest[at + end + 1..];
+	}
+	out.push_str(rest);
+	out
+}
+
+/// Fails the build when a hand-written stylesheet has an unclosed `{`. A missing `}` at the
+/// end of one block (a merge of two cards that both end `components.css` does it) turns the
+/// rest of the bundle, utilities and preflight included, into the body of that rule, and the
+/// page loses `box-sizing: border-box` and every utility without any other error.
+fn assert_balanced(name: &str, css: &str) {
+	let mut depth = 0_i32;
+	let mut in_comment = false;
+	let mut in_string: Option<char> = None;
+	let mut chars = css.chars().peekable();
+	let mut line = 1;
+	while let Some(c) = chars.next() {
+		if c == '\n' {
+			line += 1;
+		}
+		if in_comment {
+			if c == '*' && chars.peek() == Some(&'/') {
+				chars.next();
+				in_comment = false;
+			}
+			continue;
+		}
+		if let Some(quote) = in_string {
+			if c == '\\' {
+				chars.next();
+			} else if c == quote {
+				in_string = None;
+			}
+			continue;
+		}
+		match c {
+			'/' if chars.peek() == Some(&'*') => {
+				chars.next();
+				in_comment = true;
+			}
+			'"' | '\'' => in_string = Some(c),
+			'{' => depth += 1,
+			'}' => {
+				depth -= 1;
+				assert!(depth >= 0, "{name}:{line}: a `}}` closes nothing");
+			}
+			_ => {}
+		}
+	}
+	assert!(
+		depth == 0,
+		"{name}: {depth} unclosed `{{` at the end of the file"
+	);
 }
 
 /// Drops comments and the whitespace that carries no meaning (around `{`, `}`, `;`, `,` and

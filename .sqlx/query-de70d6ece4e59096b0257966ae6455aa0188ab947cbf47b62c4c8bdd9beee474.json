@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO git_providers (id, team_id, kind, name, base_url, credentials, created_by)\n\t\t\tVALUES ($1, $2, $3, $4, $5, $6, $7)\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Varchar",
+        "Varchar",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "de70d6ece4e59096b0257966ae6455aa0188ab947cbf47b62c4c8bdd9beee474"
+}

@@ -16,12 +16,13 @@ use super::{
 	StackService, StackStatus,
 };
 use crate::auth::permission::{Action, Resource, authorize};
+use crate::change::Change;
 use crate::db::is_unique_violation;
 use crate::error::{AppResult, ServerError};
-use crate::ids::{EnvironmentId, JobId, ProjectId, ServerId, StackId, TeamId, UserId};
+use crate::ids::{EnvironmentId, JobId, ProjectId, RegistryId, ServerId, StackId, TeamId, UserId};
 use crate::jobs::{self, JobKind, JobStatus};
 use crate::state::AppState;
-use crate::{environments, scope, servers, stacks, validate};
+use crate::{environments, registries, scope, servers, stacks, validate};
 
 const MAX_TAIL: u32 = 5000;
 const MAX_ENV_VARS: usize = 200;
@@ -43,6 +44,8 @@ pub struct CreateInput {
 	pub source: Option<String>,
 	/// Queue the first deploy right away.
 	pub deploy: bool,
+	/// A saved registry to pull the images with.
+	pub registry: Option<RegistryId>,
 }
 
 /// Changes to a stack; omitted fields stay as they are. Variables are
@@ -53,6 +56,8 @@ pub struct UpdateInput {
 	pub compose_yaml: Option<String>,
 	pub env_set: BTreeMap<String, String>,
 	pub env_unset: Vec<String>,
+	/// `None` leaves the saved registry as it is, `Some(None)` clears it.
+	pub registry: Change<RegistryId>,
 }
 
 /// A stack with what a page about it shows. Carries no variable values.
@@ -276,6 +281,9 @@ pub async fn create(
 	let server = scope::server(&s.db, team, body.server_id).await?;
 	let slug = validate_name(&body.name)?;
 	validate_env(&body.env)?;
+	if let Some(registry) = body.registry {
+		registries::service::pick(&s.db, team, registry).await?;
+	}
 
 	let id = StackId::generate();
 	let (compose, _) = check(
@@ -308,6 +316,7 @@ pub async fn create(
 				stacks::encrypt_env(&s.secrets, &body.files)?
 			},
 			source,
+			registry_id: body.registry,
 		},
 	)
 	.await
@@ -469,6 +478,9 @@ pub async fn update(
 	if stack.status == StackStatus::Deleting {
 		return Err(ServerError::Conflict("stack is being deleted".to_string()));
 	}
+	if let Change::Set(registry) = body.registry {
+		registries::service::pick(&s.db, team, registry).await?;
+	}
 
 	let name = match &body.name {
 		Some(name) => {
@@ -498,6 +510,7 @@ pub async fn update(
 		&name,
 		&yaml,
 		&stacks::encrypt_env(&s.secrets, &env)?,
+		body.registry,
 	)
 	.await
 	.map_err(unique_conflict)?;

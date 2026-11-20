@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT s.id AS \"id: ServerId\", s.scan_enabled,\n\t\t\t\tCOUNT(i.id) FILTER (WHERE i.db_built IS NOT NULL) AS \"scanned!\"\n\t\t\tFROM servers s LEFT JOIN image_scans i ON i.server_id = s.id\n\t\t\tWHERE s.team_id = $1\n\t\t\tGROUP BY s.id\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: ServerId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "scan_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "scan_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "scanned!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "b8bf3a53d12edce986bdc1282c37a378c24eb539508fe1ab537519f7c8fcc510"
+}

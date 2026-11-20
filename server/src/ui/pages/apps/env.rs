@@ -20,8 +20,8 @@ use crate::error::ServerError;
 use crate::ids::{ApplicationId, EnvVarId, ProjectId, TeamId};
 use crate::state::AppState;
 use crate::ui::components::{
-	Dismiss, INPUT, LABEL, Size, TEXTAREA, Variant, button_class, card, card_content, card_section,
-	dialog, dialog_cancel, dialog_open_button, empty_state, icon,
+	INPUT, LABEL, Size, TEXTAREA, Variant, button_class, card, card_content, card_section, dialog,
+	dialog_cancel, dialog_open_button, empty_state, icon,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::form_error;
@@ -44,23 +44,20 @@ pub fn router() -> Router<AppState> {
 		)
 }
 
-const ROW: &str =
-	"flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-3";
+const ROW: &str = "ui-card-row";
 
 fn env_list(base: &str, keys: &[EnvVarKey], can_delete: bool) -> Markup {
 	html! {
 		div id="env-list" {
 			@if keys.is_empty() {
-				div class="border-t border-border px-6 pt-6" {
-					(empty_state(
-						"key-round",
-						"No environment variables yet.",
-						Some("Add the settings and secrets your application reads at start. Values are encrypted and never shown again."),
-						None,
-					))
-				}
+				(empty_state(
+					"key-round",
+					"No environment variables yet.",
+					Some("Add the settings and secrets your application reads at start. Values are encrypted and never shown again."),
+					None,
+				))
 			} @else {
-				ul aria-label="Environment variables" {
+				ul class="ui-card-rows" aria-label="Environment variables" {
 					@for var in keys {
 						li class=(ROW) {
 							div class="flex min-w-0 flex-col" {
@@ -111,7 +108,6 @@ fn bulk_dialog(base: &str) -> Markup {
 		Some(
 			"One KEY=VALUE per line. Blank lines and lines starting with # are ignored. Lines that don't parse are skipped and reported by number.",
 		),
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-4" {
 				(closer("env-bulk"))
@@ -164,8 +160,8 @@ async fn env_page(
 					Some("Values are encrypted and never shown again. Setting a name that exists replaces its value."),
 					bulk_button.as_ref(),
 				))
-				div class="flex flex-col gap-2" {
-					div class="px-6" { (form_error()) }
+				div class="ui-card-list" {
+					div class="ui-card-slot" { (form_error()) }
 					(env_list(&base, &keys, can_delete))
 				}
 			}))
