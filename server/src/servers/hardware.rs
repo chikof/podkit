@@ -91,13 +91,14 @@ mod tests {
 			.execute(db)
 			.await
 			.unwrap();
+		let key = crate::tests::seed_key(db, team.0, "hw key").await;
 		let mut server = Server::new_remote(
 			team,
 			"box".to_string(),
 			"10.0.0.1".to_string(),
 			22,
 			"root".to_string(),
-			vec![1],
+			crate::ids::SshKeyId(key),
 			"/run/podman.sock".to_string(),
 		);
 		server.status = ServerStatus::Pending;

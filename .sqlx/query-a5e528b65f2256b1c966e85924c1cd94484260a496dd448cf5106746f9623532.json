@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE ssh_keys SET algorithm = $2, public_key = $3, fingerprint = $4 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Varchar",
+        "Text",
+        "Varchar"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a5e528b65f2256b1c966e85924c1cd94484260a496dd448cf5106746f9623532"
+}

@@ -8,6 +8,7 @@ use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ServerId, TeamId, UserId};
 use crate::jobs::{self, Job, JobKind};
+use crate::ssh_keys::{self, service::KeyChoice};
 use crate::state::AppState;
 use crate::{scope, validate};
 
@@ -19,14 +20,15 @@ pub const DEFAULT_SSH_PORT: i32 = 22;
 
 const MAX_NAME_LEN: usize = 60;
 
-/// What it takes to register a remote server. The key is plaintext here and
-/// encrypted before it is stored; nothing reads it back out.
+/// What it takes to register a remote server. A pasted key is plaintext here and
+/// goes into the vault encrypted; nothing reads it back out.
 pub struct NewServer {
 	pub name: String,
 	pub hostname: String,
 	pub ssh_port: i32,
 	pub ssh_user: String,
-	pub ssh_private_key: String,
+	/// The vault key to log in with, or a new one.
+	pub key: KeyChoice,
 	pub podman_socket_path: String,
 }
 
@@ -80,28 +82,27 @@ pub async fn create(s: &AppState, user: UserId, team: TeamId, new: NewServer) ->
 			"invalid podman_socket_path".to_string(),
 		));
 	}
-	if new.ssh_private_key.trim().is_empty() {
+	if matches!(&new.key, KeyChoice::Import(text) if text.trim().is_empty()) {
 		return Err(ServerError::Validation(
-			"An SSH private key is required.".to_string(),
+			"Pick an SSH key, or paste one to import.".to_string(),
 		));
 	}
 
-	let encrypted_key = s
-		.secrets
-		.encrypt(&new.ssh_private_key)
-		.map_err(|e| ServerError::Validation(format!("failed to encrypt ssh key: {e}")))?;
-
+	let key = ssh_keys::service::resolve(s, user, team, new.key, &format!("Server {name}")).await?;
 	let server = Server::new_remote(
 		team,
 		name,
 		new.hostname,
 		new.ssh_port,
 		new.ssh_user,
-		encrypted_key,
+		key.id,
 		new.podman_socket_path,
 	);
 
-	super::insert(&s.db, &server).await?;
+	if let Err(e) = super::insert(&s.db, &server).await {
+		ssh_keys::service::discard(s, team, key).await;
+		return Err(e.into());
+	}
 	enqueue_bootstrap(s, &server).await?;
 	Ok(server)
 }

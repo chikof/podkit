@@ -436,7 +436,9 @@ async fn image_app_deploy_pulls_and_sends_the_image_source(db: PgPool) {
 	let fresh = deployments::insert(&s.db, app.id, None, None, None)
 		.await
 		.unwrap();
-	let source = deployments::run::app_source(&s.state, &app, &fresh).unwrap_or_else(|_| panic!());
+	let source = deployments::run::app_source(&s.state, &app, &fresh)
+		.await
+		.unwrap_or_else(|_| panic!());
 	let Source::Image {
 		reference,
 		pull,
@@ -491,7 +493,9 @@ async fn image_app_git_deploys_still_build_from_the_repo(db: PgPool) {
 	let d = deployments::insert(&s.db, app.id, None, None, None)
 		.await
 		.unwrap();
-	let source = deployments::run::app_source(&s.state, &app, &d).unwrap_or_else(|_| panic!());
+	let source = deployments::run::app_source(&s.state, &app, &d)
+		.await
+		.unwrap_or_else(|_| panic!());
 	let Source::Git {
 		repo_url, git_ref, ..
 	} = source
@@ -539,7 +543,9 @@ async fn image_app_webhook_deploys_pull_the_image_again(db: PgPool) {
 		// No image yet: the job pulls the reference, it does not reuse one.
 		assert_eq!(d.image_tag, None);
 		let app = s.stored(id).await;
-		let source = deployments::run::app_source(&s.state, &app, d).unwrap_or_else(|_| panic!());
+		let source = deployments::run::app_source(&s.state, &app, d)
+			.await
+			.unwrap_or_else(|_| panic!());
 		assert!(matches!(source, Source::Image { pull: true, .. }));
 	}
 }

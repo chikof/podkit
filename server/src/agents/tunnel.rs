@@ -48,18 +48,21 @@ pub struct SshTarget {
 }
 
 impl SshTarget {
+	/// `sealed_key` is the server's vault key, as stored (age-encrypted).
+	///
 	/// # Errors
-	/// Fails if the server lacks an ssh user, key or pinned host key, or the key
-	/// cannot be decrypted.
-	pub fn for_server(server: &Server, secrets: &SecretBox) -> Result<Self, TunnelError> {
-		let (Some(user), Some(encrypted), Some(host_key)) = (
-			server.ssh_user.as_ref(),
-			server.ssh_private_key.as_ref(),
-			server.host_key.as_ref(),
-		) else {
+	/// Fails if the server lacks an ssh user or pinned host key, or the key cannot be
+	/// decrypted.
+	pub fn for_server(
+		server: &Server,
+		sealed_key: &[u8],
+		secrets: &SecretBox,
+	) -> Result<Self, TunnelError> {
+		let (Some(user), Some(host_key)) = (server.ssh_user.as_ref(), server.host_key.as_ref())
+		else {
 			return Err(TunnelError::MissingCredentials);
 		};
-		let private_key = secrets.decrypt(encrypted).map_err(|e| {
+		let private_key = secrets.decrypt(sealed_key).map_err(|e| {
 			tracing::warn!(server_id = %server.id, error = %e, "ssh key decryption failed");
 			TunnelError::Decrypt
 		})?;
@@ -71,6 +74,18 @@ impl SshTarget {
 			private_key: Zeroizing::new(private_key),
 			host_key: host_key.clone(),
 		})
+	}
+
+	/// The same host and user, logged in with another key.
+	#[must_use]
+	pub fn with_private_key(&self, private_key: Zeroizing<String>) -> Self {
+		Self {
+			host: self.host.clone(),
+			port: self.port,
+			user: self.user.clone(),
+			private_key,
+			host_key: self.host_key.clone(),
+		}
 	}
 
 	/// Writes the key and `known_hosts` into a fresh temp dir. The dir must

@@ -9,6 +9,7 @@ pub mod accounts;
 pub mod apps;
 pub mod backups;
 pub mod databases;
+pub mod keys;
 pub mod models;
 pub mod networks;
 pub mod projects;

@@ -58,10 +58,17 @@ pub struct CreateApplicationRequest {
 	pub registry_password: Option<String>,
 	#[serde(default = "default_git_ref")]
 	pub git_ref: String,
-	/// SSH private key (PEM) for `ssh://`/scp-form repo URLs. Plaintext on the
+	/// SSH private key to import into the vault as this application's deploy key, for
+	/// `ssh://`/scp-form repo URLs (prefer `deploy_key_id`). Plaintext on the
 	/// wire (TLS-protected); encrypted at rest. `None`/empty for public repos.
 	#[serde(default)]
 	pub deploy_key: Option<String>,
+	/// A key from the team's SSH key vault to use as the deploy key.
+	#[serde(default)]
+	pub deploy_key_id: Option<crate::ids::SshKeyId>,
+	/// Make a new Ed25519 deploy key; read its public key from the ssh-keys list.
+	#[serde(default)]
+	pub generate_deploy_key: bool,
 	/// Access token for `https://` repo URLs. Plaintext on the wire
 	/// (TLS-protected); encrypted at rest. `None`/empty for public repos.
 	#[serde(default)]
@@ -105,6 +112,12 @@ pub struct UpdateApplicationRequest {
 	/// explicitly clear a deploy key back to "public repo" once set.
 	#[serde(default)]
 	pub deploy_key: Option<String>,
+	/// A key from the team's SSH key vault to use as the deploy key.
+	#[serde(default)]
+	pub deploy_key_id: Option<crate::ids::SshKeyId>,
+	/// Make a new Ed25519 deploy key; read its public key from the ssh-keys list.
+	#[serde(default)]
+	pub generate_deploy_key: bool,
 	/// Same write-only semantics as `deploy_key`, for `https://` repos.
 	#[serde(default)]
 	pub git_token: Option<String>,
@@ -141,6 +154,8 @@ pub struct ApplicationResponse {
 	pub memory_limit_mb: Option<i32>,
 	pub cpu_limit: Option<f64>,
 	pub url: String,
+	/// The vault key used as the deploy key (its public half is in the ssh-keys list).
+	pub deploy_key_id: Option<crate::ids::SshKeyId>,
 	/// Only ever populated on creation, the plaintext is not recoverable
 	/// afterwards (only the encrypted form is stored). Wire this into the
 	/// git provider's webhook config to enable `POST /webhooks/deploy/{id}`.
@@ -173,6 +188,7 @@ impl From<&ApplicationView> for ApplicationResponse {
 			memory_limit_mb: app.memory_limit_mb,
 			cpu_limit: app.cpu_limit.map(f64::from),
 			url: app.url.clone(),
+			deploy_key_id: app.deploy_key_id,
 			webhook_secret: None,
 		}
 	}
@@ -202,6 +218,8 @@ pub async fn create(
 			registry_password: body.registry_password,
 			git_ref: body.git_ref,
 			deploy_key: body.deploy_key,
+			deploy_key_id: body.deploy_key_id,
+			generate_deploy_key: body.generate_deploy_key,
 			git_token: body.git_token,
 			build_strategy: body.build_strategy,
 			dockerfile_path: body.dockerfile_path,
@@ -255,6 +273,8 @@ pub async fn update(
 			registry_password: body.registry_password,
 			git_ref: body.git_ref,
 			deploy_key: body.deploy_key,
+			deploy_key_id: body.deploy_key_id,
+			generate_deploy_key: body.generate_deploy_key,
 			git_token: body.git_token,
 			build_strategy: body.build_strategy,
 			dockerfile_path: body.dockerfile_path,

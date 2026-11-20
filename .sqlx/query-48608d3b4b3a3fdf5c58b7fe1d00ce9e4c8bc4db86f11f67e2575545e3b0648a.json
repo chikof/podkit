@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT id AS \"id: ServerId\", team_id AS \"team_id: TeamId\", name, hostname, ssh_port,\n\t\t\t\tssh_user, ssh_private_key, podman_socket_path, is_local,\n\t\t\t\tstatus AS \"status: ServerStatus\", host_key, agent_socket_path, agent_version,\n\t\t\t\tarch, status_message,\n\t\t\t\thardware AS \"hardware?: sqlx::types::Json<proto::Hardware>\", hardware_at\n\t\t\tFROM servers\n\t\t\tWHERE status = 'active' OR is_local OR (status = 'unreachable' AND agent_version IS NOT NULL)\n\t\t",
+  "query": "\n\t\t\tSELECT id AS \"id: ServerId\", team_id AS \"team_id: TeamId\", name, hostname, ssh_port,\n\t\t\t\tssh_user, ssh_key_id AS \"ssh_key_id: SshKeyId\", podman_socket_path, is_local,\n\t\t\t\tstatus AS \"status: ServerStatus\", host_key, agent_socket_path, agent_version,\n\t\t\t\tarch, status_message,\n\t\t\t\thardware AS \"hardware?: sqlx::types::Json<proto::Hardware>\", hardware_at\n\t\t\tFROM servers\n\t\t\tWHERE team_id = $1\n\t\t",
   "describe": {
     "columns": [
       {
@@ -71,12 +71,12 @@
       },
       {
         "ordinal": 6,
-        "name": "ssh_private_key",
-        "type_info": "Bytea",
+        "name": "ssh_key_id: SshKeyId",
+        "type_info": "Int8",
         "origin": {
           "Table": {
             "table": "servers",
-            "name": "ssh_private_key"
+            "name": "ssh_key_id"
           }
         }
       },
@@ -192,7 +192,9 @@
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Int8"
+      ]
     },
     "nullable": [
       false,
@@ -214,5 +216,5 @@
       true
     ]
   },
-  "hash": "00448289bd30eaecb623b834471f81d2315c7eb590c6b93d3862e5fc7880df27"
+  "hash": "48608d3b4b3a3fdf5c58b7fe1d00ce9e4c8bc4db86f11f67e2575545e3b0648a"
 }

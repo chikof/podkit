@@ -10,16 +10,19 @@ use maud::{Markup, html};
 use serde::Deserialize;
 use serde_json::json;
 
+use super::key_picker::key_picker;
 use super::{detail_url, hardware_parts, host_port, list_url, local_badge};
 use crate::auth::permission::{Action, Resource};
-use crate::ids::TeamId;
+use crate::ids::{SshKeyId, TeamId};
 use crate::metrics::{Range, ServerPoint, service as metrics_service};
 use crate::servers::service::{self, DEFAULT_PODMAN_SOCKET_PATH, DEFAULT_SSH_PORT, NewServer};
 use crate::servers::{Server, host_key_fingerprint};
+use crate::ssh_keys::keygen::Kind;
+use crate::ssh_keys::service::{self as key_service, KeyChoice, KeyView, NewKey, Source};
 use crate::state::AppState;
 use crate::ui::charts::sparkline;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, LogoSize, TEXTAREA, dialog, dialog_cancel,
+	BUTTON, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, LogoSize, dialog, dialog_cancel,
 	dialog_open_button, icon, logo,
 };
 use crate::ui::error;
@@ -37,6 +40,10 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.route("/teams/{team_id}/servers", get(page).post(create))
 		.route("/teams/{team_id}/servers/rows", get(rows))
+		.route(
+			"/teams/{team_id}/servers/key",
+			axum::routing::post(make_key),
+		)
 }
 
 fn now() -> i64 {
@@ -196,7 +203,7 @@ fn step_label(n: u8, text: &str) -> Markup {
 }
 
 /// The three steps of the dialog: connection, SSH key, bootstrap (the live log).
-fn add_dialog(ctx: &TeamCtx) -> Markup {
+fn add_dialog(ctx: &TeamCtx, keys: &[KeyView], can_create_key: bool) -> Markup {
 	let post = format!("@post('{}')", list_url(ctx.team.id));
 	// Enter and the buttons all submit the form; `novalidate` lets each step check only its
 	// own fields before moving on. (`fieldset.reportValidity()` is always true: a fieldset is
@@ -242,15 +249,7 @@ fn add_dialog(ctx: &TeamCtx) -> Markup {
 			}
 			fieldset id="add-step-2" class="m-0 flex min-w-0 flex-col gap-4 border-0 p-0" "data-show"="$_step == 2" style="display: none" {
 				legend class="ui-visually-hidden" { "SSH key" }
-				label class=(LABEL) {
-					"SSH private key"
-					textarea class=(TEXTAREA)
-						required rows="6" spellcheck="false" autocomplete="off" autocapitalize="off"
-						placeholder="Paste the private key podkit should log in with" "data-bind:ssh_private_key" {}
-					span class="text-xs font-normal text-muted-foreground" {
-						"Stored encrypted. It is never shown again, here or in the API."
-					}
-				}
+				(key_picker(ctx.team.id, keys, can_create_key, None))
 				label class=(LABEL) {
 					"Podman socket path"
 					input class=(INPUT) type="text" required autocomplete="off" "data-bind:podman_socket_path";
@@ -294,14 +293,23 @@ fn add_dialog(ctx: &TeamCtx) -> Markup {
 async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Response> {
 	let (servers, points) = load(&s, &ctx).await?;
 	let can_create = ctx.perms.can(Action::Create, Resource::Server);
+	// Without `read ssh_key` the picker is empty and only an import is possible.
+	let keys = if can_create && ctx.perms.can(Action::Read, Resource::SshKey) {
+		key_service::list(&s.db, ctx.user.id, ctx.team.id)
+			.await
+			.map_err(|e| error::page(&ctx, &e))?
+	} else {
+		Vec::new()
+	};
+	let can_create_key = ctx.perms.can(Action::Create, Resource::SshKey);
 	let signals = format!(
-		"{{name: '', hostname: '', ssh_port: {DEFAULT_SSH_PORT}, ssh_user: '', ssh_private_key: '', podman_socket_path: '{DEFAULT_PODMAN_SOCKET_PATH}', _step: 1, _busy: false, _error: ''}}"
+		"{{name: '', hostname: '', ssh_port: {DEFAULT_SSH_PORT}, ssh_user: '', ssh_key_id: '', ssh_private_key: '', podman_socket_path: '{DEFAULT_PODMAN_SOCKET_PATH}', _step: 1, _busy: false, _error: ''}}"
 	);
 	let rows_url = format!("{}/rows", list_url(ctx.team.id));
 	// Closing the dialog resets it (and forgets a half-typed key); after a finished add it
 	// also refreshes the cards. `close` does not bubble, so the capture phase catches it.
 	let on_close = format!(
-		"($_step == 3 && @get({}, {{filterSignals: {{include: /^$/}}}})); $_step = 1; $ssh_private_key = ''; $_error = ''",
+		"($_step == 3 && @get({}, {{filterSignals: {{include: /^$/}}}})); $_step = 1; $ssh_private_key = ''; $ssh_key_id = ''; $_error = ''",
 		js_string(&rows_url)
 	);
 
@@ -320,7 +328,7 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 			}
 			(server_list(&ctx, &servers, &points))
 			(rows_poll(&rows_url, "30s"))
-			@if can_create { (add_dialog(&ctx)) }
+			@if can_create { (add_dialog(&ctx, &keys, can_create_key)) }
 		}
 	};
 	Ok(app_page(&ctx, "Servers", &super::crumbs(&ctx), &body))
@@ -364,6 +372,9 @@ struct CreateSignals {
 	hostname: String,
 	ssh_port: Port,
 	ssh_user: String,
+	#[serde(default)]
+	ssh_key_id: String,
+	#[serde(default)]
 	ssh_private_key: String,
 	podman_socket_path: String,
 }
@@ -384,6 +395,21 @@ fn bootstrap_step(team: TeamId, server: &Server) -> Markup {
 	}
 }
 
+/// What the key step chose: a vault key's id, `import` (the pasted key), or nothing yet.
+fn key_choice(sig: &CreateSignals) -> Result<KeyChoice, &'static str> {
+	match sig.ssh_key_id.trim() {
+		"" | "import" if !sig.ssh_private_key.trim().is_empty() => {
+			Ok(KeyChoice::Import(sig.ssh_private_key.clone()))
+		}
+		"import" => Err("Paste the private key to import."),
+		"" | "generate" => Err("Choose an SSH key, import one, or generate one."),
+		id => id
+			.parse::<i64>()
+			.map(|id| KeyChoice::Existing(SshKeyId(id)))
+			.map_err(|_| "Choose an SSH key."),
+	}
+}
+
 async fn create(
 	State(s): State<AppState>,
 	ctx: TeamCtx,
@@ -392,21 +418,64 @@ async fn create(
 	let Some(ssh_port) = sig.ssh_port.value() else {
 		return sse::error("SSH port must be between 1 and 65535.").into_response();
 	};
+	let key = match key_choice(&sig) {
+		Ok(key) => key,
+		Err(message) => return sse::error(message).into_response(),
+	};
 	let new = NewServer {
 		name: sig.name,
 		hostname: sig.hostname.trim().to_owned(),
 		ssh_port,
 		ssh_user: sig.ssh_user.trim().to_owned(),
-		ssh_private_key: sig.ssh_private_key,
+		key,
 		podman_socket_path: sig.podman_socket_path.trim().to_owned(),
 	};
 	match service::create(&s, ctx.user.id, ctx.team.id, new).await {
 		// The key leaves the signals as soon as the server exists.
 		Ok(server) => sse::patch(&bootstrap_step(ctx.team.id, &server))
 			.and(sse::signals(
-				&json!({ "_step": 3, "_error": "", "ssh_private_key": "" }),
+				&json!({ "_step": 3, "_error": "", "ssh_private_key": "", "ssh_key_id": "" }),
 			))
 			.into_response(),
 		Err(e) => error::action(&e),
 	}
+}
+
+#[derive(Deserialize)]
+struct MakeKeySignals {
+	name: String,
+}
+
+/// "Generate a new key" in step 2: makes an Ed25519 key in the vault named after the server
+/// and shows its public half to copy, with the key already chosen.
+async fn make_key(
+	State(s): State<AppState>,
+	ctx: TeamCtx,
+	ReadSignals(sig): ReadSignals<MakeKeySignals>,
+) -> Response {
+	let name = sig.name.trim();
+	let new = NewKey {
+		name: if name.is_empty() {
+			"New server".to_owned()
+		} else {
+			format!("Server {name}")
+		},
+		source: Source::Generate(Kind::Ed25519),
+	};
+	let made = match key_service::create(&s, ctx.user.id, ctx.team.id, new).await {
+		Ok(made) => made,
+		Err(e) => {
+			return sse::signals(&json!({ "ssh_key_id": "" }))
+				.and(sse::error(&error::message(&e)))
+				.into_response();
+		}
+	};
+	let keys = key_service::list(&s.db, ctx.user.id, ctx.team.id)
+		.await
+		.unwrap_or_default();
+	sse::patch(&key_picker(ctx.team.id, &keys, true, Some(&made)))
+		.and(sse::signals(
+			&json!({ "ssh_key_id": made.id.0.to_string(), "ssh_private_key": "", "_error": "" }),
+		))
+		.into_response()
 }

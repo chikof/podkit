@@ -16,7 +16,7 @@ fn item(label: &'static str, href: String, icon: &'static str) -> NavItem {
 	NavItem { label, href, icon }
 }
 
-/// Projects, templates, servers, models and S3 destinations.
+/// Projects, templates, servers, models, keys and S3 destinations.
 pub fn main_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	let base = format!("/teams/{}", ctx.team.id);
 	let can = |resource| ctx.perms.can(Action::Read, resource);
@@ -30,6 +30,9 @@ pub fn main_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	}
 	if can(Resource::Model) {
 		items.push(item("Models", format!("{base}/models"), "brain"));
+	}
+	if can(Resource::SshKey) {
+		items.push(item("Keys", format!("{base}/keys"), "key-round"));
 	}
 	if can(Resource::Backup) {
 		items.push(item(

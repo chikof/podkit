@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key, git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t\tFROM applications WHERE environment_id = $1 ORDER BY id\n\t\t",
+  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key_id AS \"deploy_key_id: SshKeyId\", git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t\tFROM applications WHERE environment_id = $1 ORDER BY id\n\t\t",
   "describe": {
     "columns": [
       {
@@ -126,12 +126,12 @@
       },
       {
         "ordinal": 11,
-        "name": "deploy_key",
-        "type_info": "Bytea",
+        "name": "deploy_key_id: SshKeyId",
+        "type_info": "Int8",
         "origin": {
           "Table": {
             "table": "applications",
-            "name": "deploy_key"
+            "name": "deploy_key_id"
           }
         }
       },
@@ -240,5 +240,5 @@
       true
     ]
   },
-  "hash": "071ced6985c0a44e5f15fbf8d5461e7f0965017b5b1caaaba74d937c617a8380"
+  "hash": "68802cdd00a6c89b097696c56115f2368561bc9ba86a8e7ad3e3cdc868c1cdb8"
 }

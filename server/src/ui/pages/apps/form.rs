@@ -11,9 +11,14 @@ use serde_json::json;
 
 use crate::applications::service::{AppInput, ApplicationView};
 use crate::applications::{BuildStrategy, SourceKind};
+use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
+use crate::ids::SshKeyId;
 use crate::servers::{Server, ServerStatus};
-use crate::ui::components::{INPUT, LABEL, SELECT, TEXTAREA};
+use crate::ssh_keys::service::{self as key_service, KeyView};
+use crate::state::AppState;
+use crate::ui::components::{INPUT, LABEL, SELECT, TEXTAREA, copy_field};
+use crate::ui::extract::TeamCtx;
 use crate::ui::status::Status;
 
 /// Everything the forms send, as strings: a number input would come back from Datastar as a
@@ -30,6 +35,8 @@ pub(super) struct AppSignals {
 	pub environment: String,
 	pub repo_url: String,
 	pub git_ref: String,
+	/// A vault key's id, `import` (the pasted `deploy_key`) or `new`; empty keeps what is stored.
+	pub deploy_key_id: String,
 	pub deploy_key: String,
 	pub git_token: String,
 	pub build_strategy: String,
@@ -71,6 +78,20 @@ impl AppSignals {
 		};
 		let secret = |value: &str| (!value.is_empty()).then(|| value.to_owned());
 		let image = self.is_image(existing);
+		// (pasted key to import, vault key, make a new one). A pasted key still imports with
+		// no choice made, as it did before the vault.
+		let https = self.repo_url.trim().starts_with("https://");
+		let deploy_key = if image {
+			(None, None, false)
+		} else {
+			match self.deploy_key_id.trim() {
+				"new" => (None, None, true),
+				"" | "import" => (secret(&self.deploy_key), None, false),
+				// A key picked earlier does not apply to an https URL, which takes a token.
+				_ if https => (None, None, false),
+				id => (None, id.parse::<i64>().ok().map(SshKeyId), false),
+			}
+		};
 		let (repo_url, image_ref) = if image {
 			if self.image.trim().is_empty() {
 				return Err(ServerError::Validation("Image is required.".to_owned()));
@@ -95,7 +116,9 @@ impl AppSignals {
 				.map(str::to_owned),
 			registry_password: image.then(|| secret(&self.registry_password)).flatten(),
 			git_ref: or(&self.git_ref, "main"),
-			deploy_key: (!image).then(|| secret(&self.deploy_key)).flatten(),
+			deploy_key: deploy_key.0,
+			deploy_key_id: deploy_key.1,
+			generate_deploy_key: deploy_key.2,
 			git_token: (!image).then(|| secret(self.git_token.trim())).flatten(),
 			build_strategy: or(&self.build_strategy, "dockerfile"),
 			dockerfile_path: or(&self.dockerfile_path, "Dockerfile"),
@@ -105,6 +128,19 @@ impl AppSignals {
 			environment_id: None,
 		})
 	}
+}
+
+/// The vault keys the deploy-key picker offers, and whether the user may add one. Without
+/// `read ssh_key` the list is empty, and only what the role allows is offered.
+pub(super) async fn load_keys(s: &AppState, ctx: &TeamCtx) -> (Vec<KeyView>, bool) {
+	let keys = if ctx.perms.can(Action::Read, Resource::SshKey) {
+		key_service::list(&s.db, ctx.user.id, ctx.team.id)
+			.await
+			.unwrap_or_default()
+	} else {
+		Vec::new()
+	};
+	(keys, ctx.perms.can(Action::Create, Resource::SshKey))
 }
 
 /// The signals that hold credentials, emptied after a request that took them.
@@ -121,7 +157,7 @@ pub(super) fn blank_signals(servers: &[Server], source: &str, environment: &str)
 		.unwrap_or_default();
 	json!({
 		"name": "", "slug": "", "server_id": server, "source": source, "environment": environment,
-		"repo_url": "", "git_ref": "main", "deploy_key": "", "git_token": "",
+		"repo_url": "", "git_ref": "main", "deploy_key_id": "", "deploy_key": "", "git_token": "",
 		"build_strategy": "dockerfile", "dockerfile_path": "Dockerfile",
 		"image": "", "registry_username": "", "registry_password": "",
 		"container_port": "", "memory_limit_mb": "", "cpu_limit": "", "_error": "",
@@ -134,7 +170,8 @@ pub(super) fn blank_signals(servers: &[Server], source: &str, environment: &str)
 pub(super) fn prefilled_signals(app: &ApplicationView) -> String {
 	json!({
 		"name": app.name, "slug": app.slug, "repo_url": app.repo_url.as_deref().unwrap_or_default(),
-		"git_ref": app.git_ref, "deploy_key": "", "git_token": "",
+		"git_ref": app.git_ref, "deploy_key_id": app.deploy_key_id.map(|k| k.0.to_string()).unwrap_or_default(),
+		"deploy_key": "", "git_token": "",
 		"build_strategy": app.build_strategy.as_str(), "dockerfile_path": app.dockerfile_path,
 		"image": app.image.as_deref().unwrap_or_default(),
 		"registry_username": "", "registry_password": "",
@@ -151,14 +188,23 @@ const HELP: &str = "text-xs font-normal text-muted-foreground";
 const NO_CREDENTIAL: &str =
 	"Only for private repositories. It is stored encrypted and never shown again.";
 
-/// What a stored deploy key looks like to the user: whether there is one, never what it is.
-/// Patched in place after a save.
-pub(super) fn deploy_key_hint(app: Option<&ApplicationView>) -> Markup {
+/// What the deploy key looks like to the user: which vault key the application uses and its
+/// public half to copy to the git provider. The private half is never here. Patched in place
+/// after a save.
+pub(super) fn deploy_key_hint(app: Option<&ApplicationView>, current: Option<&KeyView>) -> Markup {
 	html! {
-		p id="deploy-key-hint" class=(HELP) {
-			@if app.is_some_and(|a| a.has_deploy_key) {
-				"A deploy key is stored. Leave this empty to keep it; paste a new one to replace it."
-			} @else { (NO_CREDENTIAL) }
+		div id="deploy-key-hint" class="flex flex-col gap-2" {
+			@if let Some(key) = current {
+				p class=(HELP) {
+					"Uses the key " strong { (key.name) } " (" span class="font-mono" { (key.fingerprint) } "). "
+					"Add its public key as a deploy key at your git provider; pick another key to switch."
+				}
+				(copy_field("deploy-key-public", "Public key", &key.public_key))
+			} @else if app.is_some_and(|a| a.has_deploy_key) {
+				p class=(HELP) { "A deploy key is set. Pick another key to replace it." }
+			} @else {
+				p class=(HELP) { "Only for private repositories. The key lives in the vault; its private half is never shown." }
+			}
 		}
 	}
 }
@@ -235,8 +281,14 @@ pub(super) fn identity_fields(servers: Option<&[Server]>, derive_slug: bool) -> 
 	}
 }
 
-/// Where a Git application comes from: repository, ref and the credential its URL needs.
-pub(super) fn git_source_fields(app: Option<&ApplicationView>) -> Markup {
+/// Where a Git application comes from: repository, ref and the credential its URL needs. An
+/// ssh URL takes a deploy key from the team's vault (`keys`), a pasted one imported into it,
+/// or a new one; an https URL takes a token.
+pub(super) fn git_source_fields(
+	app: Option<&ApplicationView>,
+	keys: &[KeyView],
+	can_create_key: bool,
+) -> Markup {
 	html! {
 		label class=(LABEL) {
 			"Repository URL"
@@ -247,15 +299,56 @@ pub(super) fn git_source_fields(app: Option<&ApplicationView>) -> Markup {
 			"Branch, tag or ref"
 			input class={ (INPUT) " font-mono" } type="text" placeholder="main" autocomplete="off" spellcheck="false" "data-bind:git_ref";
 		}
-		label class=(LABEL) "data-show"="$repo_url !== '' && !$repo_url.startsWith('https://')" style="display: none" {
-			"Deploy key (SSH private key)"
-			textarea class=(TEXTAREA) rows="5" autocomplete="off" spellcheck="false" placeholder="Paste the private key" "data-bind:deploy_key" {}
-			(deploy_key_hint(app))
-		}
+		(deploy_key_field(app, keys, can_create_key))
 		label class=(LABEL) "data-show"="$repo_url.startsWith('https://')" style="display: none" {
 			"Access token"
 			input class=(INPUT) type="password" autocomplete="off" placeholder="Only for private repositories" "data-bind:git_token";
 			(git_token_hint(app))
+		}
+	}
+}
+
+/// The deploy key picker of an ssh repository: a vault key, an import or a new key, then the
+/// public half of the chosen one to copy. Patched in place after a save, so a key just made
+/// shows up in the list.
+pub(super) fn deploy_key_field(
+	app: Option<&ApplicationView>,
+	keys: &[KeyView],
+	can_create_key: bool,
+) -> Markup {
+	let current = app
+		.and_then(|a| a.deploy_key_id)
+		.and_then(|id| keys.iter().find(|k| k.id == id));
+	let keep = app.is_some_and(|a| a.has_deploy_key);
+	html! {
+		div id="deploy-key-field" class="flex flex-col gap-4"
+			"data-show"="$repo_url !== '' && !$repo_url.startsWith('https://')" style="display: none" {
+			label class=(LABEL) {
+				"Deploy key"
+				select class=(SELECT) "data-bind:deploy_key_id" {
+					button { selectedcontent {} }
+					@if !keep { option value="" { "No deploy key (public repository)" } }
+					@for key in keys {
+						option value=(key.id.0) selected[current.is_some_and(|c| c.id == key.id)] {
+							(key.name) " \u{b7} " (key.algorithm_label())
+						}
+					}
+					@if can_create_key {
+						option value="import" { "Import a key\u{2026}" }
+						option value="new" { "Generate a new key" }
+					}
+				}
+			}
+			label class=(LABEL) "data-show"="$deploy_key_id === 'import'" style="display: none" {
+				"Private key"
+				textarea class=(TEXTAREA) rows="5" autocomplete="off" spellcheck="false" autocapitalize="off"
+					placeholder="Paste an OpenSSH or PEM private key" "data-bind:deploy_key" {}
+				span class=(HELP) { "Imported into the vault under this application's name. A key with a passphrase is refused." }
+			}
+			p class=(HELP) "data-show"="$deploy_key_id === 'new'" style="display: none" {
+				"podkit makes an Ed25519 key when you save. Its public key is shown then, to add as a deploy key at your git provider."
+			}
+			(deploy_key_hint(app, current))
 		}
 	}
 }

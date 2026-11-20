@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM ssh_keys WHERE id = $2 AND team_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "67cd6acd697275057a4ee3728a0b21878b9ed8500477e0d140a2ee93a3ef751d"
+}
