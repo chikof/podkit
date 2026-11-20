@@ -139,8 +139,11 @@ async fn clone(
 				),
 			);
 		}
-		GitAuth::HttpsToken { token } => {
-			let basic = STANDARD.encode(format!("x-access-token:{token}"));
+		GitAuth::HttpsToken { token, username } => {
+			let basic = STANDARD.encode(format!(
+				"{}:{token}",
+				username.as_deref().unwrap_or("x-access-token")
+			));
 			cmd.env("GIT_CONFIG_COUNT", "1")
 				.env("GIT_CONFIG_KEY_0", "http.extraHeader")
 				.env(

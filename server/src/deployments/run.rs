@@ -327,6 +327,7 @@ async fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth
 			})?;
 		return Ok(GitAuth::HttpsToken {
 			token: access.token,
+			username: access.username,
 		});
 	}
 	if let Some(key) = application.deploy_key_id {
@@ -348,6 +349,7 @@ async fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth
 	if let Some(sealed) = application.git_token.as_deref() {
 		return Ok(GitAuth::HttpsToken {
 			token: decrypt(sealed)?,
+			username: None,
 		});
 	}
 	Ok(GitAuth::None)

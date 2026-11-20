@@ -50,6 +50,8 @@ pub struct CloneAccess {
 	pub repo_url: String,
 	/// Short-lived for a GitHub App; the stored token for the others.
 	pub token: String,
+	/// The user name to send with it, when the host wants the account's own (Gitea).
+	pub username: Option<String>,
 }
 
 /// A provider as the clients see it. No `Debug`: it carries the credentials.
@@ -94,6 +96,10 @@ impl Target<'_> {
 	/// What to clone `repo` with: the URL, and a token minted for this clone.
 	pub async fn clone_access(&self, repo: &str) -> Result<CloneAccess, ServerError> {
 		let repo_url = format!("{}/{repo}.git", self.base_url);
+		let username = match self.kind {
+			Kind::Gitea => Some(gitea::test(self).await?.login),
+			_ => None,
+		};
 		let token = match self.kind {
 			Kind::GithubApp => github::installation_token(self, repo).await?,
 			Kind::Gitlab | Kind::Gitea => match self.credentials {
@@ -101,7 +107,11 @@ impl Target<'_> {
 				Credentials::GithubApp { .. } => return Err(wrong_credentials()),
 			},
 		};
-		Ok(CloneAccess { repo_url, token })
+		Ok(CloneAccess {
+			repo_url,
+			token,
+			username,
+		})
 	}
 
 	/// Makes a push webhook on `repo` that calls `url` signed with `secret`. `None` for a

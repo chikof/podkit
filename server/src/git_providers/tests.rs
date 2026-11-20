@@ -1253,7 +1253,7 @@ async fn git_providers_applications_take_no_credential_beside_a_provider_and_clo
 				.unwrap()
 			{
 				proto::Source::Git {
-					auth: proto::GitAuth::HttpsToken { token },
+					auth: proto::GitAuth::HttpsToken { token, .. },
 					repo_url,
 					..
 				} => (repo_url, token),

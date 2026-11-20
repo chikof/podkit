@@ -448,6 +448,10 @@ pub enum GitAuth {
 	HttpsToken {
 		/// The token.
 		token: String,
+		/// The user name sent with it; `x-access-token` when absent. Gitea only accepts a token
+		/// together with the login of the account it belongs to.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		username: Option<String>,
 	},
 }
 
