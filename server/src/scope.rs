@@ -84,6 +84,28 @@ pub async fn application(
 	.ok_or(ServerError::ApplicationNotFound)
 }
 
+/// A scheduled task of the team's project.
+pub async fn cron_task(
+	db: &PgPool,
+	team: TeamId,
+	project: ProjectId,
+	id: crate::ids::CronTaskId,
+) -> AppResult<crate::cron::CronTask> {
+	sqlx::query_as(concat!(
+		"SELECT ",
+		crate::cron::task_cols!(),
+		" FROM cron_tasks
+		WHERE id = $3 AND project_id = $2
+			AND EXISTS (SELECT 1 FROM projects WHERE id = $2 AND team_id = $1)"
+	))
+	.bind(team)
+	.bind(project)
+	.bind(id)
+	.fetch_optional(db)
+	.await?
+	.ok_or(ServerError::CronNotFound("task"))
+}
+
 pub async fn git_provider(
 	db: &PgPool,
 	team: TeamId,

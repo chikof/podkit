@@ -58,4 +58,6 @@ id!(
 	NotificationEventId,
 	NotificationDeliveryId,
 	MetricAlertId,
+	CronTaskId,
+	CronRunId,
 );

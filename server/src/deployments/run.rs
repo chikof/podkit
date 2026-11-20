@@ -132,7 +132,12 @@ pub async fn run(
 				return Ok(());
 			}
 			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),
-			Some(Ok(Event::DumpWritten { .. } | Event::Progress { .. } | Event::Done)) => {}
+			Some(Ok(
+				Event::DumpWritten { .. }
+				| Event::Progress { .. }
+				| Event::Exited { .. }
+				| Event::Done,
+			)) => {}
 			Some(Err(e)) => {
 				warn!(deployment = deployment.id.0, "deploy stream failed: {e}");
 				return Err(failed(LOST_CONNECTION));
@@ -328,7 +333,7 @@ pub(crate) async fn app_source(
 	}
 }
 
-fn registry_auth(
+pub(crate) fn registry_auth(
 	state: &AppState,
 	application: &Application,
 ) -> Result<Option<RegistryAuth>, JobFailure> {
@@ -407,7 +412,7 @@ async fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth
 	Ok(GitAuth::None)
 }
 
-async fn load_env(
+pub(crate) async fn load_env(
 	state: &AppState,
 	application: &Application,
 ) -> Result<Vec<(String, String)>, JobFailure> {

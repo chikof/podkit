@@ -248,6 +248,11 @@ pub async fn job_finished(state: &AppState, job: &Job, result: &Result<(), JobFa
 				)
 				.body(clip(failure_text(e), 500))
 		}
+		JobKind::CronRun => {
+			// Retries, `cron.failed` and recovery are the cron slice's to decide.
+			crate::cron::run::finished(state, crate::ids::CronRunId(job.target_id), result).await;
+			return;
+		}
 		_ => return,
 	};
 	super::emit(state, event).await;

@@ -27,6 +27,7 @@ mod backups;
 mod catalog;
 mod change;
 mod config;
+mod cron;
 mod databases;
 mod db;
 mod deployments;

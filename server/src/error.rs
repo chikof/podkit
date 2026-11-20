@@ -99,6 +99,10 @@ pub enum ServerError {
 	#[error("{0} not found")]
 	NotificationNotFound(&'static str),
 
+	/// A scheduled task or one of its runs.
+	#[error("{0} not found")]
+	CronNotFound(&'static str),
+
 	#[error("registry not found")]
 	RegistryNotFound,
 
@@ -198,6 +202,7 @@ impl ServerError {
 			| Self::SshKeyNotFound
 			| Self::RegistryNotFound
 			| Self::NotificationNotFound(_)
+			| Self::CronNotFound(_)
 			| Self::TokenNotFound
 			| Self::GitProviderNotFound
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,

@@ -53,6 +53,7 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/backups/dump", post(backup_dump))
 		.route("/v1/backups/upload", post(backup_upload))
 		.route("/v1/backups/restore", post(backup_restore))
+		.route("/v1/cron/run", post(cron_run))
 		.route("/v1/model-downloads", post(model_download_route))
 		.route("/v1/probes", post(probe_route))
 		.route("/v1/ingress/ensure", post(ensure_ingress))
@@ -678,6 +679,10 @@ async fn backup_upload(State(ctx): State<Arc<Ctx>>, Json(req): Json<UploadReques
 
 async fn backup_restore(State(ctx): State<Arc<Ctx>>, Json(req): Json<RestoreRequest>) -> Response {
 	ndjson(move |tx| backup::restore(ctx, req, tx))
+}
+
+async fn cron_run(State(ctx): State<Arc<Ctx>>, Json(req): Json<proto::CronRunRequest>) -> Response {
+	ndjson(move |tx| crate::cron::run(ctx, req, tx))
 }
 
 async fn gateway_config(

@@ -67,8 +67,10 @@ pub enum EventKind {
 	ServerRecovered,
 	BackupFailed,
 	BackupSucceeded,
-	/// Wired by the cron card.
+	/// A scheduled task failed on its last attempt.
 	CronFailed,
+	/// A scheduled task that was failing ran well again.
+	CronRecovered,
 	/// A new critical or "act now" finding.
 	Vulnerability,
 	DiskHigh,
@@ -87,7 +89,7 @@ pub enum EventKind {
 }
 
 impl EventKind {
-	pub const ALL: [Self; 18] = [
+	pub const ALL: [Self; 19] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
@@ -96,6 +98,7 @@ impl EventKind {
 		Self::BackupFailed,
 		Self::BackupSucceeded,
 		Self::CronFailed,
+		Self::CronRecovered,
 		Self::Vulnerability,
 		Self::DiskHigh,
 		Self::CertExpiring,
@@ -118,6 +121,7 @@ impl EventKind {
 			Self::BackupFailed => "backup_failed",
 			Self::BackupSucceeded => "backup_succeeded",
 			Self::CronFailed => "cron_failed",
+			Self::CronRecovered => "cron_recovered",
 			Self::Vulnerability => "vulnerability",
 			Self::DiskHigh => "disk_high",
 			Self::CertExpiring => "cert_expiring",
@@ -145,6 +149,7 @@ impl EventKind {
 			Self::BackupFailed => "Backup failed",
 			Self::BackupSucceeded => "Backup succeeded",
 			Self::CronFailed => "Cron job failed",
+			Self::CronRecovered => "Cron job recovered",
 			Self::Vulnerability => "New critical vulnerability",
 			Self::DiskHigh => "Disk almost full",
 			Self::CertExpiring => "Certificate expiring",
@@ -163,7 +168,9 @@ impl EventKind {
 		match self {
 			Self::DeploySucceeded | Self::DeployFailed | Self::Rollback => "Deploys",
 			Self::ServerUnreachable | Self::ServerRecovered | Self::DiskHigh => "Servers",
-			Self::BackupFailed | Self::BackupSucceeded | Self::CronFailed => "Backups and jobs",
+			Self::BackupFailed | Self::BackupSucceeded | Self::CronFailed | Self::CronRecovered => {
+				"Backups and jobs"
+			}
 			Self::Vulnerability | Self::CertExpiring => "Security",
 			Self::ContainerOom | Self::CrashLoop | Self::ModelCrashed => "Containers and models",
 			Self::UptimeDown | Self::UptimeUp => "Uptime",
@@ -176,6 +183,7 @@ impl EventKind {
 			Self::DeploySucceeded
 			| Self::BackupSucceeded
 			| Self::ServerRecovered
+			| Self::CronRecovered
 			| Self::UptimeUp
 			| Self::MetricRecovered => Severity::Info,
 			Self::DeployFailed
@@ -198,6 +206,7 @@ impl EventKind {
 		match self {
 			Self::ServerUnreachable | Self::ServerRecovered => Some("server"),
 			Self::UptimeDown | Self::UptimeUp => Some("uptime"),
+			Self::CronFailed | Self::CronRecovered => Some("cron"),
 			_ => None,
 		}
 	}

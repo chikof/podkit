@@ -47,6 +47,7 @@ futures-util.workspace = true
 base64.workspace = true
 url.workspace = true
 croner.workspace = true
+jiff.workspace = true
 ssh-key.workspace = true
 rsa.workspace = true
 rusty-s3.workspace = true
