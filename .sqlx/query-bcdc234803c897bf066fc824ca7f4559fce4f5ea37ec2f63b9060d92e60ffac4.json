@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tUPDATE applications\n\t\t\tSET name = $2, slug = $3, repo_url = $4, git_ref = $5,\n\t\t\t\tdeploy_key_id = COALESCE($6, deploy_key_id), git_token = COALESCE($7, git_token),\n\t\t\t\tbuild_strategy = $8, dockerfile_path = $9, container_port = $10,\n\t\t\t\tmemory_limit_mb = $11, cpu_limit = $12, image = $13,\n\t\t\t\tregistry_auth = COALESCE($14, registry_auth), updated_at = NOW()\n\t\t\tWHERE id = $1\n\t\t\tRETURNING\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key_id AS \"deploy_key_id: SshKeyId\", git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit\n\t\t",
+  "query": "\n\t\t\tUPDATE applications\n\t\t\tSET name = $2, slug = $3, repo_url = $4, git_ref = $5,\n\t\t\t\tdeploy_key_id = COALESCE($6, deploy_key_id), git_token = COALESCE($7, git_token),\n\t\t\t\tbuild_strategy = $8, dockerfile_path = $9, container_port = $10,\n\t\t\t\tmemory_limit_mb = $11, cpu_limit = $12, image = $13,\n\t\t\t\tregistry_auth = COALESCE($14, registry_auth), updated_at = NOW()\n\t\t\tWHERE id = $1\n\t\t\tRETURNING\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth,\n\t\t\t\tdeploy_key_id AS \"deploy_key_id: SshKeyId\", git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,\n\t\t\t\tgit_provider_id AS \"git_provider_id: GitProviderId\", git_repo, git_hook_id\n\t\t",
   "describe": {
     "columns": [
       {
@@ -211,6 +211,39 @@
             "name": "cpu_limit"
           }
         }
+      },
+      {
+        "ordinal": 19,
+        "name": "git_provider_id: GitProviderId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "git_provider_id"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "git_repo",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "git_repo"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "git_hook_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "git_hook_id"
+          }
+        }
       }
     ],
     "parameters": {
@@ -250,8 +283,11 @@
       false,
       true,
       true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "2e4af423fa33d9f3a6cee098eceaa7ebc033bd784680c8d38075e5a3645c4565"
+  "hash": "bcdc234803c897bf066fc824ca7f4559fce4f5ea37ec2f63b9060d92e60ffac4"
 }

@@ -42,6 +42,7 @@ mod header;
 mod logs;
 mod models_tab;
 mod monitoring;
+mod provider_source;
 mod volumes;
 mod webhooks;
 

@@ -70,6 +70,11 @@ pub struct ServerConfig {
 	#[config(env = "HF_ENDPOINT")]
 	pub hf_endpoint: Option<String>,
 
+	/// The address git providers (GitHub, GitLab, Gitea) reach podkit at, like
+	/// `https://podkit.example.com`. Push webhooks need it; without it deploys are manual.
+	#[config(env = "PUBLIC_URL")]
+	pub public_url: Option<String>,
+
 	/// Who may create an account: `first-user` (only while no account
 	/// exists; the default, for a homelab where the first user is the
 	/// admin), `open` (anyone; for a hosted instance) or `closed` (nobody).

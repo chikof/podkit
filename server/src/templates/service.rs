@@ -348,6 +348,8 @@ async fn deploy_app(
 			memory_limit_mb: None,
 			cpu_limit: None,
 			environment_id: Some(environment),
+			git_provider_id: None,
+			git_repo: String::new(),
 		};
 		let created =
 			match applications::service::create(s, user, team, project, server.id, input).await {

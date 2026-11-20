@@ -97,6 +97,14 @@ pub enum ServerError {
 	#[error("ssh key not found")]
 	SshKeyNotFound,
 
+	#[error("git provider not found")]
+	GitProviderNotFound,
+
+	/// A git provider refused or could not be reached. The message is written for the person
+	/// who connected it and never carries a credential.
+	#[error("{0}")]
+	GitProvider(String),
+
 	/// The request is well-formed but names something podkit does not run,
 	/// e.g. a compose key outside the supported subset. `issues` is shown to
 	/// the caller next to the message.
@@ -169,10 +177,13 @@ impl ServerError {
 			| Self::ModelFileNotFound
 			| Self::StackNotFound
 			| Self::SshKeyNotFound
+			| Self::GitProviderNotFound
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,
 			Self::Unprocessable { .. } => StatusCode::UNPROCESSABLE_ENTITY,
 			Self::Forbidden | Self::RegistrationClosed => StatusCode::FORBIDDEN,
-			Self::AgentUnavailable | Self::HuggingFaceUnavailable => StatusCode::BAD_GATEWAY,
+			Self::AgentUnavailable | Self::HuggingFaceUnavailable | Self::GitProvider(_) => {
+				StatusCode::BAD_GATEWAY
+			}
 		}
 	}
 }

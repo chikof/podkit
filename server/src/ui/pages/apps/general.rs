@@ -16,10 +16,12 @@ use super::form::{
 	registry_hint, runtime_fields,
 };
 use super::header::header;
+use super::provider_source::{provider_fields, provider_label};
 use super::{AppPath, Tab, app_url, load, page, toast_ok};
 use crate::applications::service::{self, ApplicationView};
 use crate::applications::{BuildStrategy, SourceKind};
 use crate::auth::permission::{Action, Resource};
+use crate::git_providers;
 use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::ssh_keys::service::KeyView;
 use crate::state::AppState;
@@ -48,7 +50,7 @@ fn fact(label: &str, value: &Markup) -> Markup {
 }
 
 /// The source, build and limits as text, for someone who may not change them.
-fn summary(app: &ApplicationView) -> Markup {
+fn summary(app: &ApplicationView, provider: Option<&str>) -> Markup {
 	html! {
 		(card(&html! {
 			(card_section("Source", None, None))
@@ -61,10 +63,14 @@ fn summary(app: &ApplicationView) -> Markup {
 							(fact("Registry login", &html! { @if app.has_registry_auth { "Stored" } @else { "None" } }))
 						}
 						SourceKind::Git => {
-							(fact("Repository", &html! { code class="font-mono break-all" { (app.repo_url.as_deref().unwrap_or_default()) } }))
+							(fact("Repository", &html! {
+								@if let Some(repo) = &app.git_repo { code class="font-mono break-all" { (repo) } }
+								@else { code class="font-mono break-all" { (app.repo_url.as_deref().unwrap_or_default()) } }
+							}))
 							(fact("Ref", &html! { code class="font-mono" { (app.git_ref) } }))
 							(fact("Source access", &html! {
-								@if app.has_deploy_key { "Deploy key stored" }
+								@if app.git_provider_id.is_some() { "Git provider " (provider_label(provider)) }
+								@else if app.has_deploy_key { "Deploy key stored" }
 								@else if app.has_git_token { "Access token stored" }
 								@else { "Public repository" }
 							}))
@@ -112,7 +118,13 @@ fn section(title: &str, description: Option<&str>, fields: &Markup) -> Markup {
 	})
 }
 
-fn edit_form(base: &str, app: &ApplicationView, keys: &[KeyView], can_create_key: bool) -> Markup {
+fn edit_form(
+	base: &str,
+	app: &ApplicationView,
+	keys: &[KeyView],
+	can_create_key: bool,
+	provider: Option<&str>,
+) -> Markup {
 	let save = format!(
 		"evt.preventDefault(); @post({})",
 		crate::ui::sse::js_string(&format!("{base}/settings"))
@@ -128,6 +140,10 @@ fn edit_form(base: &str, app: &ApplicationView, keys: &[KeyView], can_create_key
 				@match app.source_kind {
 					SourceKind::Image => {
 						(section("Image", Some("Changes apply on the next deploy."), &image_source_fields(Some(app))))
+					}
+					SourceKind::Git if app.git_provider_id.is_some() => {
+						(section("Repository", Some("Changes apply on the next deploy."), &provider_fields(app, provider)))
+						(section("Build", None, &build_fields()))
 					}
 					SourceKind::Git => {
 						(section("Repository", Some("Changes apply on the next deploy."), &git_source_fields(Some(app), keys, can_create_key)))
@@ -154,11 +170,19 @@ async fn general_page(
 ) -> Result<Markup, Response> {
 	let (project, app) = load(&s, &ctx, project, app).await?;
 	let base = app_url(ctx.team.id, project.id, app.id);
+	// The name of the provider the repository is cloned through, if the user may read it.
+	let provider = match app.git_provider_id {
+		Some(id) => git_providers::service::get(&s, ctx.user.id, ctx.team.id, id)
+			.await
+			.ok()
+			.map(|p| p.name),
+		None => None,
+	};
 	let content = if ctx.perms.can(Action::Update, Resource::Application) {
 		let (keys, can_create_key) = load_keys(&s, &ctx).await;
-		edit_form(&base, &app, &keys, can_create_key)
+		edit_form(&base, &app, &keys, can_create_key, provider.as_deref())
 	} else {
-		html! { div class="flex flex-col gap-6" { (summary(&app)) } }
+		html! { div class="flex flex-col gap-6" { (summary(&app, provider.as_deref())) } }
 	};
 	Ok(page(&s, &ctx, &project, &app, Tab::Settings, &content).await)
 }

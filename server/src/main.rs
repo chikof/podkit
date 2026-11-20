@@ -32,6 +32,7 @@ mod domains;
 mod env_vars;
 mod environments;
 mod error;
+mod git_providers;
 mod ids;
 mod jobs;
 mod links;
@@ -200,6 +201,11 @@ fn resolve_config(config: &ServerConfig) -> AppResult<Config> {
 			.to_owned(),
 		model_ready_timeout: None,
 		model_ready_interval: Duration::from_secs(3),
+		public_url: config
+			.public_url
+			.as_deref()
+			.map(|u| u.trim().trim_end_matches('/').to_owned())
+			.filter(|u| !u.is_empty()),
 	})
 }
 

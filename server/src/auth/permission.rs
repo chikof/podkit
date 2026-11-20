@@ -42,6 +42,7 @@ pub enum Resource {
 	Model,
 	Stack,
 	SshKey,
+	GitProvider,
 }
 
 impl Resource {
@@ -63,6 +64,7 @@ impl Resource {
 			Self::Model => "model",
 			Self::Stack => "stack",
 			Self::SshKey => "ssh_key",
+			Self::GitProvider => "git_provider",
 		}
 	}
 }
@@ -123,7 +125,7 @@ impl Permissions {
 
 const ACTIONS: [Action; 4] = [Action::Create, Action::Read, Action::Update, Action::Delete];
 
-const RESOURCES: [Resource; 16] = [
+const RESOURCES: [Resource; 17] = [
 	Resource::Team,
 	Resource::Project,
 	Resource::Membership,
@@ -140,6 +142,7 @@ const RESOURCES: [Resource; 16] = [
 	Resource::Model,
 	Resource::Stack,
 	Resource::SshKey,
+	Resource::GitProvider,
 ];
 
 /// Loads `user`'s permission set in `team` with one query. A non-member gets an

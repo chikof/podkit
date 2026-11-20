@@ -13,7 +13,7 @@ use crate::applications::service::{AppInput, ApplicationView};
 use crate::applications::{BuildStrategy, SourceKind};
 use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
-use crate::ids::SshKeyId;
+use crate::ids::{GitProviderId, SshKeyId};
 use crate::servers::{Server, ServerStatus};
 use crate::ssh_keys::service::{self as key_service, KeyView};
 use crate::state::AppState;
@@ -34,6 +34,9 @@ pub(super) struct AppSignals {
 	/// Create only: the environment's id, empty for the project's first.
 	pub environment: String,
 	pub repo_url: String,
+	/// Create only, with `source` = `provider`: the git provider's id and the repository there.
+	pub git_provider_id: String,
+	pub git_repo: String,
 	pub git_ref: String,
 	/// A vault key's id, `import` (the pasted `deploy_key`) or `new`; empty keeps what is stored.
 	pub deploy_key_id: String,
@@ -78,10 +81,11 @@ impl AppSignals {
 		};
 		let secret = |value: &str| (!value.is_empty()).then(|| value.to_owned());
 		let image = self.is_image(existing);
+		let provider = existing.is_none() && self.source == "provider";
 		// (pasted key to import, vault key, make a new one). A pasted key still imports with
 		// no choice made, as it did before the vault.
 		let https = self.repo_url.trim().starts_with("https://");
-		let deploy_key = if image {
+		let deploy_key = if image || provider {
 			(None, None, false)
 		} else {
 			match self.deploy_key_id.trim() {
@@ -97,6 +101,13 @@ impl AppSignals {
 				return Err(ServerError::Validation("Image is required.".to_owned()));
 			}
 			(String::new(), Some(self.image.trim().to_owned()))
+		} else if provider {
+			if self.git_repo.trim().is_empty() {
+				return Err(ServerError::Validation(
+					"Pick a repository from the git provider.".to_owned(),
+				));
+			}
+			(String::new(), None)
 		} else {
 			if self.repo_url.trim().is_empty() {
 				return Err(ServerError::Validation(
@@ -104,6 +115,17 @@ impl AppSignals {
 				));
 			}
 			(self.repo_url.trim().to_owned(), None)
+		};
+		let git_provider_id = if provider {
+			Some(
+				self.git_provider_id
+					.trim()
+					.parse::<i64>()
+					.map(GitProviderId)
+					.map_err(|_| ServerError::Validation("Pick a git provider.".to_owned()))?,
+			)
+		} else {
+			None
 		};
 		Ok(AppInput {
 			name: self.name.clone(),
@@ -119,13 +141,21 @@ impl AppSignals {
 			deploy_key: deploy_key.0,
 			deploy_key_id: deploy_key.1,
 			generate_deploy_key: deploy_key.2,
-			git_token: (!image).then(|| secret(self.git_token.trim())).flatten(),
+			git_token: (!image && !provider)
+				.then(|| secret(self.git_token.trim()))
+				.flatten(),
 			build_strategy: or(&self.build_strategy, "dockerfile"),
 			dockerfile_path: or(&self.dockerfile_path, "Dockerfile"),
 			container_port,
 			memory_limit_mb: optional(&self.memory_limit_mb, "Memory limit")?,
 			cpu_limit: optional(&self.cpu_limit, "CPU limit")?,
 			environment_id: None,
+			git_provider_id,
+			git_repo: if provider {
+				self.git_repo.trim().to_owned()
+			} else {
+				String::new()
+			},
 		})
 	}
 }
@@ -157,10 +187,10 @@ pub(super) fn blank_signals(servers: &[Server], source: &str, environment: &str)
 		.unwrap_or_default();
 	json!({
 		"name": "", "slug": "", "server_id": server, "source": source, "environment": environment,
-		"repo_url": "", "git_ref": "main", "deploy_key_id": "", "deploy_key": "", "git_token": "",
+		"repo_url": "", "git_provider_id": "", "git_repo": "", "git_ref": "main", "deploy_key_id": "", "deploy_key": "", "git_token": "",
 		"build_strategy": "dockerfile", "dockerfile_path": "Dockerfile",
 		"image": "", "registry_username": "", "registry_password": "",
-		"container_port": "", "memory_limit_mb": "", "cpu_limit": "", "_error": "",
+		"container_port": "", "memory_limit_mb": "", "cpu_limit": "", "_error": "", "_repo_q": "",
 		"_slugEdited": false,
 	})
 	.to_string()

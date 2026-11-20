@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM git_webhook_deliveries WHERE seen_at < NOW() - INTERVAL '7 days'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "7a62fb208f2b6bd8232b28e4b956824064389fa60784ef6794b82a81813163f0"
+}

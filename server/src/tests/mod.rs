@@ -1,5 +1,6 @@
 pub mod apps;
 pub mod dbs;
+pub mod git_providers;
 pub mod grid;
 pub mod models_env;
 pub mod stacks_ui;
@@ -60,6 +61,7 @@ pub fn state(db: PgPool) -> AppState {
 			local_agent_socket,
 			data_dir,
 			registration: Registration::Open,
+			public_url: None,
 		}),
 	}
 }

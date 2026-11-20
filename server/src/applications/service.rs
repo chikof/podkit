@@ -15,7 +15,10 @@ use super::{
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::deployments::{self, DeploymentStatus};
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId, SshKeyId, TeamId, UserId};
+use crate::git_providers::service as git_service;
+use crate::ids::{
+	ApplicationId, EnvironmentId, GitProviderId, ProjectId, ServerId, SshKeyId, TeamId, UserId,
+};
 use crate::servers::Server;
 use crate::ssh_keys::service::{self as ssh_key_service, KeyChoice};
 use crate::state::AppState;
@@ -50,6 +53,9 @@ pub struct ApplicationView {
 	/// The vault key used as the deploy key.
 	pub deploy_key_id: Option<SshKeyId>,
 	pub has_git_token: bool,
+	/// The git provider the repository is cloned through, and the repository there.
+	pub git_provider_id: Option<GitProviderId>,
+	pub git_repo: Option<String>,
 	/// Whether registry credentials are stored (their contents never leave
 	/// the server).
 	pub has_registry_auth: bool,
@@ -84,6 +90,8 @@ impl ApplicationView {
 			has_deploy_key: app.deploy_key_id.is_some(),
 			deploy_key_id: app.deploy_key_id,
 			has_git_token: app.git_token.is_some(),
+			git_provider_id: app.git_provider_id,
+			git_repo: app.git_repo.clone(),
 			has_registry_auth: app.registry_auth.is_some(),
 			latest,
 		}
@@ -119,12 +127,19 @@ pub struct AppInput {
 	/// Create only: the environment to put the application in. The project's first
 	/// environment when `None`; ignored by update.
 	pub environment_id: Option<EnvironmentId>,
+	/// Create only: clone `git_repo` through this git provider. Then `repo_url`, the deploy
+	/// key and the token must be empty: the provider supplies all three.
+	pub git_provider_id: Option<GitProviderId>,
+	/// `owner/name` at the provider.
+	pub git_repo: String,
 }
 
 /// A freshly created application and the only copy of its webhook secret.
 pub struct Created {
 	pub app: ApplicationView,
 	pub webhook_secret: String,
+	/// Set when the push webhook of a provider application is not in place: why, and what to do.
+	pub notice: Option<String>,
 }
 
 /// The validated source half of an [`AppInput`].
@@ -163,6 +178,28 @@ impl AppInput {
 			self.generate_deploy_key,
 		)
 	}
+}
+
+/// The source of an application that clones through a provider: the provider supplies the
+/// URL and the credential, so none may be given as well.
+fn provider_source(body: &AppInput, repo_url: String) -> AppResult<ResolvedSource> {
+	if body.has_key()
+		|| given(body.git_token.as_deref()).is_some()
+		|| given(body.image.as_deref()).is_some()
+		|| given(body.registry_username.as_deref()).is_some()
+		|| given(body.registry_password.as_deref()).is_some()
+	{
+		return Err(ServerError::Validation(
+			"An application that clones through a git provider takes no deploy key, token or image."
+				.to_owned(),
+		));
+	}
+	if !validate::rel_path(&body.dockerfile_path) {
+		return Err(ServerError::Validation(
+			"invalid dockerfile_path".to_string(),
+		));
+	}
+	Ok(ResolvedSource::Git { repo_url })
 }
 
 fn given(v: Option<&str>) -> Option<&str> {
@@ -376,7 +413,21 @@ pub async fn create(
 	let server = scope::server(&s.db, team, server_id).await?;
 
 	validate_basics(&body)?;
-	let source = resolve_source(&body, None)?;
+	let (source, provider) = match body.git_provider_id {
+		Some(id) => {
+			if !body.repo_url.trim().is_empty() {
+				return Err(ServerError::Validation(
+					"Set either a git provider or a repo_url, not both.".to_owned(),
+				));
+			}
+			let resolved = git_service::resolve_repo(s, user, team, id, &body.git_repo).await?;
+			(
+				provider_source(&body, resolved.repo_url.clone())?,
+				Some(resolved),
+			)
+		}
+		None => (resolve_source(&body, None)?, None),
+	};
 	let key = match body.key_choice()? {
 		Some(choice) => Some(
 			ssh_key_service::resolve(
@@ -425,6 +476,8 @@ pub async fn create(
 			webhook_secret: Some(webhook_secret),
 			memory_limit_mb: body.memory_limit_mb,
 			cpu_limit: cpu_to_f32(body.cpu_limit),
+			git_provider_id: provider.as_ref().map(|p| p.provider),
+			git_repo: provider.map(|p| p.repo),
 		},
 	)
 	.await
@@ -439,9 +492,17 @@ pub async fn create(
 		}
 	};
 
+	let notice = if app.git_provider_id.is_some() {
+		git_service::after_app_created(s, &app, &webhook_secret_plain)
+			.await
+			.notice()
+	} else {
+		None
+	};
 	Ok(Created {
 		app: ApplicationView::new(&app, &server, None),
 		webhook_secret: webhook_secret_plain,
+		notice,
 	})
 }
 
@@ -507,7 +568,12 @@ pub async fn update(
 	let server = scope::server(&s.db, team, app.server_id).await?;
 
 	validate_basics(&body)?;
-	let source = resolve_source(&body, Some(app.source_kind))?;
+	let source = if app.git_provider_id.is_some() {
+		// The provider and repository are fixed; the form's URL is only a display of them.
+		provider_source(&body, app.repo_url.clone().unwrap_or_default())?
+	} else {
+		resolve_source(&body, Some(app.source_kind))?
+	};
 	let key = match body.key_choice()? {
 		Some(choice) => Some(
 			ssh_key_service::resolve(
@@ -592,6 +658,7 @@ pub async fn remove(
 	authorize(&s.db, user, team, Action::Delete, Resource::Application).await?;
 	let app = scope::application(&s.db, team, project, id).await?;
 	remove_service(s, team, &app).await;
+	git_service::before_app_removed(s, &app).await;
 	super::delete(&s.db, app.id).await?;
 	Ok(app.id)
 }
