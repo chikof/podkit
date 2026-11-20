@@ -116,6 +116,7 @@ async fn sample(db: &PgPool, server: i64, n: i64, gpu: bool) {
 				vram_used: gpu.then_some(2 * 1024 * 1024 * 1024),
 			},
 			containers: Vec::new(),
+			..Stats::default()
 		};
 		crate::metrics::record(
 			db,

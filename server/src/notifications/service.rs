@@ -664,7 +664,7 @@ pub async fn create_alert(
 	}
 	let (server, kind, resource) = match input.scope.as_str() {
 		"server" => {
-			if metric == Metric::MemMb || input.threshold > 100.0 {
+			if !metric.for_server() || input.threshold > 100.0 {
 				return Err(invalid("metric or threshold for a server"));
 			}
 			let id = input.server_id.ok_or_else(|| invalid("server"))?;
@@ -672,16 +672,14 @@ pub async fn create_alert(
 			(Some(id), None, None)
 		}
 		"resource" => {
-			if !matches!(metric, Metric::Cpu | Metric::MemMb)
-				|| (metric == Metric::Cpu && input.threshold > 100.0)
-			{
-				return Err(invalid("metric or threshold for a resource"));
-			}
 			let kind = input
 				.resource_kind
 				.clone()
 				.ok_or_else(|| invalid("resource"))?;
 			let id = input.resource_id.ok_or_else(|| invalid("resource"))?;
+			if !metric.for_resource(&kind) || (metric.is_percent() && input.threshold > 100.0) {
+				return Err(invalid("metric or threshold for a resource"));
+			}
 			let target = if matches!(
 				kind.as_str(),
 				"application" | "database" | "model" | "stack"

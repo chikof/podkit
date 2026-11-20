@@ -2,7 +2,9 @@
 
 mod backup;
 pub mod cron;
+pub mod dbstats;
 pub mod deploy;
+pub mod events;
 pub mod gateway;
 pub mod hardware;
 pub mod health;
@@ -13,6 +15,7 @@ pub mod networks;
 pub mod nixpacks;
 pub mod podman;
 pub mod probe;
+pub mod prometheus;
 pub mod registry;
 pub mod routes;
 pub mod scan;

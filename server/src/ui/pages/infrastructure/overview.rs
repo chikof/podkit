@@ -7,7 +7,7 @@ use axum::extract::State;
 use axum::response::Response;
 use maud::{Markup, html};
 
-use super::{crumbs, setup, setup_url};
+use super::{busiest, crumbs, setup, setup_url};
 use crate::auth::permission::{Action, Resource};
 use crate::ids::TeamId;
 use crate::infrastructure::service::{
@@ -27,7 +27,7 @@ use crate::ui::pages::servers::{detail_url, hardware_parts, local_badge};
 use crate::ui::status::status_badge;
 
 /// A resource's own page.
-fn resource_href(team: TeamId, project: i64, kind: &str, id: i64) -> String {
+pub(super) fn resource_href(team: TeamId, project: i64, kind: &str, id: i64) -> String {
 	let base = format!("/teams/{team}/projects/{project}");
 	match kind {
 		"application" => format!("{base}/apps/{id}"),
@@ -37,7 +37,7 @@ fn resource_href(team: TeamId, project: i64, kind: &str, id: i64) -> String {
 	}
 }
 
-fn kind_label(kind: &str) -> &'static str {
+pub(super) fn kind_label(kind: &str) -> &'static str {
 	match kind {
 		"application" => "Application",
 		"database" => "Database",
@@ -315,6 +315,9 @@ pub(super) async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Mark
 	let overview = service::overview(&s, ctx.user.id, ctx.team.id)
 		.await
 		.map_err(|e| error::page(&ctx, &e))?;
+	let top = crate::metrics::service::busiest(&s.db, ctx.user.id, ctx.team.id)
+		.await
+		.unwrap_or_default();
 	let body = html! {
 		div class="ui-page-body" {
 			header class="ui-page-head" {
@@ -331,6 +334,7 @@ pub(super) async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Mark
 			@if overview.setup.shown() { (setup::checklist(&ctx, &overview.setup)) }
 			div class="ui-infra" {
 				@for card in &overview.servers { (server_section(&ctx, &overview, card)) }
+				(busiest::section(&ctx, &top))
 				(what_runs_where(&ctx, &overview.places))
 			}
 		}

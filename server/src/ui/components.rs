@@ -34,6 +34,7 @@ mod log_viewer;
 mod logo;
 mod menu;
 mod metrics;
+mod metrics_extra;
 mod progress;
 mod registry_select;
 mod save_bar;
@@ -77,13 +78,11 @@ pub use kbd::{kbd, kbd_combo};
 pub use log_viewer::{log_viewer, log_viewer_titled};
 pub use logo::{LogoSize, logo};
 pub use menu::{MENU_ITEM, MENU_ITEM_DANGER, dropdown_menu, menu_label, menu_link, menu_separator};
-// `REFRESH_SECONDS` and `resource_charts` are for the application, database, model and stack
-// pages (cards F4, F5, F7, F8); until they embed the section only the tests call them.
 #[allow(unused_imports)]
 pub use metrics::{
 	MetricsSection, REFRESH_SECONDS, metrics_body, metrics_section, range_phrase, range_value,
-	resource_charts,
 };
+pub use metrics_extra::{Flavor, Ops, resource_monitoring};
 pub use progress::progress;
 pub use registry_select::{registry_choice, registry_select};
 pub use save_bar::{save_bar, saved as save_bar_saved};

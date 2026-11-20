@@ -2321,3 +2321,38 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-pub-summary[data-state="unknown"] { background-color: var(--muted); }
 .ui-pub-list { display: grid; margin: 0; padding: 0 var(--s-5); border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--card); list-style: none; }
 .ui-pub-foot { color: var(--subtle-foreground); font-size: var(--fs-sm); }
+/* == chart markers and counters ==
+   Vertical lines on a chart for what happened at a moment: a dashed line for a deploy, a solid one for a
+   crash, an OOM kill or a restart. The two differ by line style and cap shape, not by colour alone, and the
+   lines are decorative: the same facts are in the tooltip card (charts.js), the chart's summary sentence and
+   the counters above the charts. */
+.ui-chart-mark { position: absolute; inset-block: 0; inset-inline-start: calc(var(--x) * 1%); width: 0; pointer-events: none; border-inline-start: 1px dashed var(--primary); }
+.ui-chart-mark[data-m="event"] { border-inline-start: 1px solid var(--destructive); }
+.ui-chart-mark::before { content: ""; position: absolute; inset-block-start: 0; inset-inline-start: -4px; width: 7px; height: 7px; background-color: var(--primary); }
+.ui-chart-mark[data-m="event"]::before { inset-inline-start: -4.5px; width: 0; height: 0; background: none; border-inline: 4.5px solid transparent; border-block-start: 7px solid var(--destructive); }
+.ui-chart-legend { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); margin: 0; color: var(--muted-foreground); font-size: var(--fs-xs); }
+.ui-chart-mark-key { display: inline-flex; align-items: center; gap: var(--s-2); }
+.ui-chart-mark-key::before { content: ""; width: 0; height: 10px; border-inline-start: 1px dashed var(--primary); }
+.ui-chart-mark-key[data-m="event"]::before { border-inline-start: 1px solid var(--destructive); }
+.ui-chart-note { margin-block-start: var(--s-2); padding-block-start: var(--s-2); border-block-start: var(--bw) solid var(--border); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.ui-chart-empty { margin: 0; padding: var(--s-5) var(--s-4); border: var(--bw) dashed var(--border); border-radius: var(--r-lg); color: var(--muted-foreground); font-size: var(--fs-sm); text-align: center; }
+
+/* The event counters above a resource's charts: a few numbers in a row that wraps. */
+.ui-counters { display: flex; flex-wrap: wrap; gap: var(--s-3) var(--s-7); margin: 0; }
+.ui-counters > div { display: grid; gap: var(--s-1); }
+.ui-counters dt { color: var(--muted-foreground); font-size: var(--fs-xs); }
+.ui-counters dd { margin: 0; font-size: var(--fs-lg); font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; }
+
+/* == busiest resources ==
+   The Infrastructure overview's four short lists (CPU, memory, 5xx responses, restarts): a name that links
+   to the resource's page and its figure, so the figure is text and never only a bar. */
+.ui-busy { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--s-6); }
+.ui-busy-card { display: grid; align-content: start; gap: var(--s-3); min-width: 0; }
+.ui-busy-card h3 { margin: 0; font-size: var(--fs-md); font-weight: var(--fw-bold); }
+.ui-busy-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.ui-busy-list li { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-4); padding-block: var(--s-2); border-block-end: var(--bw) solid var(--border); font-size: var(--fs-sm); }
+.ui-busy-list li:last-child { border-block-end: 0; }
+.ui-busy-list a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-busy-list small { margin-inline-start: var(--s-2); color: var(--muted-foreground); font-size: var(--fs-xs); }
+.ui-busy-list b { flex: none; font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; }
+.ui-busy-none { margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); }

@@ -20,6 +20,7 @@ use crate::state::AppState;
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::Crumb;
 
+mod busiest;
 mod networks;
 mod overview;
 mod setup;

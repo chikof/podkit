@@ -6,7 +6,7 @@ use axum::routing::get;
 use axum::{Json, Router};
 use serde::Deserialize;
 
-use super::service;
+use super::service::{self, Extras, Target};
 use super::{Range, ResourcePoint, ServerPoint};
 use crate::auth::AuthUser;
 use crate::error::{AppResult, ServerError};
@@ -20,22 +20,30 @@ pub fn router() -> Router<AppState> {
 
 /// `/teams/{t}/projects/{p}/applications/{a}/metrics`.
 pub fn application_router() -> Router<AppState> {
-	Router::new().route("/", get(application))
+	Router::new()
+		.route("/", get(application))
+		.route("/extra", get(application_extra))
 }
 
 /// `/teams/{t}/projects/{p}/databases/{d}/metrics`.
 pub fn database_router() -> Router<AppState> {
-	Router::new().route("/", get(database))
+	Router::new()
+		.route("/", get(database))
+		.route("/extra", get(database_extra))
 }
 
 /// `/teams/{t}/projects/{p}/models/{m}/metrics`.
 pub fn model_router() -> Router<AppState> {
-	Router::new().route("/", get(model))
+	Router::new()
+		.route("/", get(model))
+		.route("/extra", get(model_extra))
 }
 
 /// `/teams/{t}/projects/{p}/stacks/{s}/metrics`.
 pub fn stack_router() -> Router<AppState> {
-	Router::new().route("/", get(stack))
+	Router::new()
+		.route("/", get(stack))
+		.route("/extra", get(stack_extra))
 }
 
 #[derive(Deserialize)]
@@ -116,5 +124,62 @@ async fn stack(
 	let range = query.parse()?;
 	Ok(Json(
 		service::stack(&s.db, user.id, team, project, id, range).await?,
+	))
+}
+
+/// HTTP, volume and event series and the deploy markers of one application; needs `read
+/// application`.
+async fn application_extra(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, project, id)): Path<(TeamId, ProjectId, ApplicationId)>,
+	Query(query): Query<RangeQuery>,
+) -> AppResult<Json<Extras>> {
+	let range = query.parse()?;
+	let target = Target::Application(project, id);
+	Ok(Json(
+		service::extras(&s.db, user.id, team, target, range).await?,
+	))
+}
+
+/// Connection, size, volume and event series of one database; needs `read database`.
+async fn database_extra(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, project, id)): Path<(TeamId, ProjectId, DatabaseId)>,
+	Query(query): Query<RangeQuery>,
+) -> AppResult<Json<Extras>> {
+	let range = query.parse()?;
+	let target = Target::Database(project, id);
+	Ok(Json(
+		service::extras(&s.db, user.id, team, target, range).await?,
+	))
+}
+
+/// Token, request, VRAM and event series of one model; needs `read model`.
+async fn model_extra(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, project, id)): Path<(TeamId, ProjectId, ModelId)>,
+	Query(query): Query<RangeQuery>,
+) -> AppResult<Json<Extras>> {
+	let range = query.parse()?;
+	let target = Target::Model(project, id);
+	Ok(Json(
+		service::extras(&s.db, user.id, team, target, range).await?,
+	))
+}
+
+/// HTTP, volume and event series of one stack, all services summed; needs `read stack`.
+async fn stack_extra(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, project, id)): Path<(TeamId, ProjectId, StackId)>,
+	Query(query): Query<RangeQuery>,
+) -> AppResult<Json<Extras>> {
+	let range = query.parse()?;
+	let target = Target::Stack(project, id);
+	Ok(Json(
+		service::extras(&s.db, user.id, team, target, range).await?,
 	))
 }

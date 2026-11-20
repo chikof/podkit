@@ -10,10 +10,17 @@
 //! Sampling is best effort. It never marks a server unreachable: only the
 //! status sync's health check decides that.
 
+pub mod collect;
+pub mod events;
+pub mod ext;
+pub mod http;
+pub mod overview;
 mod routes;
 pub mod sampler;
 pub mod service;
 
+#[cfg(test)]
+mod charts_tests;
 #[cfg(test)]
 mod tests;
 
@@ -256,6 +263,7 @@ pub async fn rollup(db: &PgPool, now: OffsetDateTime) -> Result<(), sqlx::Error>
 	)
 	.execute(db)
 	.await?;
+	ext::rollup(db, now).await?;
 	Ok(())
 }
 
@@ -280,6 +288,8 @@ pub async fn prune(db: &PgPool, now: OffsetDateTime) -> Result<(), sqlx::Error> 
 	)
 	.execute(db)
 	.await?;
+	ext::prune(db, now).await?;
+	events::prune(db, now).await?;
 	Ok(())
 }
 

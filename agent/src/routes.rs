@@ -36,6 +36,8 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/health", get(health))
 		.route("/v1/hardware", get(hardware))
 		.route("/v1/stats", get(stats))
+		.route("/v1/events", get(events))
+		.route("/v1/db-stats", post(db_stats))
 		.route("/v1/deploy", post(deploy_route))
 		.route("/v1/containers", get(list_containers))
 		.route("/v1/containers/{id}/start", post(start_container))
@@ -173,6 +175,38 @@ async fn stats(State(ctx): State<Arc<Ctx>>) -> Json<proto::Stats> {
 	let podman = ctx.podman();
 	let graph_root = podman.graph_root().await.ok().flatten();
 	Json(crate::stats::collect(graph_root.as_deref(), &ctx.data_dir, &podman).await)
+}
+
+#[derive(Deserialize)]
+struct EventsQuery {
+	/// Unix seconds, inclusive.
+	since: i64,
+	/// Unix seconds; a window longer than a day is cut to the last day.
+	until: i64,
+}
+
+/// Longest window one question covers; the control plane asks every few seconds.
+const MAX_EVENT_WINDOW_SECS: i64 = 86_400;
+
+/// Restarts, OOM kills and crashes of podkit containers in a window.
+async fn events(
+	State(ctx): State<Arc<Ctx>>,
+	Query(q): Query<EventsQuery>,
+) -> Result<Json<Vec<proto::ContainerEvent>>, ApiError> {
+	let since = q.since.max(q.until - MAX_EVENT_WINDOW_SECS);
+	crate::events::between(&ctx.podman(), since, q.until)
+		.await
+		.map(Json)
+		.map_err(|e| ApiError::podman("could not read container events", &e))
+}
+
+/// Connections, size and activity of database containers. A database that does not answer is
+/// left out of the reply.
+async fn db_stats(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::DbStatsRequest>,
+) -> Json<Vec<proto::DbStat>> {
+	Json(crate::dbstats::collect(&ctx.podman(), &req.targets).await)
 }
 
 async fn deploy_route(State(ctx): State<Arc<Ctx>>, Json(spec): Json<DeploySpec>) -> Response {

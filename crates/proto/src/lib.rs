@@ -88,6 +88,138 @@ pub struct Stats {
 	pub host: HostStats,
 	/// Running containers that belong to a podkit resource.
 	pub containers: Vec<ContainerStats>,
+	/// Traefik's counters per routed service. Empty without ingress or metrics. Absent from
+	/// agents older than the HTTP charts.
+	#[serde(default)]
+	pub http: Vec<HttpStats>,
+	/// Disk used by the volumes of each resource.
+	#[serde(default)]
+	pub volumes: Vec<VolumeStats>,
+	/// GPU memory held by the containers of each resource (NVIDIA only).
+	#[serde(default)]
+	pub vram: Vec<VramStats>,
+}
+
+/// Cumulative request counters of one routed service, read from Traefik's Prometheus
+/// metrics. Counters only grow (until Traefik restarts), so the reader works with the
+/// difference of two samples.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HttpStats {
+	/// The resource behind the Traefik service (`app-7`, `stack-3-web`).
+	pub resource: Option<ResourceRef>,
+	/// Requests answered with a 2xx status.
+	pub r2xx: f64,
+	/// Requests answered with a 3xx status.
+	pub r3xx: f64,
+	/// Requests answered with a 4xx status.
+	pub r4xx: f64,
+	/// Requests answered with a 5xx status.
+	pub r5xx: f64,
+	/// Request body bytes received.
+	pub bytes_in: f64,
+	/// Response body bytes sent.
+	pub bytes_out: f64,
+	/// Cumulative latency histogram over all statuses, `le` ascending; `None` is `+Inf`.
+	pub buckets: Vec<HistogramBucket>,
+}
+
+/// One cumulative bucket of a latency histogram.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct HistogramBucket {
+	/// Upper bound in seconds; `None` is `+Inf`.
+	pub le: Option<f64>,
+	/// Observations at or under `le`.
+	pub count: f64,
+}
+
+/// Bytes on disk used by the volumes of one resource.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VolumeStats {
+	/// The owner of the volumes.
+	pub resource: ResourceRef,
+	/// Bytes used.
+	pub used: u64,
+}
+
+/// GPU memory in use by one resource.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VramStats {
+	/// The owner of the processes.
+	pub resource: ResourceRef,
+	/// Bytes of VRAM.
+	pub used: u64,
+}
+
+/// What a container did that the charts mark.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContainerEventKind {
+	/// The main process exited with a status other than 0.
+	Exit,
+	/// The kernel killed the container for using too much memory.
+	Oom,
+	/// Podman restarted the container.
+	Restart,
+}
+
+impl ContainerEventKind {
+	/// The word stored and shown.
+	#[must_use]
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Exit => "exit",
+			Self::Oom => "oom",
+			Self::Restart => "restart",
+		}
+	}
+}
+
+/// One entry of `GET /v1/events`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContainerEvent {
+	/// Unix seconds.
+	pub at: i64,
+	/// What happened.
+	pub kind: ContainerEventKind,
+	/// The resource the container belongs to.
+	pub resource: ResourceRef,
+	/// Container name.
+	pub container: String,
+	/// The exit status, for `exit`.
+	pub exit_code: Option<i64>,
+}
+
+/// `POST /v1/db-stats` body: which database containers to read.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbStatsRequest {
+	/// One entry per database.
+	pub targets: Vec<DbStatsTarget>,
+}
+
+/// One database to read.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbStatsTarget {
+	/// The database's id, echoed in the answer.
+	pub id: i64,
+	/// Container to exec in.
+	pub container: String,
+	/// Engine of the database.
+	pub engine: Engine,
+}
+
+/// One database's figures. A figure the engine cannot give cheaply is `None`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DbStat {
+	/// The id of the [`DbStatsTarget`].
+	pub id: i64,
+	/// Open client connections.
+	pub connections: Option<i64>,
+	/// Size of the data in bytes.
+	pub size: Option<i64>,
+	/// Cumulative transactions (`PostgreSQL`) or commands (the others) since the server started.
+	pub operations: Option<i64>,
+	/// Memory the engine reports using, in bytes.
+	pub memory: Option<i64>,
 }
 
 /// Host-wide figures. Sizes are bytes; `net_*` are counters since boot.
@@ -917,6 +1049,35 @@ impl Engine {
 				r#"mongorestore --archive --drop -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin"#,
 			),
 			Self::Redis => None,
+		}
+	}
+
+	/// Shell command that prints `connections|size|operations|memory` on one line, an empty
+	/// field where the engine has no cheap answer. It runs inside the database container, so
+	/// it reads the credentials from the container's own environment and sends none over
+	/// the wire; every query only reads.
+	///
+	/// Sources: `PostgreSQL` `pg_stat_database`
+	/// (<https://www.postgresql.org/docs/current/monitoring-stats.html>), `MySQL` status
+	/// variables (<https://dev.mysql.com/doc/refman/9.0/en/server-status-variables.html>),
+	/// `MongoDB` `serverStatus` and `dbStats`
+	/// (<https://www.mongodb.com/docs/manual/reference/command/serverStatus/>), Redis `INFO`
+	/// (<https://redis.io/docs/latest/commands/info/>).
+	#[must_use]
+	pub fn stats_cmd(self) -> &'static str {
+		match self {
+			Self::Postgres => {
+				r#"PGOPTIONS='-c default_transaction_read_only=on' psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atq -c "SELECT numbackends || '|' || pg_database_size(datname) || '|' || (xact_commit + xact_rollback) || '|' FROM pg_stat_database WHERE datname = current_database()""#
+			}
+			Self::Mysql => {
+				r#"MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -B -e "SET SESSION TRANSACTION READ ONLY; SELECT CONCAT_WS('|', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_connected'), (SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '$MYSQL_DATABASE'), (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Questions'), '')""#
+			}
+			Self::Mongodb => {
+				r#"mongosh --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval 'const s = db.serverStatus(); const d = db.getSiblingDB(process.env.MONGO_INITDB_DATABASE || "admin").stats(); const ops = Object.values(s.opcounters).reduce((a, b) => a + Number(b), 0); print([s.connections.current, d.dataSize, ops, Number(s.mem.resident) * 1048576].join("|"))'"#
+			}
+			Self::Redis => {
+				r#"REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli INFO | tr -d '\r' | awk -F: '/^connected_clients:/{c=$2} /^used_memory:/{m=$2} /^total_commands_processed:/{o=$2} END{print c "||" o "|" m}'"#
+			}
 		}
 	}
 
