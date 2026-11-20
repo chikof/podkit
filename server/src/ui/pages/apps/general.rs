@@ -21,6 +21,7 @@ use crate::applications::service::{self, ApplicationView};
 use crate::applications::{BuildStrategy, SourceKind};
 use crate::auth::permission::{Action, Resource};
 use crate::ids::{ApplicationId, ProjectId, TeamId};
+use crate::registries::Registry;
 use crate::state::AppState;
 use crate::ui::components::{
 	Size, Variant, button_class, card, card_content, card_footer, card_section,
@@ -111,7 +112,7 @@ fn section(title: &str, description: Option<&str>, fields: &Markup) -> Markup {
 	})
 }
 
-fn edit_form(base: &str, app: &ApplicationView) -> Markup {
+fn edit_form(base: &str, app: &ApplicationView, registries: &[Registry], team: TeamId) -> Markup {
 	let save = format!(
 		"evt.preventDefault(); @post({})",
 		crate::ui::sse::js_string(&format!("{base}/settings"))
@@ -126,7 +127,7 @@ fn edit_form(base: &str, app: &ApplicationView) -> Markup {
 				))
 				@match app.source_kind {
 					SourceKind::Image => {
-						(section("Image", Some("Changes apply on the next deploy."), &image_source_fields(Some(app))))
+						(section("Image", Some("Changes apply on the next deploy."), &image_source_fields(Some(app), registries, team)))
 					}
 					SourceKind::Git => {
 						(section("Repository", Some("Changes apply on the next deploy."), &git_source_fields(Some(app))))
@@ -154,7 +155,10 @@ async fn general_page(
 	let (project, app) = load(&s, &ctx, project, app).await?;
 	let base = app_url(ctx.team.id, project.id, app.id);
 	let content = if ctx.perms.can(Action::Update, Resource::Application) {
-		edit_form(&base, &app)
+		let registries = crate::registries::service::list(&s.db, ctx.user.id, ctx.team.id)
+			.await
+			.unwrap_or_default();
+		edit_form(&base, &app, &registries, ctx.team.id)
 	} else {
 		html! { div class="flex flex-col gap-6" { (summary(&app)) } }
 	};

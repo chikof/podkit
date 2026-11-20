@@ -38,6 +38,9 @@ pub fn main_items(ctx: &TeamCtx) -> Vec<NavItem> {
 			"cloud",
 		));
 	}
+	if can(Resource::Registry) {
+		items.push(item("Registries", format!("{base}/registries"), "package"));
+	}
 	items
 }
 

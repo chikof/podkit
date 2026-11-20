@@ -114,8 +114,11 @@ async fn new_page(
 		"evt.preventDefault(); @post({})",
 		crate::ui::sse::js_string(&format!("{}/apps", project_url(ctx.team.id, project.id)))
 	);
+	let registries = crate::registries::service::list(&s.db, ctx.user.id, ctx.team.id)
+		.await
+		.unwrap_or_default();
 	let source_fields = if image {
-		html! { (image_source_fields(None)) }
+		html! { (image_source_fields(None, &registries, ctx.team.id)) }
 	} else {
 		html! { (git_source_fields(None)) }
 	};

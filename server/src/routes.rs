@@ -9,8 +9,8 @@ use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
 	applications, auth, backups, catalog, databases, deployments, domains, env_vars, environments,
-	links, logos, members, metrics, model_files, models, projects, servers, stacks, teams,
-	templates, ui, volumes, webhooks,
+	links, logos, members, metrics, model_files, models, projects, registries, servers, stacks,
+	teams, templates, ui, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -38,6 +38,8 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			environments::router(),
 		)
 		.nest("/teams/{team_id}/servers", servers::router())
+		.nest("/teams/{team_id}/registries", registries::router())
+		.nest("/teams/{team_id}/api-tokens", auth::tokens::router())
 		.nest(
 			"/teams/{team_id}/servers/{server_id}/metrics",
 			metrics::router(),
@@ -84,7 +86,12 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			model_files::token::router(),
 		)
 		.nest(&format!("{DB}/{{database_id}}/backups"), backups::router())
-		.nest("/webhooks", webhooks::router());
+		.nest("/webhooks", webhooks::router())
+		// Last, so it wraps every route above: a `pk_` token is resolved and limited here.
+		.layer(axum::middleware::from_fn_with_state(
+			state.clone(),
+			auth::tokens::gate,
+		));
 	Ok(Router::new()
 		.merge(ui::router())
 		.merge(logos::router())

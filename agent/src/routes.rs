@@ -49,6 +49,7 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/backups/restore", post(backup_restore))
 		.route("/v1/model-downloads", post(model_download_route))
 		.route("/v1/probes", post(probe_route))
+		.route("/v1/registry-login", post(registry_login_route))
 		.route("/v1/gateway/config", put(gateway_config))
 		.route("/v1/gateway/usage/drain", post(gateway_drain))
 		.route("/v1/gateway/chat", post(gateway_chat))
@@ -458,6 +459,25 @@ async fn probe_route(
 		.await
 		.map(Json)
 		.map_err(|m| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, m))
+}
+
+async fn registry_login_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::RegistryLogin>,
+) -> Result<Json<proto::RegistryLoginResult>, ApiError> {
+	if req.server.is_empty()
+		|| req.server.len() > 255
+		|| !req
+			.server
+			.chars()
+			.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+	{
+		return Err(ApiError::new(
+			StatusCode::BAD_REQUEST,
+			"invalid registry host",
+		));
+	}
+	Ok(Json(crate::registry::check(&ctx.http, &req).await))
 }
 
 async fn model_download_route(

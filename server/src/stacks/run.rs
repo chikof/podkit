@@ -22,6 +22,7 @@ use crate::error::ServerError;
 use crate::ids::{StackId, StackServiceId};
 use crate::jobs::{Job, JobFailure, JobKind};
 use crate::logs::JobLog;
+use crate::registries;
 use crate::servers;
 use crate::stacks;
 use crate::state::AppState;
@@ -250,6 +251,28 @@ impl Ctx<'_> {
 			.await;
 		let mut spec = planned.spec.clone();
 		spec.instance_id = self.job.id.0;
+		// The login is added after the plan is hashed: rotating a password must not
+		// redeploy services that run fine.
+		if let (
+			Some(id),
+			proto::Source::Image {
+				auth, reference, ..
+			},
+		) = (self.stack.registry_id, &mut spec.source)
+		{
+			let login = registries::service::auth_for(self.state, id)
+				.await
+				.map_err(|e| {
+					warn!(stack = self.stack.id.0, "saved registry unusable: {e}");
+					failed("failed to load the saved registry login")
+				})?;
+			// Only the registry it belongs to ever sees the login: a stack's services may
+			// come from several.
+			if login.server.as_deref() == Some(registries::service::image_host(reference).as_str())
+			{
+				*auth = Some(login);
+			}
+		}
 		let mut events = self
 			.client
 			.stream(Method::POST, "/v1/deploy", Some(&spec))

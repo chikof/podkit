@@ -16,12 +16,26 @@ pub mod permission;
 mod routes;
 pub mod service;
 pub mod session;
+pub mod tokens;
 
 pub use routes::{Credentials, log_in, log_out, router};
 
-/// The authenticated caller, resolved from a live session.
+/// The authenticated caller: a live session, or an API token acting as the user who made
+/// it. Either way `id` is the user, and RBAC is asked about them as usual.
 pub struct AuthUser {
 	pub id: UserId,
+	/// Set when the caller used an API token: its scopes and limits.
+	pub grant: Option<tokens::Grant>,
+}
+
+impl AuthUser {
+	/// Whether secrets (database passwords) may be included in what this caller sees. A
+	/// session always may, as far as RBAC allows; a token needs `read:sensitive`.
+	pub fn can_reveal(&self) -> bool {
+		self.grant
+			.as_ref()
+			.is_none_or(|g| g.allows(tokens::Scope::ReadSensitive))
+	}
 }
 
 /// The raw session token the request presented (bearer header first, then the
@@ -60,11 +74,25 @@ impl FromRequestParts<AppState> for AuthUser {
 	) -> Result<Self, Self::Rejection> {
 		let SessionToken(token) = SessionToken::from_request_parts(parts, state).await?;
 
+		// An API token was already checked, scope and limits included, by the gate in
+		// front of the JSON API. Anywhere else (the web UI) it is simply not a session.
+		if token.starts_with(tokens::PREFIX) {
+			let grant = parts
+				.extensions
+				.get::<tokens::Grant>()
+				.cloned()
+				.ok_or(ServerError::InvalidToken)?;
+			return Ok(Self {
+				id: grant.user,
+				grant: Some(grant),
+			});
+		}
+
 		let id = session::resolve(&state.db, &token)
 			.await?
 			.ok_or(ServerError::InvalidToken)?;
 
-		Ok(Self { id })
+		Ok(Self { id, grant: None })
 	}
 }
 

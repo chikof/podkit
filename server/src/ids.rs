@@ -45,5 +45,7 @@ id!(
 	ModelId,
 	StackId,
 	StackServiceId,
+	RegistryId,
+	ApiTokenId,
 	JobId,
 );

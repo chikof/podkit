@@ -11,6 +11,7 @@ pub mod backups;
 pub mod databases;
 pub mod models;
 pub mod projects;
+pub mod registries;
 pub mod search;
 pub mod servers;
 pub mod settings;

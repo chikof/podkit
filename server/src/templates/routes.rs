@@ -14,7 +14,7 @@ use super::service::{self, DeployInput, Deployed};
 use super::{Template, Variable};
 use crate::auth::AuthUser;
 use crate::error::{AppResult, ServerError};
-use crate::ids::{EnvironmentId, ModelId, ProjectId, ServerId, TeamId};
+use crate::ids::{EnvironmentId, ModelId, ProjectId, RegistryId, ServerId, TeamId};
 use crate::state::AppState;
 
 /// The gallery: `GET /`, `GET /{id}`.
@@ -234,6 +234,9 @@ struct DeployRequest {
 	/// A model to link, for templates with `gateway`.
 	#[serde(default)]
 	model_id: Option<ModelId>,
+	/// A saved registry to pull the images with.
+	#[serde(default)]
+	registry_id: Option<RegistryId>,
 }
 
 /// Deploys a template into the project; 202 with what was created. Caller
@@ -256,6 +259,7 @@ async fn deploy(
 			name: body.name,
 			inputs: body.inputs,
 			model: body.model_id,
+			registry: body.registry_id,
 		},
 	)
 	.await?;

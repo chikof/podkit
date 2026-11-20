@@ -1,7 +1,7 @@
 //! Applications: a git repo built and run as a container on one of the
 //! team's servers.
 
-use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId};
+use crate::ids::{ApplicationId, EnvironmentId, ProjectId, RegistryId, ServerId};
 use crate::servers::Server;
 
 pub mod routes;
@@ -86,8 +86,11 @@ pub struct Application {
 	pub source_kind: SourceKind,
 	/// Registry reference; `Some` exactly when `source_kind` is [`SourceKind::Image`].
 	pub image: Option<String>,
-	/// age-encrypted JSON `{"username", "password"}` for a private registry.
+	/// age-encrypted JSON `{"username", "password"}` for a private registry. Set only by
+	/// the API's inline credentials; a saved registry (`registry_id`) replaces it.
 	pub registry_auth: Option<Vec<u8>>,
+	/// The saved registry this image is pulled with.
+	pub registry_id: Option<RegistryId>,
 	/// age-encrypted SSH private key (PEM) for `ssh://`/scp-form repo URLs.
 	pub deploy_key: Option<Vec<u8>>,
 	/// age-encrypted access token for `https://` repo URLs.
@@ -119,6 +122,7 @@ pub struct NewApplication {
 	pub source_kind: SourceKind,
 	pub image: Option<String>,
 	pub registry_auth: Option<Vec<u8>>,
+	pub registry_id: Option<RegistryId>,
 	pub deploy_key: Option<Vec<u8>>,
 	pub git_token: Option<Vec<u8>>,
 	pub build_strategy: BuildStrategy,
@@ -127,6 +131,17 @@ pub struct NewApplication {
 	pub webhook_secret: Option<Vec<u8>>,
 	pub memory_limit_mb: Option<i32>,
 	pub cpu_limit: Option<f32>,
+}
+
+/// What an update does to the saved registry an application pulls with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RegistryChoice {
+	/// Leave it as it is.
+	Keep,
+	/// Pull anonymously (or with the inline login given alongside).
+	Clear,
+	/// Pull with this saved registry; the inline login is dropped.
+	Use(RegistryId),
 }
 
 /// Editable fields. `deploy_key`/`git_token`/`registry_auth` of `None`
@@ -138,6 +153,7 @@ pub struct ApplicationUpdate {
 	pub git_ref: String,
 	pub image: Option<String>,
 	pub registry_auth: Option<Vec<u8>>,
+	pub registry: RegistryChoice,
 	pub deploy_key: Option<Vec<u8>>,
 	pub git_token: Option<Vec<u8>>,
 	pub build_strategy: BuildStrategy,
@@ -160,12 +176,12 @@ pub async fn insert(
 			INSERT INTO applications
 				(id, project_id, environment_id, server_id, name, slug, repo_url, git_ref, deploy_key, git_token,
 				 build_strategy, dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,
-				 source_kind, image, registry_auth)
-			VALUES ($1, $2, $19, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+				 source_kind, image, registry_auth, registry_id)
+			VALUES ($1, $2, $19, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $20)
 			RETURNING
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
-				source_kind AS "source_kind: SourceKind", image, registry_auth,
+				source_kind AS "source_kind: SourceKind", image, registry_auth, registry_id AS "registry_id: RegistryId",
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 		"#,
@@ -188,6 +204,7 @@ pub async fn insert(
 		new.image,
 		new.registry_auth,
 		new.environment_id as EnvironmentId,
+		new.registry_id as Option<RegistryId>,
 	)
 	.fetch_one(db)
 	.await
@@ -207,12 +224,13 @@ pub async fn update(
 				deploy_key = COALESCE($6, deploy_key), git_token = COALESCE($7, git_token),
 				build_strategy = $8, dockerfile_path = $9, container_port = $10,
 				memory_limit_mb = $11, cpu_limit = $12, image = $13,
-				registry_auth = COALESCE($14, registry_auth), updated_at = NOW()
+				registry_auth = CASE WHEN $16::BIGINT IS NOT NULL THEN NULL ELSE COALESCE($14, registry_auth) END,
+				registry_id = CASE WHEN $15 THEN $16 ELSE registry_id END, updated_at = NOW()
 			WHERE id = $1
 			RETURNING
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
-				source_kind AS "source_kind: SourceKind", image, registry_auth,
+				source_kind AS "source_kind: SourceKind", image, registry_auth, registry_id AS "registry_id: RegistryId",
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 		"#,
@@ -230,6 +248,11 @@ pub async fn update(
 		u.cpu_limit,
 		u.image,
 		u.registry_auth,
+		!matches!(u.registry, RegistryChoice::Keep),
+		match u.registry {
+			RegistryChoice::Use(id) => Some(id.0),
+			_ => None,
+		},
 	)
 	.fetch_one(db)
 	.await
@@ -247,7 +270,7 @@ pub async fn find_by_id(
 			SELECT
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
-				source_kind AS "source_kind: SourceKind", image, registry_auth,
+				source_kind AS "source_kind: SourceKind", image, registry_auth, registry_id AS "registry_id: RegistryId",
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 			FROM applications WHERE id = $1
@@ -268,7 +291,7 @@ pub async fn list_by_environment(
 			SELECT
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
-				source_kind AS "source_kind: SourceKind", image, registry_auth,
+				source_kind AS "source_kind: SourceKind", image, registry_auth, registry_id AS "registry_id: RegistryId",
 				deploy_key, git_token, build_strategy AS "build_strategy: BuildStrategy",
 				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
 			FROM applications WHERE environment_id = $1 ORDER BY id

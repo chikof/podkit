@@ -51,6 +51,10 @@ async fn create(
 
 /// Lists every team the caller is a member of.
 async fn list(State(s): State<AppState>, user: AuthUser) -> AppResult<Json<Vec<TeamResponse>>> {
-	let teams = list_for_user(&s.db, user.id).await?;
+	let mut teams = list_for_user(&s.db, user.id).await?;
+	// A token sees only the team it was made in.
+	if let Some(grant) = &user.grant {
+		teams.retain(|t| t.id == grant.team);
+	}
 	Ok(Json(teams.iter().map(TeamResponse::from).collect()))
 }

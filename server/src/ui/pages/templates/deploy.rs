@@ -391,6 +391,7 @@ pub(super) async fn deploy(
 				name,
 				inputs,
 				model: None,
+				registry: None,
 			},
 		)
 		.await?;

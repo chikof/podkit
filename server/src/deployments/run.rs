@@ -20,7 +20,7 @@ use crate::jobs::{Job, JobFailure};
 use crate::logs::JobLog;
 use crate::servers::Server;
 use crate::state::AppState;
-use crate::{deployments, domains, env_vars, links, scope, volumes};
+use crate::{deployments, domains, env_vars, links, registries, scope, volumes};
 
 const LOST_CONNECTION: &str = "lost connection to server agent";
 
@@ -158,7 +158,26 @@ async fn build_spec(
 	let container_port = u16::try_from(application.container_port)
 		.map_err(|_| failed("application container_port is out of range"))?;
 
-	let source = app_source(state, application, deployment)?;
+	let mut source = app_source(state, application, deployment)?;
+	if let (
+		Some(id),
+		Source::Image {
+			auth, pull: true, ..
+		},
+	) = (application.registry_id, &mut source)
+	{
+		*auth = Some(
+			registries::service::auth_for(state, id)
+				.await
+				.map_err(|e| {
+					tracing::error!(
+						application = application.id.0,
+						"saved registry unusable: {e}"
+					);
+					failed("failed to load the saved registry login")
+				})?,
+		);
+	}
 
 	let custom_domains = domains::list(&state.db, application.id)
 		.await

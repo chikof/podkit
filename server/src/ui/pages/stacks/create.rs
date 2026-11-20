@@ -245,6 +245,7 @@ pub(super) async fn create(
 				environment_id: environment,
 				source: None,
 				deploy: sig.deploy,
+				registry: None,
 			},
 		)
 		.await?;

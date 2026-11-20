@@ -24,6 +24,7 @@ mod applications;
 mod auth;
 mod backups;
 mod catalog;
+mod change;
 mod config;
 mod databases;
 mod db;
@@ -43,6 +44,7 @@ mod metrics;
 mod model_files;
 mod models;
 mod projects;
+mod registries;
 mod routes;
 mod scope;
 mod search;
@@ -112,6 +114,14 @@ async fn main() -> AppResult<()> {
 	};
 
 	worker::recover(&state).await?;
+	match registries::service::backfill(&state).await {
+		Ok(0) => {}
+		Ok(moved) => info!(
+			moved,
+			"moved applications' registry logins to saved registries"
+		),
+		Err(e) => warn!("failed to move registry logins to saved registries: {e}"),
+	}
 	if let Err(e) = servers::bootstrap::enqueue_outdated(&state).await {
 		warn!("failed to enqueue agent upgrades: {e}");
 	}
