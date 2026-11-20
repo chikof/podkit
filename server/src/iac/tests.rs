@@ -497,15 +497,7 @@ async fn iac_a_missing_server_key_or_registry_is_a_clear_plan_error(db: PgPool) 
 	let (s, refused) = w.apply(&bad, &secrets(), false).await;
 	assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY, "{refused}");
 	assert_eq!(count(&w.db, "applications").await, 0, "nothing was made");
-	assert_eq!(
-		count(&w.db, "environments").await,
-		1 + count_envs_of_others(&w).await
-	);
-}
-
-/// Environments other than the project's own (none in these tests).
-async fn count_envs_of_others(_w: &World) -> i64 {
-	0
+	assert_eq!(count(&w.db, "environments").await, 1);
 }
 
 #[db_test]
@@ -992,7 +984,7 @@ fn as_json(toml_text: &str) -> Value {
 	serde_json::to_value(value).unwrap()
 }
 
-/// The fenced ```toml blocks of the docs: every one is an example of a file.
+/// The fenced `toml` blocks of the docs: every one is an example of a file.
 fn examples() -> Vec<String> {
 	let mut out = Vec::new();
 	let mut current: Option<String> = None;

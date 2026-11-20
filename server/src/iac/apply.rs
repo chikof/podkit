@@ -641,6 +641,7 @@ impl Cx<'_> {
 		})
 	}
 
+	#[allow(clippy::too_many_lines, reason = "one arm per field of an application")]
 	async fn app_set(&mut self, change: &Change) -> AppResult<()> {
 		let s = self.state;
 		let id = if change.action == Action::Create {

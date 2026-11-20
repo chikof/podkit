@@ -149,6 +149,10 @@ async fn load_server(state: &AppState, application: &Application) -> Result<Serv
 		})
 }
 
+#[allow(
+	clippy::too_many_lines,
+	reason = "one spec built from every source of an application"
+)]
 async fn build_spec(
 	state: &AppState,
 	application: &Application,

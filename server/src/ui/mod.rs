@@ -97,6 +97,7 @@ pub fn router() -> Router<AppState> {
 		.merge(pages::backups::router())
 		.merge(pages::registries::router())
 		.merge(pages::servers::router())
+		.merge(pages::iac::router())
 		.merge(pages::networks::router())
 		.merge(pages::keys::router())
 		.merge(pages::settings::router())

@@ -468,3 +468,17 @@ pub async fn import_apply(
 	}
 	Ok(ImportOutcome::Done(done))
 }
+
+/// The project the Infrastructure as code page is about; needs `read project`.
+///
+/// # Errors
+/// `Forbidden`; `ProjectNotFound` for another team's project.
+pub async fn project(
+	state: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+) -> AppResult<Project> {
+	authorize(&state.db, user, team, Do::Read, Resource::Project).await?;
+	scope::project(&state.db, team, project).await
+}

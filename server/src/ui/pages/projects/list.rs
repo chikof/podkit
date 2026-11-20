@@ -274,7 +274,14 @@ async fn list_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Re
 					h1 { "Projects" }
 					p class="ui-lede" { "Applications, databases and models, grouped by what they are for." }
 				}
-				@if can_create { div class="ui-page-actions" { (new_button) } }
+				@if can_create {
+					div class="ui-page-actions" {
+						a class=(button_class(Variant::Outline, Size::Md)) href=(format!("/teams/{}/import", ctx.team.id)) {
+							(icon("upload")) "Import"
+						}
+						(new_button)
+					}
+				}
 			}
 			@if cards.is_empty() {
 				(empty_state(

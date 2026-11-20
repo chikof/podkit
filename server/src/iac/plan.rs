@@ -527,6 +527,7 @@ pub fn validate_doc(project: &ProjectDoc, refs: &Refs) -> Vec<Issue> {
 				));
 			}
 			let at = format!("{at}.models.{name}");
+			#[allow(clippy::if_not_else, reason = "the issue reads first, the check after")]
 			if !named(&refs.servers, &model.server) {
 				issues.push(Issue::new(
 					format!("{at}.server"),
