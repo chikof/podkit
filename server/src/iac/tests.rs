@@ -976,3 +976,110 @@ fn without_domains(text: &str) -> String {
 		"",
 	)
 }
+
+// ----- the schema and the examples of the docs
+
+const SCHEMA: &str = include_str!("../../../docs/iac/podkit.schema.json");
+const README: &str = include_str!("../../../docs/iac/README.md");
+
+fn validator() -> jsonschema::Validator {
+	let schema: Value = serde_json::from_str(SCHEMA).expect("the schema is JSON");
+	jsonschema::validator_for(&schema).expect("the schema is a schema")
+}
+
+fn as_json(toml_text: &str) -> Value {
+	let value: toml::Value = toml::from_str(toml_text).expect("TOML");
+	serde_json::to_value(value).unwrap()
+}
+
+/// The fenced ```toml blocks of the docs: every one is an example of a file.
+fn examples() -> Vec<String> {
+	let mut out = Vec::new();
+	let mut current: Option<String> = None;
+	for line in README.lines() {
+		match (&mut current, line) {
+			(None, "```toml") => current = Some(String::new()),
+			(Some(block), "```") => {
+				out.push(std::mem::take(block));
+				current = None;
+			}
+			(Some(block), line) => {
+				block.push_str(line);
+				block.push('\n');
+			}
+			(None, _) => {}
+		}
+	}
+	out
+}
+
+#[test]
+fn iac_every_example_in_the_docs_validates_against_the_schema_and_parses() {
+	let validator = validator();
+	let found = examples();
+	assert!(found.len() >= 5, "the docs have examples: {}", found.len());
+	for (n, example) in found.iter().enumerate() {
+		let errors: Vec<String> = validator
+			.iter_errors(&as_json(example))
+			.map(|e| format!("{} at {}", e, e.instance_path()))
+			.collect();
+		assert!(
+			errors.is_empty(),
+			"example {n} does not validate: {errors:?}\n{example}"
+		);
+		super::doc::parse(example).unwrap_or_else(|e| panic!("example {n} does not parse: {e}"));
+	}
+}
+
+#[test]
+fn iac_the_schema_refuses_what_podkit_refuses() {
+	let validator = validator();
+	for (what, bad) in [
+		("another version", "version = 2\n"),
+		("an unknown key", "version = 1\nsurprise = true\n"),
+		(
+			"an app with neither repo nor image",
+			"version = 1\n[projects.p]\nname = \"P\"\n[projects.p.environments.production]\nname = \"p\"\n[projects.p.environments.production.apps.a]\nserver = \"s\"\nslug = \"a\"\nport = 80\n",
+		),
+		(
+			"an app with both",
+			"version = 1\n[projects.p]\nname = \"P\"\n[projects.p.environments.production]\nname = \"p\"\n[projects.p.environments.production.apps.a]\nserver = \"s\"\nslug = \"a\"\nport = 80\nrepo = \"r\"\nimage = \"i\"\n",
+		),
+		(
+			"an engine that does not exist",
+			"version = 1\n[projects.p]\nname = \"P\"\n[projects.p.environments.production]\nname = \"p\"\n[projects.p.environments.production.databases.d]\nserver = \"s\"\nengine = \"oracle\"\n",
+		),
+		(
+			"a project that is not a slug",
+			"version = 1\n[projects.\"Not A Slug\"]\nname = \"P\"\n",
+		),
+	] {
+		assert!(
+			!validator.is_valid(&as_json(bad)),
+			"the schema accepts {what}"
+		);
+	}
+}
+
+#[db_test]
+async fn iac_a_real_export_validates_against_the_schema_and_the_secrets_file_of_the_docs_parses(
+	db: PgPool,
+) {
+	let w = World::new(db.clone(), "alice").await;
+	let (s, _) = w.apply(&file(&w.server), &secrets(), false).await;
+	assert_eq!(s, StatusCode::OK);
+	crate::tests::seed_model(&db, w.team, w.project, "tiny", "stopped", None).await;
+	let exported = w.export().await;
+	let errors: Vec<String> = validator()
+		.iter_errors(&as_json(&exported))
+		.map(|e| format!("{} at {}", e, e.instance_path()))
+		.collect();
+	assert!(errors.is_empty(), "{errors:?}\n{exported}");
+	// The secrets file of the docs is what `Secrets::parse` reads.
+	let block = README
+		.split("```toml secrets\n")
+		.nth(1)
+		.and_then(|rest| rest.split("```").next())
+		.expect("the docs show a secrets file");
+	assert!(!super::objects::Secrets::parse(block).unwrap().0.is_empty());
+}
