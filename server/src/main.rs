@@ -35,6 +35,7 @@ mod env_vars;
 mod environments;
 mod error;
 mod git_providers;
+mod health_gate;
 mod iac;
 mod ids;
 mod infrastructure;

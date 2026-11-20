@@ -72,6 +72,10 @@ async fn check(state: &AppState, server: &Server) {
 
 	crate::links::sync(state, server.id, &client).await;
 
+	// Before the crash sweep: a release that died inside its rollback window is put back
+	// rather than only marked crashed.
+	crate::health_gate::watch::sweep(state, server.id, &client).await;
+
 	if let Err(e) = mark_crashed(state, server.id, &client).await {
 		tracing::warn!(server = %server.id, error = %e, "status sync could not check containers");
 	}

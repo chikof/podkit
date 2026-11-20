@@ -8,8 +8,10 @@
 use maud::{Markup, html};
 
 use crate::deployments::DeploymentStatus;
+use crate::deployments::service::DeploymentView;
 use crate::stacks::{ServiceStatus, StackStatus};
 use crate::ui::components::Status as Shape;
+use crate::ui::status::Status;
 
 /// A dot and a word. `shape` picks the colour and form; `word` is what the page says.
 pub fn dot(shape: Shape, word: &str) -> Markup {
@@ -33,6 +35,25 @@ pub const fn deployment_shape(s: DeploymentStatus) -> Shape {
 		DeploymentStatus::Failed | DeploymentStatus::Crashed => Shape::Failed,
 		DeploymentStatus::Stopped | DeploymentStatus::Cancelled => Shape::Stopped,
 	}
+}
+
+/// What a deployment row says about itself: the shape and the word. The health gate's
+/// verdict wins while the deploy waits for it ("Waiting for health…") and after a release was
+/// put back ("Rolled back"); otherwise it is the status.
+#[must_use]
+pub fn deployment_state(d: &DeploymentView) -> (Shape, String) {
+	if d.waiting_for_health() {
+		return (Shape::Deploying, "Waiting for health\u{2026}".to_owned());
+	}
+	if d.rolled_back() {
+		return (Shape::Failed, "Rolled back".to_owned());
+	}
+	let word = if d.in_flight() {
+		format!("{}\u{2026}", d.status.label())
+	} else {
+		d.status.label().to_owned()
+	};
+	(deployment_shape(d.status), word)
 }
 
 /// The shape of a stack's state; a stack being removed reads as at rest.

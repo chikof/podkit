@@ -12,6 +12,7 @@ use crate::ids::JobId;
 use crate::state::AppState;
 use crate::tests::apps::{app_environment, app_source, webhook_secret_blob};
 use crate::tests::grid::env_id;
+use crate::tests::health;
 use crate::tests::{
 	PgPool, add_pending_server, application_id, call, count, db_test, deploy_job_id,
 	deployment_image, deployment_status, env_var_ciphertext, env_var_id, insert_deployment,
@@ -2014,4 +2015,190 @@ async fn the_webhook_secret_is_shown_once_when_rotated_and_the_old_one_stops_wor
 	// Rotating again gives another one.
 	let again = f.post_empty(&f.url("webhooks/rotate")).await;
 	assert_ne!(shown_value(&again, "New webhook secret"), secret);
+}
+
+// --- the health gate ----------------------------------------------------------------------------
+
+/// The Health section's fields, as the form sends them.
+fn health_form(extra: Value) -> Value {
+	let mut form = json!({
+		"hc_mode": "http", "hc_path": "/up", "hc_status": "204", "hc_command": "",
+		"hc_interval": "2", "hc_timeout": "1", "hc_retries": "4", "hc_start": "7",
+		"hc_wait": "45", "hc_drain": "9", "hc_window": "10", "hc_after": "2",
+	});
+	merge(&mut form, extra);
+	form
+}
+
+#[db_test]
+async fn health_gate_section_is_on_the_general_tab_and_prefilled(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let page = f.page("settings").await;
+	assert_contains(&page, "Health");
+	assert_contains(&page, "Wait for the new container");
+	assert_contains(&page, "&quot;hc_mode&quot;:&quot;off&quot;");
+	// The save bar and its dirty dialog watch the new fields like the old ones.
+	assert_contains(&page, "$hc_mode !== $_initial.hc_mode");
+	assert_contains(&page, "$hc_after !== $_initial.hc_after");
+	// Numbers are text inputs with a numeric keyboard, never type=number.
+	assert_contains(&page, "inputmode=\"numeric\"");
+	assert_not_contains(&page, "type=\"number\"");
+	assert_eq!(page.matches("<h1").count(), 1);
+}
+
+#[db_test]
+async fn health_gate_saving_stores_the_settings_and_the_page_shows_them_back(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let uri = f.url("settings");
+	let mut form = f.form("web", json!({}));
+	merge(&mut form, health_form(json!({})));
+	assert_contains(&f.post(&uri, &form).await, "Settings saved");
+	assert_eq!(
+		health::settings(&db, f.application).await,
+		Some(("http".into(), "/up".into(), 204, 2, 10))
+	);
+	let page = f.page("settings").await;
+	assert_contains(&page, "&quot;hc_mode&quot;:&quot;http&quot;");
+	assert_contains(&page, "&quot;hc_path&quot;:&quot;/up&quot;");
+	assert_contains(&page, "&quot;hc_wait&quot;:&quot;45&quot;");
+
+	// A command check, then off again: the row goes.
+	let mut form = f.form("web", json!({}));
+	merge(
+		&mut form,
+		health_form(json!({ "hc_mode": "command", "hc_command": "pg_isready -q" })),
+	);
+	assert_contains(&f.post(&uri, &form).await, "Settings saved");
+	assert_eq!(
+		health::settings(&db, f.application).await.unwrap().0,
+		"command"
+	);
+	let mut form = f.form("web", json!({}));
+	merge(&mut form, health_form(json!({ "hc_mode": "off" })));
+	assert_contains(&f.post(&uri, &form).await, "Settings saved");
+	assert_eq!(health::settings(&db, f.application).await, None);
+}
+
+#[db_test]
+async fn health_gate_a_bad_number_refuses_the_whole_save(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let uri = f.url("settings");
+	for (extra, message) in [
+		(
+			json!({ "hc_interval": "abc" }),
+			"interval must be a whole number",
+		),
+		(json!({ "hc_path": "health" }), "path must start with /"),
+		(json!({ "hc_retries": "99" }), "retries must be between"),
+		(json!({ "hc_wait": "1" }), "deploy wait must be between"),
+	] {
+		let mut form = f.form("web", json!({ "name": "Renamed" }));
+		merge(&mut form, health_form(extra));
+		let body = f.post(&uri, &form).await;
+		assert_contains(&body, message);
+		assert_not_contains(&body, "Settings saved");
+	}
+	// Nothing was stored, not even the name that was fine.
+	assert_eq!(health::settings(&db, f.application).await, None);
+	assert_not_contains(&f.page("settings").await, "Renamed");
+}
+
+#[db_test]
+async fn health_gate_a_reader_sees_text_and_a_forged_post_changes_nothing(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let mut form = f.form("web", json!({}));
+	merge(
+		&mut form,
+		health_form(json!({ "hc_command": "<script>alert(1)</script>", "hc_mode": "command" })),
+	);
+	f.post(&f.url("settings"), &form).await;
+	let carol = f.member("carol").await;
+
+	let (_, _, page) = get_html(&f.app, &f.url("settings"), Some(&carol)).await;
+	let main = page_main(&page);
+	assert_contains(main, "Health");
+	assert_contains(main, "Automatic rollback");
+	assert_not_contains(main, "Unsaved changes");
+	// A command is data: escaped, never markup.
+	assert_not_contains(main, "<script>alert(1)</script>");
+	assert_contains(main, "&lt;script&gt;alert(1)&lt;/script&gt;");
+
+	let mut forged = f.form("web", json!({}));
+	merge(&mut forged, health_form(json!({ "hc_mode": "off" })));
+	let (_, _, body) = post_signals(&f.app, &f.url("settings"), Some(&carol), &forged).await;
+	assert_contains(&body, "You don't have permission to do that.");
+	assert_eq!(
+		health::settings(&db, f.application).await.unwrap().0,
+		"command"
+	);
+}
+
+#[db_test]
+async fn health_gate_another_team_cannot_reach_or_change_the_settings(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let mut form = f.form("web", json!({}));
+	merge(&mut form, health_form(json!({})));
+	f.post(&f.url("settings"), &form).await;
+	let (bob_cookie, bob_team) = ui_session(&f.app, "bob").await;
+	let theirs = format!(
+		"/teams/{bob_team}/projects/{}/apps/{}/settings",
+		f.project, f.application
+	);
+	let (s, _, body) = get_html(&f.app, &theirs, Some(&bob_cookie)).await;
+	assert_eq!(s, StatusCode::NOT_FOUND);
+	assert_not_contains(&body, "/up");
+	let mut forged = f.form("web", json!({}));
+	merge(&mut forged, health_form(json!({ "hc_mode": "off" })));
+	let (_, _, body) = post_signals(&f.app, &theirs, Some(&bob_cookie), &forged).await;
+	assert_contains(&body, "That no longer exists.");
+	assert_eq!(
+		health::settings(&db, f.application).await.unwrap().0,
+		"http"
+	);
+}
+
+#[db_test]
+async fn health_gate_the_timeline_and_header_say_what_the_gate_did(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	// An old release, the bad one that was rolled back, the rollback itself (live), and a
+	// deploy that is waiting for its check right now.
+	f.seed(200, "stopped", Some("img:1"), Some("c1")).await;
+	f.seed(201, "stopped", Some("img:2"), Some("c2")).await;
+	f.seed(202, "running", Some("img:1"), Some("c3")).await;
+	health::seed_gate(
+		&db,
+		201,
+		"rolled_back",
+		Some("the release crashed 40s after it went live"),
+		None,
+	)
+	.await;
+	health::seed_gate(&db, 202, "healthy", None, Some(201)).await;
+	let page = f.page("").await;
+	assert_contains(&page, "Rolled back");
+	assert_contains(&page, "the release crashed 40s after it went live");
+	assert_contains(&page, "Rolled back automatically");
+	assert_contains(&page, "Replaced #201, which went bad");
+	// The header says the live release is the previous image put back.
+	assert_contains(&page, "Rolled back from #201");
+
+	f.seed(203, "deploying", None, None).await;
+	health::seed_gate(&db, 203, "waiting", None, None).await;
+	let page = f.page("").await;
+	assert_contains(&page, "Waiting for health\u{2026}");
+
+	f.seed(204, "failed", None, None).await;
+	set_deployment_error(
+		&db,
+		204,
+		"the new container did not become healthy: <b>x</b>",
+	)
+	.await;
+	health::seed_gate(&db, 204, "unhealthy", None, None).await;
+	let page = f.page("").await;
+	assert_contains(
+		&page,
+		"Never became healthy; the previous container kept serving",
+	);
+	assert_not_contains(&page, "<b>x</b>");
 }

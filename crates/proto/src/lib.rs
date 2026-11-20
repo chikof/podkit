@@ -203,6 +203,52 @@ pub struct DeploySpec {
 	/// payloads) keeps the container on the shared `podkit` network.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub attach: Vec<NetworkAttach>,
+	/// Gates the swap on the new container being healthy. `None` keeps the plain
+	/// "stays running" check. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub health: Option<HealthGate>,
+}
+
+/// What makes a container healthy, and how long a deploy waits for it. The agent turns the
+/// check into a Podman healthcheck, so Traefik (which skips containers that are not
+/// `healthy`) sends no traffic to the new container before it passes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HealthGate {
+	/// The check itself.
+	pub check: HealthCheck,
+	/// Time between checks, in milliseconds.
+	pub interval_ms: u64,
+	/// Time one check may take, in milliseconds.
+	pub timeout_ms: u64,
+	/// Consecutive failures after the start period that make the container unhealthy.
+	pub retries: u32,
+	/// Time after start during which failures do not count, in milliseconds.
+	pub start_period_ms: u64,
+	/// Seconds a deploy waits for the container to become healthy before it fails.
+	pub gate_timeout_s: u32,
+	/// Seconds the old container keeps running once the new one is healthy.
+	pub drain_s: u32,
+}
+
+/// One health check.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum HealthCheck {
+	/// `GET path` on the container's own port, from inside the container, and the status
+	/// that counts as healthy. Needs nothing from the image: the agent binary does the request.
+	Http {
+		/// Path and query, starting with `/`.
+		path: String,
+		/// The status that means healthy.
+		status: u16,
+		/// The port the application listens on.
+		port: u16,
+	},
+	/// A shell command run in the container; exit 0 is healthy.
+	Command {
+		/// The command line, run with `sh -c`.
+		command: String,
+	},
 }
 
 /// A network a container joins, with the DNS aliases it has there.
@@ -1156,6 +1202,37 @@ mod tests {
 		let back: DeploySpec =
 			serde_json::from_str(&serde_json::to_string(&spec).unwrap()).unwrap();
 		assert_eq!(back.attach, spec.attach);
+	}
+
+	#[test]
+	fn health_gate_is_absent_unless_set_and_round_trips() {
+		let mut spec: DeploySpec = serde_json::from_str(OLD_DEPLOY).unwrap();
+		assert!(spec.health.is_none());
+		assert!(!serde_json::to_string(&spec).unwrap().contains("health"));
+		spec.health = Some(HealthGate {
+			check: HealthCheck::Http {
+				path: "/up".into(),
+				status: 200,
+				port: 8080,
+			},
+			interval_ms: 5000,
+			timeout_ms: 3000,
+			retries: 3,
+			start_period_ms: 10_000,
+			gate_timeout_s: 90,
+			drain_s: 5,
+		});
+		let json = serde_json::to_string(&spec).unwrap();
+		assert!(json.contains(r#""check":{"type":"http","path":"/up","status":200,"port":8080}"#));
+		let back: DeploySpec = serde_json::from_str(&json).unwrap();
+		assert_eq!(back.health, spec.health);
+		let command = HealthCheck::Command {
+			command: "true".into(),
+		};
+		assert_eq!(
+			serde_json::from_str::<HealthCheck>(&serde_json::to_string(&command).unwrap()).unwrap(),
+			command
+		);
 	}
 
 	#[test]

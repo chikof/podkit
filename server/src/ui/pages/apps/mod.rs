@@ -39,6 +39,7 @@ mod env;
 mod form;
 mod general;
 mod header;
+mod health;
 mod logs;
 mod models_tab;
 mod monitoring;

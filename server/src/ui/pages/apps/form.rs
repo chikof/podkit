@@ -54,6 +54,20 @@ pub(super) struct AppSignals {
 	pub container_port: String,
 	pub memory_limit_mb: String,
 	pub cpu_limit: String,
+	/// The Health section (General tab only): `off`, `http` or `command`, empty when the
+	/// page did not have the section, and the checks' numbers as typed.
+	pub hc_mode: String,
+	pub hc_path: String,
+	pub hc_status: String,
+	pub hc_command: String,
+	pub hc_interval: String,
+	pub hc_timeout: String,
+	pub hc_retries: String,
+	pub hc_start: String,
+	pub hc_wait: String,
+	pub hc_drain: String,
+	pub hc_window: String,
+	pub hc_after: String,
 }
 
 fn optional<T: std::str::FromStr>(raw: &str, what: &str) -> Result<Option<T>, ServerError> {
@@ -238,7 +252,7 @@ pub(super) fn prefilled_signals(app: &ApplicationView) -> String {
 	.to_string()
 }
 
-const HELP: &str = "text-xs font-normal text-muted-foreground";
+pub(super) const HELP: &str = "text-xs font-normal text-muted-foreground";
 
 const NO_CREDENTIAL: &str =
 	"Only for private repositories. It is stored encrypted and never shown again.";

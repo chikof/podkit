@@ -4,6 +4,7 @@ mod backup;
 pub mod deploy;
 pub mod gateway;
 pub mod hardware;
+pub mod health;
 pub mod ingress;
 pub mod model_download;
 pub mod networks;
