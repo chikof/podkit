@@ -20,6 +20,7 @@ pub static ICONS_SVG: &str = include_str!("../../static/icons.svg");
 pub static LOGOS_SVG: &str = include_str!("../../static/logos.svg");
 static PODKIT_JS: &str = include_str!("../../static/podkit.js");
 static PAGE_JS: &str = include_str!("../../static/page.js");
+static CANVAS_JS: &str = include_str!("../../static/canvas.js");
 static HANKEN_GROTESK: &[u8] = include_bytes!("../../static/fonts/hanken-grotesk-var.woff2");
 static SPLINE_SANS_MONO: &[u8] = include_bytes!("../../static/fonts/spline-sans-mono-var.woff2");
 
@@ -37,6 +38,9 @@ pub static LOGOS_HREF: LazyLock<String> = LazyLock::new(|| hashed("/static/logos
 pub static PODKIT_JS_HREF: LazyLock<String> =
 	LazyLock::new(|| hashed("/static/podkit.js", PODKIT_JS));
 pub static PAGE_JS_HREF: LazyLock<String> = LazyLock::new(|| hashed("/static/page.js", PAGE_JS));
+/// The canvas page's own script; no other page loads it.
+pub static CANVAS_JS_HREF: LazyLock<String> =
+	LazyLock::new(|| hashed("/static/canvas.js", CANVAS_JS));
 
 const IMMUTABLE: &str = "public, max-age=31536000, immutable";
 
@@ -46,6 +50,7 @@ pub fn router() -> Router<AppState> {
 		.route("/static/logos.svg", get(logos))
 		.route("/static/podkit.js", get(podkit_js))
 		.route("/static/page.js", get(page_js))
+		.route("/static/canvas.js", get(canvas_js))
 		.route("/static/fonts/hanken-grotesk-var.woff2", get(sans))
 		.route("/static/fonts/spline-sans-mono-var.woff2", get(mono))
 }
@@ -87,6 +92,16 @@ async fn page_js() -> impl IntoResponse {
 			(header::CACHE_CONTROL, IMMUTABLE),
 		],
 		PAGE_JS,
+	)
+}
+
+async fn canvas_js() -> impl IntoResponse {
+	(
+		[
+			(header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+			(header::CACHE_CONTROL, IMMUTABLE),
+		],
+		CANVAS_JS,
 	)
 }
 

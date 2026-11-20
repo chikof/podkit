@@ -650,8 +650,11 @@ async fn render(
 					p class="ui-lede" { (summary_line(&view)) }
 					(network_line(ctx.team.id, &env_networks))
 				}
-				@if can_pick {
-					div class="ui-page-actions" {
+				div class="ui-page-actions" {
+					a class=(button_class(Variant::Ghost, Size::Md)) href={ (project_url(ctx.team.id, view.project.id)) "/canvas" } {
+						(icon("network")) span { "Canvas" }
+					}
+					@if can_pick {
 						(picker::open_button(&create_url(ctx.team.id, view.project.id, &view.environment.slug)))
 					}
 				}

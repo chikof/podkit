@@ -28,6 +28,7 @@ const RESERVED_SLUGS: &[&str] = &[
 	"stacks",
 	"templates",
 	"iac",
+	"canvas",
 ];
 
 /// How many resources a refusal to delete names before saying "and N more".

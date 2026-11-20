@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 
+mod canvas_live;
 mod live;
 
 use crate::jobs::{self, JobKind};
