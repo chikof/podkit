@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT id AS \"id: ApplicationId\" FROM applications\n\t\t\tWHERE git_provider_id = $1 AND lower(git_repo) = lower($2) AND git_ref = $3\n\t\t\t\tAND source_kind = 'git'\n\t\t\tORDER BY id\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: ApplicationId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "98070fe5055bffefb1e4287292aa475556b5a3e232f007b74911cc70082c97d9"
+}

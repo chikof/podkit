@@ -41,7 +41,13 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/containers/{id}/stop", post(stop_container))
 		.route("/v1/containers/{id}/logs", get(container_logs))
 		.route("/v1/containers/{id}/health", get(container_health))
-		.route("/v1/networks/{name}", delete(delete_network))
+		.route("/v1/networks", get(list_networks).post(create_network))
+		.route(
+			"/v1/networks/{name}",
+			get(get_network).delete(delete_network),
+		)
+		.route("/v1/networks/{name}/connect", post(connect_network))
+		.route("/v1/networks/{name}/disconnect", post(disconnect_network))
 		.route("/v1/services/{service}", delete(delete_service))
 		.route("/v1/volumes/{name}", delete(delete_volume))
 		.route("/v1/backups/dump", post(backup_dump))
@@ -49,6 +55,10 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/backups/restore", post(backup_restore))
 		.route("/v1/model-downloads", post(model_download_route))
 		.route("/v1/probes", post(probe_route))
+		.route("/v1/ingress/ensure", post(ensure_ingress))
+		.route("/v1/registry-login", post(registry_login_route))
+		.route("/v1/scan", post(scan_route))
+		.route("/v1/scan/resolve", post(scan_resolve_route))
 		.route("/v1/gateway/config", put(gateway_config))
 		.route("/v1/gateway/usage/drain", post(gateway_drain))
 		.route("/v1/gateway/chat", post(gateway_chat))
@@ -318,16 +328,17 @@ async fn health_response(
 	}
 }
 
-/// Removes a stack network. Only `podkit-stack-*` networks may be removed.
+/// Removes a network podkit created. Podman refuses (409) while containers
+/// are on it; an imported network is never removed by the agent.
 async fn delete_network(
 	State(ctx): State<Arc<Ctx>>,
 	Path(name): Path<String>,
 ) -> Result<StatusCode, ApiError> {
 	check_ref(&name)?;
-	if !name.starts_with(deploy::STACK_NETWORK_PREFIX) {
+	if !crate::networks::is_managed(&name) {
 		return Err(ApiError::new(
 			StatusCode::BAD_REQUEST,
-			format!("{name:?} is not a stack network"),
+			format!("{name:?} is not a podkit network"),
 		));
 	}
 	ctx.podman()
@@ -335,6 +346,129 @@ async fn delete_network(
 		.await
 		.map_err(|e| ApiError::podman(&format!("removing network {name} failed"), &e))?;
 	Ok(StatusCode::NO_CONTENT)
+}
+
+async fn list_networks(
+	State(ctx): State<Arc<Ctx>>,
+) -> Result<Json<Vec<proto::NetworkInfo>>, ApiError> {
+	ctx.podman()
+		.list_networks()
+		.await
+		.map(Json)
+		.map_err(|e| ApiError::podman("listing networks failed", &e))
+}
+
+async fn get_network(
+	State(ctx): State<Arc<Ctx>>,
+	Path(name): Path<String>,
+) -> Result<Json<proto::NetworkInfo>, ApiError> {
+	check_ref(&name)?;
+	ctx.podman()
+		.inspect_network(&name)
+		.await
+		.map_err(|e| ApiError::podman("inspecting the network failed", &e))?
+		.map(Json)
+		.ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, format!("network {name} not found")))
+}
+
+async fn create_network(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::NetworkCreate>,
+) -> Result<(StatusCode, Json<proto::NetworkInfo>), ApiError> {
+	if !crate::networks::is_managed(&req.name) {
+		return Err(ApiError::new(
+			StatusCode::BAD_REQUEST,
+			format!("invalid network name {:?}", req.name),
+		));
+	}
+	let podman = ctx.podman();
+	podman
+		.create_network(&req.name, req.internal)
+		.await
+		.map_err(|e| ApiError::podman("creating the network failed", &e))?;
+	let info = podman
+		.inspect_network(&req.name)
+		.await
+		.map_err(|e| ApiError::podman("inspecting the network failed", &e))?
+		.ok_or_else(|| {
+			ApiError::new(
+				StatusCode::INTERNAL_SERVER_ERROR,
+				"the network did not appear",
+			)
+		})?;
+	Ok((StatusCode::CREATED, Json(info)))
+}
+
+/// A podkit container: only those may be moved between networks.
+fn check_member(req: &proto::NetworkMember) -> Result<(), ApiError> {
+	check_ref(&req.container)?;
+	if !req.container.starts_with(DEFAULT_PREFIX) {
+		return Err(ApiError::new(
+			StatusCode::BAD_REQUEST,
+			format!("{:?} is not a podkit container", req.container),
+		));
+	}
+	Ok(())
+}
+
+async fn connect_network(
+	State(ctx): State<Arc<Ctx>>,
+	Path(name): Path<String>,
+	Json(req): Json<proto::NetworkMember>,
+) -> Result<StatusCode, ApiError> {
+	check_ref(&name)?;
+	check_member(&req)?;
+	if !crate::networks::valid_member_network(&name)
+		|| req.aliases.iter().any(|a| !deploy_valid_alias(a))
+	{
+		return Err(ApiError::new(
+			StatusCode::BAD_REQUEST,
+			format!("cannot connect to network {name:?}"),
+		));
+	}
+	ctx.podman()
+		.connect_network(&name, &req.container, &req.aliases)
+		.await
+		.map_err(|e| ApiError::podman(&format!("joining network {name} failed"), &e))?;
+	deploy::sync_ingress_networks(&ctx.podman()).await;
+	// Traefik does not notice a container changing networks.
+	if let Err(e) = crate::ingress::refresh(&ctx.podman()).await {
+		tracing::warn!(error = %e, "refreshing Traefik's routes failed");
+	}
+	Ok(StatusCode::NO_CONTENT)
+}
+
+async fn disconnect_network(
+	State(ctx): State<Arc<Ctx>>,
+	Path(name): Path<String>,
+	Json(req): Json<proto::NetworkMember>,
+) -> Result<StatusCode, ApiError> {
+	check_ref(&name)?;
+	check_member(&req)?;
+	// The system network is left too, by `migrate`; the host's own never.
+	if !crate::networks::valid_member_network(&name) && name != proto::SYSTEM_NETWORK {
+		return Err(ApiError::new(
+			StatusCode::BAD_REQUEST,
+			format!("cannot leave network {name:?}"),
+		));
+	}
+	ctx.podman()
+		.disconnect_network(&name, &req.container)
+		.await
+		.map_err(|e| ApiError::podman(&format!("leaving network {name} failed"), &e))?;
+	deploy::sync_ingress_networks(&ctx.podman()).await;
+	// Traefik does not notice a container changing networks.
+	if let Err(e) = crate::ingress::refresh(&ctx.podman()).await {
+		tracing::warn!(error = %e, "refreshing Traefik's routes failed");
+	}
+	Ok(StatusCode::NO_CONTENT)
+}
+
+fn deploy_valid_alias(alias: &str) -> bool {
+	!alias.is_empty()
+		&& alias
+			.bytes()
+			.all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'))
 }
 
 #[derive(Deserialize)]
@@ -417,6 +551,7 @@ async fn delete_service(
 			.await
 			.map_err(|e| ApiError::podman(&format!("removing {name} failed"), &e))?;
 	}
+	deploy::sync_ingress_networks(&podman).await;
 
 	match podman.service_images(&service).await {
 		Ok(images) => {
@@ -448,6 +583,22 @@ async fn delete_volume(
 	}
 }
 
+/// Makes sure Traefik runs with the current configuration (a Traefik of an
+/// older agent is replaced) and sits on the networks of the routed containers.
+async fn ensure_ingress(
+	State(ctx): State<Arc<Ctx>>,
+	Json(ingress): Json<proto::Ingress>,
+) -> Result<StatusCode, ApiError> {
+	let podman = ctx.podman();
+	crate::ingress::ensure_traefik(&podman, &ingress, &ctx.podman_socket, &ctx.data_dir)
+		.await
+		.map_err(|e| ApiError::podman("ingress setup failed", &e))?;
+	ctx.supervisor
+		.add(crate::ingress::TRAEFIK_CONTAINER_NAME)
+		.await;
+	Ok(StatusCode::NO_CONTENT)
+}
+
 async fn probe_route(
 	State(ctx): State<Arc<Ctx>>,
 	Json(req): Json<proto::ProbeRequest>,
@@ -458,6 +609,56 @@ async fn probe_route(
 		.await
 		.map(Json)
 		.map_err(|m| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, m))
+}
+
+async fn registry_login_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::RegistryLogin>,
+) -> Result<Json<proto::RegistryLoginResult>, ApiError> {
+	if req.server.is_empty()
+		|| req.server.len() > 255
+		|| !req
+			.server
+			.chars()
+			.all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | ':' | '[' | ']'))
+	{
+		return Err(ApiError::new(
+			StatusCode::BAD_REQUEST,
+			"invalid registry host",
+		));
+	}
+	Ok(Json(crate::registry::check(&ctx.http, &req).await))
+}
+
+async fn scan_resolve_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::ScanResolveRequest>,
+) -> Result<Json<proto::ScanResolveResponse>, ApiError> {
+	crate::scan::resolve(&ctx.podman(), &req.image)
+		.await
+		.map(|image_id| Json(proto::ScanResolveResponse { image_id }))
+		.map_err(|e| scan_error(&e))
+}
+
+async fn scan_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::ScanRequest>,
+) -> Result<Json<proto::ScanResult>, ApiError> {
+	let config = crate::scan::ScanConfig::new(&ctx.data_dir);
+	crate::scan::run(&ctx.podman(), &config, &req)
+		.await
+		.map(Json)
+		.map_err(|e| scan_error(&e))
+}
+
+fn scan_error(e: &crate::scan::ScanError) -> ApiError {
+	use crate::scan::ScanError;
+	let status = match *e {
+		ScanError::ImageMissing(_) => StatusCode::NOT_FOUND,
+		ScanError::Invalid(_) => StatusCode::BAD_REQUEST,
+		ScanError::Failed(_) => StatusCode::INTERNAL_SERVER_ERROR,
+	};
+	ApiError::new(status, e.to_string())
 }
 
 async fn model_download_route(

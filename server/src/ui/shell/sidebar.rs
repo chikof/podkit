@@ -142,19 +142,33 @@ fn user_menu(ctx: &TeamCtx) -> Markup {
 }
 
 /// The sidebar. Above 760 px it is the left column; below, the strip across the top.
+/// The daily places come first, then the Infrastructure section (what the team runs on),
+/// then Settings.
 pub fn aside(ctx: &TeamCtx) -> Markup {
-	let items = nav::primary_items(ctx);
-	let current = nav::primary_current(ctx);
+	let main = nav::main_items(ctx);
+	let infra = nav::infra_items(ctx);
+	let settings = nav::settings_entry(ctx);
+	let current = nav::sidebar_current(ctx);
+	let is_current = |item: &NavItem| current.as_deref() == Some(item.href.as_str());
 	html! {
 		aside class="ui-sidebar ui-vt-chrome" aria-label="Application" {
 			(side_brand(ctx))
 			(team_menu(ctx))
 			nav class="ui-nav" aria-label="Primary" {
-				ul class="ui-nav-list" {
-					@for item in &items {
-						(link(item, current.as_deref() == Some(item.href.as_str())))
+				@if !main.is_empty() {
+					ul class="ui-nav-list" {
+						@for item in &main { (link(item, is_current(item))) }
 					}
 				}
+				@if !infra.is_empty() {
+					div class="ui-nav-group" {
+						p class="ui-nav-heading" id="nav-infrastructure" { "Infrastructure" }
+						ul class="ui-nav-list" aria-labelledby="nav-infrastructure" {
+							@for item in &infra { (link(item, is_current(item))) }
+						}
+					}
+				}
+				ul class="ui-nav-list" { (link(&settings, is_current(&settings))) }
 			}
 			div class="ui-chrome-foot" { (user_menu(ctx)) }
 		}

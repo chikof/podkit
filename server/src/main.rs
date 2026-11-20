@@ -24,6 +24,7 @@ mod applications;
 mod auth;
 mod backups;
 mod catalog;
+mod change;
 mod config;
 mod databases;
 mod db;
@@ -32,7 +33,9 @@ mod domains;
 mod env_vars;
 mod environments;
 mod error;
+mod git_providers;
 mod ids;
+mod infrastructure;
 mod jobs;
 mod links;
 mod logos;
@@ -42,11 +45,15 @@ mod members;
 mod metrics;
 mod model_files;
 mod models;
+mod networks;
 mod projects;
+mod registries;
 mod routes;
+mod scanning;
 mod scope;
 mod search;
 mod servers;
+mod ssh_keys;
 mod stacks;
 mod state;
 mod teams;
@@ -111,7 +118,23 @@ async fn main() -> AppResult<()> {
 		config: Arc::new(runtime_config),
 	};
 
+	// Keys the 0041 migration moved into the vault have no public key yet; only this process
+	// can decrypt them to derive it.
+	match ssh_keys::service::derive_missing(&state).await {
+		Ok(0) => {}
+		Ok(n) => info!("derived the public key of {n} vault key(s)"),
+		Err(e) => warn!("failed to derive vault public keys: {e}"),
+	}
+
 	worker::recover(&state).await?;
+	match registries::service::backfill(&state).await {
+		Ok(0) => {}
+		Ok(moved) => info!(
+			moved,
+			"moved applications' registry logins to saved registries"
+		),
+		Err(e) => warn!("failed to move registry logins to saved registries: {e}"),
+	}
 	if let Err(e) = servers::bootstrap::enqueue_outdated(&state).await {
 		warn!("failed to enqueue agent upgrades: {e}");
 	}
@@ -191,6 +214,11 @@ fn resolve_config(config: &ServerConfig) -> AppResult<Config> {
 			.to_owned(),
 		model_ready_timeout: None,
 		model_ready_interval: Duration::from_secs(3),
+		public_url: config
+			.public_url
+			.as_deref()
+			.map(|u| u.trim().trim_end_matches('/').to_owned())
+			.filter(|u| !u.is_empty()),
 	})
 }
 

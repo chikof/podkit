@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.deploy_key_id AS \"key!: SshKeyId\", a.id AS \"id: ApplicationId\", a.name,\n\t\t\ta.project_id AS \"project_id: ProjectId\"\n\t\t   FROM applications a JOIN projects p ON p.id = a.project_id\n\t\t   WHERE p.team_id = $1 AND a.deploy_key_id IS NOT NULL ORDER BY a.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key!: SshKeyId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "deploy_key_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id: ApplicationId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "project_id: ProjectId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "project_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e677e348a46ee777fc5fb2fd1eec4e3fe15b4182aa259524c3716e2011db474c"
+}

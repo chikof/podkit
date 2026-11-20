@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE servers SET ssh_key_id = $3, updated_at = NOW() WHERE id = $1 AND ssh_key_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "386259c18686851d9916c92f33ed039909b91fa586e9e99d82474a576cbcaf3e"
+}

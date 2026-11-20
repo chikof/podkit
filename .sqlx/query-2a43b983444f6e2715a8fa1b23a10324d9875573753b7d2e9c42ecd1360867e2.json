@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO infrastructure_setup (team_id, dismissed_at)\n\t\t\tVALUES ($1, CASE WHEN $2 THEN NOW() END)\n\t\t\tON CONFLICT (team_id) DO UPDATE\n\t\t\tSET dismissed_at = CASE WHEN $2 THEN NOW() END, updated_at = NOW()\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2a43b983444f6e2715a8fa1b23a10324d9875573753b7d2e9c42ecd1360867e2"
+}

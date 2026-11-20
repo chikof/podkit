@@ -1,0 +1,221 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT id AS \"id: ServerId\", team_id AS \"team_id: TeamId\", name, hostname, ssh_port,\n\t\t\t\tssh_user, ssh_key_id AS \"ssh_key_id: SshKeyId\", podman_socket_path, is_local,\n\t\t\t\tstatus AS \"status: ServerStatus\", host_key, agent_socket_path, agent_version,\n\t\t\t\tarch, status_message,\n\t\t\t\thardware AS \"hardware?: sqlx::types::Json<proto::Hardware>\", hardware_at\n\t\t\tFROM servers\n\t\t\tWHERE id = $2 AND team_id = $1\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: ServerId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "team_id: TeamId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "hostname",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "hostname"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "ssh_port",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "ssh_port"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "ssh_user",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "ssh_user"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "ssh_key_id: SshKeyId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "ssh_key_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "podman_socket_path",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "podman_socket_path"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "is_local",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "is_local"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "status: ServerStatus",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "host_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "host_key"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "agent_socket_path",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "agent_socket_path"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "agent_version",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "agent_version"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "arch",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "arch"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "status_message",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "status_message"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "hardware?: sqlx::types::Json<proto::Hardware>",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "hardware"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "hardware_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "servers",
+            "name": "hardware_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "7aa879427fa869bdeed28cc88c31641999f9419948319d19ad0cccc97ec9cd54"
+}

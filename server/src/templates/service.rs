@@ -11,6 +11,7 @@ use super::{Invalid, Loaded};
 use crate::applications::service::AppInput;
 use crate::applications::{self, public_hostname};
 use crate::auth::permission::{Action, Resource, authorize};
+use crate::change::Change;
 use crate::error::{AppResult, ServerError};
 use crate::ids::{EnvironmentId, ModelId, ProjectId, ServerId, TeamId, UserId};
 use crate::servers::Server;
@@ -32,6 +33,8 @@ pub struct DeployInput {
 	pub inputs: BTreeMap<String, String>,
 	/// A podkit model to link to the application ([`Loaded`] with `gateway`).
 	pub model: Option<ModelId>,
+	/// A saved registry to pull the template's images with.
+	pub registry: Option<crate::ids::RegistryId>,
 }
 
 /// What a template became.
@@ -224,6 +227,7 @@ async fn deploy_stack(
 			environment_id: Some(environment),
 			source: Some(format!("template:{}@{}", t.id, t.version)),
 			deploy: false,
+			registry: body.registry,
 		};
 		let stack = match stacks::service::create(s, user, team, project, input).await {
 			Ok((stack, _)) => stack,
@@ -337,8 +341,11 @@ async fn deploy_app(
 			image: Some(reference.clone()),
 			registry_username: None,
 			registry_password: None,
+			registry: body.registry.map_or(Change::Keep, Change::Set),
 			git_ref: "main".to_string(),
 			deploy_key: None,
+			deploy_key_id: None,
+			generate_deploy_key: false,
 			git_token: None,
 			build_strategy: "dockerfile".to_string(),
 			dockerfile_path: "Dockerfile".to_string(),
@@ -346,6 +353,8 @@ async fn deploy_app(
 			memory_limit_mb: None,
 			cpu_limit: None,
 			environment_id: Some(environment),
+			git_provider_id: None,
+			git_repo: String::new(),
 		};
 		let created =
 			match applications::service::create(s, user, team, project, server.id, input).await {

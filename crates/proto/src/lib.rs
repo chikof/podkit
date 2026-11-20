@@ -198,6 +198,66 @@ pub struct DeploySpec {
 	/// Container settings only compose stacks use. Absent in older payloads.
 	#[serde(default, skip_serializing_if = "ContainerOptions::is_default")]
 	pub options: ContainerOptions,
+	/// The environment and user networks the container joins, the first one
+	/// being where it lives and where Traefik reaches it. Empty (older
+	/// payloads) keeps the container on the shared `podkit` network.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub attach: Vec<NetworkAttach>,
+}
+
+/// A network a container joins, with the DNS aliases it has there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkAttach {
+	/// Podman network name.
+	pub name: String,
+	/// DNS aliases on this network.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub aliases: Vec<String>,
+	/// Created without outbound access when missing.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub internal: bool,
+}
+
+/// Name prefix of the per-environment networks podkit creates.
+pub const ENV_NETWORK_PREFIX: &str = "podkit-env-";
+/// Name prefix of the user networks podkit creates.
+pub const USER_NETWORK_PREFIX: &str = "podkit-net-";
+/// Name prefix of the per-stack networks podkit creates.
+pub const STACK_NETWORK_PREFIX: &str = "podkit-stack-";
+/// The shared network of system containers (Traefik, the gateway).
+pub const SYSTEM_NETWORK: &str = "podkit";
+
+/// `POST /v1/networks` body.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkCreate {
+	/// A name with one of the podkit prefixes.
+	pub name: String,
+	/// No outbound access.
+	#[serde(default)]
+	pub internal: bool,
+}
+
+/// A Podman network as `GET /v1/networks` reports it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkInfo {
+	/// Network name.
+	pub name: String,
+	/// No outbound access.
+	pub internal: bool,
+	/// Network driver, e.g. `bridge`.
+	pub driver: String,
+	/// Names of the containers on it.
+	pub containers: Vec<String>,
+}
+
+/// `POST /v1/networks/{name}/connect` body; `disconnect` ignores `aliases`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkMember {
+	/// Container name.
+	pub container: String,
+	/// DNS aliases on the network.
+	#[serde(default)]
+	pub aliases: Vec<String>,
 }
 
 /// What the agent does when a supervised container exits.
@@ -433,6 +493,39 @@ impl std::fmt::Debug for RegistryAuth {
 	}
 }
 
+/// `POST /v1/registry-login` body: asks the agent to log in to a registry the
+/// way a pull would, so a wrong password is found before a deploy.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegistryLogin {
+	/// Registry user.
+	pub username: String,
+	/// Registry password or access token.
+	pub password: String,
+	/// Registry host, with the port when it is not the default (`ghcr.io`,
+	/// `127.0.0.1:5000`).
+	pub server: String,
+}
+
+impl std::fmt::Debug for RegistryLogin {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("RegistryLogin")
+			.field("username", &self.username)
+			.field("password", &"<redacted>")
+			.field("server", &self.server)
+			.finish()
+	}
+}
+
+/// `POST /v1/registry-login` response. A refused login is an answer, not an
+/// error: `ok` is false and `message` says why. The password is never in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegistryLoginResult {
+	/// Whether the registry accepted the login.
+	pub ok: bool,
+	/// One line for the user.
+	pub message: String,
+}
+
 /// Git credentials.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -448,6 +541,10 @@ pub enum GitAuth {
 	HttpsToken {
 		/// The token.
 		token: String,
+		/// The user name sent with it; `x-access-token` when absent. Gitea only accepts a token
+		/// together with the login of the account it belongs to.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		username: Option<String>,
 	},
 }
 
@@ -878,6 +975,10 @@ pub struct GatewayConfig {
 	/// Only used to tell "not allowed" (403) from "unknown" (404).
 	#[serde(default)]
 	pub other_models: Vec<String>,
+	/// Networks the sidecar must be on: those of the apps that use a model
+	/// and of the models. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub networks: Vec<String>,
 }
 
 /// Token counters of one key and model during one hour.
@@ -895,6 +996,84 @@ pub struct GatewayUsage {
 	pub input_tokens: u64,
 	/// Generated tokens, as far as the engine reported them.
 	pub output_tokens: u64,
+}
+
+/// `POST /v1/scan/resolve` body: which image a reference names right now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScanResolveRequest {
+	/// Image reference or id on the server.
+	pub image: String,
+}
+
+/// `POST /v1/scan/resolve` answer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScanResolveResponse {
+	/// Content id of the image (`sha256:…`): the key scans are cached under.
+	pub image_id: String,
+}
+
+/// `POST /v1/scan` body. With `image` the agent exports the image, runs Syft on
+/// it and Grype on the SBOM; with `sbom` alone it only runs Grype (a rescan,
+/// which never reads the image again).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScanRequest {
+	/// Image to scan; it must exist on the server.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub image: Option<String>,
+	/// `CycloneDX` JSON of an earlier scan, for a rescan.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub sbom: Option<String>,
+	/// CPU cap of each scanner container.
+	pub cpus: f64,
+	/// Memory cap of each scanner container, in MiB.
+	pub memory_mb: u32,
+}
+
+/// One vulnerability found in one package, reduced from Grype's match.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScanFinding {
+	/// `CVE-…`, `GHSA-…` or `GO-…`.
+	pub vuln_id: String,
+	/// Package name.
+	pub package: String,
+	/// Installed version.
+	pub version: String,
+	/// First version that fixes it, when there is one.
+	#[serde(default)]
+	pub fixed_version: Option<String>,
+	/// `critical`, `high`, `medium`, `low` or `unknown`.
+	pub severity: String,
+	/// Highest CVSS base score reported.
+	#[serde(default)]
+	pub cvss: Option<f64>,
+	/// EPSS probability (0 to 1).
+	#[serde(default)]
+	pub epss: Option<f64>,
+	/// Listed in CISA's Known Exploited Vulnerabilities catalog.
+	#[serde(default)]
+	pub kev: bool,
+	/// Where to read about it.
+	#[serde(default)]
+	pub url: Option<String>,
+}
+
+/// `POST /v1/scan` answer.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScanResult {
+	/// Content id of the scanned image; empty for a rescan.
+	#[serde(default)]
+	pub image_id: String,
+	/// `CycloneDX` JSON, set when the agent built it (not for a rescan).
+	#[serde(default)]
+	pub sbom: Option<String>,
+	/// What Grype found.
+	pub findings: Vec<ScanFinding>,
+	/// When the vulnerability database Grype used was built.
+	#[serde(default)]
+	pub db_built: Option<String>,
+	/// `syft@1.57.2 grype@0.122.1`-style versions of the tools that ran.
+	#[serde(default)]
+	pub tools: String,
 }
 
 /// Shown when Hugging Face answers a download or listing with 401 or 403.
@@ -962,6 +1141,21 @@ mod tests {
 			!json.contains("networks") && !json.contains("options"),
 			"{json}"
 		);
+	}
+
+	#[test]
+	fn attach_is_absent_unless_set() {
+		let mut spec: DeploySpec = serde_json::from_str(OLD_DEPLOY).unwrap();
+		assert!(spec.attach.is_empty());
+		assert!(!serde_json::to_string(&spec).unwrap().contains("attach"));
+		spec.attach = vec![NetworkAttach {
+			name: "podkit-env-1".into(),
+			aliases: vec!["db".into()],
+			internal: false,
+		}];
+		let back: DeploySpec =
+			serde_json::from_str(&serde_json::to_string(&spec).unwrap()).unwrap();
+		assert_eq!(back.attach, spec.attach);
 	}
 
 	#[test]

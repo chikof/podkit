@@ -7,7 +7,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use serde::Serialize;
 
-use super::{header, is_authorized};
+use super::{delivery_id, header, is_authorized};
 use crate::error::{AppResult, ServerError};
 use crate::ids::ApplicationId;
 use crate::state::AppState;
@@ -57,7 +57,30 @@ async fn deploy(
 		return Err(ServerError::Forbidden);
 	}
 
-	if header(&headers, "x-github-event").is_some_and(|event| event != "push") {
+	// A provider repeats a delivery it thinks failed; a captured request is replayed the same
+	// way. Either way the second one deploys nothing. Recorded only after authentication.
+	if let Some(delivery) = delivery_id(&headers)
+		&& !crate::git_providers::first_delivery(&s.db, &format!("app:{application_id}:{delivery}"))
+			.await?
+	{
+		return Ok(Json(Ignored { ignored: true }).into_response());
+	}
+
+	let not_a_push = header(&headers, "x-github-event").is_some_and(|event| event != "push")
+		|| header(&headers, "x-gitea-event").is_some_and(|event| event != "push")
+		|| header(&headers, "x-gitlab-event").is_some_and(|event| event != "Push Hook");
+	if not_a_push {
+		return Ok(Json(Ignored { ignored: true }).into_response());
+	}
+
+	// An application cloned through a git provider deploys the branch it follows, not
+	// every branch that gets a push.
+	if application.git_provider_id.is_some()
+		&& let Some(pushed) = serde_json::from_slice::<serde_json::Value>(&body)
+			.ok()
+			.and_then(|v| v.get("ref").and_then(|r| r.as_str()).map(str::to_owned))
+		&& crate::git_providers::branch_of(&pushed) != Some(application.git_ref.as_str())
+	{
 		return Ok(Json(Ignored { ignored: true }).into_response());
 	}
 

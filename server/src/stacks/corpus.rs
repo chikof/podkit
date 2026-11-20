@@ -178,6 +178,51 @@ fn two_services_translate_to_one_network_and_two_specs() {
 }
 
 #[test]
+fn a_routed_service_lives_on_the_stack_network_and_a_linked_one_joins_the_others() {
+	use crate::networks::attach::Linked;
+	let domains = BTreeMap::from([(
+		"app".to_string(),
+		Domain {
+			host: "app.example.com".to_string(),
+			port: None,
+		},
+	)]);
+	let mut plan = translate_yaml(APP_AND_POSTGRES, &[("DB_PASSWORD", "x")], &domains);
+	let before: Vec<String> = plan.services.iter().map(|s| s.hash.clone()).collect();
+	let names = |plan: &translate::Plan, service: &str| -> Vec<String> {
+		plan.services
+			.iter()
+			.find(|s| s.name == service)
+			.unwrap()
+			.spec
+			.attach
+			.iter()
+			.map(|a| a.name.clone())
+			.collect()
+	};
+
+	// Not attached to anything: only the routed service has a place of its own, the
+	// stack network, where Traefik reaches it. Nothing is on `podkit`.
+	translate::link_networks(&mut plan, &[]);
+	assert_eq!(names(&plan, "app"), ["podkit-stack-42"]);
+	assert!(names(&plan, "db").is_empty());
+
+	// Attached to a user network: every service joins it, the routed one after its own.
+	let linked = [Linked {
+		name: "podkit-net-9".to_string(),
+		internal: true,
+	}];
+	translate::link_networks(&mut plan, &linked);
+	assert_eq!(names(&plan, "app"), ["podkit-stack-42", "podkit-net-9"]);
+	assert_eq!(names(&plan, "db"), ["podkit-net-9"]);
+	let db = plan.services.iter().find(|s| s.name == "db").unwrap();
+	assert_eq!(db.spec.attach[0].aliases, ["podkit-stack-42-db"]);
+	assert!(db.spec.attach[0].internal);
+	let after: Vec<String> = plan.services.iter().map(|s| s.hash.clone()).collect();
+	assert_ne!(before, after, "attaching a network redeploys the services");
+}
+
+#[test]
 fn the_hash_follows_the_spec_and_nothing_else() {
 	let domains = BTreeMap::new();
 	let first = translate_yaml(APP_AND_POSTGRES, &[("DB_PASSWORD", "a")], &domains);

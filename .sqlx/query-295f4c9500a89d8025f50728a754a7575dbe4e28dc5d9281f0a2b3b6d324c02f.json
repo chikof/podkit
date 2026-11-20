@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT dismissed_at IS NOT NULL AS \"dismissed!\", skipped\n\t\t\tFROM infrastructure_setup WHERE team_id = $1\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "dismissed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "skipped",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "infrastructure_setup",
+            "name": "skipped"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      false
+    ]
+  },
+  "hash": "295f4c9500a89d8025f50728a754a7575dbe4e28dc5d9281f0a2b3b6d324c02f"
+}

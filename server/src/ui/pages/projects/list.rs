@@ -22,12 +22,13 @@ use crate::projects::overview::{self, ProjectCard};
 use crate::projects::service;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, Dismiss, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, Size, Tone, Variant,
-	button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu, empty_state, icon,
-	menu_label,
+	BUTTON_DANGER, BannerKind, Dismiss, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, Size, Tone,
+	Variant, banner, button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu,
+	empty_state, icon, link_button, menu_label,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page, form_error};
+use crate::ui::pages::infrastructure::setup_url;
 use crate::ui::{error, shell, sse};
 
 pub fn router() -> Router<AppState> {
@@ -267,6 +268,16 @@ async fn list_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Re
 		))
 	};
 	let resources: usize = cards.iter().map(|c| c.logos.len()).sum();
+	// A team with no project yet is on its first run: point it at the guided setup, until it
+	// is finished or dismissed.
+	let first_run = if cards.is_empty() {
+		crate::infrastructure::service::setup(&s, ctx.user.id, ctx.team.id)
+			.await
+			.ok()
+			.filter(crate::infrastructure::service::SetupView::shown)
+	} else {
+		None
+	};
 	let body = html! {
 		div class="ui-wide ui-proj-page" data-signals="{name: '', slug: '', target: '', targetName: '', targetSlug: '', confirm: '', _error: ''}" {
 			header class="ui-page-head" {
@@ -277,6 +288,14 @@ async fn list_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Re
 				@if can_create { div class="ui-page-actions" { (new_button) } }
 			}
 			@if cards.is_empty() {
+				@if let Some(setup) = &first_run {
+					(banner(
+						BannerKind::Info,
+						Some("First time here?"),
+						&format!("The guided setup takes you from a bare host to a first deploy. {} of {} steps are done.", setup.done_count(), setup.steps.len()),
+						Some(&link_button(Variant::Outline, Size::Sm, &setup_url(ctx.team.id), &html! { "Open the setup" })),
+					))
+				}
 				(empty_state(
 					"folder",
 					"No projects yet",

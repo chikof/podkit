@@ -10,7 +10,9 @@ use maud::{Markup, html};
 use serde::Deserialize;
 use serde_json::json;
 
-use super::{crumbs, detail_url, host_port, human_mb, list_url, local_badge, server_tabs};
+use super::{
+	ServerTab, crumbs, detail_url, host_port, human_mb, list_url, local_badge, server_tabs,
+};
 use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ServerId, TeamId};
@@ -25,6 +27,7 @@ use crate::ui::components::{
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
 use crate::ui::live::{job_log, log_view};
+use crate::ui::pages::security;
 use crate::ui::status::{Status, poll, status_badge};
 use crate::ui::{error, sse};
 
@@ -257,7 +260,12 @@ fn delete_dialog(ctx: &TeamCtx, server: &Server) -> Markup {
 
 /// The header every page of a server shares: logo, name, address, the page's actions and
 /// the two tabs.
-pub(super) fn header(team: TeamId, server: &Server, monitoring: bool, actions: &Markup) -> Markup {
+pub(in crate::ui) fn header(
+	team: TeamId,
+	server: &Server,
+	tab: ServerTab,
+	actions: &Markup,
+) -> Markup {
 	html! {
 		div class="ui-stack" {
 			header class="ui-page-head" {
@@ -271,7 +279,7 @@ pub(super) fn header(team: TeamId, server: &Server, monitoring: bool, actions: &
 				}
 				div class="ui-page-actions" { (actions) }
 			}
-			(server_tabs(team, server.id, monitoring))
+			(server_tabs(team, server.id, tab))
 		}
 	}
 }
@@ -288,14 +296,24 @@ async fn detail(
 	let can_update = ctx.perms.can(Action::Update, Resource::Server) && !server.is_local;
 	let can_delete = ctx.perms.can(Action::Delete, Resource::Server) && !server.is_local;
 	let log_url = format!("{}/log", detail_url(ctx.team.id, server.id));
+	let scan_settings = if security::can_see(&ctx) {
+		crate::scanning::service::settings(&s.db, ctx.user.id, ctx.team.id, server.id)
+			.await
+			.ok()
+	} else {
+		None
+	};
 
 	let mut crumbs = crumbs(&ctx);
 	crumbs.push((server.name.as_str(), None));
 	let body = html! {
 		div class="ui-page-body" data-signals="{confirm: '', _busy: false, _error: '', _delete_error: ''}" {
-			(header(ctx.team.id, server, false, &actions(&ctx, server, can_update, can_delete)))
+			(header(ctx.team.id, server, ServerTab::Overview, &actions(&ctx, server, can_update, can_delete)))
 			(form_error())
 			(status_region(&ctx, server, found.bootstrap.as_ref()))
+			@if let Some(settings) = scan_settings {
+				(security::settings_card(&ctx, server.id, settings))
+			}
 			@if !server.is_local {
 				section class="ui-stack" aria-labelledby="bootstrap-title" {
 					h2 id="bootstrap-title" class="ui-sec-h" { "Bootstrap log" }

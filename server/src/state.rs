@@ -60,6 +60,9 @@ pub struct Config {
 	pub model_ready_interval: std::time::Duration,
 	/// Who may create an account.
 	pub registration: Registration,
+	/// The address git providers can reach podkit at (`PUBLIC_URL`), without a trailing slash.
+	/// `None` on a homelab with no public address: push webhooks cannot be created then.
+	pub public_url: Option<String>,
 }
 
 #[derive(Clone)]

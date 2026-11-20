@@ -1,0 +1,100 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT\n\t\t\t\t(SELECT COUNT(*) FROM servers WHERE team_id = $1) AS \"servers!\",\n\t\t\t\t(SELECT COUNT(*) FROM servers WHERE team_id = $1 AND status = 'active') AS \"servers_active!\",\n\t\t\t\t(SELECT COUNT(*) FROM servers WHERE team_id = $1 AND status <> 'active') AS \"servers_attention!\",\n\t\t\t\t(SELECT COUNT(*) FROM applications a JOIN projects p ON p.id = a.project_id\n\t\t\t\t\tWHERE p.team_id = $1 AND (\n\t\t\t\t\t\tSELECT d.status FROM deployments d WHERE d.application_id = a.id\n\t\t\t\t\t\tORDER BY d.created_at DESC, d.id DESC LIMIT 1\n\t\t\t\t\t) = 'running') AS \"running_apps!\",\n\t\t\t\t(SELECT COUNT(*) FROM networks WHERE team_id = $1 AND kind = 'user') AS \"user_networks!\",\n\t\t\t\t(SELECT COUNT(*) FROM ssh_keys WHERE team_id = $1) AS \"ssh_keys!\",\n\t\t\t\t(SELECT COUNT(*) FROM git_providers WHERE team_id = $1) AS \"git_providers!\",\n\t\t\t\t(SELECT COUNT(*) FROM registries WHERE team_id = $1) AS \"registries!\",\n\t\t\t\t(SELECT COUNT(*) FROM servers WHERE team_id = $1 AND scan_enabled) AS \"scan_servers!\",\n\t\t\t\tEXISTS (SELECT 1 FROM image_scans WHERE team_id = $1 AND db_built IS NOT NULL) AS \"scan_db_ready!\",\n\t\t\t\t(SELECT COUNT(*) FROM projects WHERE team_id = $1) AS \"projects!\",\n\t\t\t\t(SELECT COUNT(*) FROM applications a JOIN projects p ON p.id = a.project_id WHERE p.team_id = $1)\n\t\t\t\t+ (SELECT COUNT(*) FROM databases d JOIN projects p ON p.id = d.project_id WHERE p.team_id = $1)\n\t\t\t\t+ (SELECT COUNT(*) FROM models m JOIN projects p ON p.id = m.project_id WHERE p.team_id = $1)\n\t\t\t\t+ (SELECT COUNT(*) FROM stacks s JOIN projects p ON p.id = s.project_id WHERE p.team_id = $1) AS \"resources!\"\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "servers!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "servers_active!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "servers_attention!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "running_apps!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "user_networks!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "ssh_keys!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "git_providers!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "registries!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "scan_servers!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "scan_db_ready!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 10,
+        "name": "projects!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "resources!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "19839b57d75a7a585811dde6a2e86d503645d755c0f253ec48a7d4db4e773c1d"
+}

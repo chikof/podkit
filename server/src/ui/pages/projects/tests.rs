@@ -108,7 +108,7 @@ async fn the_grid_shows_projects_with_counts_logos_and_the_forms(db: PgPool) {
 	assert_contains(&body, "No projects yet");
 	assert_contains(&body, "New project");
 	assert_contains(&body, "<title>Projects");
-	assert_contains(&body, "S3 Destinations");
+	assert_contains(&body, "S3 destinations");
 
 	let (s, headers, body) = post_signals(
 		&app,

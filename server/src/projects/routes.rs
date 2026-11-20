@@ -62,7 +62,11 @@ async fn list(
 	user: AuthUser,
 	Path(team): Path<TeamId>,
 ) -> AppResult<Json<Vec<ProjectResponse>>> {
-	let projects = service::list(&s.db, user.id, team).await?;
+	let mut projects = service::list(&s.db, user.id, team).await?;
+	// A project-limited token sees only its projects.
+	if let Some(grant) = &user.grant {
+		projects.retain(|p| grant.sees(p.project.id));
+	}
 	Ok(Json(
 		projects
 			.iter()

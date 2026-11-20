@@ -20,7 +20,7 @@ use crate::jobs::{Job, JobFailure};
 use crate::logs::JobLog;
 use crate::servers::Server;
 use crate::state::AppState;
-use crate::{deployments, domains, env_vars, links, scope, volumes};
+use crate::{deployments, domains, env_vars, links, networks, registries, scope, volumes};
 
 const LOST_CONNECTION: &str = "lost connection to server agent";
 
@@ -107,6 +107,20 @@ pub async fn run(
 					deployment.commit_sha = commit_sha;
 				}
 				advance(state, &mut deployment, DeploymentStatus::Running).await?;
+				// Queued, never awaited: the deploy is done whether or not the scan ever runs.
+				if let Some(image) = deployment.image_tag.as_deref() {
+					crate::scanning::queue(
+						state,
+						application.server_id,
+						crate::scanning::Target {
+							kind: crate::scanning::ResourceKind::Application,
+							resource_id: application.id.0,
+							image_ref: image,
+							deployment: Some(deployment.id),
+						},
+					)
+					.await;
+				}
 				if let Err(e) =
 					deployments::retire_others(&state.db, application.id, deployment.id).await
 				{
@@ -149,6 +163,10 @@ async fn load_server(state: &AppState, application: &Application) -> Result<Serv
 		})
 }
 
+#[allow(
+	clippy::too_many_lines,
+	reason = "the merged cards each added a step; one flow reads better unsplit"
+)]
 async fn build_spec(
 	state: &AppState,
 	application: &Application,
@@ -158,7 +176,26 @@ async fn build_spec(
 	let container_port = u16::try_from(application.container_port)
 		.map_err(|_| failed("application container_port is out of range"))?;
 
-	let source = app_source(state, application, deployment)?;
+	let mut source = app_source(state, application, deployment).await?;
+	if let (
+		Some(id),
+		Source::Image {
+			auth, pull: true, ..
+		},
+	) = (application.registry_id, &mut source)
+	{
+		*auth = Some(
+			registries::service::auth_for(state, id)
+				.await
+				.map_err(|e| {
+					tracing::error!(
+						application = application.id.0,
+						"saved registry unusable: {e}"
+					);
+					failed("failed to load the saved registry login")
+				})?,
+		);
+	}
 
 	let custom_domains = domains::list(&state.db, application.id)
 		.await
@@ -225,6 +262,21 @@ async fn build_spec(
 		stop_timeout_s: None,
 		networks: Vec::new(),
 		options: proto::ContainerOptions::default(),
+		attach: networks::attach::for_resource(
+			&state.db,
+			networks::attach::Home {
+				kind: networks::ResourceKind::Application,
+				id: application.id.0,
+				environment: application.environment_id,
+				server: application.server_id,
+			},
+			&[],
+		)
+		.await
+		.map_err(|e| {
+			tracing::error!("failed to resolve networks: {e}");
+			failed("failed to resolve the application's networks")
+		})?,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,
@@ -238,7 +290,7 @@ async fn build_spec(
 /// and built, and an image app pulls its reference again, so a redeploy or a
 /// registry webhook picks up a moved tag. After a pull the agent reports the
 /// digest reference, which is what a later rollback runs.
-pub(crate) fn app_source(
+pub(crate) async fn app_source(
 	state: &AppState,
 	application: &Application,
 	deployment: &Deployment,
@@ -265,7 +317,7 @@ pub(crate) fn app_source(
 				.clone()
 				.ok_or_else(|| failed("application has no repository"))?,
 			git_ref: application.git_ref.clone(),
-			auth: git_auth(state, application)?,
+			auth: git_auth(state, application).await?,
 			build: match application.build_strategy {
 				BuildStrategy::Dockerfile => Build::Dockerfile {
 					path: application.dockerfile_path.clone(),
@@ -304,7 +356,7 @@ fn registry_auth(
 
 /// One credential per application: an ssh key for ssh repo urls, a token
 /// for https ones. `create`/`update` only ever store the matching one.
-fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth, JobFailure> {
+async fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth, JobFailure> {
 	let decrypt = |sealed: &[u8]| {
 		state.secrets.decrypt(sealed).map_err(|e| {
 			tracing::error!(
@@ -314,14 +366,42 @@ fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth, JobF
 			failed("failed to decrypt repository credential")
 		})
 	};
-	if let Some(sealed) = application.deploy_key.as_deref() {
+	// A provider application clones with what the provider gives now: a token minted for this
+	// clone for a GitHub App, the stored access token for GitLab and Gitea.
+	if let (Some(provider), Some(repo)) =
+		(application.git_provider_id, application.git_repo.as_deref())
+	{
+		let access = crate::git_providers::service::clone_access(state, provider, repo)
+			.await
+			.map_err(|e| {
+				tracing::warn!(application = application.id.0, error = %e, "clone access failed");
+				failed(format!("could not get access to the repository: {e}"))
+			})?;
+		return Ok(GitAuth::HttpsToken {
+			token: access.token,
+			username: access.username,
+		});
+	}
+	if let Some(key) = application.deploy_key_id {
+		let sealed = crate::ssh_keys::sealed_private_key(&state.db, key)
+			.await
+			.map_err(|e| {
+				tracing::error!(
+					application = application.id.0,
+					"deploy key lookup failed: {e}"
+				);
+				failed("failed to load the deploy key")
+			})?
+			.ok_or_else(|| failed("the application's deploy key no longer exists"))?;
+		let _ = crate::ssh_keys::touch(&state.db, key).await;
 		return Ok(GitAuth::SshKey {
-			private_key: decrypt(sealed)?,
+			private_key: decrypt(&sealed)?,
 		});
 	}
 	if let Some(sealed) = application.git_token.as_deref() {
 		return Ok(GitAuth::HttpsToken {
 			token: decrypt(sealed)?,
+			username: None,
 		});
 	}
 	Ok(GitAuth::None)

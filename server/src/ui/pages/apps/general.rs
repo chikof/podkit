@@ -11,16 +11,20 @@ use maud::{Markup, html};
 use serde_json::json;
 
 use super::form::{
-	AppSignals, build_fields, clear_credentials, deploy_key_hint, git_source_fields,
-	git_token_hint, identity_fields, image_source_fields, prefilled_signals, registry_hint,
-	runtime_fields,
+	AppSignals, build_fields, clear_credentials, deploy_key_field, git_source_fields,
+	git_token_hint, identity_fields, image_source_fields, load_keys, prefilled_signals,
+	registry_hint, runtime_fields,
 };
 use super::header::header;
+use super::provider_source::{provider_fields, provider_label};
 use super::{AppPath, Tab, app_url, load, page, toast_ok};
 use crate::applications::service::{self, ApplicationView};
 use crate::applications::{BuildStrategy, SourceKind};
 use crate::auth::permission::{Action, Resource};
+use crate::git_providers;
 use crate::ids::{ApplicationId, ProjectId, TeamId};
+use crate::registries::Registry;
+use crate::ssh_keys::service::KeyView;
 use crate::state::AppState;
 use crate::ui::components::{
 	Size, Variant, button_class, card, card_content, card_footer, card_section,
@@ -47,7 +51,7 @@ fn fact(label: &str, value: &Markup) -> Markup {
 }
 
 /// The source, build and limits as text, for someone who may not change them.
-fn summary(app: &ApplicationView) -> Markup {
+fn summary(app: &ApplicationView, provider: Option<&str>) -> Markup {
 	html! {
 		(card(&html! {
 			(card_section("Source", None, None))
@@ -60,10 +64,14 @@ fn summary(app: &ApplicationView) -> Markup {
 							(fact("Registry login", &html! { @if app.has_registry_auth { "Stored" } @else { "None" } }))
 						}
 						SourceKind::Git => {
-							(fact("Repository", &html! { code class="font-mono break-all" { (app.repo_url.as_deref().unwrap_or_default()) } }))
+							(fact("Repository", &html! {
+								@if let Some(repo) = &app.git_repo { code class="font-mono break-all" { (repo) } }
+								@else { code class="font-mono break-all" { (app.repo_url.as_deref().unwrap_or_default()) } }
+							}))
 							(fact("Ref", &html! { code class="font-mono" { (app.git_ref) } }))
 							(fact("Source access", &html! {
-								@if app.has_deploy_key { "Deploy key stored" }
+								@if app.git_provider_id.is_some() { "Git provider " (provider_label(provider)) }
+								@else if app.has_deploy_key { "Deploy key stored" }
 								@else if app.has_git_token { "Access token stored" }
 								@else { "Public repository" }
 							}))
@@ -111,7 +119,15 @@ fn section(title: &str, description: Option<&str>, fields: &Markup) -> Markup {
 	})
 }
 
-fn edit_form(base: &str, app: &ApplicationView) -> Markup {
+fn edit_form(
+	base: &str,
+	app: &ApplicationView,
+	keys: &[KeyView],
+	can_create_key: bool,
+	registries: &[Registry],
+	team: TeamId,
+	provider: Option<&str>,
+) -> Markup {
 	let save = format!(
 		"evt.preventDefault(); @post({})",
 		crate::ui::sse::js_string(&format!("{base}/settings"))
@@ -126,10 +142,14 @@ fn edit_form(base: &str, app: &ApplicationView) -> Markup {
 				))
 				@match app.source_kind {
 					SourceKind::Image => {
-						(section("Image", Some("Changes apply on the next deploy."), &image_source_fields(Some(app))))
+						(section("Image", Some("Changes apply on the next deploy."), &image_source_fields(Some(app), registries, team)))
+					}
+					SourceKind::Git if app.git_provider_id.is_some() => {
+						(section("Repository", Some("Changes apply on the next deploy."), &provider_fields(app, provider)))
+						(section("Build", None, &build_fields()))
 					}
 					SourceKind::Git => {
-						(section("Repository", Some("Changes apply on the next deploy."), &git_source_fields(Some(app))))
+						(section("Repository", Some("Changes apply on the next deploy."), &git_source_fields(Some(app), keys, can_create_key)))
 						(section("Build", None, &build_fields()))
 					}
 				}
@@ -153,10 +173,30 @@ async fn general_page(
 ) -> Result<Markup, Response> {
 	let (project, app) = load(&s, &ctx, project, app).await?;
 	let base = app_url(ctx.team.id, project.id, app.id);
+	// The name of the provider the repository is cloned through, if the user may read it.
+	let provider = match app.git_provider_id {
+		Some(id) => git_providers::service::get(&s, ctx.user.id, ctx.team.id, id)
+			.await
+			.ok()
+			.map(|p| p.name),
+		None => None,
+	};
 	let content = if ctx.perms.can(Action::Update, Resource::Application) {
-		edit_form(&base, &app)
+		let (keys, can_create_key) = load_keys(&s, &ctx).await;
+		let registries = crate::registries::service::list(&s.db, ctx.user.id, ctx.team.id)
+			.await
+			.unwrap_or_default();
+		edit_form(
+			&base,
+			&app,
+			&keys,
+			can_create_key,
+			&registries,
+			ctx.team.id,
+			provider.as_deref(),
+		)
 	} else {
-		html! { div class="flex flex-col gap-6" { (summary(&app)) } }
+		html! { div class="flex flex-col gap-6" { (summary(&app, provider.as_deref())) } }
 	};
 	Ok(page(&s, &ctx, &project, &app, Tab::Settings, &content).await)
 }
@@ -179,12 +219,25 @@ async fn save(
 	match result {
 		Ok(updated) => {
 			let rows = super::recent_deployments(&s, &ctx, &updated).await;
+			// Re-read the vault so a key made by this save is in the list, then point the
+			// picker at the key the application now uses.
+			let (keys, can_create_key) = load_keys(&s, &ctx).await;
+			let picked = updated
+				.deploy_key_id
+				.map(|k| k.0.to_string())
+				.unwrap_or_default();
 			sse::patch(&header(&s, &ctx, &updated, &rows).await)
-				.and(sse::patch(&deploy_key_hint(Some(&updated))))
+				.and(sse::patch(&deploy_key_field(
+					Some(&updated),
+					&keys,
+					can_create_key,
+				)))
 				.and(sse::patch(&git_token_hint(Some(&updated))))
 				.and(sse::patch(&registry_hint(Some(&updated))))
 				.and(sse::signals(&clear_credentials()))
-				.and(sse::signals(&json!({ "_error": "" })))
+				.and(sse::signals(
+					&json!({ "_error": "", "deploy_key_id": picked }),
+				))
 				.and(toast_ok("Settings saved"))
 				.into_response()
 		}

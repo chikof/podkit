@@ -45,5 +45,12 @@ id!(
 	ModelId,
 	StackId,
 	StackServiceId,
+	NetworkId,
+	SshKeyId,
+	RegistryId,
+	ApiTokenId,
+	GitProviderId,
 	JobId,
+	ScanId,
+	ScanIgnoreId,
 );
