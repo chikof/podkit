@@ -26,6 +26,8 @@ struct TeamResponse {
 	name: String,
 	slug: String,
 	logo: String,
+	/// Where the team's picture is served, if it has one.
+	avatar_url: Option<String>,
 }
 
 impl From<&Team> for TeamResponse {
@@ -35,6 +37,10 @@ impl From<&Team> for TeamResponse {
 			name: team.name.clone(),
 			slug: team.slug.clone(),
 			logo: team.logo.clone(),
+			avatar_url: team
+				.avatar
+				.as_deref()
+				.map(|h| crate::avatars::team_url(team.id, h)),
 		}
 	}
 }

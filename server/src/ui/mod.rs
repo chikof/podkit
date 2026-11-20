@@ -46,7 +46,7 @@ mod shell;
 mod sse;
 mod status;
 #[cfg(test)]
-mod testing;
+pub(crate) mod testing;
 mod theme;
 
 use components::{BUTTON, INPUT, LABEL, icon, reveal_button};
@@ -90,6 +90,7 @@ pub fn router() -> Router<AppState> {
 		.route("/static/app.css", get(app_css))
 		.merge(assets::router())
 		.merge(pages::accounts::router())
+		.merge(pages::profile::router())
 		.merge(pages::projects::router())
 		.merge(pages::apps::router())
 		.merge(pages::databases::router())

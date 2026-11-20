@@ -40,6 +40,8 @@ pub struct MemberDetail {
 	pub role_id: RoleId,
 	pub role_name: String,
 	pub joined_at: OffsetDateTime,
+	/// Hash of the member's picture, when they have one (see `avatars`).
+	pub avatar: Option<String>,
 }
 
 pub async fn find(
@@ -109,7 +111,8 @@ pub async fn list_details(
 		r#"
 			SELECT m.user_id AS "user_id: UserId", u.email AS "email!",
 				u.name AS "display_name!", m.role_id AS "role_id: RoleId",
-				r.name AS "role_name!", m.joined_at
+				r.name AS "role_name!", m.joined_at,
+				(SELECT hash FROM user_avatars WHERE user_id = u.id) AS avatar
 			FROM team_members m
 			JOIN users u ON u.id = m.user_id
 			JOIN roles r ON r.id = m.role_id

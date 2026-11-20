@@ -61,7 +61,8 @@ pub async fn rename(db: &PgPool, user: UserId, team: TeamId, name: &str) -> AppR
 		Team,
 		r#"
 			UPDATE teams SET name = $2 WHERE id = $1
-			RETURNING id AS "id: TeamId", name, slug, logo
+			RETURNING id AS "id: TeamId", name, slug, logo,
+				(SELECT hash FROM team_avatars WHERE team_id = teams.id) AS avatar
 		"#,
 		team as TeamId,
 		name

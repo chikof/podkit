@@ -22,6 +22,7 @@ use crate::state::{AppState, Config};
 mod agents;
 mod applications;
 mod auth;
+mod avatars;
 mod backups;
 mod catalog;
 mod config;

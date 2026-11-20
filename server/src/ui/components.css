@@ -1634,3 +1634,37 @@ code.font-mono { font-size: 0.92em; }
    or model). The later rule won everywhere, so the deployment facts stacked in one long
    column. Where the figures belong in a row, they are one. */
 .ui-dep .ui-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-6); }
+
+/* == avatars == */
+
+/* A picture sits over the monogram, so one that fails to load leaves the initials showing.
+   It has its own background so a transparent picture does not show the initials through. */
+.ui-avatar-pic-host { position: relative; overflow: hidden; }
+.ui-avatar-pic { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background-color: var(--accent); }
+.ui-team-mark .ui-avatar-pic { background-color: var(--primary); }
+
+.ui-avatar-lg { width: 4rem; height: 4rem; border-radius: var(--r-lg); font-size: var(--fs-xl); }
+.ui-team-mark-lg { width: 4rem; height: 4rem; border-radius: var(--r-lg); font-size: var(--fs-xl); }
+
+/* The picture form: the current picture beside the file, the hint and the buttons. */
+.ui-avatar-field { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-5); }
+.ui-avatar-field-pic { position: relative; flex: none; width: 4rem; height: 4rem; border-radius: var(--r-lg); overflow: hidden; }
+.ui-avatar-field-pic > .ui-avatar, .ui-avatar-field-pic > .ui-team-mark { width: 100%; height: 100%; }
+.ui-avatar-preview { z-index: 1; }
+.ui-avatar-field-body { display: grid; flex: 1 1 16rem; gap: var(--s-4); min-width: 0; max-width: 28rem; }
+
+/* The native file input, in the colors of the other controls. The button inside it looks
+   like a secondary button; the file name beside it is muted text. */
+.ui-file { max-width: 100%; color: var(--muted-foreground); font: inherit; font-size: var(--fs-sm); }
+.ui-file::file-selector-button {
+	height: var(--ctl-h); margin-inline-end: var(--s-3); padding-inline: var(--s-4);
+	border: var(--bw) solid var(--input); border-radius: var(--r-md);
+	background-color: var(--secondary); color: var(--foreground); box-shadow: var(--sh-1);
+	font: inherit; font-size: var(--fs-sm); font-weight: var(--fw-medium); cursor: pointer;
+	transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.ui-file::file-selector-button:hover { background-color: var(--accent); border-color: var(--muted-foreground); }
+.ui-file:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--r-md); }
+.ui-file:user-invalid { color: var(--destructive); }
+.ui-crumb-mark { display: inline-flex; flex: none; margin-inline-end: var(--s-3); }
+.ui-account { display: grid; gap: var(--s-5); min-width: 0; max-width: 44rem; }

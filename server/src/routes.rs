@@ -8,9 +8,9 @@ use tower_http::compression::predicate::{Predicate, SizeAbove};
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
-	applications, auth, backups, catalog, databases, deployments, domains, env_vars, environments,
-	links, logos, members, metrics, model_files, models, projects, servers, stacks, teams,
-	templates, ui, volumes, webhooks,
+	applications, auth, avatars, backups, catalog, databases, deployments, domains, env_vars,
+	environments, links, logos, members, metrics, model_files, models, projects, servers, stacks,
+	teams, templates, ui, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -30,6 +30,7 @@ async fn health() -> &'static str {
 pub async fn routes(state: AppState) -> AppResult<Router> {
 	let api = Router::new()
 		.nest("/auth", auth::router())
+		.merge(avatars::api_router())
 		.nest("/teams", teams::router())
 		.nest("/teams/{team_id}", members::router())
 		.nest("/teams/{team_id}/projects", projects::router())
@@ -88,6 +89,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 	Ok(Router::new()
 		.merge(ui::router())
 		.merge(logos::router())
+		.merge(avatars::public_router())
 		.route("/health", get(health))
 		.nest("/api/v1", api)
 		.nest("/webhooks", webhooks::router())

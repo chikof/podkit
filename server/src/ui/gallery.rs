@@ -14,19 +14,22 @@ use maud::{Markup, PreEscaped, html};
 use super::assets::ICONS_SVG;
 use super::components::Dismiss;
 use super::components::{
-	BUTTON, BannerKind, CHECKBOX, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, RadioTab,
-	SELECT, SWITCH, Size, Status, TabItem, Tone, Variant, avatar, badge, banner, breadcrumb,
-	button, button_class, card, card_content, card_description, card_footer, card_section,
-	card_title, checkbox_field, copy_field, dialog, dialog_cancel, dialog_open_button,
-	dropdown_menu, empty_state, error_text, help_text, icon, icon_button, icon_with, invalid_text,
-	kbd, kbd_combo, link_button, link_card, logo, menu_label, menu_link, menu_separator,
-	password_field, radio_tabs, select_field, skeleton, skeleton_row, status_badge, status_dot,
-	switch_field, table, tabs, text_field, textarea_field, theme_toggle, toast, tooltip,
+	AvatarField, BUTTON, BannerKind, CHECKBOX, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER,
+	MarkSize, RadioTab, SELECT, SWITCH, Size, Status, TabItem, Tone, Variant, avatar, avatar_field,
+	badge, banner, breadcrumb, button, button_class, card, card_content, card_description,
+	card_footer, card_section, card_title, checkbox_field, copy_field, dialog, dialog_cancel,
+	dialog_open_button, dropdown_menu, empty_state, error_text, help_text, icon, icon_button,
+	icon_with, invalid_text, kbd, kbd_combo, link_button, link_card, logo, menu_label, menu_link,
+	menu_separator, password_field, radio_tabs, select_field, skeleton, skeleton_row, status_badge,
+	status_dot, switch_field, table, tabs, team_mark, text_field, textarea_field, theme_toggle,
+	toast, tooltip,
 };
 use super::extract::UiUser;
 use super::{error, layout};
 use crate::error::ServerError;
+use crate::ids::TeamId;
 use crate::state::AppState;
+use crate::teams::Team;
 
 /// Hover, focus and active drawn with `data-state`, so every state sits side by side. Only
 /// this page needs them (the real pseudo-classes work everywhere), so they are not in the
@@ -322,6 +325,15 @@ fn body(user: &str) -> Markup {
 			}))
 			(section("avatar", "Avatar", "Initials on one of six tints, chosen from the name; named for assistive technology.", |_| {
 				row(&html! { (avatar("Ada Lovelace")) (avatar("grace")) (avatar("Linus Torvalds")) (avatar("Mara Lindqvist")) (avatar("Priya Nair")) (avatar("Tomás Ortega")) (avatar("   ")) })
+			}))
+			(section("team-mark", "Team mark", "A team beside its name: its picture when it has one, else the first letter. Three sizes; hidden from assistive technology because the name sits next to it.", |_| {
+				let team = Team { id: TeamId(1), name: "Acme".to_owned(), slug: "acme".to_owned(), logo: String::new(), avatar: None };
+				row(&html! { (team_mark(&team, MarkSize::Small)) (team_mark(&team, MarkSize::Medium)) (team_mark(&team, MarkSize::Large)) })
+			}))
+			(section("avatar-field", "Avatar field", "Choose a picture, see it before it is sent, upload it or remove it. A plain multipart form, so it works without script; the server crops it square and resizes it.", |id| {
+				let team = Team { id: TeamId(1), name: "Acme".to_owned(), slug: "acme".to_owned(), logo: String::new(), avatar: None };
+				let current = team_mark(&team, MarkSize::Large);
+				avatar_field(&AvatarField { id, subject: "team", current: &current, action: "#upload", remove_action: Some("#remove") })
 			}))
 			(section("kbd", "Kbd", "A key or a shortcut, as a hint.", |_| {
 				row(&html! { (kbd("Esc")) (kbd_combo(&["Ctrl", "K"])) (kbd_combo(&["Shift", "Enter"])) })

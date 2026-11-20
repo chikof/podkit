@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tINSERT INTO teams (id, name, slug, logo)\n\t\t\tVALUES ($1, $2, $3, $4)\n\t\t\tRETURNING id AS \"id: TeamId\", name, slug, logo\n\t\t",
+  "query": "\n\t\t\tSELECT teams.id AS \"id: TeamId\", teams.name, teams.slug, teams.logo,\n\t\t\t\t(SELECT hash FROM team_avatars WHERE team_id = teams.id) AS avatar\n\t\t\tFROM teams\n\t\t\tJOIN team_members ON teams.id = team_members.team_id\n\t\t\tWHERE team_members.user_id = $1\n\t\t\tORDER BY teams.id\n\t\t",
   "describe": {
     "columns": [
       {
@@ -46,22 +46,26 @@
             "name": "logo"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "avatar",
+        "type_info": "Text",
+        "origin": "Expression"
       }
     ],
     "parameters": {
       "Left": [
-        "Int8",
-        "Varchar",
-        "Varchar",
-        "Text"
+        "Int8"
       ]
     },
     "nullable": [
       false,
       false,
       false,
-      false
+      false,
+      null
     ]
   },
-  "hash": "62ff772cbbcc4e3a0f04014da0c501da6daefb3b3de04954dc1135e487e4f5c9"
+  "hash": "965497203f70dc622bdfd4c2454bbb4e6b03f7ae9e2c35bdc03918d714e3feb3"
 }
