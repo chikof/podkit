@@ -188,7 +188,6 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 		div class="ui-page-body" data-signals=(signals) "data-on:close__capture"=(on_close) {
 			header class="ui-page-head" {
 				div class="ui-page-title" {
-					p class="ui-eyebrow" { "Infrastructure" }
 					h1 { "Keys" }
 					p class="ui-lede" {
 						"SSH keys for this team's servers and git deploys. Make or import a key once, then pick it wherever one is asked for."

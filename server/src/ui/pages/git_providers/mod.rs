@@ -208,7 +208,6 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 		div class="ui-page-body" data-signals=(signals) "data-on:close__capture"=(on_close) {
 			header class="ui-page-head" {
 				div class="ui-page-title" {
-					p class="ui-eyebrow" { "Infrastructure" }
 					h1 { "Git providers" }
 					p class="ui-lede" {
 						"Connect GitHub, GitLab or Gitea once, then pick a repository from it when you create an application. Private repositories need no token or deploy key of their own."

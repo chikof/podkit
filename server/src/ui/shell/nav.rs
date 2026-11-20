@@ -41,7 +41,7 @@ pub fn infra_items(ctx: &TeamCtx) -> Vec<NavItem> {
 		items.push(item(
 			"Overview",
 			format!("{base}/infrastructure"),
-			"layout-dashboard",
+			"activity",
 		));
 		items.push(item("Servers", format!("{base}/servers"), "server"));
 		items.push(item(

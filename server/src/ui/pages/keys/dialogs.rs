@@ -105,7 +105,7 @@ pub(super) fn import_dialog(team: TeamId) -> Markup {
 		form id="import-form" class="flex flex-col gap-4" "data-show"="!$_imp_done" "data-on:submit"=(post) "data-indicator:_busy" {
 			label class=(LABEL) {
 				"Name"
-				input class=(INPUT) type="text" required maxlength="60" autocomplete="off" placeholder="ci-runner" "data-bind:imp_name";
+				input class=(INPUT) type="text" required maxlength="60" autocomplete="off" placeholder="ci-runner" autofocus "data-bind:imp_name";
 			}
 			label class=(LABEL) {
 				"Private key"

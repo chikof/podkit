@@ -2162,3 +2162,65 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 		color: transparent; white-space: nowrap;
 	}
 }
+
+/* == infra design review (DR) ==
+   Fixes from the designer review of the infra batch (design/finalists/02-quiet-linear/REVIEW-infra.md).
+   One block, appended: nothing above it was reordered. */
+
+/* A page head lets its title take the row first and the actions follow, so a long lede wraps beside
+   the buttons instead of pushing them onto a row of their own (Git providers). */
+.ui-page-head > .ui-page-title { flex: 1 1 26rem; }
+
+/* Tab panels: an empty status slot (`#saved`, `#networks-saved`) is a flex item and added a 24 px gap
+   above the first card on Environment, Domains, Volumes and Networks, so the content jumped when you
+   switched tabs. It takes no space until a message is patched in (then it is not :empty). */
+.flex-col > div[id]:empty:not([class]) { display: none; }
+
+/* Canvas: the view switch is the boxed group of the D1 spec, not underline tabs. */
+.ui-cv-bar .ui-tabs { gap: 0; padding: 2px; border: var(--bw) solid var(--border); border-radius: var(--r-md); overflow: visible; }
+.ui-cv-bar .ui-tab { margin: 0; padding: var(--s-1) var(--s-3); border: 0; border-radius: var(--r-sm); }
+.ui-cv-bar .ui-tabs > input:checked + .ui-tab { background-color: var(--muted-strong); }
+.ui-cv-bar .ui-tabs > input:focus-visible + .ui-tab { outline-offset: 1px; }
+
+/* Canvas: in a one-column frame (about 270 px) the count wrapped under the name and ran into the first
+   node, which sits 44 px down. A narrow frame gets a tighter two-line head that ends above it. */
+.ui-cv-env { container-type: inline-size; }
+@container (max-width: 340px) {
+	.ui-cv-env-h { padding-block-start: var(--s-3); row-gap: 0; padding-inline-end: calc(var(--s-3) + 28px); }
+	.ui-cv-env-s { line-height: 1.2; }
+}
+
+/* IaC options: the hint belongs to its checkbox (4 px under it), not 28 px down; and the plan sits one
+   page gap below the form. */
+.ui-iac-options > .ui-hint { margin-block: calc(-1 * var(--s-3)) var(--s-2); }
+#iac-result { margin-block-start: 0; }
+
+@media (max-width: 760px) {
+	/* Server rows: the status chips were a third grid item with no column, so they landed in the 2.5 rem
+	   logo column and ran off the left edge. They take the text column. */
+	.ui-row > .ui-row-end { grid-column: 2 / -1; justify-content: flex-start; flex-wrap: wrap; }
+}
+
+/* Sidebar rail: centering the icons with `justify-content` flipped at once on click, so a short label
+   (Keys, Models) jumped sideways before the width eased. The icon now stays put in the flow and its
+   side padding eases to the centered value, like the width does. Fixed numbers, not a percentage: a
+   percentage resolves against the column while it is still wide, and overshot by 12 px. */
+@media (min-width: 761px) {
+	.ui-shell-collapsed .ui-nav-link, .ui-shell-collapsed .ui-side-toggle { justify-content: flex-start; padding-inline: calc((var(--nav-w) - 2 * var(--s-3) - 1em) / 2); }
+	.ui-shell-collapsed .ui-brand { justify-content: flex-start; padding-inline: calc((var(--nav-w) - 2 * var(--s-3) - 20px) / 2); }
+	.ui-shell-collapsed .ui-team-trigger, .ui-shell-collapsed .ui-user-trigger { justify-content: flex-start; padding-inline: calc((var(--nav-w) - 2 * var(--s-3) - 24px) / 2); }
+}
+
+/* A stacked table row whose last cell is only a row menu (Keys, Git providers): the menu sits in the
+   card's top-right corner instead of taking a row of its own, left-aligned under the values. */
+@container (width < 36rem) {
+	.ui-table tr { position: relative; }
+	.ui-table td.ui-table-act:has(> .ui-menu-trigger) { position: absolute; inset-block-start: var(--s-3); inset-inline-end: var(--s-3); grid-column: auto; }
+	.ui-table tr:has(> td.ui-table-act > .ui-menu-trigger) > :first-child { padding-inline-end: calc(var(--ctl-h) + var(--s-3)); }
+}
+
+/* Security badge on the scale: it set its own 12 px text, 6 px gap, 999 px radius and rem padding. */
+.ui-sev, .ui-sev-act { font-size: var(--fs-xs); border-radius: var(--r-pill); }
+.ui-sev-group, .ui-sev { gap: var(--s-2); }
+.ui-sev { padding-inline: var(--s-3); }
+.ui-sev-act { padding-inline: var(--s-3); }

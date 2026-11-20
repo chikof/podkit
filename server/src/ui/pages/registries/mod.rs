@@ -278,7 +278,6 @@ async fn registries_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Mark
 		div class="ui-dests" "data-signals"=(signals) {
 			header class="ui-page-head" {
 				div class="ui-page-title" {
-					p class="ui-eyebrow" { "Infrastructure" }
 					h1 { "Registries" }
 					p class="ui-lede" {
 						"Logins for private container registries such as GitHub Packages or your own. Save one here and pick it on an image application, a stack or a template."

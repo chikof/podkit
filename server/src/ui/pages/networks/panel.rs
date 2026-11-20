@@ -94,13 +94,12 @@ fn saved_slot(redeploy: Option<&str>, saved: bool) -> Markup {
 	}
 }
 
-const ROW: &str =
-	"flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-3";
+const ROW: &str = "ui-card-row";
 
 fn joined_list(base: &str, view: &ResourceNetworks, can_change: bool) -> Markup {
 	let kind = view.kind;
 	html! {
-		ul aria-label="Networks this resource is on" {
+		ul class="ui-card-rows" aria-label="Networks this resource is on" {
 			@for (network, aliases) in &view.joined {
 				@let removable = can_change && (network.is_user() || (kind == ResourceKind::Stack && network.is_environment()));
 				li class=(ROW) {
@@ -200,9 +199,7 @@ pub(in crate::ui) fn panel(
 					None,
 				))
 				@if view.joined.is_empty() {
-					div class="px-6 pb-6" {
-						(empty_state("network", "Not on any network yet.", Some("It joins its environment's network with its first deploy."), None))
-					}
+					(empty_state("network", "Not on any network yet.", Some("It joins its environment's network with its first deploy."), None))
 				} @else {
 					(joined_list(&base, view, can))
 				}
