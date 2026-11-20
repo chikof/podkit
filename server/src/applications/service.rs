@@ -442,6 +442,10 @@ pub async fn servers_for_create(db: &PgPool, user: UserId, team: TeamId) -> AppR
 /// Creates an application under a project, deployed to one of the team's
 /// own servers. Caller must hold `create application` on the team; both the
 /// project and the target server must belong to that same team.
+#[allow(
+	clippy::too_many_lines,
+	reason = "the merged cards each added a step; one flow reads better unsplit"
+)]
 pub async fn create(
 	s: &AppState,
 	user: UserId,

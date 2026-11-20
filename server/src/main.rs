@@ -35,6 +35,7 @@ mod environments;
 mod error;
 mod git_providers;
 mod ids;
+mod infrastructure;
 mod jobs;
 mod links;
 mod logos;

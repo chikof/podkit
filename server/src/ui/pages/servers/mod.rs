@@ -54,7 +54,7 @@ fn host_port(server: &Server) -> String {
 	}
 }
 
-fn local_badge() -> Markup {
+pub(in crate::ui) fn local_badge() -> Markup {
 	html! {
 		span class=(Tone::Neutral.badge_class()) { "Local" }
 	}
@@ -79,7 +79,7 @@ fn human_mb(mb: u64) -> String {
 
 /// The hardware the agent last reported, one short phrase each: threads, RAM, disk and
 /// GPUs. Empty until the agent has reported.
-fn hardware_parts(server: &Server) -> Vec<String> {
+pub(in crate::ui) fn hardware_parts(server: &Server) -> Vec<String> {
 	let Some(hw) = server.hardware.as_ref().map(|h| &h.0) else {
 		return Vec::new();
 	};

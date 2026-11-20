@@ -1704,3 +1704,66 @@ code.font-mono { font-size: 0.92em; }
 /* In a resource row the badge shares the kind line, so it must not make that line taller than a row without one. */
 .ui-res-kind .ui-sev { padding-block: 0; line-height: 1rem; }
 .ui-res-kind .ui-sev-act { padding-block: 0; line-height: 0.875rem; }
+
+/* == infrastructure ============================================================================ */
+/* The sidebar's Infrastructure group: a small heading over its own list. */
+.ui-nav { display: flex; flex-direction: column; gap: var(--s-4); }
+.ui-nav-group { display: grid; gap: var(--s-1); }
+.ui-nav-heading { margin: 0; padding-inline: var(--s-3); color: var(--subtle-foreground); font-size: var(--fs-xs); font-weight: var(--fw-medium); letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* The overview: one section per server, then the table. */
+.ui-infra { display: grid; gap: var(--s-6); min-width: 0; }
+.ui-infra-where, .ui-infra-netcard { min-width: 0; }
+.ui-infra-h2 { margin: 0 0 var(--s-3); font-size: var(--fs-lg); font-weight: var(--fw-medium); }
+.ui-infra-server { display: grid; gap: var(--s-4); min-width: 0; padding: var(--s-4); border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--card); }
+.ui-infra-head { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto; align-items: center; column-gap: var(--s-4); }
+.ui-infra-head .ui-row-name a { color: inherit; text-decoration: none; }
+.ui-infra-facts { display: grid; gap: var(--s-3); margin: 0; }
+.ui-infra-facts > div { display: grid; grid-template-columns: minmax(5.5rem, 8rem) minmax(0, 1fr); align-items: baseline; gap: var(--s-4); font-size: var(--fs-sm); }
+.ui-infra-facts dt { color: var(--muted-foreground); }
+.ui-infra-facts dd { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin: 0; min-width: 0; }
+.ui-infra-note { color: var(--muted-foreground); font-size: var(--fs-xs); }
+.ui-infra-chips { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: 0; padding: 0; list-style: none; }
+.ui-infra-chip { display: inline-flex; align-items: center; gap: var(--s-2); min-height: 1.75rem; padding: 0 var(--s-3); border: var(--bw) solid var(--border); border-radius: var(--r-md); color: var(--foreground); font-size: var(--fs-sm); text-decoration: none; transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.ui-infra-chip:hover { background-color: var(--accent); }
+.ui-infra-chip:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ui-infra-count { color: var(--muted-foreground); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.ui-infra-res { display: grid; gap: var(--s-3); padding-block-start: var(--s-4); border-block-start: var(--bw) solid var(--border); }
+.ui-infra-proj { display: grid; gap: var(--s-2); }
+.ui-infra-proj-name { margin: 0; font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.ui-infra-proj-name a { color: inherit; text-decoration: none; }
+.ui-infra-proj-name a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.ui-infra-env { display: grid; grid-template-columns: minmax(5.5rem, 8rem) minmax(0, 1fr); align-items: center; gap: var(--s-4); }
+.ui-infra-env-name { color: var(--muted-foreground); font-size: var(--fs-xs); }
+.ui-infra-spark { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-6); padding-block-start: var(--s-4); border-block-start: var(--bw) solid var(--border); min-width: 0; }
+.ui-infra-fig { display: grid; gap: var(--s-1); min-width: 0; }
+.ui-infra-fig-head { display: flex; align-items: baseline; justify-content: space-between; color: var(--muted-foreground); font-size: var(--fs-xs); }
+.ui-infra-fig-val { color: var(--foreground); font-weight: var(--fw-medium); }
+.ui-infra-what { display: grid; gap: var(--s-1); min-width: 0; }
+.ui-infra-what-name { display: inline-flex; align-items: center; gap: var(--s-2); }
+
+/* The checklist and the setup steps: a mark, what it is, its state and its way in. */
+.ui-todo { display: grid; margin: 0; padding: 0; list-style: none; }
+.ui-todo-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: var(--s-4); padding: var(--s-3) 0; border-block-start: var(--bw) solid var(--border); }
+.ui-todo-row:first-child { border-block-start: 0; }
+.ui-todo-main { display: grid; gap: var(--s-1); min-width: 0; }
+.ui-todo-name { color: var(--foreground); font-size: var(--fs-md); font-weight: var(--fw-medium); text-decoration: none; }
+a.ui-todo-name:hover { text-decoration: underline; text-underline-offset: 4px; }
+a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--r-sm); }
+.ui-todo-detail { color: var(--muted-foreground); font-size: var(--fs-sm); }
+.ui-todo-act { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s-2); }
+.ui-todo-title { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.ui-todo-mark { display: grid; place-items: center; width: 1.25rem; height: 1.25rem; border: var(--bw) solid var(--input); border-radius: 50%; color: var(--primary-foreground); font-size: 0.75rem; }
+.ui-todo-mark[data-state="done"] { border-color: transparent; background-color: var(--success); }
+.ui-todo-mark[data-state="skipped"] { border-style: dashed; color: var(--muted-foreground); }
+.ui-fact-list { display: grid; margin: 0 0 var(--s-4); }
+.ui-setup-nav { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); }
+@media (max-width: 760px) {
+	.ui-infra-head { grid-template-columns: 2.5rem minmax(0, 1fr); row-gap: var(--s-2); }
+	.ui-infra-head .ui-row-end { grid-column: 2; justify-content: flex-start; }
+	.ui-infra-facts > div, .ui-infra-env { grid-template-columns: minmax(0, 1fr); gap: var(--s-1); }
+	.ui-infra-spark { grid-template-columns: minmax(0, 1fr); gap: var(--s-4); }
+	.ui-todo-row { grid-template-columns: auto minmax(0, 1fr); row-gap: var(--s-2); }
+	.ui-todo-state, .ui-todo-act { grid-column: 2; justify-content: flex-start; }
+	.ui-todo-act a, .ui-todo-act button, .ui-infra-chip { min-height: 2.75rem; }
+}

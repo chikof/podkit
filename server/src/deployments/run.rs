@@ -163,6 +163,10 @@ async fn load_server(state: &AppState, application: &Application) -> Result<Serv
 		})
 }
 
+#[allow(
+	clippy::too_many_lines,
+	reason = "the merged cards each added a step; one flow reads better unsplit"
+)]
 async fn build_spec(
 	state: &AppState,
 	application: &Application,

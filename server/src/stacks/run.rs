@@ -248,6 +248,10 @@ impl Ctx<'_> {
 	}
 
 	/// Deploys one service and stores the result on its row.
+	#[allow(
+		clippy::too_many_lines,
+		reason = "the merged cards each added a step; one flow reads better unsplit"
+	)]
 	async fn deploy_service(
 		&self,
 		log: &mut JobLog,

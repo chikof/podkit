@@ -95,7 +95,7 @@ fn groups(ctx: &TeamCtx, q: &str, hits: &[Hit]) -> Vec<Group> {
 		}
 	}
 
-	let pages: Vec<Entry> = nav::main_items(ctx)
+	let pages: Vec<Entry> = nav::places(ctx)
 		.into_iter()
 		.chain(nav::settings_items(ctx))
 		.filter(|i| contains(i.label, q))

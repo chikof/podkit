@@ -10,6 +10,7 @@ pub mod apps;
 pub mod backups;
 pub mod databases;
 pub mod git_providers;
+pub mod infrastructure;
 pub mod keys;
 pub mod models;
 pub mod networks;

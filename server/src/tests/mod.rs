@@ -2,6 +2,7 @@ pub mod apps;
 pub mod dbs;
 pub mod git_providers;
 pub mod grid;
+pub mod infrastructure_ui;
 pub mod models_env;
 pub mod registries_ui;
 pub mod stacks_ui;

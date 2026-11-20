@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT id AS \"id: crate::ids::RegistryId\", name, url,\n\t\t\t\tusername, password, created_at\n\t\t\tFROM registries\n\t\t\tWHERE id = $2 AND team_id = $1\n\t\t",
+  "query": "\n\t\t\tSELECT id AS \"id: RegistryId\", name, url,\n\t\t\t\tusername, password, created_at\n\t\t\tFROM registries\n\t\t\tWHERE id = $2 AND team_id = $1\n\t\t",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "id: crate::ids::RegistryId",
+        "name": "id: RegistryId",
         "type_info": "Int8",
         "origin": {
           "Table": {
@@ -85,5 +85,5 @@
       false
     ]
   },
-  "hash": "b3ddf5269f39d5da1bdb7736ef53a8f048c213fc68ff0bc79cd7a04f344a258f"
+  "hash": "bdfc7dc6a2ef97e693e2b52938853c250e96b9f37da8a5e3f3fddb5793762fb9"
 }
