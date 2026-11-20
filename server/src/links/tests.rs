@@ -461,6 +461,7 @@ async fn links_usage_is_added_up_per_key_model_and_hour(db: PgPool) {
 			requests,
 			input_tokens: 10 * requests,
 			output_tokens: 4 * requests,
+			mcp: false,
 		}];
 		super::collect_usage(&s.state, &client).await.unwrap();
 	}

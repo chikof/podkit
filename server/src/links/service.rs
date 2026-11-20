@@ -161,7 +161,7 @@ pub async fn unlink(
 	Ok(())
 }
 
-async fn collect_best_effort(s: &AppState, app: &applications::Application) {
+pub(crate) async fn collect_best_effort(s: &AppState, app: &applications::Application) {
 	let result = async {
 		let server = crate::servers::find(&s.db, app.server_id)
 			.await?

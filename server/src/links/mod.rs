@@ -376,6 +376,11 @@ pub async fn build_config(db: &PgPool, server: ServerId) -> Result<GatewayConfig
 	.bind(server)
 	.fetch_all(db)
 	.await?;
+	let mcp = crate::mcp_servers::gateway_parts(db, server).await?;
+	let mut environments = environments;
+	environments.extend(mcp.environments);
+	environments.sort_unstable();
+	environments.dedup();
 	Ok(GatewayConfig {
 		keys: keys
 			.into_iter()
@@ -386,6 +391,8 @@ pub async fn build_config(db: &PgPool, server: ServerId) -> Result<GatewayConfig
 			.into_iter()
 			.map(|e| crate::networks::environment_podman_name(crate::ids::EnvironmentId(e)))
 			.collect(),
+		mcp_keys: mcp.keys,
+		other_mcp: mcp.names,
 	})
 }
 
@@ -412,7 +419,11 @@ pub async fn collect_usage(state: &AppState, client: &AgentClient) -> AppResult<
 		.json(Method::POST, "/v1/gateway/usage/drain", None::<&()>)
 		.await?;
 	for row in &rows {
-		record_usage(&state.db, row).await?;
+		if row.mcp {
+			crate::mcp_servers::record_usage(&state.db, row).await?;
+		} else {
+			record_usage(&state.db, row).await?;
+		}
 	}
 	Ok(rows.len())
 }
@@ -469,7 +480,14 @@ pub async fn sync(state: &AppState, server: ServerId, client: &AgentClient) {
 	.await;
 	match keyed {
 		Ok(true) => {}
-		Ok(false) => return,
+		Ok(false) => match crate::mcp_servers::has_keys(&state.db, server).await {
+			Ok(true) => {}
+			Ok(false) => return,
+			Err(e) => {
+				tracing::warn!(%server, error = %e, "gateway sync could not read the MCP keys");
+				return;
+			}
+		},
 		Err(e) => {
 			tracing::warn!(%server, error = %e, "gateway sync could not read the keys");
 			return;

@@ -793,6 +793,7 @@ pub async fn remove(
 ) -> AppResult<ApplicationId> {
 	authorize(&s.db, user, team, Action::Delete, Resource::Application).await?;
 	let app = scope::application(&s.db, team, project, id).await?;
+	crate::mcp_servers::service::ensure_removable(&s.db, app.id).await?;
 	remove_service(s, team, &app).await;
 	git_service::before_app_removed(s, &app).await;
 	super::delete(&s.db, app.id).await?;

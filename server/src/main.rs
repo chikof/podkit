@@ -45,6 +45,7 @@ mod logos;
 mod logs;
 mod maintenance;
 mod mcp;
+mod mcp_servers;
 mod members;
 mod metrics;
 mod model_files;
