@@ -218,9 +218,22 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	Ok(())
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
-	match run().await {
+/// The agent waits on Podman and the network almost all of the time: two
+/// workers are plenty and keep its idle footprint small.
+fn main() -> ExitCode {
+	let mut builder = tokio::runtime::Builder::new_multi_thread();
+	builder.enable_all();
+	if std::env::var_os("TOKIO_WORKER_THREADS").is_none() {
+		builder.worker_threads(2);
+	}
+	let runtime = match builder.build() {
+		Ok(runtime) => runtime,
+		Err(e) => {
+			eprintln!("podkit-agent: {e}");
+			return ExitCode::FAILURE;
+		}
+	};
+	match runtime.block_on(run()) {
 		Ok(()) => ExitCode::SUCCESS,
 		Err(e) => {
 			eprintln!("podkit-agent: {e}");

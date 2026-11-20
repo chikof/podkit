@@ -68,8 +68,23 @@ mod webhooks;
 #[cfg(test)]
 mod tests;
 
-#[tokio::main]
-async fn main() -> AppResult<()> {
+/// Worker threads of the async runtime: one per core up to four. The server is
+/// I/O-bound (Postgres, the agents' sockets, HTTP), so more only cost stacks and
+/// allocator arenas; `TOKIO_WORKER_THREADS` still overrides it.
+fn worker_threads() -> usize {
+	std::thread::available_parallelism().map_or(2, |n| n.get().min(4))
+}
+
+fn main() -> AppResult<()> {
+	let mut runtime = tokio::runtime::Builder::new_multi_thread();
+	runtime.enable_all();
+	if std::env::var_os("TOKIO_WORKER_THREADS").is_none() {
+		runtime.worker_threads(worker_threads());
+	}
+	runtime.build()?.block_on(run())
+}
+
+async fn run() -> AppResult<()> {
 	if let Some(code) = templates::import::cli() {
 		std::process::exit(code);
 	}

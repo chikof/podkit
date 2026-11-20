@@ -26,6 +26,26 @@ llama.cpp, Ollama, vLLM, colibri or any image that serves `/v1`; it is
 reachable only as `model-<slug>` on the server's internal network and the
 create call refuses a format, GPU or memory size the server cannot take.
 
+## How light is podkit?
+
+Measured on a release build after 10 minutes with no traffic (RSS, from
+`/proc/<pid>/status`); method, budgets and the comparison with Coolify and
+Dokploy are in [docs/footprint.md](docs/footprint.md).
+
+| Part | Idle RSS | Runs when |
+|---|---|---|
+| `server` (control plane and UI) | 12.4 MB | always (plus your Postgres) |
+| `podkit-agent` (per server) | 7.8 MB | always |
+| Traefik | 89.7 MB | from the first deploy with a domain |
+| LLM gateway sidecar | 7.1 MB | only while a model link exists |
+| Vulnerability scanner (Syft, Grype) | 0 MB | only during a scan |
+
+For scale, Coolify's docs ask for 2 CPU cores and 2 GB RAM and Dokploy's for
+2 GB RAM and 30 GB disk. Those are host minimums, not process sizes: see the
+doc for what that does and does not compare. CI fails when the server goes over
+15.6 MB or the agent over 9.6 MB idle (hard caps 60 and 25 MB); run the same
+check with `scripts/footprint.sh --check`.
+
 ## Running it (dev)
 
 ```sh
