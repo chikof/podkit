@@ -481,8 +481,11 @@ fn tab_row(ctx: &TeamCtx, view: &EnvironmentView) -> Markup {
 				&format!("Actions for the {} environment", view.environment.name),
 				&icon("ellipsis"),
 				&html! {
-					@if can_update || can_delete {
+					@if can_update || can_delete || can_create {
 						(menu_label("Environment"))
+					}
+					@if can_create {
+						(super::clone::menu_item(MENU_ITEM))
 					}
 					@if can_update {
 						button type="button" class=(MENU_ITEM) command="show-modal" commandfor="environment-rename"
@@ -627,7 +630,7 @@ async fn render(
 	)
 	.await
 	.unwrap_or_default();
-	let signals = json!({
+	let mut signals = json!({
 		"q": filter.q,
 		"type": filter.kind.map_or("all", ResourceKind::slug),
 		"newName": "",
@@ -638,6 +641,17 @@ async fn render(
 		"_filtering": false,
 		"seen": seen_of(&view.resources),
 	});
+	let clone_dialog = if can_create_env {
+		if let (Some(map), Some(extra)) = (
+			signals.as_object_mut(),
+			super::clone::signals().as_object().cloned(),
+		) {
+			map.extend(extra);
+		}
+		Some(super::clone::clone_dialog(s, ctx, view.project.id, &view.environment.name).await)
+	} else {
+		None
+	};
 
 	let body = html! {
 		div class="ui-wide ui-res-page" data-signals=(signals.to_string()) {
@@ -666,6 +680,7 @@ async fn render(
 			(filter_bar(&view, ctx, filter))
 			(grid(s, ctx, &view, filter, now, None, &badges))
 			@if can_create_env { (create_env_dialog(ctx.team.id, view.project.id)) }
+			@if let Some(dialog) = &clone_dialog { (dialog) }
 			@if can_update { (rename_env_dialog(ctx.team.id, view.project.id)) }
 			@if can_delete { (delete_env_dialog(ctx.team.id, view.project.id, &view.environment.name)) }
 		}

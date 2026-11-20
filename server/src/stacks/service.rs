@@ -539,7 +539,7 @@ pub async fn update(
 	Ok(updated)
 }
 
-async fn start_deploy(s: &AppState, stack: &Stack) -> AppResult<JobId> {
+pub(crate) async fn start_deploy(s: &AppState, stack: &Stack) -> AppResult<JobId> {
 	stacks::set_status(&s.db, stack.id, StackStatus::Deploying, None).await?;
 	queue_or_fail(
 		s,

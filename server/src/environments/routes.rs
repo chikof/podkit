@@ -14,6 +14,7 @@ pub fn router() -> Router<AppState> {
 		.route("/", get(list).post(create))
 		.route("/order", put(reorder))
 		.route("/{environment_id}", get(show).patch(update).delete(remove))
+		.merge(super::clone::router())
 }
 
 #[derive(Deserialize)]

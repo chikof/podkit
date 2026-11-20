@@ -2232,3 +2232,25 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-shared-affected > li { min-inline-size: 0; overflow-wrap: anywhere; }
 /* An application's inherited variables: source and override state sit after the name and wrap below it when narrow. */
 .ui-inherited-end { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--s-2); }
+
+/* == environment clone == */
+/* The dialog's preview and the clone page's steps: a mark, then the name with what it does under it. */
+.ui-clone-preview { display: grid; gap: var(--s-3); min-inline-size: 0; padding: var(--s-4); border: var(--bw) solid var(--border); border-radius: var(--r-md); background: var(--card); }
+.ui-clone-preview > p { margin: 0; }
+.ui-clone-items, .ui-clone-steps { display: grid; gap: var(--s-3); margin: 0; padding: 0; list-style: none; }
+.ui-clone-items > li, .ui-clone-steps > li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-3); align-items: start; min-inline-size: 0; }
+.ui-clone-mark { display: inline-flex; align-items: center; min-block-size: 1.5em; color: var(--muted-foreground); }
+.ui-clone-mark[data-step="ok"] { color: var(--success); }
+.ui-clone-mark[data-step="failed"] { color: var(--destructive); }
+.ui-clone-mark[data-step="running"] .ui-icon { animation: ui-spin 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .ui-clone-mark[data-step="running"] .ui-icon { animation: none; } }
+.ui-clone-body { display: grid; gap: var(--s-1); min-inline-size: 0; }
+.ui-clone-name { overflow-wrap: anywhere; font-weight: var(--fw-medium); }
+.ui-clone-url { overflow-wrap: anywhere; }
+.ui-clone-conflicts { margin: 0; padding: var(--s-3) var(--s-4); border: var(--bw) solid var(--destructive); border-radius: var(--r-md); color: var(--destructive); font-size: var(--fs-sm); list-style: none; }
+.ui-clone-options { display: grid; gap: var(--s-4); min-inline-size: 0; margin: 0; padding: var(--s-4); border: var(--bw) solid var(--border); border-radius: var(--r-md); }
+.ui-clone-options > legend { padding-inline: var(--s-2); font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.ui-clone-options .ui-check { align-items: flex-start; }
+.ui-clone-options .ui-check > input { margin-block-start: 2px; }
+.ui-clone-options .ui-check > span { display: grid; gap: var(--s-1); }
+.ui-clone-progress { display: grid; gap: var(--s-4); }

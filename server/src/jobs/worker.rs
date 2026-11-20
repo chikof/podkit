@@ -16,7 +16,8 @@ use crate::state::AppState;
 
 /// Concurrent running jobs allowed per server. Scans do not count: they have a
 /// lane of their own (one at a time per server, by lock key), so a deploy never
-/// waits for one and one never waits for a deploy.
+/// waits for one and one never waits for a deploy. Nor does an environment clone: it
+/// only waits for the jobs it queues, which need the slots.
 const MAX_JOBS_PER_SERVER: i64 = 2;
 
 const INTERRUPTED: &str = "interrupted: podkit restarted";
@@ -96,9 +97,9 @@ async fn claim(db: &PgPool, max: i64) -> Result<Option<Job>, sqlx::Error> {
 			SELECT j.id FROM jobs j
 			WHERE j.status = 'queued' AND j.run_after <= NOW()
 				AND NOT EXISTS (SELECT 1 FROM jobs r WHERE r.status = 'running' AND r.lock_key = j.lock_key)
-				AND (j.kind IN ('image_scan', 'image_rescan')
+				AND (j.kind IN ('image_scan', 'image_rescan', 'environment_clone')
 					OR (SELECT COUNT(*) FROM jobs r WHERE r.status = 'running' AND r.server_id = j.server_id
-						AND r.kind NOT IN ('image_scan', 'image_rescan')) < $1)
+						AND r.kind NOT IN ('image_scan', 'image_rescan', 'environment_clone')) < $1)
 			ORDER BY j.id FOR UPDATE SKIP LOCKED LIMIT 1)
 		RETURNING id, kind, server_id, target_id, lock_key, status, error",
 	)
@@ -177,6 +178,9 @@ async fn dispatch(
 		}
 		JobKind::VolumeRestore => {
 			crate::volume_backups::run::run_restore(state, job, token, log).await
+		}
+		JobKind::EnvironmentClone => {
+			crate::environments::clone::run::run(state, job, token, log).await
 		}
 	}
 }

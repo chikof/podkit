@@ -57,4 +57,5 @@ id!(
 	VolumePolicyId,
 	VolumeBackupId,
 	VolumeRestoreId,
+	CloneId,
 );
