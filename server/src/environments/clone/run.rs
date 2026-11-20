@@ -318,6 +318,10 @@ async fn copy_database(
 	outcome
 }
 
+/// How often a restore into a database that is still starting is tried.
+const RESTORE_TRIES: u32 = 8;
+const RESTORE_RETRY_AFTER: Duration = Duration::from_secs(5);
+
 async fn restore_loan(
 	state: &AppState,
 	cancel: &CancellationToken,
@@ -338,30 +342,47 @@ async fn restore_loan(
 	{
 		return Outcome::Failed(sql(&e));
 	}
-	if let Err(e) = jobs::enqueue(
-		state,
-		JobKind::Restore,
-		clone.server_id,
-		loan,
-		format!("db:{}", clone.id),
-	)
-	.await
-	{
-		return Outcome::Failed(e.to_string());
-	}
-	let waited = wait(cancel, || async {
-		let job = jobs::latest_for(&state.db, JobKind::Restore, loan)
-			.await
-			.map_err(|e| sql(&e))?
-			.ok_or_else(|| "the restore job is gone".to_owned())?;
-		match job.status {
-			JobStatus::Succeeded => Ok(Some(())),
-			JobStatus::Failed => Err(job.error.unwrap_or_else(|| "the restore failed".to_owned())),
-			JobStatus::Cancelled => Err("the restore was cancelled".to_owned()),
-			_ => Ok(None),
+	// A fresh database reports running while its first-start init still restarts the server
+	// once, so a restore that finds no socket is tried again. The dump is `--clean`, so a
+	// second try is safe.
+	let mut waited = Err("the restore did not start".to_owned());
+	for attempt in 0..RESTORE_TRIES {
+		if let Err(e) = jobs::enqueue(
+			state,
+			JobKind::Restore,
+			clone.server_id,
+			loan,
+			format!("db:{}", clone.id),
+		)
+		.await
+		{
+			return Outcome::Failed(e.to_string());
 		}
-	})
-	.await;
+		waited = wait(cancel, || async {
+			let job = jobs::latest_for(&state.db, JobKind::Restore, loan)
+				.await
+				.map_err(|e| sql(&e))?
+				.ok_or_else(|| "the restore job is gone".to_owned())?;
+			match job.status {
+				JobStatus::Succeeded => Ok(Some(())),
+				JobStatus::Failed => {
+					Err(job.error.unwrap_or_else(|| "the restore failed".to_owned()))
+				}
+				JobStatus::Cancelled => Err("the restore was cancelled".to_owned()),
+				_ => Ok(None),
+			}
+		})
+		.await;
+		match &waited {
+			Err(m) if attempt + 1 < RESTORE_TRIES && m.contains("connection to server") => {
+				tokio::select! {
+					() = cancel.cancelled() => return Outcome::Failed("cancelled".to_owned()),
+					() = tokio::time::sleep(RESTORE_RETRY_AFTER) => {}
+				}
+			}
+			_ => break,
+		}
+	}
 	match waited {
 		Ok(()) => Outcome::Done(Some("restored from a dump".to_owned())),
 		Err(m) => Outcome::Failed(format!("the dump was taken but restoring it failed: {m}")),

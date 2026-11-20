@@ -97,12 +97,19 @@ async fn wait_database(f: &Fx, id: DatabaseId) -> String {
 
 /// What `sql` returns from the database's own `psql`.
 fn psql(container: &str, sql: &str) -> String {
-	podman(&[
-		"exec", container, "psql", "-U", "podkit", "-d", "podkit", "-tA", "-c", sql,
-	])
-	.unwrap()
-	.trim()
-	.to_owned()
+	// The container is "running" while the image's first-start init still restarts the server
+	// once, so the first calls can find no socket.
+	let mut last = String::new();
+	for _ in 0..30 {
+		match podman(&[
+			"exec", container, "psql", "-U", "podkit", "-d", "podkit", "-tA", "-c", sql,
+		]) {
+			Ok(out) => return out.trim().to_owned(),
+			Err(e) => last = e,
+		}
+		std::thread::sleep(Duration::from_secs(2));
+	}
+	panic!("psql never answered: {last}");
 }
 
 #[sqlx::test]
