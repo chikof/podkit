@@ -14,7 +14,9 @@ use crate::ids::JobId;
 use crate::logs::JobLog;
 use crate::state::AppState;
 
-/// Concurrent running jobs allowed per server.
+/// Concurrent running jobs allowed per server. Scans do not count: they have a
+/// lane of their own (one at a time per server, by lock key), so a deploy never
+/// waits for one and one never waits for a deploy.
 const MAX_JOBS_PER_SERVER: i64 = 2;
 
 const INTERRUPTED: &str = "interrupted: podkit restarted";
@@ -94,7 +96,9 @@ async fn claim(db: &PgPool, max: i64) -> Result<Option<Job>, sqlx::Error> {
 			SELECT j.id FROM jobs j
 			WHERE j.status = 'queued' AND j.run_after <= NOW()
 				AND NOT EXISTS (SELECT 1 FROM jobs r WHERE r.status = 'running' AND r.lock_key = j.lock_key)
-				AND (SELECT COUNT(*) FROM jobs r WHERE r.status = 'running' AND r.server_id = j.server_id) < $1
+				AND (j.kind IN ('image_scan', 'image_rescan')
+					OR (SELECT COUNT(*) FROM jobs r WHERE r.status = 'running' AND r.server_id = j.server_id
+						AND r.kind NOT IN ('image_scan', 'image_rescan')) < $1)
 			ORDER BY j.id FOR UPDATE SKIP LOCKED LIMIT 1)
 		RETURNING id, kind, server_id, target_id, lock_key, status, error",
 	)
@@ -165,6 +169,9 @@ async fn dispatch(
 		| JobKind::StackRemove
 		| JobKind::StackPurge
 		| JobKind::StackRestartService => crate::stacks::run::run(state, job, token, log).await,
+		JobKind::ImageScan | JobKind::ImageRescan => {
+			crate::scanning::run::run(state, job, token, log).await
+		}
 	}
 }
 
@@ -224,6 +231,35 @@ mod tests {
 		.execute(db)
 		.await
 		.unwrap();
+	}
+
+	#[sqlx::test]
+	async fn scanning_jobs_never_take_a_deploy_slot(db: PgPool) {
+		let server = seed_server(&db).await;
+		// The server is busy with two deploys.
+		for lock in ["app:1", "app:2"] {
+			queue(&db, server, lock).await;
+			claim(&db, MAX_JOBS_PER_SERVER).await.unwrap().unwrap();
+		}
+		queue(&db, server, "app:3").await;
+		assert!(claim(&db, MAX_JOBS_PER_SERVER).await.unwrap().is_none());
+
+		// A scan still runs; a second scan of the same server waits for the first.
+		for kind in ["image_scan", "image_scan", "image_rescan"] {
+			sqlx::query(
+				"INSERT INTO jobs (id, kind, server_id, target_id, lock_key) VALUES ($1, $2, $3, $1, $4)",
+			)
+			.bind(crypto::generate_id())
+			.bind(kind)
+			.bind(server)
+			.bind(format!("scan:{server}"))
+			.execute(&db)
+			.await
+			.unwrap();
+		}
+		let scan = claim(&db, MAX_JOBS_PER_SERVER).await.unwrap().unwrap();
+		assert_eq!(scan.kind, super::super::JobKind::ImageScan);
+		assert!(claim(&db, MAX_JOBS_PER_SERVER).await.unwrap().is_none());
 	}
 
 	#[sqlx::test]

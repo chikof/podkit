@@ -46,4 +46,6 @@ id!(
 	StackId,
 	StackServiceId,
 	JobId,
+	ScanId,
+	ScanIgnoreId,
 );

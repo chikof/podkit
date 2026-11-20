@@ -114,7 +114,11 @@ async fn provision(
 		};
 		match event {
 			Some(Ok(Event::Log { stream, line })) => log.push(stream, &line).await,
-			Some(Ok(Event::Deployed { container_id, .. })) => {
+			Some(Ok(Event::Deployed {
+				container_id,
+				image,
+				..
+			})) => {
 				sqlx::query!(
 					"UPDATE databases SET container_id = $2, status = 'running', status_message = NULL,
 						updated_at = NOW() WHERE id = $1",
@@ -124,6 +128,17 @@ async fn provision(
 				.execute(&state.db)
 				.await
 				.map_err(|e| db_failure(&e))?;
+				crate::scanning::queue(
+					state,
+					database.server_id,
+					crate::scanning::Target {
+						kind: crate::scanning::ResourceKind::Database,
+						resource_id: database.id.0,
+						image_ref: &image,
+						deployment: None,
+					},
+				)
+				.await;
 				return Ok(());
 			}
 			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),

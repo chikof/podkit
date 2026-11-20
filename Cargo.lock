@@ -3285,6 +3285,7 @@ dependencies = [
  "dirs",
  "dotenvy",
  "encre-css",
+ "flate2",
  "forgeconf",
  "futures-util",
  "getrandom 0.4.3",

@@ -271,7 +271,11 @@ impl Ctx<'_> {
 				Some(Ok(Event::Log { stream, line })) => {
 					log.push(stream, &format!("{}: {line}", planned.name)).await;
 				}
-				Some(Ok(Event::Deployed { container_id, .. })) => break Ok(container_id),
+				Some(Ok(Event::Deployed {
+					container_id,
+					image,
+					..
+				})) => break Ok((container_id, image)),
 				Some(Ok(Event::Failed { message })) => break Err(message),
 				Some(Ok(
 					Event::Phase { .. }
@@ -287,7 +291,7 @@ impl Ctx<'_> {
 			}
 		};
 		match outcome {
-			Ok(container_id) => {
+			Ok((container_id, image)) => {
 				stacks::set_service_state(
 					&self.state.db,
 					row.id,
@@ -295,6 +299,17 @@ impl Ctx<'_> {
 				)
 				.await
 				.map_err(|e| db_failure(&e))?;
+				crate::scanning::queue(
+					self.state,
+					self.stack.server_id,
+					crate::scanning::Target {
+						kind: crate::scanning::ResourceKind::StackService,
+						resource_id: row.id.0,
+						image_ref: &image,
+						deployment: None,
+					},
+				)
+				.await;
 				let mut row = row.clone();
 				row.container_id = Some(container_id);
 				row.status = ServiceStatus::Running;

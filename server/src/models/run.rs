@@ -161,7 +161,11 @@ async fn deploy(
 		};
 		match event {
 			Some(Ok(Event::Log { stream, line })) => log.push(stream, &line).await,
-			Some(Ok(Event::Deployed { container_id, .. })) => {
+			Some(Ok(Event::Deployed {
+				container_id,
+				image,
+				..
+			})) => {
 				sqlx::query(
 					"UPDATE models SET container_id = $2, updated_at = NOW() WHERE id = $1",
 				)
@@ -170,6 +174,17 @@ async fn deploy(
 				.execute(&state.db)
 				.await
 				.map_err(|e| db_failure(&e))?;
+				crate::scanning::queue(
+					state,
+					model.server_id,
+					crate::scanning::Target {
+						kind: crate::scanning::ResourceKind::Model,
+						resource_id: model.id.0,
+						image_ref: &image,
+						deployment: None,
+					},
+				)
+				.await;
 				return Ok(container_id);
 			}
 			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),

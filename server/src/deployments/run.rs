@@ -107,6 +107,20 @@ pub async fn run(
 					deployment.commit_sha = commit_sha;
 				}
 				advance(state, &mut deployment, DeploymentStatus::Running).await?;
+				// Queued, never awaited: the deploy is done whether or not the scan ever runs.
+				if let Some(image) = deployment.image_tag.as_deref() {
+					crate::scanning::queue(
+						state,
+						application.server_id,
+						crate::scanning::Target {
+							kind: crate::scanning::ResourceKind::Application,
+							resource_id: application.id.0,
+							image_ref: image,
+							deployment: Some(deployment.id),
+						},
+					)
+					.await;
+				}
 				if let Err(e) =
 					deployments::retire_others(&state.db, application.id, deployment.id).await
 				{
