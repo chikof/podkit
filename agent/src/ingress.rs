@@ -148,6 +148,38 @@ pub async fn sync_networks(podman: &Podman) -> Result<(), PodmanError> {
 	Ok(())
 }
 
+/// Container that is started to make Traefik re-read its routes.
+pub const REFRESH_CONTAINER_NAME: &str = "podkit-ingress-refresh";
+
+/// Makes Traefik look at the addresses of its routed containers again.
+///
+/// Traefik rebuilds its routes on container `start` and `die` events only;
+/// it never hears of a container joining or leaving a network, so it keeps
+/// the address the container had on a network it just left. Starting a
+/// throwaway container (it exits at once, and is kept so the next start is
+/// cheap) emits those events without restarting Traefik. Verified with Podman
+/// 6 and Traefik 3: the stale route answers again within a second.
+///
+/// # Errors
+/// Podman is unreachable or refuses to create or start the container.
+pub async fn refresh(podman: &Podman) -> Result<(), PodmanError> {
+	if podman.inspect(TRAEFIK_CONTAINER_NAME).await?.is_none() {
+		return Ok(());
+	}
+	if podman.inspect(REFRESH_CONTAINER_NAME).await?.is_none() {
+		podman
+			.create_container(ContainerSpec {
+				name: REFRESH_CONTAINER_NAME.to_string(),
+				image: TRAEFIK_IMAGE.to_string(),
+				entrypoint: Some(vec!["/bin/true".to_string()]),
+				network: NETWORK.to_string(),
+				..Default::default()
+			})
+			.await?;
+	}
+	podman.start(REFRESH_CONTAINER_NAME).await
+}
+
 /// The network Traefik reaches a routed container on: the one its label
 /// names, else (a container deployed before the label existed) its
 /// environment network.

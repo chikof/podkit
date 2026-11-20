@@ -13,6 +13,8 @@ use serde_json::{Value, json};
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 
+mod live;
+
 use crate::jobs::{self, JobKind};
 use crate::state::AppState;
 use crate::tests::{call, member_role, revoke_permission, state, user_with_team};
@@ -153,6 +155,11 @@ impl Setup {
 	async fn new(db: PgPool) -> Self {
 		let state = state(db.clone());
 		let agent = fake_agent(&state);
+		Self::on(db, state, agent).await
+	}
+
+	/// The same project on `state`, whatever answers on its agent socket.
+	async fn on(db: PgPool, state: AppState, agent: Arc<FakeAgent>) -> Self {
 		let app = crate::routes::routes(state.clone()).await.unwrap();
 		let (token, team) = user_with_team(&app, "alice").await;
 		let (_, servers) = call(

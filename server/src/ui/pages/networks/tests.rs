@@ -210,10 +210,8 @@ async fn networks_ui_create_import_and_delete_through_the_forms(db: PgPool) {
 	assert_contains(&html, "Imported");
 	assert_contains(&html, "No outbound");
 
-	let id: i64 = sqlx::query_scalar("SELECT id FROM networks WHERE imported")
-		.fetch_one(&ui.db)
-		.await
-		.unwrap();
+	let id: i64 =
+		crate::tests::scalar(&ui.db, "SELECT id FROM networks WHERE imported", None).await;
 	let (status, _) = post_signals(
 		&ui.app,
 		&ui.cookie,
@@ -236,10 +234,8 @@ async fn networks_ui_resource_tab_attaches_and_detaches(db: PgPool) {
 		json!({ "net_name": "Shared", "net_internal": false }),
 	)
 	.await;
-	let net: i64 = sqlx::query_scalar("SELECT id FROM networks WHERE kind = 'user'")
-		.fetch_one(&ui.db)
-		.await
-		.unwrap();
+	let net: i64 =
+		crate::tests::scalar(&ui.db, "SELECT id FROM networks WHERE kind = 'user'", None).await;
 	let tab = format!(
 		"/teams/{}/projects/{}/apps/{app}/networks",
 		ui.team, ui.project
@@ -285,12 +281,12 @@ async fn networks_ui_resource_tab_attaches_and_detaches(db: PgPool) {
 	)
 	.await;
 	assert_contains(&body, "Saved.");
-	let on: i64 =
-		sqlx::query_scalar("SELECT COUNT(*) FROM resource_networks WHERE network_id = $1")
-			.bind(net)
-			.fetch_one(&ui.db)
-			.await
-			.unwrap();
+	let on: i64 = crate::tests::scalar(
+		&ui.db,
+		"SELECT COUNT(*) FROM resource_networks WHERE network_id = $1",
+		Some(net),
+	)
+	.await;
 	assert_eq!(on, 0);
 }
 
@@ -305,10 +301,8 @@ async fn networks_ui_the_other_team_gets_404s_and_forged_posts_fail(db: PgPool) 
 		json!({ "net_name": "Mine", "net_internal": false }),
 	)
 	.await;
-	let net: i64 = sqlx::query_scalar("SELECT id FROM networks WHERE kind = 'user'")
-		.fetch_one(&ui.db)
-		.await
-		.unwrap();
+	let net: i64 =
+		crate::tests::scalar(&ui.db, "SELECT id FROM networks WHERE kind = 'user'", None).await;
 
 	let (_, bob_team) = user_with_team(&ui.app, "bob").await;
 	let bob = ui_login(&ui.app, "bob").await;

@@ -428,6 +428,10 @@ async fn connect_network(
 		.await
 		.map_err(|e| ApiError::podman(&format!("joining network {name} failed"), &e))?;
 	deploy::sync_ingress_networks(&ctx.podman()).await;
+	// Traefik does not notice a container changing networks.
+	if let Err(e) = crate::ingress::refresh(&ctx.podman()).await {
+		tracing::warn!(error = %e, "refreshing Traefik's routes failed");
+	}
 	Ok(StatusCode::NO_CONTENT)
 }
 
@@ -450,6 +454,10 @@ async fn disconnect_network(
 		.await
 		.map_err(|e| ApiError::podman(&format!("leaving network {name} failed"), &e))?;
 	deploy::sync_ingress_networks(&ctx.podman()).await;
+	// Traefik does not notice a container changing networks.
+	if let Err(e) = crate::ingress::refresh(&ctx.podman()).await {
+		tracing::warn!(error = %e, "refreshing Traefik's routes failed");
+	}
 	Ok(StatusCode::NO_CONTENT)
 }
 
