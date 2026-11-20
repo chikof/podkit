@@ -102,6 +102,8 @@ pub struct TeamCtx {
 	/// The project (and environment) the page is about, when its path names one the
 	/// user may read; the header's switchers are built from it.
 	pub scope: Option<ProjectScope>,
+	/// Events the user has not read yet, for the bell. Counted on page loads only.
+	pub unread: i64,
 }
 
 /// A project page's place in the hierarchy: the project, its siblings, and the
@@ -286,6 +288,14 @@ impl FromRequestParts<AppState> for TeamCtx {
 		)
 		.await;
 
+		let unread = if is_navigation(&parts.method) {
+			crate::notifications::service::unread_count(&state.db, user.id, team_id)
+				.await
+				.unwrap_or(0)
+		} else {
+			0
+		};
+
 		Ok(Self {
 			user,
 			team,
@@ -293,6 +303,7 @@ impl FromRequestParts<AppState> for TeamCtx {
 			teams,
 			path,
 			scope,
+			unread,
 		})
 	}
 }

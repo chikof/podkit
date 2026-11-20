@@ -10,8 +10,8 @@ use crate::state::AppState;
 use crate::{
 	applications, auth, avatars, backups, catalog, databases, deployments, domains, env_vars,
 	environments, git_providers, iac, links, logos, members, metrics, model_files, models,
-	networks, projects, registries, scanning, servers, ssh_keys, stacks, teams, templates, ui,
-	volumes, webhooks,
+	networks, notifications, projects, registries, scanning, servers, ssh_keys, stacks, teams,
+	templates, ui, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -51,6 +51,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest("/teams/{team_id}/networks", networks::network_router())
 		.nest("/teams/{team_id}/registries", registries::router())
 		.nest("/teams/{team_id}/api-tokens", auth::tokens::router())
+		.nest("/teams/{team_id}/notifications", notifications::router())
 		.nest(
 			"/teams/{team_id}/servers/{server_id}/metrics",
 			metrics::router(),

@@ -96,6 +96,9 @@ pub enum ServerError {
 
 	#[error("ssh key not found")]
 	SshKeyNotFound,
+	#[error("{0} not found")]
+	NotificationNotFound(&'static str),
+
 	#[error("registry not found")]
 	RegistryNotFound,
 
@@ -194,6 +197,7 @@ impl ServerError {
 			| Self::StackNotFound
 			| Self::SshKeyNotFound
 			| Self::RegistryNotFound
+			| Self::NotificationNotFound(_)
 			| Self::TokenNotFound
 			| Self::GitProviderNotFound
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,

@@ -79,6 +79,8 @@ pub async fn run_dispatcher(state: AppState, shutdown: CancellationToken) {
 				}
 			}
 		}
+		// Not a service of its own: the delivery queue is worked from this loop.
+		crate::notifications::delivery::wake(&state);
 		tokio::select! {
 			() = state.jobs.notify.notified() => {}
 			() = tokio::time::sleep(Duration::from_secs(5)) => {}
@@ -134,6 +136,7 @@ async fn run_job(state: AppState, job: Job, token: CancellationToken) {
 	if let Err(failure) = &result {
 		fail_target(&state, job.kind, job.target_id, failure).await;
 	}
+	crate::notifications::hooks::job_finished(&state, &job, &result).await;
 
 	// The log ends only after the final status is stored, so a client that sees
 	// `event: end` and refetches reads a settled state.

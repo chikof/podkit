@@ -19,6 +19,11 @@ const CONCURRENT_SERVERS: usize = 8;
 pub async fn run(state: AppState, interval: Duration, shutdown: CancellationToken) {
 	loop {
 		sweep(&state).await;
+		if let Err(e) =
+			crate::notifications::alerts::evaluate(&state, OffsetDateTime::now_utc()).await
+		{
+			tracing::warn!(error = %e, "metric alerts could not be evaluated");
+		}
 		tokio::select! {
 			() = shutdown.cancelled() => return,
 			() = tokio::time::sleep(interval) => {}

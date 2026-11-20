@@ -16,6 +16,7 @@ pub mod infrastructure;
 pub mod keys;
 pub mod models;
 pub mod networks;
+pub mod notifications;
 pub mod profile;
 pub mod projects;
 pub mod registries;

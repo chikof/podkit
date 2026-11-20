@@ -112,6 +112,13 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 		format!("{base}/settings/api-tokens"),
 		"terminal",
 	));
+	if can(Resource::Notification) {
+		items.push(item(
+			"Notifications",
+			format!("{base}/settings/notifications"),
+			"bell",
+		));
+	}
 	items.push(item(
 		"Appearance",
 		format!("{base}/settings/appearance"),

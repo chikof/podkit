@@ -48,6 +48,7 @@ mod metrics;
 mod model_files;
 mod models;
 mod networks;
+mod notifications;
 mod projects;
 mod registries;
 mod routes;

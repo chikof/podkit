@@ -53,4 +53,9 @@ id!(
 	JobId,
 	ScanId,
 	ScanIgnoreId,
+	NotificationChannelId,
+	NotificationRuleId,
+	NotificationEventId,
+	NotificationDeliveryId,
+	MetricAlertId,
 );

@@ -1,0 +1,13 @@
+DELETE FROM role_permissions WHERE permission_id IN (SELECT id FROM permissions WHERE resource = 'notification');
+DELETE FROM permissions WHERE resource = 'notification';
+DROP TABLE metric_alerts;
+DROP TABLE notification_flaps;
+DROP TABLE notification_deliveries;
+DROP TABLE notification_user_state;
+DROP TABLE notification_reads;
+DROP TABLE notification_events;
+DROP TABLE notification_rule_channels;
+DROP TABLE notification_rules;
+DROP TABLE notification_settings;
+DROP TABLE notification_smtp;
+DROP TABLE notification_channels;
