@@ -26,12 +26,12 @@ use crate::ids::ApplicationId;
 use crate::jobs::{self, JobKind};
 use crate::tests::state;
 
-const INGRESS_PORT: u16 = 28080;
-const HTTPS_PORT: u16 = 28443;
+pub(super) const INGRESS_PORT: u16 = 28080;
+pub(super) const HTTPS_PORT: u16 = 28443;
 const APP_IMAGE: &str = "docker.io/library/nginx:alpine";
 
 /// `podman` against the private socket. `Err` carries the output.
-async fn podman(socket: &str, args: &[&str]) -> Result<String, String> {
+pub(super) async fn podman(socket: &str, args: &[&str]) -> Result<String, String> {
 	let program = ["/run/current-system/sw/bin/podman", "/usr/bin/podman"]
 		.into_iter()
 		.find(|p| std::path::Path::new(p).exists())
@@ -54,13 +54,13 @@ async fn podman(socket: &str, args: &[&str]) -> Result<String, String> {
 	}
 }
 
-struct Live {
-	socket: String,
+pub(super) struct Live {
+	pub(super) socket: String,
 }
 
 impl Live {
 	/// The name of the one container whose name starts with `prefix`.
-	async fn container(&self, prefix: &str) -> String {
+	pub(super) async fn container(&self, prefix: &str) -> String {
 		let out = podman(
 			&self.socket,
 			&[
@@ -79,14 +79,14 @@ impl Live {
 	}
 
 	/// Runs `script` in `container`; `true` when it exits 0.
-	async fn succeeds(&self, container: &str, script: &str) -> bool {
+	pub(super) async fn succeeds(&self, container: &str, script: &str) -> bool {
 		podman(&self.socket, &["exec", container, "sh", "-c", script])
 			.await
 			.is_ok()
 	}
 
 	/// Polls until `script` succeeds in `container`.
-	async fn eventually(&self, container: &str, script: &str, what: &str) {
+	pub(super) async fn eventually(&self, container: &str, script: &str, what: &str) {
 		let start = Instant::now();
 		while start.elapsed() < Duration::from_secs(90) {
 			if self.succeeds(container, script).await {
@@ -98,7 +98,7 @@ impl Live {
 		panic!("{what}: never held in {container} ({script}): {out:?}");
 	}
 
-	async fn ip_of(&self, container: &str, network: &str) -> String {
+	pub(super) async fn ip_of(&self, container: &str, network: &str) -> String {
 		podman(
 			&self.socket,
 			&[
@@ -115,7 +115,7 @@ impl Live {
 	}
 }
 
-fn agent_binary() -> PathBuf {
+pub(super) fn agent_binary() -> PathBuf {
 	let exe = std::env::current_exe().unwrap();
 	let binary = exe
 		.parent()
@@ -131,7 +131,7 @@ fn agent_binary() -> PathBuf {
 }
 
 impl Setup {
-	async fn image_app(&self, slug: &str, environment: i64) -> (i64, String) {
+	pub(super) async fn image_app(&self, slug: &str, environment: i64) -> (i64, String) {
 		let (status, app) = self
 			.send(
 				"POST",
@@ -153,7 +153,7 @@ impl Setup {
 		)
 	}
 
-	async fn stored(&self, id: i64) -> applications::Application {
+	pub(super) async fn stored(&self, id: i64) -> applications::Application {
 		applications::find_by_id(&self.db, ApplicationId(id))
 			.await
 			.unwrap()
@@ -161,7 +161,7 @@ impl Setup {
 	}
 
 	/// Deploys the way the API and the worker do.
-	async fn deploy_for_real(&self, id: i64) {
+	pub(super) async fn deploy_for_real(&self, id: i64) {
 		let app = self.stored(id).await;
 		let queued = crate::deployments::queue(&self.state, &app, None, None)
 			.await
@@ -177,7 +177,7 @@ impl Setup {
 		log.finish().await;
 	}
 
-	async fn database_in(&self, environment: i64) -> i64 {
+	pub(super) async fn database_in(&self, environment: i64) -> i64 {
 		let (status, database) = self
 			.send(
 				"POST",
@@ -205,7 +205,7 @@ impl Setup {
 		id
 	}
 
-	async fn through_ingress(&self, host: &str) -> Option<StatusCode> {
+	pub(super) async fn through_ingress(&self, host: &str) -> Option<StatusCode> {
 		self.state
 			.http
 			.get(format!("http://127.0.0.1:{INGRESS_PORT}/"))
@@ -216,7 +216,7 @@ impl Setup {
 			.map(|r| r.status())
 	}
 
-	async fn answers_through_ingress(&self, host: &str) {
+	pub(super) async fn answers_through_ingress(&self, host: &str) {
 		let mut last = None;
 		for _ in 0..60 {
 			last = self.through_ingress(host).await;

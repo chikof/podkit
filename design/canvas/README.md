@@ -350,6 +350,8 @@ Measured from the prototype, `canvas-demo.js`, sectioned:
 
 The prototype itself is 23.8 KB raw (8.1 KB gzip) because it also stands in for the server: `can()`, `describe()`, the commit, the list dialog and the staging code (about 10 KB that does not ship). **Estimate for I2: 12 to 15 KB source, one file, no dependencies.** Ship it unminified (no build step) behind the server's normal compression, about 4 KB on the wire. It loads `defer`, only on the canvas page, and is independent of `page.js` (which stays under 10 KB).
 
+> I2: the shipped file is 17,666 bytes readable and 12,038 minified, over this estimate. Why, and the fidelity and Firefox notes, are in `I2-implementation.md`.
+
 ### 11.4 CSS
 
 `canvas.css` is a single block, 17.9 KB raw. Append it to `components.css` as `/* == canvas == */` **at the end**, never reordering existing blocks; the `ui-*` classes in maud map 1:1 (`cv-*` → `ui-cv-*`). It does **not** ship the `states sheet` rules (the `.cv-sheet`, `.cv-cell`, `.cv-spec` block near the end, ~1.3 KB). Every colour, radius, space, font and duration is an existing token; the literals that remain are component dimensions: node 208 × 92, handles 12 px, the label pill's 20 px, the 24 px icon tile, grid 24 px. `@property --tx --ty --z` and `color-mix()` are Baseline.
