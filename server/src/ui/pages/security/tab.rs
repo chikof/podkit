@@ -17,9 +17,9 @@ use crate::scanning::store::{FindingFilter, StoredFinding, StoredIgnore};
 use crate::scanning::{BadgeState, ScanStatus, Severity, Subject};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, BannerKind, Dismiss, INPUT, LABEL, SELECT, Size, Variant,
-	act_now_marker, banner, button_class, card, card_content, card_section, chip, chip_group,
-	dialog, dialog_cancel, empty_state, icon, link_button, security_badge, severity_chip, table,
+	BUTTON, BUTTON_OUTLINE, BannerKind, INPUT, LABEL, SELECT, Size, Variant, act_now_marker,
+	banner, button_class, card, card_content, card_section, chip, chip_group, dialog,
+	dialog_cancel, empty_state, icon, link_button, security_badge, severity_chip, table,
 };
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
@@ -511,7 +511,6 @@ fn ignore_dialog(ctx: &TeamCtx) -> Markup {
 			"ignore-dialog",
 			"Ignore this finding?",
 			Some("It stops counting in the badge and the lists until it expires. Say why, so the next person knows."),
-			Dismiss::Esc,
 			&html! {
 				div class="flex flex-col gap-3" {
 					p class="text-sm" { "Ignoring " strong class="font-mono break-all" "data-text"="$ig_vuln" {} }

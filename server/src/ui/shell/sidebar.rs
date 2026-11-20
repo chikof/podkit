@@ -10,8 +10,8 @@ use maud::{Markup, html};
 
 use super::nav::{self, NavItem};
 use crate::ui::components::{
-	MENU_ITEM, MarkSize, dropdown_menu, icon, menu_label, menu_link, menu_separator, team_mark,
-	user_avatar,
+	MENU_ITEM, MarkSize, dropdown_menu, icon, kbd, menu_label, menu_link, menu_separator,
+	team_mark, user_avatar,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::theme::{self, Theme};
@@ -48,12 +48,17 @@ fn side_brand(ctx: &TeamCtx) -> Markup {
 	brand_in(&format!("/teams/{}/projects", ctx.team.id))
 }
 
-fn link(item: &NavItem, current: bool) -> Markup {
+/// One place. `tip` is the id of the rail tooltip: the sidebar's links carry one (it only
+/// opens while the sidebar is folded to icons); the tab bar's do not.
+fn link(item: &NavItem, current: bool, tip: Option<&str>) -> Markup {
 	html! {
 		li {
-			a href=(item.href) class="ui-nav-link" aria-current=[current.then_some("page")] {
+			a href=(item.href) class="ui-nav-link" aria-current=[current.then_some("page")] interestfor=[tip] {
 				(icon(item.icon))
 				span class="ui-nav-label" { (item.label) }
+			}
+			@if let Some(tip) = tip {
+				div id=(tip) popover="hint" class="ui-tip ui-tip-side" { (item.label) }
 			}
 		}
 	}
@@ -137,36 +142,70 @@ fn user_menu(ctx: &TeamCtx) -> Markup {
 	)
 }
 
-/// The sidebar. Above 760 px it is the left column; below, the strip across the top.
-/// The daily places come first, then the Infrastructure section (what the team runs on),
-/// then Settings.
+/// The fold toggle at the foot of the sidebar. `[` does the same (the shell's `_side` signal).
+/// Its label and tooltip name the action for the state it is in.
+fn collapse_toggle(collapsed: bool) -> Markup {
+	let name = if collapsed {
+		"Expand sidebar"
+	} else {
+		"Collapse sidebar"
+	};
+	html! {
+		button type="button" class="ui-side-toggle" data-side-toggle aria-label=(name) aria-keyshortcuts="["
+			interestfor="side-toggle-tip" "data-on:click"="$_side = !$_side"
+			"data-attr:aria-label"="$_side ? 'Expand sidebar' : 'Collapse sidebar'" {
+			(icon("panel-left"))
+			span class="ui-nav-label" { "Collapse" }
+		}
+		div id="side-toggle-tip" popover="hint" class="ui-tip ui-tip-side" {
+			span class="ui-when-open" { "Collapse sidebar" }
+			span class="ui-when-collapsed" { "Expand sidebar" }
+			" " (kbd("["))
+		}
+	}
+}
+
+/// The sidebar. Above 760 px it is the left column (or the icon rail, when the user folded
+/// it); below, the strip across the top. The daily places come first, then the
+/// Infrastructure section (what the team runs on), then Settings. Every link carries a rail
+/// tooltip that only opens while the sidebar is folded to icons.
 pub fn aside(ctx: &TeamCtx) -> Markup {
 	let main = nav::main_items(ctx);
 	let infra = nav::infra_items(ctx);
 	let settings = nav::settings_entry(ctx);
 	let current = nav::sidebar_current(ctx);
+	let collapsed = super::sidebar_collapsed();
 	let is_current = |item: &NavItem| current.as_deref() == Some(item.href.as_str());
 	html! {
-		aside class="ui-sidebar ui-vt-chrome" aria-label="Application" {
+		aside id="side" class="ui-sidebar ui-vt-chrome" aria-label="Application" {
 			(side_brand(ctx))
 			(team_menu(ctx))
 			nav class="ui-nav" aria-label="Primary" {
 				@if !main.is_empty() {
 					ul class="ui-nav-list" {
-						@for item in &main { (link(item, is_current(item))) }
+						@for (i, item) in main.iter().enumerate() {
+							(link(item, is_current(item), Some(&format!("nav-tip-{i}"))))
+						}
 					}
 				}
 				@if !infra.is_empty() {
 					div class="ui-nav-group" {
 						p class="ui-nav-heading" id="nav-infrastructure" { "Infrastructure" }
 						ul class="ui-nav-list" aria-labelledby="nav-infrastructure" {
-							@for item in &infra { (link(item, is_current(item))) }
+							@for (i, item) in infra.iter().enumerate() {
+								(link(item, is_current(item), Some(&format!("nav-tip-infra-{i}"))))
+							}
 						}
 					}
 				}
-				ul class="ui-nav-list" { (link(&settings, is_current(&settings))) }
+				ul class="ui-nav-list" {
+					(link(&settings, is_current(&settings), Some("nav-tip-settings")))
+				}
 			}
-			div class="ui-chrome-foot" { (user_menu(ctx)) }
+			div class="ui-chrome-foot" {
+				(collapse_toggle(collapsed))
+				(user_menu(ctx))
+			}
 		}
 	}
 }
@@ -179,7 +218,7 @@ pub fn tab_bar(ctx: &TeamCtx) -> Markup {
 		nav class="ui-tabbar" aria-label="Tabs" {
 			ul class="ui-nav-list" {
 				@for item in &items {
-					(link(item, current.as_deref() == Some(item.href.as_str())))
+					(link(item, current.as_deref() == Some(item.href.as_str()), None))
 				}
 			}
 		}

@@ -28,9 +28,9 @@ use crate::projects::overview::model_mark;
 use crate::scanning::Subject;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, BUTTON_OUTLINE, Dismiss, LABEL, LogoSize, MetricsSection, SELECT, Size, TabItem,
-	Tone, Variant, badge, button_class, card, card_content, card_section, dialog,
-	dialog_open_button, empty_state, icon, logo, metrics_section, resource_charts, table, tabs,
+	BUTTON_DANGER, BUTTON_OUTLINE, LABEL, LogoSize, MetricsSection, SELECT, Size, TabItem, Tone,
+	Variant, badge, button_class, card, card_content, card_section, dialog, dialog_open_button,
+	empty_state, icon, logo, metrics_section, resource_charts, table, tabs,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -290,7 +290,6 @@ fn advanced_tab(ctx: &TeamCtx, model: &Model) -> Markup {
 					"remove-dialog",
 					&format!("Remove {}?", model.name),
 					Some("Applications linked to it lose it on their next deploy. The downloaded files stay."),
-					Dismiss::Esc,
 					&html! {},
 					&html! {
 						form method="dialog" class="flex flex-col-reverse gap-2 sm:flex-row" {

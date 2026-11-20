@@ -63,13 +63,35 @@ fn main() {
 		"neither encre-css nor components.css generates CSS for these classes in src/ui: {unknown:?}"
 	);
 
-	let utilities = encre_css::generate(sources.iter().map(String::as_str), &full);
+	let utilities = without_moz_focusring(&encre_css::generate(
+		sources.iter().map(String::as_str),
+		&full,
+	));
 	let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR")).join("app.css");
 	fs::write(
 		out,
 		format!("{}\n{}\n{utilities}", squeeze(&theme), squeeze(&components)),
 	)
 	.expect("write app.css");
+}
+
+/// Removes the preflight rule `:-moz-focusring { outline: auto }`. Only Firefox knows that
+/// pseudo-class, and the utilities come after `theme.css` and `components.css`, so at equal
+/// specificity the rule beat every focus style of ours there: the command palette input got
+/// a thick native ring inside the palette's own, and `outline: none` was ignored. Without it
+/// the cascade is the same in every engine (`:focus-visible` in `theme.css`).
+fn without_moz_focusring(css: &str) -> String {
+	let mut out = String::with_capacity(css.len());
+	let mut rest = css;
+	while let Some(at) = rest.find(":-moz-focusring") {
+		let Some(end) = rest[at..].find('}') else {
+			break;
+		};
+		out.push_str(&rest[..at]);
+		rest = &rest[at + end + 1..];
+	}
+	out.push_str(rest);
+	out
 }
 
 /// Drops comments and the whitespace that carries no meaning (around `{`, `}`, `;`, `,` and

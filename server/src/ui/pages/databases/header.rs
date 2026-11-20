@@ -23,8 +23,8 @@ use crate::metrics::{Range, ResourcePoint};
 use crate::scanning::Subject;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, CHECKBOX, Dismiss, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER,
-	Size, Status as Shape, Variant, button_class, dialog, dropdown_menu, icon, logo, menu_label,
+	BUTTON, BUTTON_OUTLINE, CHECKBOX, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, Size,
+	Status as Shape, Variant, button_class, dialog, dropdown_menu, icon, logo, menu_label,
 	menu_separator,
 };
 use crate::ui::extract::TeamCtx;
@@ -207,7 +207,6 @@ pub fn dialogs(ctx: &TeamCtx, database: &Database) -> Markup {
 				"delete-dialog",
 				"Delete this database?",
 				Some("Deleting stops and removes the database's container."),
-				Dismiss::Esc,
 				&html! {
 					div class="flex flex-col gap-3" {
 						label class=(LABEL) {

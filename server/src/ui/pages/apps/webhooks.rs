@@ -20,7 +20,7 @@ use crate::applications::service;
 use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::state::AppState;
 use crate::ui::components::{
-	Dismiss, Size, Variant, button_class, card, card_content, card_section, dialog, dialog_cancel,
+	Size, Variant, button_class, card, card_content, card_section, dialog, dialog_cancel,
 	dialog_open_button, icon,
 };
 use crate::ui::extract::TeamCtx;
@@ -118,7 +118,6 @@ async fn webhooks_page(
 				"webhook-rotate",
 				"Rotate the webhook secret?",
 				Some(rotate_lead.as_str()),
-				Dismiss::Esc,
 				&html! {
 					(closer("webhook-rotate"))
 					p class="text-sm text-destructive" role="alert" "data-show"="$_error" "data-text"="$_error" style="display: none" {}

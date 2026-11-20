@@ -187,7 +187,7 @@ pub(super) fn dialog(place: Place, l: &Loaded, vars: &[VariableInfo], targets: &
 	let change = format!("@get({})", js_string(&envs_url));
 	let blocked = no_target(targets);
 	html! {
-		dialog id=(DIALOG_ID) class="ui-dialog ui-dialog-wide" closedby="closerequest"
+		dialog id=(DIALOG_ID) class="ui-dialog ui-dialog-wide" closedby="any"
 			aria-labelledby="tpl-deploy-title" aria-describedby="tpl-deploy-description"
 			"data-signals"=(signals(l, vars, targets).to_string()) {
 			div id="tpl-deploy-panel" class="ui-dlg-panel" {

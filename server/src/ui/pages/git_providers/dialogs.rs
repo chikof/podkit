@@ -9,8 +9,8 @@ use crate::git_providers::Kind;
 use crate::ids::TeamId;
 pub(super) use crate::ui::components::dialog_open_button as open_button;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, BannerKind, Dismiss, INPUT, LABEL, Size, Variant, banner, button_class,
-	dialog, dialog_cancel,
+	BUTTON, BUTTON_OUTLINE, BannerKind, INPUT, LABEL, Size, Variant, banner, button_class, dialog,
+	dialog_cancel,
 };
 use crate::ui::layout::form_error;
 use crate::ui::sse::js_string;
@@ -75,7 +75,6 @@ pub(super) fn github_dialog(team: TeamId, public: bool) -> Markup {
 		Some(
 			"podkit creates a GitHub App that can read your repositories. GitHub shows you what it asks for before anything is made.",
 		),
-		Dismiss::Esc,
 		&body,
 		&footer,
 	)
@@ -152,7 +151,6 @@ pub(super) fn token_dialog(team: TeamId, kind: Kind) -> Markup {
 		id,
 		&format!("Connect {}", kind.label()),
 		Some("podkit checks the token against the server before it keeps it."),
-		Dismiss::Esc,
 		&body,
 		&footer,
 	)
@@ -169,7 +167,6 @@ pub(super) fn delete_dialog(team: TeamId) -> Markup {
 		Some(
 			"podkit forgets its credentials. The GitHub App or token itself stays where you made it.",
 		),
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				p { "Delete " strong class="break-all" "data-text"="$_p_name" {} "?" }

@@ -29,8 +29,8 @@ use crate::ids::{ApiTokenId, ProjectId, TeamId};
 use crate::projects;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, CHECKBOX, Dismiss, INPUT, LABEL, SELECT, Size, Tone, Variant, badge, button_class,
-	card, card_content, card_footer, card_heading, copy_field, dialog, empty_state, icon,
+	BUTTON, CHECKBOX, INPUT, LABEL, SELECT, Size, Tone, Variant, badge, button_class, card,
+	card_content, card_footer, card_heading, copy_field, dialog, empty_state, icon,
 };
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
@@ -204,7 +204,6 @@ fn revoke_dialog(team: TeamId) -> Markup {
 		"revoke-token-dialog",
 		"Revoke this token?",
 		Some("Anything that uses it stops working at once. This cannot be undone."),
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				p { "Revoke " strong class="break-all" "data-text"="$_rev_name" {} "?" }

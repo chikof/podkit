@@ -9,7 +9,7 @@ use crate::ids::TeamId;
 use crate::ssh_keys::service::KeyView;
 pub(super) use crate::ui::components::dialog_open_button as open_button;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, SELECT, Size, TEXTAREA, Variant, button_class,
+	BUTTON, BUTTON_OUTLINE, INPUT, LABEL, SELECT, Size, TEXTAREA, Variant, button_class,
 	copy_field, dialog, dialog_cancel,
 };
 use crate::ui::layout::form_error;
@@ -36,7 +36,6 @@ pub(super) fn public_dialog(key: &KeyView) -> Markup {
 		Some(
 			"Add it to ~/.ssh/authorized_keys on a server, or as a deploy key at your git provider. It is safe to share.",
 		),
-		Dismiss::EscOrOutside,
 		&html! {
 			div class="flex flex-col gap-3" {
 				@if key.public_key.is_empty() {
@@ -92,7 +91,6 @@ pub(super) fn generate_dialog(team: TeamId) -> Markup {
 		Some(
 			"podkit makes the key pair here and keeps the private half, encrypted. You only ever see the public half.",
 		),
-		Dismiss::Esc,
 		&body,
 		&footer,
 	)
@@ -132,7 +130,6 @@ pub(super) fn import_dialog(team: TeamId) -> Markup {
 		IMPORT,
 		"Import a key",
 		Some("Bring a key you already use. podkit derives the public half from it."),
-		Dismiss::Esc,
 		&body,
 		&footer,
 	)
@@ -178,7 +175,6 @@ pub(super) fn rotate_dialog(team: TeamId) -> Markup {
 		ROTATE,
 		"Rotate this key?",
 		Some("Replaces the key on every server that uses it."),
-		Dismiss::Esc,
 		&body,
 		&footer,
 	)
@@ -195,7 +191,6 @@ pub(super) fn delete_dialog(team: TeamId) -> Markup {
 		Some(
 			"The private key is deleted for good. Anything that still needs it must be given another.",
 		),
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				p { "Delete " strong class="break-all" "data-text"="$_k_name" {} "?" }

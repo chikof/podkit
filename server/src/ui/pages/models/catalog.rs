@@ -400,7 +400,7 @@ fn tier_sections(ctx: &TeamCtx, view: &View, hardware: Option<&Hardware>) -> Mar
 /// The create dialog's frame. Its content arrives with the click that opens it.
 fn setup_dialog() -> Markup {
 	html! {
-		dialog id="setup-dialog" class="ui-dialog ui-dialog-wide" closedby="closerequest"
+		dialog id="setup-dialog" class="ui-dialog ui-dialog-wide" closedby="any"
 			aria-label="Set up a model" aria-labelledby="setup-title" {
 			div id="setup-body" class="ui-dlg-panel" {
 				div class="ui-dialog-head" {

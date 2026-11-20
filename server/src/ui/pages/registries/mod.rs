@@ -21,7 +21,7 @@ use crate::registries::Registry;
 use crate::registries::service::{self, CreateInput, LoginOutcome, UpdateInput};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, Size, Variant, button_class, card, card_content,
+	BUTTON, BUTTON_OUTLINE, INPUT, LABEL, Size, Variant, button_class, card, card_content,
 	card_footer, card_section, dialog, empty_state, icon,
 };
 use crate::ui::extract::TeamCtx;
@@ -159,7 +159,6 @@ fn delete_dialog(team: TeamId) -> Markup {
 		"delete-registry-dialog",
 		"Delete this registry?",
 		Some("Applications and stacks that pull with it must be moved to another registry first."),
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				p { "Delete " strong class="break-all" "data-text"="$_del_name" {} "?" }
@@ -185,7 +184,6 @@ fn edit_dialog(team: TeamId) -> Markup {
 		"edit-registry-dialog",
 		"Edit registry",
 		Some("The address cannot change: applications pull from it by name."),
-		Dismiss::Esc,
 		&html! {
 			form id="edit-registry" class="flex flex-col gap-4" "data-on:submit"=(action) {
 				label class=(LABEL) {

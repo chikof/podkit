@@ -29,9 +29,9 @@ use crate::projects::overview::{self, EnvironmentView, Pick, ResourceCard, Resou
 use crate::scanning::{Badge, BadgeState, Subject};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, Dismiss, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, SELECT, Size, TabItem, Tone,
-	Variant, button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu, empty_state,
-	icon, menu_label, security_badge, skeleton_row, tabs,
+	BUTTON_DANGER, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, SELECT, Size, TabItem, Tone, Variant,
+	button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu, empty_state, icon,
+	menu_label, security_badge, skeleton_row, tabs,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page, form_error};
@@ -521,7 +521,6 @@ fn create_env_dialog(team: TeamId, project: ProjectId) -> Markup {
 		Some(
 			"An environment holds its own applications, databases and models, such as staging next to production.",
 		),
-		Dismiss::Esc,
 		&html! {
 			form id="environment-create-form" class="flex flex-col gap-4" "data-on:submit"=(post) {
 				label class=(LABEL) {
@@ -555,7 +554,6 @@ fn rename_env_dialog(team: TeamId, project: ProjectId) -> Markup {
 		"environment-rename",
 		"Rename environment",
 		Some("Its slug and the links to it stay the same."),
-		Dismiss::Esc,
 		&html! {
 			form id="environment-rename-form" class="flex flex-col gap-4" "data-on:submit"=(post) {
 				label class=(LABEL) {
@@ -582,7 +580,6 @@ fn delete_env_dialog(team: TeamId, project: ProjectId, name: &str) -> Markup {
 		"environment-delete",
 		"Delete environment",
 		None,
-		Dismiss::Esc,
 		&html! {
 			form id="environment-delete-form" class="flex flex-col gap-4" "data-on:submit"=(post) {
 				p {

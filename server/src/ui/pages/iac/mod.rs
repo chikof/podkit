@@ -24,8 +24,8 @@ use crate::iac::service::{self, ImportOutcome, Input, Outcome};
 use crate::ids::{ProjectId, TeamId};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, CHECKBOX, Dismiss, LABEL, Size, Variant, button_class, card, card_content,
-	card_section, dialog, icon,
+	BUTTON, CHECKBOX, LABEL, Size, Variant, button_class, card, card_content, card_section, dialog,
+	icon,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page, form_error};
@@ -196,7 +196,6 @@ fn apply_dialog(post_to: &str, what: &str) -> Markup {
 		Some(
 			"The file is planned again against what exists now, then applied. A change that fails stops the rest.",
 		),
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				p class="text-sm" { "Changes go through the same checks as the pages do, so anything you may not do is refused before it starts." }

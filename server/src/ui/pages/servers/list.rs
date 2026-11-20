@@ -22,8 +22,8 @@ use crate::ssh_keys::service::{self as key_service, KeyChoice, KeyView, NewKey, 
 use crate::state::AppState;
 use crate::ui::charts::sparkline;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, LogoSize, dialog, dialog_cancel,
-	dialog_open_button, icon, logo,
+	BUTTON, BUTTON_OUTLINE, INPUT, LABEL, LogoSize, dialog, dialog_cancel, dialog_open_button,
+	icon, logo,
 };
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
@@ -284,7 +284,6 @@ fn add_dialog(ctx: &TeamCtx, keys: &[KeyView], can_create_key: bool) -> Markup {
 		Some(
 			"podkit connects over SSH, installs its agent and starts it. The server stays pending until that finishes.",
 		),
-		Dismiss::Esc,
 		&body,
 		&footer,
 	)

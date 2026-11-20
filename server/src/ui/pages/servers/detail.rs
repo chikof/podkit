@@ -21,8 +21,8 @@ use crate::servers::service;
 use crate::servers::{Server, host_key_fingerprint};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, BUTTON_OUTLINE, Dismiss, INPUT, LogoSize, dialog, dialog_cancel,
-	dialog_open_button, icon, logo,
+	BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LogoSize, dialog, dialog_cancel, dialog_open_button,
+	icon, logo,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -220,7 +220,6 @@ fn reset_dialog(ctx: &TeamCtx, server: &Server) -> Markup {
 		RESET_DIALOG,
 		"Reset the host key?",
 		None,
-		Dismiss::Esc,
 		&html! {
 			p {
 				"podkit pins the server's SSH host key the first time it connects and refuses any other key afterwards. "
@@ -243,7 +242,6 @@ fn delete_dialog(ctx: &TeamCtx, server: &Server) -> Markup {
 		DELETE_DIALOG,
 		"Delete server",
 		Some("podkit forgets this server. Nothing is removed from the host itself."),
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				p { "Type " strong { (server.name) } " to confirm." }

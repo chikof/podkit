@@ -27,7 +27,7 @@ use crate::projects::overview::application_mark;
 use crate::scanning::Subject;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, Size,
+	BUTTON, BUTTON_OUTLINE, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, Size,
 	Status as Shape, Variant, button_class, dialog, dropdown_menu, icon, logo, menu_label,
 	menu_separator,
 };
@@ -286,7 +286,6 @@ pub fn dialogs(ctx: &TeamCtx, app: &ApplicationView) -> Markup {
 				"rollback-dialog",
 				"Roll back to an earlier build",
 				Some("Nothing is rebuilt: podkit starts the image of that deployment and replaces the running container."),
-				Dismiss::Esc,
 				&html! {
 					div class="flex flex-col gap-3" {
 						p { "Roll back to deployment " strong class="font-mono" { "#" span "data-text"="$_rb" {} } "?" }
@@ -305,7 +304,6 @@ pub fn dialogs(ctx: &TeamCtx, app: &ApplicationView) -> Markup {
 				"delete-dialog",
 				"Delete this application?",
 				Some("Deleting stops and removes the application's containers and volumes. This can't be undone."),
-				Dismiss::Esc,
 				&html! {
 					div class="flex flex-col gap-3" {
 						label class=(LABEL) {

@@ -27,8 +27,8 @@ use crate::networks::{Member, ResourceKind};
 use crate::servers::service as servers;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, Size, Tone, Variant, badge, button_class,
-	dialog, dialog_cancel, dialog_open_button, empty_state, icon, table,
+	BUTTON_DANGER, BUTTON_OUTLINE, INPUT, LABEL, Size, Tone, Variant, badge, button_class, dialog,
+	dialog_cancel, dialog_open_button, empty_state, icon, table,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -117,7 +117,6 @@ fn delete_dialog(base: &str, view: &NetworkView) -> Markup {
 		&delete_dialog_id(n.id),
 		&format!("Delete {}?", n.name),
 		None,
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				@if view.members.is_empty() {
@@ -195,7 +194,6 @@ fn new_dialog(base: &str) -> Markup {
 		NEW_DIALOG,
 		"New network",
 		Some("Resources you attach to it reach each other by name, across environments."),
-		Dismiss::Esc,
 		&html! {
 			form id="new-network-form" class="flex flex-col gap-4" "data-on:submit"=(create) {
 				div class="ui-field-group" {
@@ -229,7 +227,6 @@ fn import_dialog(base: &str, suggestions: &[String]) -> Markup {
 		IMPORT_DIALOG,
 		"Import a network",
 		Some("Use a Podman network that already exists on this server. podkit never removes it."),
-		Dismiss::Esc,
 		&html! {
 			form id="import-network-form" class="flex flex-col gap-4" "data-on:submit"=(import) {
 				div class="ui-field-group" {
@@ -260,7 +257,6 @@ fn migrate_dialog(base: &str) -> Markup {
 		MIGRATE_DIALOG,
 		"Migrate this server's networks?",
 		None,
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				p { "Moves every running app, database and model from the shared " code { "podkit" } " network onto its environment's own network, without restarting it. Compose stacks move on their next deploy." }

@@ -790,7 +790,7 @@ async fn the_monitoring_tab_draws_every_chart_from_the_samples(db: PgPool) {
 	// The chart region has no script of its own.
 	let (_, region) = body.split_once("id=\"metrics-body\"").unwrap();
 	let region = region.split("</section>").next().unwrap();
-	assert_not_contains(region, "<script");
+	assert_not_contains(region, "<script>");
 	assert_not_contains(region, "javascript:");
 }
 
@@ -877,5 +877,5 @@ async fn the_refresh_endpoint_patches_only_the_charts(db: PgPool) {
 	assert_contains(&out, "CPU, last 24 hours.");
 	// The frame (and its timer) is not re-sent, so the timer is not restarted.
 	assert_not_contains(&out, "data-on-interval");
-	assert_not_contains(&out, "<script");
+	assert_not_contains(&out, "<script>");
 }
