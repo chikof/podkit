@@ -102,6 +102,8 @@ pub enum ServerError {
 	/// A scheduled task or one of its runs.
 	#[error("{0} not found")]
 	CronNotFound(&'static str),
+	#[error("uptime check not found")]
+	UptimeCheckNotFound,
 
 	#[error("registry not found")]
 	RegistryNotFound,
@@ -203,6 +205,7 @@ impl ServerError {
 			| Self::RegistryNotFound
 			| Self::NotificationNotFound(_)
 			| Self::CronNotFound(_)
+			| Self::UptimeCheckNotFound
 			| Self::TokenNotFound
 			| Self::GitProviderNotFound
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,

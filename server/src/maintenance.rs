@@ -29,6 +29,7 @@ pub fn spawn(state: AppState) {
 			crate::scanning::queue_daily_rescans(&state).await;
 			crate::notifications::maintain(&state.db).await;
 			crate::cron::scheduler::purge(&state).await;
+			crate::uptime::maintain(&state.db).await;
 		}
 	});
 }

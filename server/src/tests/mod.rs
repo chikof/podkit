@@ -10,6 +10,7 @@ pub mod notifications_ui;
 pub mod registries_ui;
 pub mod stacks_ui;
 mod tenancy;
+pub mod uptime_ui;
 
 use std::sync::Arc;
 
