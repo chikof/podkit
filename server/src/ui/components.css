@@ -232,7 +232,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-card-sub { font-size: var(--fs-xs); color: var(--muted-foreground); }
 .ui-card-b { display: grid; gap: var(--s-4); padding: var(--card-pad); }
 .ui-card-f { display: flex; align-items: center; justify-content: flex-end; gap: var(--s-3); padding: var(--s-3) var(--card-pad); border-top: var(--bw) solid var(--border); }
-.ui-card-action { display: flex; align-items: center; gap: var(--s-3); }
+.ui-card-action { display: flex; align-items: center; gap: var(--s-3); flex-shrink: 0; }
 @container ui-card (max-width: 20rem) { .ui-card-f { flex-direction: column; align-items: stretch; } }
 @container ui-card (max-width: 28rem) { .ui-card-h:has(> .ui-card-action) { flex-wrap: wrap; } }
 
@@ -563,6 +563,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 
 .ui-shell-main {
 	display: grid;
+	grid-template-columns: minmax(0, 1fr);
 	grid-template-rows: auto 1fr;
 	min-width: 0;
 }
