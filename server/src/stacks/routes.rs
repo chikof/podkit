@@ -15,9 +15,12 @@ use super::service::{self, CreateInput, StackDetail, UpdateInput};
 use super::{ServiceStatus, Stack, StackService, StackStatus};
 use crate::applications::routes::log_events;
 use crate::auth::AuthUser;
+use crate::change::Change;
 use crate::environments::EnvironmentFilter;
 use crate::error::AppResult;
-use crate::ids::{EnvironmentId, JobId, ProjectId, ServerId, StackId, StackServiceId, TeamId};
+use crate::ids::{
+	EnvironmentId, JobId, ProjectId, RegistryId, ServerId, StackId, StackServiceId, TeamId,
+};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -50,6 +53,9 @@ struct CreateStackRequest {
 	/// Queue the first deploy right away.
 	#[serde(default)]
 	deploy: bool,
+	/// A saved registry (`/teams/{team}/registries`) to pull the images with.
+	#[serde(default)]
+	registry_id: Option<RegistryId>,
 }
 
 /// Every field is optional; omitted ones stay as they are.
@@ -65,6 +71,9 @@ struct UpdateStackRequest {
 	/// Names of variables to remove.
 	#[serde(default)]
 	unset_env: Vec<String>,
+	/// A saved registry to pull with. Omitted keeps the current one; `null` clears it.
+	#[serde(default)]
+	registry_id: Change<RegistryId>,
 }
 
 #[derive(Deserialize)]
@@ -107,6 +116,8 @@ struct StackResponse {
 	name: String,
 	slug: String,
 	source: String,
+	/// The saved registry the images are pulled with.
+	registry_id: Option<RegistryId>,
 	status: StackStatus,
 	status_message: Option<String>,
 	/// Unix seconds.
@@ -154,6 +165,7 @@ impl From<&Stack> for StackResponse {
 			name: stack.name.clone(),
 			slug: stack.slug.clone(),
 			source: stack.source.clone(),
+			registry_id: stack.registry_id,
 			status: stack.status,
 			status_message: stack.status_message.clone(),
 			created_at: stack.created_at.unix_timestamp(),
@@ -219,6 +231,7 @@ async fn create(
 		environment_id: body.environment_id,
 		source: None,
 		deploy: body.deploy,
+		registry: body.registry_id,
 	};
 	let (stack, job) = service::create(&s, user.id, team, project, input).await?;
 	let status = if job.is_some() {
@@ -268,6 +281,7 @@ async fn update(
 		compose_yaml: body.compose_yaml,
 		env_set: body.env,
 		env_unset: body.unset_env,
+		registry: body.registry_id,
 	};
 	service::update(&s, user.id, team, project, id, input).await?;
 	let detail = service::detail(&s, user.id, team, project, id).await?;

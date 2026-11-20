@@ -9,13 +9,17 @@ use sqlx::PgPool;
 use tracing::warn;
 
 use super::{
-	Application, ApplicationUpdate, BuildStrategy, NewApplication, SLUG_CONSTRAINT, SourceKind,
-	StoredRegistryAuth, public_hostname,
+	Application, ApplicationUpdate, BuildStrategy, NewApplication, RegistryChoice, SLUG_CONSTRAINT,
+	SourceKind, StoredRegistryAuth, public_hostname,
 };
 use crate::auth::permission::{Action, Resource, authorize};
+use crate::change::Change;
 use crate::deployments::{self, DeploymentStatus};
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, EnvironmentId, ProjectId, ServerId, SshKeyId, TeamId, UserId};
+use crate::ids::{
+	ApplicationId, EnvironmentId, ProjectId, RegistryId, ServerId, SshKeyId, TeamId, UserId,
+};
+use crate::registries;
 use crate::servers::Server;
 use crate::ssh_keys::service::{self as ssh_key_service, KeyChoice};
 use crate::state::AppState;
@@ -53,6 +57,8 @@ pub struct ApplicationView {
 	/// Whether registry credentials are stored (their contents never leave
 	/// the server).
 	pub has_registry_auth: bool,
+	/// The saved registry the image is pulled with.
+	pub registry_id: Option<RegistryId>,
 	/// Status of the newest deployment. Filled in by [`get`] only.
 	pub latest: Option<DeploymentStatus>,
 }
@@ -84,7 +90,8 @@ impl ApplicationView {
 			has_deploy_key: app.deploy_key_id.is_some(),
 			deploy_key_id: app.deploy_key_id,
 			has_git_token: app.git_token.is_some(),
-			has_registry_auth: app.registry_auth.is_some(),
+			has_registry_auth: app.registry_auth.is_some() || app.registry_id.is_some(),
+			registry_id: app.registry_id,
 			latest,
 		}
 	}
@@ -103,6 +110,9 @@ pub struct AppInput {
 	pub image: Option<String>,
 	pub registry_username: Option<String>,
 	pub registry_password: Option<String>,
+	/// A saved registry to pull with: `None` leaves it as it is (on update), `Some(None)`
+	/// clears it, `Some(Some(id))` uses that one.
+	pub registry: Change<RegistryId>,
 	pub git_ref: String,
 	/// A pasted SSH private key, imported into the vault under the application's name.
 	pub deploy_key: Option<String>,
@@ -343,6 +353,41 @@ fn cpu_to_f32(cpu: Option<f64>) -> Option<f32> {
 	cpu.map(|c| c as f32)
 }
 
+/// Settles which saved registry the application pulls with after this input. A saved
+/// registry must be the team's own and the one the image comes from, so its login is never
+/// sent to another host; an inline login replaces a saved registry.
+async fn choose_registry(
+	db: &PgPool,
+	team: TeamId,
+	body: &AppInput,
+	image: Option<&str>,
+	existing: Option<&Application>,
+) -> AppResult<RegistryChoice> {
+	let inline = given(body.registry_username.as_deref()).is_some()
+		|| given(body.registry_password.as_deref()).is_some();
+	match (body.registry, image) {
+		(Change::Set(_), None) => Err(ServerError::Validation(
+			"a registry only applies to image applications".to_string(),
+		)),
+		(Change::Set(_), _) if inline => Err(ServerError::Validation(
+			"pick a saved registry or enter a login, not both".to_string(),
+		)),
+		(Change::Set(id), Some(image)) => {
+			registries::service::pick_for_image(db, team, id, image).await?;
+			Ok(RegistryChoice::Use(id))
+		}
+		(Change::Clear, _) => Ok(RegistryChoice::Clear),
+		(Change::Keep, _) if inline => Ok(RegistryChoice::Clear),
+		(Change::Keep, Some(image)) => {
+			if let Some(id) = existing.and_then(|a| a.registry_id) {
+				registries::service::pick_for_image(db, team, id, image).await?;
+			}
+			Ok(RegistryChoice::Keep)
+		}
+		(Change::Keep, None) => Ok(RegistryChoice::Keep),
+	}
+}
+
 fn slug_conflict(e: sqlx::Error) -> ServerError {
 	if db::is_unique_violation(&e, SLUG_CONSTRAINT) {
 		ServerError::ApplicationSlugTaken
@@ -392,6 +437,7 @@ pub async fn create(
 	};
 	let git_token = seal(s, body.git_token.as_deref(), "git token")?;
 	let (repo_url, image, registry_auth) = split_source(s, source)?;
+	let registry = choose_registry(&s.db, team, &body, image.as_deref(), None).await?;
 
 	let webhook_secret_plain = crypto::generate_token(24);
 	let webhook_secret = s
@@ -416,6 +462,10 @@ pub async fn create(
 			repo_url,
 			image,
 			registry_auth,
+			registry_id: match registry {
+				RegistryChoice::Use(id) => Some(id),
+				_ => None,
+			},
 			git_ref: body.git_ref,
 			deploy_key_id: key.map(|k| k.id),
 			git_token,
@@ -523,6 +573,7 @@ pub async fn update(
 	};
 	let git_token = seal(s, body.git_token.as_deref(), "git token")?;
 	let (repo_url, image, registry_auth) = split_source(s, source)?;
+	let registry = choose_registry(&s.db, team, &body, image.as_deref(), Some(&app)).await?;
 
 	let updated = super::update(
 		&s.db,
@@ -533,6 +584,7 @@ pub async fn update(
 			repo_url,
 			image,
 			registry_auth,
+			registry,
 			git_ref: body.git_ref,
 			deploy_key_id: key.map(|k| k.id),
 			git_token,

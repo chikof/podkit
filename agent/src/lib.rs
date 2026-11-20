@@ -10,6 +10,7 @@ pub mod networks;
 pub mod nixpacks;
 pub mod podman;
 pub mod probe;
+pub mod registry;
 pub mod routes;
 pub mod source;
 pub mod stats;

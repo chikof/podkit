@@ -1,0 +1,95 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT r.id AS \"id: RegistryId\", r.name, r.url, r.username, r.password, r.created_at,\n\t\t\t\t(SELECT COUNT(*) FROM applications a WHERE a.registry_id = r.id)\n\t\t\t\t+ (SELECT COUNT(*) FROM stacks s WHERE s.registry_id = r.id) AS \"used_by!\"\n\t\t\tFROM registries r WHERE r.team_id = $1 ORDER BY r.name\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: RegistryId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "registries",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "registries",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "url",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "registries",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "username",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "registries",
+            "name": "username"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "password",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "registries",
+            "name": "password"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "registries",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "used_by!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "02d509f756d7e82c49a9af35ec143f42adc9d7f83fe37b3256aa11a47009bb94"
+}

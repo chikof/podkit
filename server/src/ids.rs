@@ -47,5 +47,7 @@ id!(
 	StackServiceId,
 	NetworkId,
 	SshKeyId,
+	RegistryId,
+	ApiTokenId,
 	JobId,
 );

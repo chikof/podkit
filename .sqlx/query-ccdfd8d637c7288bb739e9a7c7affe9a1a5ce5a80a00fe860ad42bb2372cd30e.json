@@ -1,0 +1,62 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT a.id, p.team_id, a.image AS \"image!\", a.registry_auth AS \"registry_auth!\"\n\t\t\tFROM applications a JOIN projects p ON p.id = a.project_id\n\t\t\tWHERE a.registry_auth IS NOT NULL AND a.registry_id IS NULL AND a.image IS NOT NULL\n\t\t\tORDER BY a.id\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "team_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "image!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "image"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "registry_auth!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "registry_auth"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "ccdfd8d637c7288bb739e9a7c7affe9a1a5ce5a80a00fe860ad42bb2372cd30e"
+}

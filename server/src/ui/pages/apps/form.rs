@@ -12,8 +12,10 @@ use serde_json::json;
 use crate::applications::service::{AppInput, ApplicationView};
 use crate::applications::{BuildStrategy, SourceKind};
 use crate::auth::permission::{Action, Resource};
+use crate::change::Change;
 use crate::error::ServerError;
-use crate::ids::SshKeyId;
+use crate::ids::{RegistryId, SshKeyId, TeamId};
+use crate::registries::Registry;
 use crate::servers::{Server, ServerStatus};
 use crate::ssh_keys::service::{self as key_service, KeyView};
 use crate::state::AppState;
@@ -44,6 +46,8 @@ pub(super) struct AppSignals {
 	pub image: String,
 	pub registry_username: String,
 	pub registry_password: String,
+	/// A saved registry's id, empty for none.
+	pub registry_id: String,
 	pub container_port: String,
 	pub memory_limit_mb: String,
 	pub cpu_limit: String,
@@ -67,6 +71,25 @@ impl AppSignals {
 			Some(kind) => kind == SourceKind::Image,
 			None => self.source == "image",
 		}
+	}
+
+	/// What the registry select asks for. Empty means none: on a save that clears a saved
+	/// registry, on create there is nothing to clear.
+	fn registry_choice(
+		&self,
+		image: bool,
+		saving: bool,
+	) -> Result<Change<RegistryId>, ServerError> {
+		let raw = self.registry_id.trim();
+		if !image {
+			return Ok(Change::Keep);
+		}
+		if raw.is_empty() {
+			return Ok(if saving { Change::Clear } else { Change::Keep });
+		}
+		raw.parse()
+			.map(|id| Change::Set(RegistryId(id)))
+			.map_err(|_| ServerError::Validation("Unknown registry.".to_owned()))
 	}
 
 	pub fn input(&self, existing: Option<SourceKind>) -> Result<AppInput, ServerError> {
@@ -115,6 +138,7 @@ impl AppSignals {
 				.filter(|v| !v.is_empty())
 				.map(str::to_owned),
 			registry_password: image.then(|| secret(&self.registry_password)).flatten(),
+			registry: self.registry_choice(image, existing.is_some())?,
 			git_ref: or(&self.git_ref, "main"),
 			deploy_key: deploy_key.0,
 			deploy_key_id: deploy_key.1,
@@ -159,7 +183,7 @@ pub(super) fn blank_signals(servers: &[Server], source: &str, environment: &str)
 		"name": "", "slug": "", "server_id": server, "source": source, "environment": environment,
 		"repo_url": "", "git_ref": "main", "deploy_key_id": "", "deploy_key": "", "git_token": "",
 		"build_strategy": "dockerfile", "dockerfile_path": "Dockerfile",
-		"image": "", "registry_username": "", "registry_password": "",
+		"image": "", "registry_username": "", "registry_password": "", "registry_id": "",
 		"container_port": "", "memory_limit_mb": "", "cpu_limit": "", "_error": "",
 		"_slugEdited": false,
 	})
@@ -175,6 +199,7 @@ pub(super) fn prefilled_signals(app: &ApplicationView) -> String {
 		"build_strategy": app.build_strategy.as_str(), "dockerfile_path": app.dockerfile_path,
 		"image": app.image.as_deref().unwrap_or_default(),
 		"registry_username": "", "registry_password": "",
+		"registry_id": app.registry_id.map(|r| r.0.to_string()).unwrap_or_default(),
 		"container_port": app.container_port.to_string(),
 		"memory_limit_mb": app.memory_limit_mb.map(|m| m.to_string()).unwrap_or_default(),
 		"cpu_limit": app.cpu_limit.map(|c| c.to_string()).unwrap_or_default(),
@@ -353,8 +378,13 @@ pub(super) fn deploy_key_field(
 	}
 }
 
-/// Where an image application comes from: the image and, for a private registry, a login.
-pub(super) fn image_source_fields(app: Option<&ApplicationView>) -> Markup {
+/// Where an image application comes from: the image and, for a private registry, a saved
+/// registry (or, for this application only, a login of its own).
+pub(super) fn image_source_fields(
+	app: Option<&ApplicationView>,
+	registries: &[Registry],
+	team: TeamId,
+) -> Markup {
 	html! {
 		label class=(LABEL) {
 			"Image"
@@ -362,14 +392,36 @@ pub(super) fn image_source_fields(app: Option<&ApplicationView>) -> Markup {
 				placeholder="ghcr.io/you/app:1.2 or traefik/whoami" "data-bind:image";
 			span class=(HELP) { "A registry reference. Without a tag podkit pulls " code class="font-mono" { "latest" } "." }
 		}
-		div class="grid grid-cols-1 gap-4 sm:grid-cols-2" {
-			label class=(LABEL) {
-				"Registry username"
-				input class=(INPUT) type="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="Optional" "data-bind:registry_username";
+		label class=(LABEL) {
+			"Registry"
+			select class=(SELECT) "data-bind:registry_id" {
+				button { selectedcontent {} }
+				option value="" { "None (public image)" }
+				@for registry in registries {
+					option value=(registry.id.0) { (registry.name) " \u{b7} " (registry.url) }
+				}
 			}
-			label class=(LABEL) {
-				"Registry password or token"
-				input class=(INPUT) type="password" autocomplete="off" placeholder="Optional" "data-bind:registry_password";
+			span class=(HELP) {
+				@if registries.is_empty() {
+					"No saved registries yet. "
+				} @else {
+					"The login used to pull the image. "
+				}
+				a class="underline underline-offset-2" href={ "/teams/" (team) "/registries" } { "Manage registries" }
+				"."
+			}
+		}
+		details class="ui-disclosure" {
+			summary { "Use a login for this application only" }
+			div class="grid grid-cols-1 gap-4 sm:grid-cols-2" {
+				label class=(LABEL) {
+					"Registry username"
+					input class=(INPUT) type="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="Optional" "data-bind:registry_username";
+				}
+				label class=(LABEL) {
+					"Registry password or token"
+					input class=(INPUT) type="password" autocomplete="off" placeholder="Optional" "data-bind:registry_password";
+				}
 			}
 		}
 		(registry_hint(app))
