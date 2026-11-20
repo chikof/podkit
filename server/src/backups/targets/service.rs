@@ -6,6 +6,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use sqlx::{PgExecutor, PgPool};
 use url::{Host, Url};
 
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::backups::{BackupTarget, s3};
 use crate::db::is_unique_violation;
@@ -205,6 +206,20 @@ pub async fn create(
 			e.into()
 		}
 	})?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"backup_target.create",
+		Target::new("backup_target", target.id).named(&target.name),
+		Diff::new()
+			.set("name", target.name.clone())
+			.set("endpoint", audit::scrub_url(&target.endpoint))
+			.set("bucket", target.bucket.clone())
+			.set("access_key_id", target.access_key_id.clone())
+			.secret("secret_access_key"),
+	)
+	.await;
 	Ok(target)
 }
 
@@ -232,6 +247,15 @@ pub async fn remove(
 	)
 	.execute(db)
 	.await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"backup_target.delete",
+		Target::new("backup_target", target.id).named(&target.name),
+		Diff::new().set("name", target.name.clone()),
+	)
+	.await;
 	Ok(target.id)
 }
 

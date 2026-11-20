@@ -206,6 +206,10 @@ pub async fn header(
 ) -> Markup {
 	let base = app_url(ctx.team.id, app.project_id, app.id);
 	let link = public_link(s, &app.url);
+	// An MCP server is never routed, so its header points at its MCP page instead.
+	let mcp_page = crate::mcp_servers::service::is_server(&s.db, app.id)
+		.await
+		.then(|| crate::ui::pages::mcp::mcp_url(ctx.team.id, app.project_id, app.id));
 	let busy = app.latest.is_some_and(Status::in_flight);
 	let mark = application_mark(app.repo_url.as_deref(), app.build_strategy);
 	let rollback_to = rows.iter().find(|d| d.can_rollback());
@@ -265,9 +269,16 @@ pub async fn header(
 					(chrome::dot(shape, &word))
 					(health)
 					(security)
-					a href=(link) class="ui-head-url" target="_blank" rel="noopener noreferrer" {
-						span class="truncate" { (link) }
-						(icon("external-link"))
+					@if let Some(href) = &mcp_page {
+						a href=(href) class="ui-head-url" {
+							span class="truncate" { "MCP server page" }
+							(icon("arrow-up-right"))
+						}
+					} @else {
+						a href=(link) class="ui-head-url" target="_blank" rel="noopener noreferrer" {
+							span class="truncate" { (link) }
+							(icon("external-link"))
+						}
 					}
 					@match app.source_kind {
 						SourceKind::Git => {

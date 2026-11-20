@@ -8,6 +8,7 @@ use sqlx::PgPool;
 use super::{LOGIN_CONSTRAINT, NAME_CONSTRAINT, Registry};
 use crate::agents::AgentClient;
 use crate::applications::StoredRegistryAuth;
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::db::{is_reference_violation, is_unique_violation};
 use crate::error::{AppResult, ServerError};
@@ -154,7 +155,23 @@ pub async fn create(
 	validate_login(&body.name, &body.username, Some(&body.password))?;
 	body.url = normalize_url(&body.url)?;
 	let sealed = seal(s, &body.password)?;
-	insert(&s.db, team, &body, &sealed).await.map_err(conflict)
+	let created = insert(&s.db, team, &body, &sealed)
+		.await
+		.map_err(conflict)?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"registry.create",
+		Target::new("registry", created.id).named(&created.name),
+		Diff::new()
+			.set("name", created.name.clone())
+			.set("url", audit::scrub_url(&created.url))
+			.set("username", created.username.clone())
+			.secret("password"),
+	)
+	.await;
+	Ok(created)
 }
 
 async fn insert(
@@ -196,7 +213,7 @@ pub async fn update(
 	let password = body.password.as_deref().filter(|p| !p.is_empty());
 	validate_login(&body.name, &body.username, password)?;
 	let sealed = password.map(|p| seal(s, p)).transpose()?;
-	sqlx::query_as!(
+	let updated = sqlx::query_as!(
 		Registry,
 		r#"
 			UPDATE registries
@@ -212,7 +229,27 @@ pub async fn update(
 	)
 	.fetch_one(&s.db)
 	.await
-	.map_err(conflict)
+	.map_err(conflict)?;
+	let mut diff = Diff::new()
+		.changed("name", registry.name.clone(), updated.name.clone())
+		.changed(
+			"username",
+			registry.username.clone(),
+			updated.username.clone(),
+		);
+	if password.is_some() {
+		diff = diff.secret("password");
+	}
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"registry.update",
+		Target::new("registry", updated.id).named(&updated.name),
+		diff,
+	)
+	.await;
+	Ok(updated)
 }
 
 /// Deletes a registry nothing pulls with. Needs `delete registry`.
@@ -239,6 +276,17 @@ pub async fn remove(
 			e.into()
 		}
 	})?;
+	audit::log(
+		db,
+		user,
+		team,
+		"registry.delete",
+		Target::new("registry", registry.id).named(&registry.name),
+		Diff::new()
+			.set("name", registry.name.clone())
+			.set("url", audit::scrub_url(&registry.url)),
+	)
+	.await;
 	Ok(registry.id)
 }
 
@@ -296,7 +344,7 @@ pub async fn test(
 		);
 		ServerError::Internal
 	})?;
-	login(
+	let outcome = login(
 		s,
 		team,
 		server,
@@ -304,7 +352,19 @@ pub async fn test(
 		&registry.username,
 		&password,
 	)
-	.await
+	.await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"registry.test",
+		Target::new("registry", registry.id).named(&registry.name),
+		Diff::new()
+			.set("server_id", server.map(|s| s.0))
+			.set("ok", outcome.ok),
+	)
+	.await;
+	Ok(outcome)
 }
 
 /// Tries a login before it is saved: the same checks as [`create`], then one login from the

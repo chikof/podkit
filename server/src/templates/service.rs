@@ -10,6 +10,7 @@ use super::render::{Placement, Rendered, render};
 use super::{Invalid, Loaded};
 use crate::applications::service::AppInput;
 use crate::applications::{self, public_hostname};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::change::Change;
 use crate::error::{AppResult, ServerError};
@@ -150,34 +151,64 @@ pub async fn deploy(
 		));
 	}
 	let name = project_name(body.name.as_deref().unwrap_or(&loaded.template.name))?;
+	let template_id = loaded.template.id.clone();
+	let version = loaded.template.version.clone();
 
-	if as_app {
-		deploy_app(
-			s,
-			user,
-			team,
-			project,
-			environment,
-			&server,
-			loaded,
-			&name,
-			body,
+	// The pieces of a template (application, volumes, stack, domains) are one deploy to
+	// the log, not one event each.
+	let deployed = audit::quiet(async {
+		if as_app {
+			deploy_app(
+				s,
+				user,
+				team,
+				project,
+				environment,
+				&server,
+				loaded,
+				&name,
+				body,
+			)
+			.await
+		} else {
+			deploy_stack(
+				s,
+				user,
+				team,
+				project,
+				environment,
+				&server,
+				loaded,
+				&name,
+				body,
+			)
+			.await
+		}
+	})
+	.await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"template.deploy",
+		Target::new(
+			match deployed.kind {
+				Kind::Application => "application",
+				Kind::Stack => "stack",
+			},
+			deployed.id,
 		)
-		.await
-	} else {
-		deploy_stack(
-			s,
-			user,
-			team,
-			project,
-			environment,
-			&server,
-			loaded,
-			&name,
-			body,
-		)
-		.await
-	}
+		.named(&deployed.name)
+		.in_project(project),
+		Diff::new()
+			.set("template", template_id)
+			.set("version", version)
+			.set("server_id", server.id.0)
+			.set("name", deployed.name.clone())
+			.secret("credentials"),
+	)
+	.await;
+	Ok(deployed)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -294,6 +325,7 @@ async fn finish_stack(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 async fn deploy_app(
 	s: &AppState,
 	user: UserId,
@@ -328,7 +360,10 @@ async fn deploy_app(
 		let rendered = render(t, &body.inputs, &place, &mut Os).map_err(invalid)?;
 		let plan = plan_of(s, loaded, &rendered)?;
 		let spec = &plan.services[0].spec;
-		let Some(port) = spec.container_port else {
+		let Some(port) = spec
+			.container_port
+			.or_else(|| t.mcp.as_ref().map(|m| m.port))
+		else {
 			return Err(ServerError::Internal);
 		};
 		let proto::Source::Image { reference, .. } = &spec.source else {
@@ -367,7 +402,17 @@ async fn deploy_app(
 			};
 		let app = created.app;
 		let finished = finish_app(
-			s, user, team, project, server, &app.slug, app.id, &plan, &rendered, body.model,
+			s,
+			user,
+			team,
+			project,
+			server,
+			&app.slug,
+			app.id,
+			&plan,
+			&rendered,
+			body.model,
+			t.mcp.as_ref(),
 		)
 		.await;
 		return match finished {
@@ -375,7 +420,11 @@ async fn deploy_app(
 				kind: Kind::Application,
 				id: app.id.0,
 				name: app.name,
-				urls: urls_of(s, server, &app.slug, &rendered),
+				urls: if t.mcp.is_some() {
+					Vec::new()
+				} else {
+					urls_of(s, server, &app.slug, &rendered)
+				},
 				values: rendered.values,
 				credentials: rendered.reveal,
 				deploy_id: deployment,
@@ -419,6 +468,7 @@ async fn finish_app(
 	plan: &translate::Plan,
 	rendered: &Rendered,
 	model: Option<ModelId>,
+	mcp: Option<&super::Mcp>,
 ) -> AppResult<i64> {
 	let spec = &plan.services[0].spec;
 	for (key, value) in &spec.env {
@@ -436,6 +486,23 @@ async fn finish_app(
 	}
 	if let Some(model) = model {
 		links::service::link(s, user, team, project, app, model, true).await?;
+	}
+	if let Some(mcp) = mcp {
+		let transport =
+			crate::mcp_servers::Transport::parse(&mcp.transport).ok_or(ServerError::Internal)?;
+		crate::mcp_servers::service::register(
+			s,
+			user,
+			team,
+			project,
+			app,
+			&crate::mcp_servers::service::Settings {
+				transport,
+				path: mcp.path.clone(),
+				command: mcp.command.clone(),
+			},
+		)
+		.await?;
 	}
 	let deployment = deployments::service::deploy(s, user, team, project, app).await?;
 	Ok(deployment.id.0)

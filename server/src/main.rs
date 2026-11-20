@@ -21,6 +21,7 @@ use crate::state::{AppState, Config};
 
 mod agents;
 mod applications;
+mod audit;
 mod auth;
 mod avatars;
 mod backups;
@@ -45,6 +46,8 @@ mod links;
 mod logos;
 mod logs;
 mod maintenance;
+mod mcp;
+mod mcp_servers;
 mod members;
 mod metrics;
 mod model_files;
@@ -176,9 +179,12 @@ async fn run() -> AppResult<()> {
 	let listener = TcpListener::bind(&addr).await?;
 
 	info!("started http server on http://{addr}");
-	axum::serve(listener, app)
-		.with_graceful_shutdown(shutdown.clone().cancelled_owned())
-		.await?;
+	axum::serve(
+		listener,
+		app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+	)
+	.with_graceful_shutdown(shutdown.clone().cancelled_owned())
+	.await?;
 
 	if let Err(e) = dispatcher.await {
 		warn!("job dispatcher panicked: {e}");

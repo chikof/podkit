@@ -15,6 +15,7 @@ use super::{
 	DOMAIN_INDEX, NAME_CONSTRAINT, NewStack, SLUG_CONSTRAINT, ServiceState, ServiceStatus, Stack,
 	StackService, StackStatus,
 };
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::change::Change;
 use crate::db::is_unique_violation;
@@ -328,6 +329,26 @@ pub async fn create(
 	} else {
 		None
 	};
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.create",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new()
+			.set("name", stack.name.clone())
+			.set("source", stack.source.clone())
+			.set("server_id", server.id.0)
+			.set(
+				"services",
+				compose.services.keys().cloned().collect::<Vec<_>>(),
+			)
+			.set("env_keys", body.env.keys().cloned().collect::<Vec<_>>())
+			.set("deployed", job.is_some()),
+	)
+	.await;
 	Ok((stack, job))
 }
 
@@ -497,6 +518,7 @@ pub async fn update(
 		env.remove(key);
 	}
 	validate_env(&body.env_set)?;
+	let env_set_keys: Vec<String> = body.env_set.keys().cloned().collect();
 	env.extend(body.env_set);
 	validate_env(&env)?;
 
@@ -515,6 +537,24 @@ pub async fn update(
 	.await
 	.map_err(unique_conflict)?;
 	stacks::sync_services(&s.db, stack.id, &images_of(&compose)).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.update",
+		Target::new("stack", updated.id)
+			.named(&updated.slug)
+			.in_project(project),
+		Diff::new()
+			.changed("name", stack.name.clone(), updated.name.clone())
+			.set(
+				"compose_changed",
+				stack.compose_yaml != updated.compose_yaml,
+			)
+			.set("env_keys_set", env_set_keys)
+			.set("env_keys_unset", body.env_unset.clone()),
+	)
+	.await;
 	Ok(updated)
 }
 
@@ -559,6 +599,17 @@ pub async fn deploy(
 	let job = start_deploy(s, &stack).await?;
 	stack.status = StackStatus::Deploying;
 	stack.status_message = None;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.deploy",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new().set("job_id", job.0),
+	)
+	.await;
 	Ok((stack, job))
 }
 
@@ -577,6 +628,17 @@ pub async fn stop(
 		return Err(ServerError::Conflict("stack is being deleted".to_string()));
 	}
 	let job = stacks::enqueue(s, JobKind::StackStop, &stack, stack.id.0).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.stop",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new().set("job_id", job.0),
+	)
+	.await;
 	Ok((stack, job))
 }
 
@@ -597,6 +659,17 @@ pub async fn restart_service(
 		return Err(ServerError::Conflict("stack is being deleted".to_string()));
 	}
 	let job = stacks::enqueue(s, JobKind::StackRestartService, &stack, svc.id.0).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.restart",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new().set("service", svc.name.clone()),
+	)
+	.await;
 	Ok((svc, job))
 }
 
@@ -623,6 +696,19 @@ pub async fn remove(
 		JobKind::StackRemove
 	};
 	let job = queue_or_fail(s, kind, &stack, stack.id.0, "failed to queue remove job").await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.delete",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new()
+			.set("name", stack.name.clone())
+			.set("purge_volumes", purge_volumes),
+	)
+	.await;
 	Ok((stack, job))
 }
 
@@ -674,6 +760,20 @@ pub async fn set_domain(
 	stacks::set_domain(&s.db, svc.id, Some(&host), port.map(i32::from))
 		.await
 		.map_err(unique_conflict)?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.domain.set",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new()
+			.set("service", svc.name.clone())
+			.set("host", host.clone())
+			.set("port", port),
+	)
+	.await;
 	service_row(&s.db, &stack, service).await
 }
 
@@ -691,6 +791,17 @@ pub async fn clear_domain(
 	let stack = scope::stack(&s.db, team, project, id).await?;
 	let svc = service_row(&s.db, &stack, service).await?;
 	stacks::set_domain(&s.db, svc.id, None, None).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.domain.clear",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new().set("service", svc.name.clone()),
+	)
+	.await;
 	service_row(&s.db, &stack, service).await
 }
 

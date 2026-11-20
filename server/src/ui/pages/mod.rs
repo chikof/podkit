@@ -15,6 +15,7 @@ pub mod git_providers;
 pub mod iac;
 pub mod infrastructure;
 pub mod keys;
+pub mod mcp;
 pub mod models;
 pub mod networks;
 pub mod notifications;

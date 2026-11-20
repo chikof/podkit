@@ -56,6 +56,7 @@ flate2.workspace = true
 dotenvy = "0.15.7"
 serde-saphyr = "=2.2.0"
 shlex = "=1.3.0"
+tower.workspace = true
 
 [lints]
 workspace = true
@@ -67,4 +68,3 @@ encre-css.workspace = true
 # Live model-download test runs the real agent in process.
 agent = { path = "../agent" }
 jsonschema = { version = "=0.61.2", default-features = false }
-tower.workspace = true

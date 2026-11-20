@@ -1,0 +1,29 @@
+id = "mcp-github"
+name = "MCP GitHub"
+description = "GitHub's own MCP server: repositories, issues, pull requests, code search and Actions as tools for an agent, with a personal access token you choose the scopes of."
+category = "ai"
+tags = [
+    "ai",
+    "mcp",
+    "agents",
+    "github",
+    "git",
+]
+version = "v2.2.0"
+logo = "logo.svg"
+website = "https://github.com/github/github-mcp-server"
+docs = "https://github.com/github/github-mcp-server#readme"
+source = "https://github.com/github/github-mcp-server"
+# Image: ghcr.io/github/github-mcp-server:v2.2.0 (entrypoint /server/github-mcp-server, cmd stdio;
+# label org.opencontainers.image.licenses = MIT). Token variable: GITHUB_PERSONAL_ACCESS_TOKEN,
+# https://github.com/github/github-mcp-server#github-personal-access-token
+
+[variables]
+github_token = { type = "string", label = "GitHub token", description = "A personal access token; the tools can do what its scopes allow", secret = true }
+
+[mcp]
+transport = "stdio"
+port = 8080
+
+[config.env]
+GITHUB_PERSONAL_ACCESS_TOKEN = "${github_token}"

@@ -176,6 +176,20 @@ async fn get_one(
 	let mut response = DatabaseResponse::from(&database);
 	// Passwords come out only for a session or a token with `read:sensitive`.
 	response.connection = connection.filter(|_| user.can_reveal());
+	if response.connection.is_some() {
+		// The password is in this response: say so, without saying what it is.
+		crate::audit::log(
+			&s.db,
+			user.id,
+			team,
+			"database.reveal",
+			crate::audit::Target::new("database", database.id)
+				.named(&database.name)
+				.in_project(project),
+			crate::audit::Diff::new().secret("password"),
+		)
+		.await;
+	}
 	Ok(Json(response))
 }
 

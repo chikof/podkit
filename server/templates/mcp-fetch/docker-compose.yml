@@ -1,0 +1,6 @@
+services:
+  mcp-fetch:
+    image: mcp/fetch:latest
+    restart: unless-stopped
+    expose:
+      - 8080

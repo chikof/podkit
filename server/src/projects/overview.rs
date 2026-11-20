@@ -10,6 +10,7 @@ use time::OffsetDateTime;
 
 use super::Project;
 use crate::applications::{self, BuildStrategy};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::databases::{self, DatabaseStatus, EngineKind as DbEngine};
 use crate::deployments::DeploymentStatus;
@@ -414,7 +415,19 @@ pub async fn rename(
 	authorize(db, user, team, Action::Update, Resource::Project).await?;
 	let project = scope::project(db, team, id).await?;
 	let name = super::service::validate_name(name)?;
-	Ok(super::update_name(db, project.id, &name).await?)
+	let renamed = super::update_name(db, project.id, &name).await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"project.rename",
+		Target::new("project", project.id)
+			.named(&project.slug)
+			.in_project(project.id),
+		Diff::new().change("name", project.name.clone(), renamed.name.clone()),
+	)
+	.await;
+	Ok(renamed)
 }
 
 // --- an environment ------------------------------------------------------------------

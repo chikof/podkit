@@ -7,6 +7,7 @@ pub mod gateway;
 pub mod hardware;
 pub mod health;
 pub mod ingress;
+pub mod mcp_bridge;
 pub mod model_download;
 pub mod networks;
 pub mod nixpacks;

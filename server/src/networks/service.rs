@@ -13,6 +13,7 @@ use super::{
 	member_count, members, memberships, remove_member, slugify, upsert_member, valid_alias,
 };
 use crate::agents::AgentClient;
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::db;
 use crate::error::{AppResult, ServerError};
@@ -206,6 +207,18 @@ pub async fn create(
 			.await?;
 		return Err(e);
 	}
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"network.create",
+		Target::new("network", row.id).named(&row.slug),
+		Diff::new()
+			.set("name", row.name.clone())
+			.set("server_id", server.id.0)
+			.set("internal", internal),
+	)
+	.await;
 	Ok(row)
 }
 
@@ -230,6 +243,15 @@ pub async fn rename(
 		.bind(&name)
 		.execute(&state.db)
 		.await?;
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"network.rename",
+		Target::new("network", current.id).named(&current.slug),
+		Diff::new().change("name", current.name.clone(), name),
+	)
+	.await;
 	network(state, team, id).await
 }
 
@@ -269,6 +291,17 @@ pub async fn delete(state: &AppState, user: UserId, team: TeamId, id: NetworkId)
 		.bind(current.id)
 		.execute(&state.db)
 		.await?;
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"network.delete",
+		Target::new("network", current.id).named(&current.slug),
+		Diff::new()
+			.set("name", current.name.clone())
+			.set("imported", current.imported),
+	)
+	.await;
 	Ok(())
 }
 
@@ -331,7 +364,7 @@ pub async fn import(
 			other => other,
 		})?;
 	let (name, slug) = validate_name(name.filter(|n| !n.trim().is_empty()).unwrap_or(&info.name))?;
-	sqlx::query_as(
+	let imported: Network = sqlx::query_as(
 		"INSERT INTO networks (id, team_id, server_id, name, slug, kind, podman_name, internal, imported)
 		VALUES ($1, $2, $3, $4, $5, 'user', $6, $7, TRUE)
 		RETURNING id, team_id, server_id, name, slug, kind, environment_id, podman_name, internal,
@@ -346,7 +379,20 @@ pub async fn import(
 	.bind(info.internal)
 	.fetch_one(&state.db)
 	.await
-	.map_err(name_conflict)
+	.map_err(name_conflict)?;
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"network.import",
+		Target::new("network", imported.id).named(&imported.slug),
+		Diff::new()
+			.set("name", imported.name.clone())
+			.set("podman_name", imported.podman_name.clone())
+			.set("server_id", server.id.0),
+	)
+	.await;
+	Ok(imported)
 }
 
 /// A resource of `team`; another team's id is the resource's not-found.
@@ -451,6 +497,18 @@ pub async fn attach(
 		));
 	}
 	upsert_member(&state.db, network.id, kind, id, &aliases).await?;
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"network.attach",
+		Target::new("network", network.id).named(&network.slug),
+		Diff::new()
+			.set("resource_kind", kind.as_str())
+			.set("resource_id", id)
+			.set("aliases", aliases.clone()),
+	)
+	.await;
 	Ok(())
 }
 
@@ -475,6 +533,17 @@ pub async fn detach(
 	if !remove_member(&state.db, network.id, kind, id).await? {
 		return Err(ServerError::NotFound);
 	}
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"network.detach",
+		Target::new("network", network.id).named(&network.slug),
+		Diff::new()
+			.set("resource_kind", kind.as_str())
+			.set("resource_id", id),
+	)
+	.await;
 	Ok(())
 }
 

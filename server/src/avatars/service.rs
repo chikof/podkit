@@ -5,6 +5,7 @@ use sqlx::PgPool;
 
 use super::Stored;
 use super::process::process;
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{TeamId, UserId};
@@ -23,13 +24,32 @@ pub async fn set_team(
 	authorize(db, user, team, Action::Update, Resource::Team).await?;
 	let image = process(declared, data)?;
 	super::put_team(db, team, &image).await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"team.avatar.set",
+		Target::new("team", team),
+		Diff::new().set("hash", image.hash.clone()),
+	)
+	.await;
 	Ok(image.hash)
 }
 
 /// Removes the team's picture, so the monogram shows again; needs `update team`.
 pub async fn clear_team(db: &PgPool, user: UserId, team: TeamId) -> AppResult<()> {
 	authorize(db, user, team, Action::Update, Resource::Team).await?;
-	Ok(super::delete_team(db, team).await?)
+	super::delete_team(db, team).await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"team.avatar.clear",
+		Target::new("team", team),
+		Diff::new(),
+	)
+	.await;
+	Ok(())
 }
 
 /// Sets `owner`'s picture. Only the owner may: `actor` must be `owner`.

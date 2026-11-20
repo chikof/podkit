@@ -95,6 +95,10 @@ pub struct Template {
 	/// model to the application and it gets the gateway's variables.
 	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
 	pub gateway: bool,
+	/// The software is an MCP server: it is deployed as an application that is
+	/// registered as one, never routed publicly, and applications link to it.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub mcp: Option<Mcp>,
 	/// What the host needs to run it.
 	#[serde(default, skip_serializing_if = "Requires::is_empty")]
 	pub requires: Requires,
@@ -109,6 +113,27 @@ pub struct Template {
 	/// Environment, domains and files.
 	#[serde(default)]
 	pub config: Config,
+}
+
+/// How an MCP-server template is reached (`[mcp]`).
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct Mcp {
+	/// `http` (the image serves streamable HTTP) or `stdio` (podkit's bridge does).
+	pub transport: String,
+	/// The port the server (or, for stdio, the bridge) listens on.
+	#[serde(default = "default_mcp_port")]
+	pub port: u16,
+	/// Path of the streamable HTTP endpoint; `/mcp` when missing.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub path: Option<String>,
+	/// stdio only: the command to run; the image's own entrypoint and command when empty.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub command: Vec<String>,
+}
+
+const fn default_mcp_port() -> u16 {
+	8080
 }
 
 /// Minimum host resources.
@@ -322,6 +347,19 @@ impl Template {
 				"category {:?} is not one of {CATEGORIES:?}",
 				self.category
 			)));
+		}
+		if let Some(mcp) = &self.mcp {
+			let settings = crate::mcp_servers::service::Settings {
+				transport: crate::mcp_servers::Transport::parse(&mcp.transport)
+					.ok_or_else(|| Invalid::new("mcp.transport is http or stdio"))?,
+				path: mcp.path.clone(),
+				command: mcp.command.clone(),
+			};
+			crate::mcp_servers::service::check_settings(&settings)
+				.map_err(|e| Invalid::new(format!("mcp: {e}")))?;
+			if mcp.port == 0 {
+				return Err(Invalid::new("mcp.port must not be 0"));
+			}
 		}
 		if self.logo.is_empty() || self.logo.contains('/') || self.logo.contains("..") {
 			return Err(Invalid::new("logo must be a file name"));

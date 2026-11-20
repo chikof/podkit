@@ -7,6 +7,7 @@ use zeroize::Zeroizing;
 
 use super::keygen::{self, Kind, Material};
 use super::{SshKey, Usage};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{SshKeyId, TeamId, UserId};
@@ -201,6 +202,7 @@ async fn store(
 pub async fn create(s: &AppState, user: UserId, team: TeamId, new: NewKey) -> AppResult<KeyView> {
 	authorize(&s.db, user, team, Action::Create, Resource::SshKey).await?;
 	let name = validate_name(&new.name)?;
+	let imported = matches!(new.source, Source::Import(_));
 	if let Source::Import(text) = &new.source {
 		// Check the key before anything is stored; the duplicate check needs its fingerprint.
 		let read = keygen::import(text).map_err(|e| key_error(&e))?;
@@ -212,6 +214,20 @@ pub async fn create(s: &AppState, user: UserId, team: TeamId, new: NewKey) -> Ap
 		}
 	}
 	let key = store(s, user, team, &name, new.source).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"ssh_key.create",
+		Target::new("ssh_key", key.id).named(&key.name),
+		Diff::new()
+			.set("name", key.name.clone())
+			.set("algorithm", key.algorithm.clone())
+			.set("fingerprint", key.fingerprint.clone())
+			.set("imported", imported)
+			.secret("private_key"),
+	)
+	.await;
 	Ok(KeyView::new(&key, Usage::default()))
 }
 
@@ -297,6 +313,17 @@ pub async fn remove(db: &PgPool, user: UserId, team: TeamId, id: SshKeyId) -> Ap
 			e.into()
 		}
 	})?;
+	audit::log(
+		db,
+		user,
+		team,
+		"ssh_key.delete",
+		Target::new("ssh_key", key.id).named(&key.name),
+		Diff::new()
+			.set("name", key.name.clone())
+			.set("fingerprint", key.fingerprint.clone()),
+	)
+	.await;
 	Ok(())
 }
 

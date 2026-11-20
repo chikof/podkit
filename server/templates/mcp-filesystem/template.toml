@@ -1,0 +1,22 @@
+id = "mcp-filesystem"
+name = "MCP Filesystem"
+description = "Reference MCP server that reads, searches and writes files under one directory. Its /data volume is the only place it can reach. Link it to an agent application to give the agent a workspace."
+category = "ai"
+tags = [
+    "ai",
+    "mcp",
+    "agents",
+    "files",
+]
+version = "1.0.2"
+logo = "logo.svg"
+website = "https://modelcontextprotocol.io"
+docs = "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem#readme"
+source = "https://github.com/modelcontextprotocol/servers"
+# Image: https://hub.docker.com/r/mcp/filesystem (tag 1.0.2; entrypoint node /app/dist/index.js, stdio).
+# License: modelcontextprotocol/servers, MIT for older code and Apache-2.0 for new (see its LICENSE).
+
+[mcp]
+transport = "stdio"
+port = 8080
+command = ["node", "/app/dist/index.js", "/data"]

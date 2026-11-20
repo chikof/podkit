@@ -319,6 +319,31 @@ pub(crate) async fn build_spec(
 		})?
 		.map(|config| config.to_gate(container_port));
 
+	// An MCP server is reached through the gateway on its environment's network, by its
+	// alias: it is never routed publicly, and a stdio one runs behind the agent's bridge.
+	let mcp = crate::mcp_servers::find(&state.db, application.id)
+		.await
+		.map_err(|e| db_failure(&e))?;
+	let aliases: Vec<String> = mcp
+		.iter()
+		.map(|_| crate::mcp_servers::alias(&application.slug))
+		.collect();
+	let mut options = proto::ContainerOptions::default();
+	if let Some(mcp) = mcp
+		.as_ref()
+		.filter(|m| m.transport == crate::mcp_servers::Transport::Stdio)
+	{
+		options.mcp_bridge = Some(proto::McpBridge {
+			port: container_port,
+			path: mcp.path.clone(),
+			command: mcp.args(),
+		});
+	}
+	let routing = mcp.is_none().then(|| Routing {
+		http_hosts: vec![applications::public_hostname(&application.slug, server)],
+		https_hosts,
+	});
+
 	Ok(DeploySpec {
 		service: format!("app-{}", application.id),
 		instance_id: deployment.id.0,
@@ -326,10 +351,7 @@ pub(crate) async fn build_spec(
 		env: load_env(state, application).await?,
 		command: None,
 		container_port: Some(container_port),
-		routing: Some(Routing {
-			http_hosts: vec![applications::public_hostname(&application.slug, server)],
-			https_hosts,
-		}),
+		routing,
 		network_aliases: Vec::new(),
 		volumes,
 		published_ports: Vec::new(),
@@ -343,7 +365,7 @@ pub(crate) async fn build_spec(
 		shm_bytes: None,
 		stop_timeout_s: None,
 		networks: Vec::new(),
-		options: proto::ContainerOptions::default(),
+		options,
 		attach: networks::attach::for_resource(
 			&state.db,
 			networks::attach::Home {
@@ -352,7 +374,7 @@ pub(crate) async fn build_spec(
 				environment: application.environment_id,
 				server: application.server_id,
 			},
-			&[],
+			&aliases,
 		)
 		.await
 		.map_err(|e| {
@@ -523,6 +545,17 @@ pub(crate) async fn load_env(
 	})?;
 	env.retain(|(key, _)| !gateway.iter().any(|(g, _)| g == key));
 	env.extend(gateway);
+	let mcp = crate::mcp_servers::env(state, application.id)
+		.await
+		.map_err(|e| {
+			tracing::error!(
+				application = application.id.0,
+				"failed to load MCP env: {e}"
+			);
+			failed("failed to load the application's MCP links")
+		})?;
+	env.retain(|(key, _)| !mcp.iter().any(|(g, _)| g == key));
+	env.extend(mcp);
 	Ok(env)
 }
 

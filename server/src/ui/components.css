@@ -2258,3 +2258,10 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 /* Scheduled tasks: the overlap policy is a labelled group of three choice cards. */
 .ui-cron-policy { display: flex; flex-direction: column; gap: var(--s-2); min-inline-size: 0; margin: 0; padding: 0; border: 0; }
 .ui-cron-policy legend { padding: 0; margin-block-end: var(--s-2); font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+
+/* == audit log == */
+.ui-audit-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--s-3); align-items: end; margin-block-end: var(--s-4); }
+.ui-audit-filters-act { display: flex; flex-wrap: wrap; gap: var(--s-2); grid-column: 1 / -1; }
+.ui-audit-diff summary { cursor: pointer; font-size: var(--fs-xs); color: var(--muted-foreground); }
+.ui-audit-diff pre { margin: var(--s-2) 0 0; max-inline-size: 36rem; overflow: auto; font-size: var(--fs-xs); }
+.ui-audit-ua { display: block; max-inline-size: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); }

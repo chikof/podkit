@@ -11,6 +11,7 @@ use super::{
 	Credentials, Database, DatabaseStatus, EngineKind, NAME_CONSTRAINT, NewDatabase,
 	PORT_CONSTRAINT, SettingsUpdate, engines,
 };
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{
@@ -282,6 +283,23 @@ pub async fn create(
 		"failed to queue provision job",
 	)
 	.await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"database.create",
+		Target::new("database", database.id)
+			.named(&database.name)
+			.in_project(project),
+		Diff::new()
+			.set("name", database.name.clone())
+			.set("engine", format!("{:?}", database.engine).to_lowercase())
+			.set("version", database.version.clone())
+			.set("server_id", server.id.0)
+			.set("public_port", database.public_port)
+			.secret("password"),
+	)
+	.await;
 	Ok(database)
 }
 
@@ -425,7 +443,21 @@ pub async fn reveal(
 	id: DatabaseId,
 ) -> AppResult<Connection> {
 	match get_with_connection(s, user, team, project, id).await? {
-		(_, Some(connection)) => Ok(connection),
+		(database, Some(connection)) => {
+			// The password is not written down, only that it was shown.
+			audit::log(
+				&s.db,
+				user,
+				team,
+				"database.reveal",
+				Target::new("database", database.id)
+					.named(&database.name)
+					.in_project(project),
+				Diff::new().secret("password"),
+			)
+			.await;
+			Ok(connection)
+		}
 		(_, None) => Err(ServerError::Forbidden),
 	}
 }
@@ -506,6 +538,36 @@ pub async fn update_settings(
 	if reprovision {
 		queue(s, JobKind::DatabaseProvision, &updated).await?;
 	}
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"database.update",
+		Target::new("database", updated.id)
+			.named(&updated.name)
+			.in_project(project),
+		Diff::new()
+			.changed("public_port", database.public_port, updated.public_port)
+			.changed(
+				"memory_limit_mb",
+				database.memory_limit_mb,
+				updated.memory_limit_mb,
+			)
+			.changed("cpu_limit", database.cpu_limit, updated.cpu_limit)
+			.changed(
+				"backup_target_id",
+				database.backup_target_id.map(|t| t.0),
+				updated.backup_target_id.map(|t| t.0),
+			)
+			.changed(
+				"backup_schedule",
+				database.backup_schedule.clone(),
+				updated.backup_schedule.clone(),
+			)
+			.changed("backup_keep", database.backup_keep, updated.backup_keep)
+			.set("reprovisioned", reprovision),
+	)
+	.await;
 	Ok((updated, reprovision))
 }
 
@@ -516,10 +578,22 @@ async fn lifecycle(
 	project: ProjectId,
 	id: DatabaseId,
 	kind: JobKind,
+	action: &str,
 ) -> AppResult<Database> {
 	authorize(&s.db, user, team, Action::Update, Resource::Database).await?;
 	let database = scope::database(&s.db, team, project, id).await?;
 	queue(s, kind, &database).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		action,
+		Target::new("database", database.id)
+			.named(&database.name)
+			.in_project(project),
+		Diff::new(),
+	)
+	.await;
 	Ok(database)
 }
 
@@ -531,7 +605,16 @@ pub async fn start(
 	project: ProjectId,
 	id: DatabaseId,
 ) -> AppResult<Database> {
-	lifecycle(s, user, team, project, id, JobKind::DatabaseStart).await
+	lifecycle(
+		s,
+		user,
+		team,
+		project,
+		id,
+		JobKind::DatabaseStart,
+		"database.start",
+	)
+	.await
 }
 
 /// Stops the container; the agent will not restart it. Caller must hold
@@ -543,7 +626,16 @@ pub async fn stop(
 	project: ProjectId,
 	id: DatabaseId,
 ) -> AppResult<Database> {
-	lifecycle(s, user, team, project, id, JobKind::DatabaseStop).await
+	lifecycle(
+		s,
+		user,
+		team,
+		project,
+		id,
+		JobKind::DatabaseStop,
+		"database.stop",
+	)
+	.await
 }
 
 /// Recreates the container from the stored settings, keeping its data.
@@ -555,7 +647,16 @@ pub async fn restart(
 	project: ProjectId,
 	id: DatabaseId,
 ) -> AppResult<Database> {
-	lifecycle(s, user, team, project, id, JobKind::DatabaseProvision).await
+	lifecycle(
+		s,
+		user,
+		team,
+		project,
+		id,
+		JobKind::DatabaseProvision,
+		"database.restart",
+	)
+	.await
 }
 
 /// Marks the database `deleting` and queues the removal of its containers;
@@ -582,6 +683,19 @@ pub async fn remove(
 		JobKind::DatabaseRemove
 	};
 	queue_or_fail(s, kind, &database, "failed to queue remove job").await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"database.delete",
+		Target::new("database", database.id)
+			.named(&database.name)
+			.in_project(project),
+		Diff::new()
+			.set("name", database.name.clone())
+			.set("purge_data", purge_data),
+	)
+	.await;
 	Ok(database)
 }
 

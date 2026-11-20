@@ -14,6 +14,7 @@
 //!
 //! Later cards add NEW files under `components/` instead of editing these.
 
+mod audit_events;
 mod avatar;
 mod avatar_field;
 mod badge;
@@ -46,6 +47,7 @@ mod theme_toggle;
 mod toast;
 mod tooltip;
 
+pub use audit_events::{activity_card, audit_table};
 pub use avatar::{avatar, user_avatar, user_avatar_lg};
 pub use avatar_field::{AvatarField, avatar_field};
 pub use badge::{Status, Tone, badge, status_badge, status_dot};

@@ -90,6 +90,8 @@ pub struct ApiToken {
 /// What an authenticated token may do, attached to the request.
 #[derive(Debug, Clone)]
 pub struct Grant {
+	/// The token itself, for the audit log.
+	pub token: ApiTokenId,
 	pub team: TeamId,
 	pub user: UserId,
 	pub scopes: Vec<Scope>,

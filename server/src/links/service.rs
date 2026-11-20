@@ -4,6 +4,7 @@
 use sqlx::PgPool;
 
 use super::Link;
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ApplicationId, ModelId, ProjectId, TeamId, UserId};
@@ -77,6 +78,19 @@ pub async fn link(
 	links::ensure_key(s, app.id).await?;
 	links::add(&s.db, app.id, model.id, make_default).await?;
 	links::push_after_change(s, app.server_id).await;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"app.model.link",
+		Target::new("application", app.id)
+			.named(&app.slug)
+			.in_project(project),
+		Diff::new()
+			.set("model_id", model.id.0)
+			.set("default", make_default),
+	)
+	.await;
 	one(&s.db, app.id, model.id).await
 }
 
@@ -97,6 +111,17 @@ pub async fn set_default(
 	if !links::set_default(&s.db, app.id, model).await? {
 		return Err(not_linked());
 	}
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"app.model.default",
+		Target::new("application", app.id)
+			.named(&app.slug)
+			.in_project(project),
+		Diff::new().set("model_id", model.0),
+	)
+	.await;
 	one(&s.db, app.id, model).await
 }
 
@@ -122,10 +147,21 @@ pub async fn unlink(
 		return Err(not_linked());
 	}
 	links::push_after_change(s, app.server_id).await;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"app.model.unlink",
+		Target::new("application", app.id)
+			.named(&app.slug)
+			.in_project(project),
+		Diff::new().set("model_id", model.0),
+	)
+	.await;
 	Ok(())
 }
 
-async fn collect_best_effort(s: &AppState, app: &applications::Application) {
+pub(crate) async fn collect_best_effort(s: &AppState, app: &applications::Application) {
 	let result = async {
 		let server = crate::servers::find(&s.db, app.server_id)
 			.await?

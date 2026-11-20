@@ -13,6 +13,7 @@ use super::doc::{self, Doc, EnvironmentDoc, ProjectDoc};
 use super::objects::{Kind, Secrets, flatten};
 use super::plan::{Action, Plan, diff, validate_doc};
 use super::snapshot::{self, Lookup};
+use crate::audit::{self, Diff};
 use crate::auth::permission::{Action as Do, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ProjectId, TeamId, UserId};
@@ -277,12 +278,31 @@ pub async fn apply(
 		lookup: &prepared.lookup,
 		ids: prepared.snapshot.ids.clone(),
 	};
-	let report = apply::run(
+	let report = audit::quiet(apply::run(
 		&mut cx,
 		&prepared.plan,
 		Options {
 			deploy: input.deploy,
 		},
+	))
+	.await;
+	// One event for the whole apply: what it changed is in the report, not in 30 rows.
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"iac.apply",
+		audit::Target::new("project", prepared.project.id)
+			.named(&prepared.project.slug)
+			.in_project(prepared.project.id),
+		Diff::new()
+			.set("applied", report.applied.len())
+			.set("not_run", report.not_run.len())
+			.set("deploys", report.deployed.len())
+			.set("failed", report.failed.is_some())
+			.set("deploy", input.deploy)
+			.set("prune", input.prune)
+			.secret("secrets"),
 	)
 	.await;
 	Ok(Outcome::Done(Box::new(Applied {
@@ -427,48 +447,68 @@ pub async fn import_apply(
 		authorize_plan(state, user, team, &p.plan, input.deploy).await?;
 	}
 	let doc = doc::parse(&input.text).map_err(bad)?;
-	let mut done = Vec::new();
-	for (slug, desired) in doc.projects {
-		let made =
-			crate::projects::service::create(&state.db, user, team, &desired.name, &slug).await?;
-		let one = Doc {
-			version: doc::VERSION,
-			projects: [(slug.clone(), desired)].into(),
-		};
-		let text = doc::render(&one).map_err(bad)?;
-		let sub = Input {
-			text,
-			secrets: input.secrets.clone(),
-			prune: true,
-			deploy: input.deploy,
-		};
-		match apply(state, user, team, made.id, &sub).await? {
-			Outcome::Done(applied) => {
-				let failed = applied.report.failed.is_some();
-				done.push(Imported {
-					slug,
-					project_id: made.id,
-					applied: *applied,
-				});
-				if failed {
+	let done = Box::pin(audit::quiet(async {
+		let mut done = Vec::new();
+		for (slug, desired) in doc.projects {
+			let made =
+				crate::projects::service::create(&state.db, user, team, &desired.name, &slug)
+					.await?;
+			let one = Doc {
+				version: doc::VERSION,
+				projects: [(slug.clone(), desired)].into(),
+			};
+			let text = doc::render(&one).map_err(bad)?;
+			let sub = Input {
+				text,
+				secrets: input.secrets.clone(),
+				prune: true,
+				deploy: input.deploy,
+			};
+			match apply(state, user, team, made.id, &sub).await? {
+				Outcome::Done(applied) => {
+					let failed = applied.report.failed.is_some();
+					done.push(Imported {
+						slug,
+						project_id: made.id,
+						applied: *applied,
+					});
+					if failed {
+						break;
+					}
+				}
+				Outcome::Refused(plan) => {
+					// The project exists but the file did not fit it: say so rather than leave it
+					// looking like a clean import.
+					done.push(Imported {
+						slug,
+						project_id: made.id,
+						applied: Applied {
+							plan: *plan,
+							report: Report::default(),
+						},
+					});
 					break;
 				}
 			}
-			Outcome::Refused(plan) => {
-				// The project exists but the file did not fit it: say so rather than leave it
-				// looking like a clean import.
-				done.push(Imported {
-					slug,
-					project_id: made.id,
-					applied: Applied {
-						plan: *plan,
-						report: Report::default(),
-					},
-				});
-				break;
-			}
 		}
-	}
+		Ok::<_, crate::error::ServerError>(done)
+	}))
+	.await?;
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"iac.import",
+		audit::Target::none("project"),
+		Diff::new()
+			.set(
+				"projects",
+				done.iter().map(|i| i.slug.clone()).collect::<Vec<_>>(),
+			)
+			.set("deploy", input.deploy)
+			.secret("secrets"),
+	)
+	.await;
 	Ok(ImportOutcome::Done(done))
 }
 

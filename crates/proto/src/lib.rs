@@ -251,6 +251,20 @@ pub enum HealthCheck {
 	},
 }
 
+/// A stdio MCP server run behind `podkit-agent --mcp-bridge`: the agent binary is
+/// mounted into the container and replaces its entrypoint, so the server answers
+/// streamable HTTP on `port` at `path`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct McpBridge {
+	/// Port the bridge listens on.
+	pub port: u16,
+	/// Path of the endpoint.
+	pub path: String,
+	/// The server's command line. Empty: the image's own entrypoint and command.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub command: Vec<String>,
+}
+
 /// A network a container joins, with the DNS aliases it has there.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NetworkAttach {
@@ -388,6 +402,9 @@ pub struct FileMount {
 /// field is optional on the wire.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContainerOptions {
+	/// Run the container's stdio MCP server behind the agent's own bridge.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub mcp_bridge: Option<McpBridge>,
 	/// Restart behaviour.
 	#[serde(default, skip_serializing_if = "is_default")]
 	pub restart: Restart,
@@ -1092,6 +1109,37 @@ pub struct GatewayConfig {
 	/// and of the models. Absent in older payloads.
 	#[serde(default, skip_serializing_if = "Vec::is_empty")]
 	pub networks: Vec<String>,
+	/// Keys of application-to-MCP-server links, one server each. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub mcp_keys: Vec<GatewayMcpKey>,
+	/// Names of the MCP servers on the server that belong to no key above.
+	/// Only used to tell "not allowed" (403) from "unknown" (404).
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub other_mcp: Vec<String>,
+}
+
+/// One MCP server the gateway forwards `/mcp/<name>` to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatewayMcp {
+	/// Server-side id of the MCP server's application; usage is reported against it.
+	pub server_id: i64,
+	/// The `<name>` in `/mcp/<name>`.
+	pub name: String,
+	/// DNS name of the MCP server's container on its environment network.
+	pub host: String,
+	/// Port it listens on.
+	pub port: u16,
+	/// Path of its streamable HTTP endpoint, e.g. `/mcp`.
+	pub path: String,
+}
+
+/// The key of one link, and the one MCP server it opens.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatewayMcpKey {
+	/// Hex SHA-256 of the key.
+	pub key_hash: String,
+	/// What the key reaches.
+	pub mcp: GatewayMcp,
 }
 
 /// Token counters of one key and model during one hour.
@@ -1109,6 +1157,10 @@ pub struct GatewayUsage {
 	pub input_tokens: u64,
 	/// Generated tokens, as far as the engine reported them.
 	pub output_tokens: u64,
+	/// An MCP link's counter: `model_id` is then the MCP server's application id and
+	/// the token counts are zero. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub mcp: bool,
 }
 
 /// `POST /v1/scan/resolve` body: which image a reference names right now.
@@ -1404,6 +1456,30 @@ impl std::fmt::Debug for GatewayChatRequest {
 		f.debug_struct("GatewayChatRequest")
 			.field("key", &"***")
 			.field("body_bytes", &self.body.len())
+			.field("timeout_s", &self.timeout_s)
+			.finish()
+	}
+}
+
+/// `POST /v1/gateway/mcp/tools` body: `initialize` and `tools/list` against one
+/// MCP server through the gateway, from a throwaway container on the `podkit`
+/// network. The answer is an NDJSON stream of [`Event::Log`] lines: one JSON
+/// object, `{"tools": [...]}` or `{"error": "<why>"}`; then a terminal event.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatewayMcpToolsRequest {
+	/// Gateway key sent as the bearer token. Never logged.
+	pub key: String,
+	/// The `<name>` of `/mcp/<name>`.
+	pub name: String,
+	/// Seconds each request may take.
+	pub timeout_s: u32,
+}
+
+impl std::fmt::Debug for GatewayMcpToolsRequest {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("GatewayMcpToolsRequest")
+			.field("key", &"***")
+			.field("name", &self.name)
 			.field("timeout_s", &self.timeout_s)
 			.finish()
 	}

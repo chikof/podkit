@@ -7,6 +7,7 @@ use time::OffsetDateTime;
 use super::api::{CloneAccess, Identity, RepoPage, Target, valid_repo};
 use super::{Credentials, GitProvider, Kind, UsedBy, github};
 use crate::applications::Application;
+use crate::audit::{self, Diff};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{GitProviderId, TeamId, UserId};
@@ -219,6 +220,19 @@ pub async fn create_token(
 		created_at: OffsetDateTime::now_utc(),
 	};
 	store(s, &provider).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"git_provider.create",
+		audit::Target::new("git_provider", provider.id).named(&provider.name),
+		Diff::new()
+			.set("name", provider.name.clone())
+			.set("kind", provider.kind.clone())
+			.set("base_url", audit::scrub_url(&provider.base_url))
+			.secret("token"),
+	)
+	.await;
 	view(s, &provider, Vec::new())
 }
 
@@ -250,6 +264,20 @@ pub(super) async fn create_github(
 		created_at: OffsetDateTime::now_utc(),
 	};
 	store(s, &provider).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"git_provider.create",
+		audit::Target::new("git_provider", provider.id).named(&provider.name),
+		Diff::new()
+			.set("name", provider.name.clone())
+			.set("kind", provider.kind.clone())
+			.set("base_url", audit::scrub_url(&provider.base_url))
+			.secret("private_key")
+			.secret("webhook_secret"),
+	)
+	.await;
 	view(s, &provider, Vec::new())
 }
 
@@ -276,7 +304,17 @@ pub async fn test(
 	authorize(&s.db, user, team, Action::Update, Resource::GitProvider).await?;
 	let p = scope::git_provider(&s.db, team, id).await?;
 	let (kind, credentials) = open(s, &p)?;
-	target(s, &p, kind, &credentials).test().await
+	let identity = target(s, &p, kind, &credentials).test().await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"git_provider.test",
+		audit::Target::new("git_provider", p.id).named(&p.name),
+		Diff::new(),
+	)
+	.await;
+	Ok(identity)
 }
 
 fn target<'a>(
@@ -350,6 +388,17 @@ pub async fn remove(s: &AppState, user: UserId, team: TeamId, id: GitProviderId)
 			e.into()
 		}
 	})?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"git_provider.delete",
+		audit::Target::new("git_provider", p.id).named(&p.name),
+		Diff::new()
+			.set("name", p.name.clone())
+			.set("kind", p.kind.clone()),
+	)
+	.await;
 	Ok(())
 }
 

@@ -8,6 +8,7 @@ use time::OffsetDateTime;
 
 use super::{Deployment, DeploymentStatus};
 use crate::applications::Application;
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::deployments;
 use crate::error::{AppResult, ServerError};
@@ -18,6 +19,30 @@ use crate::state::AppState;
 
 /// The most container log lines one request may replay.
 pub const MAX_TAIL: u32 = 5000;
+
+/// Records a deployment action on the application it belongs to.
+async fn log(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	app: &Application,
+	action: &str,
+	d: &Deployment,
+) {
+	audit::log(
+		&s.db,
+		user,
+		team,
+		action,
+		Target::new("application", app.id)
+			.named(&app.slug)
+			.in_project(app.project_id),
+		Diff::new()
+			.set("deployment_id", d.id.0)
+			.set("status", d.status.as_str()),
+	)
+	.await;
+}
 
 /// What started a deployment.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -239,7 +264,9 @@ pub async fn deploy(
 		Resource::Deployment,
 	)
 	.await?;
-	deployments::queue(s, &app, Some(user), None).await
+	let d = deployments::queue(s, &app, Some(user), None).await?;
+	log(s, user, team, &app, "app.deploy", &d).await;
+	Ok(d)
 }
 
 /// Redeploys `id`'s built image as a new deployment; needs `create deployment`.
@@ -265,6 +292,7 @@ pub async fn rollback(
 		.await?
 		.ok_or(ServerError::DeploymentNotFound)?;
 	let deployment = deployments::queue(s, &app, Some(user), Some(&target)).await?;
+	log(s, user, team, &app, "app.rollback", &deployment).await;
 	crate::notifications::hooks::rollback(s, app.id.0, None).await;
 	Ok(deployment)
 }
@@ -302,7 +330,9 @@ pub async fn cancel(
 			"deployment is not in progress".to_string(),
 		));
 	}
-	Ok(deployments::find(&s.db, app.id, id).await?.unwrap_or(d))
+	let after = deployments::find(&s.db, app.id, id).await?.unwrap_or(d);
+	log(s, user, team, &app, "deployment.cancel", &after).await;
+	Ok(after)
 }
 
 /// The job whose log is the deployment's build output, if it has one; needs
@@ -371,7 +401,10 @@ pub async fn stop(
 		.send(Method::POST, &format!("/v1/containers/{container_id}/stop"))
 		.await?;
 
-	Ok(deployments::set_status(&s.db, current.id, DeploymentStatus::Stopped, None).await?)
+	let stopped =
+		deployments::set_status(&s.db, current.id, DeploymentStatus::Stopped, None).await?;
+	log(s, user, team, &app, "app.stop", &stopped).await;
+	Ok(stopped)
 }
 
 /// Brings the application back by redeploying its newest built image; no
@@ -408,7 +441,9 @@ pub async fn restart(
 					.to_string(),
 			)
 		})?;
-	deployments::queue(s, &app, Some(user), Some(&target)).await
+	let d = deployments::queue(s, &app, Some(user), Some(&target)).await?;
+	log(s, user, team, &app, "app.restart", &d).await;
+	Ok(d)
 }
 
 /// Whether a deployment of the application is running now; needs

@@ -47,6 +47,7 @@ pub enum Resource {
 	Scan,
 	Notification,
 	Cron,
+	Audit,
 }
 
 impl Resource {
@@ -73,6 +74,7 @@ impl Resource {
 			Self::Scan => "scan",
 			Self::Notification => "notification",
 			Self::Cron => "cron",
+			Self::Audit => "audit",
 		}
 	}
 }
@@ -133,7 +135,7 @@ impl Permissions {
 
 const ACTIONS: [Action; 4] = [Action::Create, Action::Read, Action::Update, Action::Delete];
 
-const RESOURCES: [Resource; 21] = [
+const RESOURCES: [Resource; 22] = [
 	Resource::Team,
 	Resource::Project,
 	Resource::Membership,
@@ -155,6 +157,7 @@ const RESOURCES: [Resource; 21] = [
 	Resource::Scan,
 	Resource::Notification,
 	Resource::Cron,
+	Resource::Audit,
 ];
 
 /// Loads `user`'s permission set in `team` with one query. A non-member gets an

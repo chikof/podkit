@@ -9,6 +9,7 @@ use proto::{Event, GpuVendor};
 
 use super::engines::{self, EngineKind, EngineSpec, GpuNeed};
 use super::{Model, ModelStatus, NAME_CONSTRAINT, NewModel, SLUG_CONSTRAINT};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{EnvironmentId, ModelFileId, ModelId, ProjectId, TeamId, UserId};
@@ -378,7 +379,35 @@ pub async fn create(
 	})?;
 
 	queue(s, JobKind::ModelStart, &model).await?;
+	log(
+		s,
+		user,
+		team,
+		&model,
+		"model.create",
+		Diff::new()
+			.set("name", model.name.clone())
+			.set("engine", format!("{:?}", model.engine).to_lowercase())
+			.set("server_id", model.server_id.0)
+			.set("model_files_id", model.model_files_id.0),
+	)
+	.await;
 	Ok(model)
+}
+
+/// Records an action on a model.
+async fn log(s: &AppState, user: UserId, team: TeamId, model: &Model, action: &str, diff: Diff) {
+	audit::log(
+		&s.db,
+		user,
+		team,
+		action,
+		Target::new("model", model.id)
+			.named(&model.slug)
+			.in_project(model.project_id),
+		diff,
+	)
+	.await;
 }
 
 /// Queues `kind`; when that fails the model is marked failed so it does not
@@ -474,6 +503,7 @@ pub async fn start(
 		)));
 	}
 	begin_start(s, &mut model).await?;
+	log(s, user, team, &model, "model.start", Diff::new()).await;
 	Ok(model)
 }
 
@@ -502,6 +532,7 @@ pub async fn stop(
 		)));
 	}
 	queue(s, JobKind::ModelStop, &model).await?;
+	log(s, user, team, &model, "model.stop", Diff::new()).await;
 	Ok(model)
 }
 
@@ -524,6 +555,7 @@ pub async fn restart(
 		));
 	}
 	begin_start(s, &mut model).await?;
+	log(s, user, team, &model, "model.restart", Diff::new()).await;
 	Ok(model)
 }
 
@@ -562,6 +594,15 @@ pub async fn remove(
 	model.status = ModelStatus::Removing;
 	model.error = None;
 	queue(s, JobKind::ModelRemove, &model).await?;
+	log(
+		s,
+		user,
+		team,
+		&model,
+		"model.delete",
+		Diff::new().set("name", model.name.clone()),
+	)
+	.await;
 	Ok(model)
 }
 

@@ -12,6 +12,7 @@ use super::{
 	Badge, BadgeState, Counts, MAX_IGNORE_DAYS, ResourceKind, Subject, Target, decompress,
 	queue_fresh,
 };
+use crate::audit::{self, Diff};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{DeploymentId, ProjectId, ScanId, ScanIgnoreId, ServerId, TeamId, UserId};
@@ -383,7 +384,7 @@ pub async fn ignore(
 		.as_deref()
 		.map(str::trim)
 		.filter(|p| !p.is_empty());
-	Ok(store::add_ignore(
+	let id = store::add_ignore(
 		db,
 		team,
 		user,
@@ -392,7 +393,20 @@ pub async fn ignore(
 		reason,
 		OffsetDateTime::now_utc() + Duration::days(new.days),
 	)
-	.await?)
+	.await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"scan.ignore",
+		audit::Target::new("scan_ignore", id).named(vuln_id),
+		Diff::new()
+			.set("vuln_id", vuln_id)
+			.set("package", package)
+			.set("days", new.days),
+	)
+	.await;
+	Ok(id)
 }
 
 /// # Errors
@@ -405,6 +419,15 @@ pub async fn remove_ignore(
 ) -> AppResult<()> {
 	authorize(db, user, team, Action::Delete, Resource::Scan).await?;
 	if store::remove_ignore(db, team, id).await? {
+		audit::log(
+			db,
+			user,
+			team,
+			"scan.unignore",
+			audit::Target::new("scan_ignore", id),
+			Diff::new(),
+		)
+		.await;
 		Ok(())
 	} else {
 		Err(ServerError::NotFound)
@@ -462,6 +485,21 @@ pub async fn scan_again(
 			"nothing to scan yet: deploy first".to_owned(),
 		));
 	}
+	let (kind, id) = match subject {
+		Subject::Application(id) => ("application", id.0),
+		Subject::Database(id) => ("database", id.0),
+		Subject::Model(id) => ("model", id.0),
+		Subject::Stack(id) => ("stack", id.0),
+	};
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"scan.run",
+		audit::Target::new(kind, id).in_project(project),
+		Diff::new().set("queued", queued),
+	)
+	.await;
 	Ok(queued)
 }
 
@@ -590,5 +628,17 @@ pub async fn update_settings(
 	.bind(new.memory_mb)
 	.execute(db)
 	.await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"scan.settings",
+		audit::Target::new("server", server.id).named(&server.name),
+		Diff::new()
+			.set("enabled", new.enabled)
+			.set("cpus", new.cpus)
+			.set("memory_mb", new.memory_mb),
+	)
+	.await;
 	Ok(())
 }

@@ -49,6 +49,7 @@ id!(
 	SshKeyId,
 	RegistryId,
 	ApiTokenId,
+	AuditEventId,
 	GitProviderId,
 	JobId,
 	ScanId,

@@ -1,0 +1,28 @@
+[package]
+name = "cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The podkit command line: `podkit mcp` serves MCP over stdio"
+
+[lib]
+name = "cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "podkit"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true, features = ["rt", "io-std", "io-util", "macros"] }
+reqwest.workspace = true
+rustls.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+
+[lints]
+workspace = true

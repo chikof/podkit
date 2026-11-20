@@ -63,6 +63,7 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/gateway/config", put(gateway_config))
 		.route("/v1/gateway/usage/drain", post(gateway_drain))
 		.route("/v1/gateway/chat", post(gateway_chat))
+		.route("/v1/gateway/mcp/tools", post(gateway_mcp_tools))
 		.with_state(ctx)
 }
 
@@ -708,4 +709,15 @@ async fn gateway_chat(
 	}
 	let podman = ctx.podman();
 	ndjson(move |tx| crate::gateway::chat::run(podman, req, tx))
+}
+
+async fn gateway_mcp_tools(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::GatewayMcpToolsRequest>,
+) -> Response {
+	if let Err(message) = crate::gateway::mcp::validate(&req) {
+		return ApiError::new(StatusCode::BAD_REQUEST, message).into_response();
+	}
+	let podman = ctx.podman();
+	ndjson(move |tx| crate::gateway::mcp::tools(podman, req, tx))
 }

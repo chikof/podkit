@@ -4,6 +4,7 @@
 use sqlx::PgPool;
 
 use super::Server;
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ServerId, TeamId, UserId};
@@ -104,6 +105,21 @@ pub async fn create(s: &AppState, user: UserId, team: TeamId, new: NewServer) ->
 		return Err(e.into());
 	}
 	enqueue_bootstrap(s, &server).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"server.create",
+		Target::new("server", server.id).named(&server.name),
+		Diff::new()
+			.set("name", server.name.clone())
+			.set("hostname", server.hostname.clone())
+			.set("ssh_port", server.ssh_port)
+			.set("ssh_user", server.ssh_user.clone())
+			.set("ssh_key_id", key.id.0)
+			.set("ssh_key_created", key.created),
+	)
+	.await;
 	Ok(server)
 }
 
@@ -147,6 +163,15 @@ pub async fn bootstrap(
 		server.host_key = None;
 	}
 	enqueue_bootstrap(s, &server).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"server.bootstrap",
+		Target::new("server", server.id).named(&server.name),
+		Diff::new().set("reset_host_key", reset_host_key),
+	)
+	.await;
 	Ok(server)
 }
 
@@ -171,5 +196,16 @@ pub async fn remove(s: &AppState, user: UserId, team: TeamId, id: ServerId) -> A
 		}
 	})?;
 	s.agents.forget(server.id);
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"server.delete",
+		Target::new("server", server.id).named(&server.name),
+		Diff::new()
+			.set("name", server.name.clone())
+			.set("hostname", server.hostname.clone()),
+	)
+	.await;
 	Ok(server)
 }

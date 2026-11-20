@@ -683,6 +683,7 @@ fn convert(
 		source: meta.links.get("github").cloned(),
 		upstream: Some(format!("Dokploy/templates@{rev} blueprints/{upstream_id}")),
 		gateway: false,
+		mcp: None,
 		requires: Requires::default(),
 		reveal: reveal_of(&variables),
 		variables,
