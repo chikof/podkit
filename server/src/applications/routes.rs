@@ -90,6 +90,12 @@ pub struct CreateApplicationRequest {
 	/// The project's first environment when omitted.
 	#[serde(default)]
 	pub environment_id: Option<EnvironmentId>,
+	/// Clone `git_repo` through this git provider instead of from a `repo_url`.
+	#[serde(default)]
+	pub git_provider_id: Option<crate::ids::GitProviderId>,
+	/// `owner/name` at the provider.
+	#[serde(default)]
+	pub git_repo: String,
 }
 
 /// Same shape as `CreateApplicationRequest` minus `server_id` (moving an
@@ -167,6 +173,12 @@ pub struct ApplicationResponse {
 	pub url: String,
 	/// The vault key used as the deploy key (its public half is in the ssh-keys list).
 	pub deploy_key_id: Option<crate::ids::SshKeyId>,
+	/// The git provider the repository is cloned through, and the repository there.
+	pub git_provider_id: Option<crate::ids::GitProviderId>,
+	pub git_repo: Option<String>,
+	/// Set on creation when the push webhook could not be put in place.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub notice: Option<String>,
 	/// Only ever populated on creation, the plaintext is not recoverable
 	/// afterwards (only the encrypted form is stored). Wire this into the
 	/// git provider's webhook config to enable `POST /webhooks/deploy/{id}`.
@@ -201,6 +213,9 @@ impl From<&ApplicationView> for ApplicationResponse {
 			cpu_limit: app.cpu_limit.map(f64::from),
 			url: app.url.clone(),
 			deploy_key_id: app.deploy_key_id,
+			git_provider_id: app.git_provider_id,
+			git_repo: app.git_repo.clone(),
+			notice: None,
 			webhook_secret: None,
 		}
 	}
@@ -240,11 +255,14 @@ pub async fn create(
 			memory_limit_mb: body.memory_limit_mb,
 			cpu_limit: body.cpu_limit,
 			environment_id: body.environment_id,
+			git_provider_id: body.git_provider_id,
+			git_repo: body.git_repo,
 		},
 	)
 	.await?;
 	let mut response = ApplicationResponse::from(&created.app);
 	response.webhook_secret = Some(created.webhook_secret);
+	response.notice = created.notice;
 	Ok(Json(response))
 }
 
@@ -296,6 +314,8 @@ pub async fn update(
 			memory_limit_mb: body.memory_limit_mb,
 			cpu_limit: body.cpu_limit,
 			environment_id: None,
+			git_provider_id: None,
+			git_repo: String::new(),
 		},
 	)
 	.await?;

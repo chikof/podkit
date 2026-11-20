@@ -22,7 +22,9 @@ use super::form::{
 use super::{app_url, crumbs, origin, project_url};
 use crate::applications::SourceKind;
 use crate::applications::service::{self, Created};
+use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
+use crate::git_providers;
 use crate::ids::{EnvironmentId, ProjectId, ServerId, TeamId};
 use crate::projects;
 use crate::ssh_keys::service::{self as key_service, KeyView};
@@ -33,6 +35,7 @@ use crate::ui::components::{
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
+use crate::ui::pages::git_providers::picker::provider_source_fields;
 use crate::ui::{error, sse};
 
 pub fn router() -> Router<AppState> {
@@ -58,6 +61,10 @@ fn field_group(title: &str, description: Option<&str>, fields: &Markup) -> Marku
 	})
 }
 
+#[allow(
+	clippy::too_many_lines,
+	reason = "one page: the tabs, the fields and the form"
+)]
 async fn new_page(
 	State(s): State<AppState>,
 	ctx: TeamCtx,
@@ -72,7 +79,16 @@ async fn new_page(
 		.await
 		.map_err(fail)?;
 	let image = q.source == "image";
-	let source = if image { "image" } else { "git" };
+	// "Git provider" is offered to someone who may read providers; the URL source stays.
+	let provider =
+		!image && q.source == "provider" && ctx.perms.can(Action::Read, Resource::GitProvider);
+	let source = if image {
+		"image"
+	} else if provider {
+		"provider"
+	} else {
+		"git"
+	};
 	let environment = q.environment.map(|e| e.to_string()).unwrap_or_default();
 	let back = if environment.is_empty() {
 		project_url(ctx.team.id, project.id)
@@ -94,22 +110,26 @@ async fn new_page(
 		}
 		href
 	};
-	let (git_href, image_href) = (switch("git"), switch("image"));
-	let source_tabs = tabs(
-		"Source type",
-		&[
-			TabItem {
-				label: "Git repository",
-				href: &git_href,
-				current: !image,
-			},
-			TabItem {
-				label: "Docker image",
-				href: &image_href,
-				current: image,
-			},
-		],
-	);
+	let (git_href, provider_href, image_href) =
+		(switch("git"), switch("provider"), switch("image"));
+	let mut items = vec![TabItem {
+		label: "Git repository",
+		href: &git_href,
+		current: !image && !provider,
+	}];
+	if ctx.perms.can(Action::Read, Resource::GitProvider) {
+		items.push(TabItem {
+			label: "Git provider",
+			href: &provider_href,
+			current: provider,
+		});
+	}
+	items.push(TabItem {
+		label: "Docker image",
+		href: &image_href,
+		current: image,
+	});
+	let source_tabs = tabs("Source type", &items);
 
 	let post = format!(
 		"evt.preventDefault(); @post({})",
@@ -119,8 +139,17 @@ async fn new_page(
 	let registries = crate::registries::service::list(&s.db, ctx.user.id, ctx.team.id)
 		.await
 		.unwrap_or_default();
+	let providers = if provider {
+		git_providers::service::list(&s, ctx.user.id, ctx.team.id)
+			.await
+			.unwrap_or_default()
+	} else {
+		Vec::new()
+	};
 	let source_fields = if image {
 		html! { (image_source_fields(None, &registries, ctx.team.id)) }
+	} else if provider {
+		html! { (provider_source_fields(ctx.team.id, &providers)) }
 	} else {
 		html! { (git_source_fields(None, &keys, can_create_key)) }
 	};
@@ -130,6 +159,7 @@ async fn new_page(
 				h1 class="text-2xl font-semibold tracking-tight" { "New application" }
 				p class="text-sm text-muted-foreground" {
 					@if image { "An image from a registry, pulled and run as a container on one of your servers." }
+					@else if provider { "A repository from a connected git provider, built and run as a container on one of your servers." }
 					@else { "A git repository, built and run as a container on one of your servers." }
 				}
 			}
@@ -139,6 +169,9 @@ async fn new_page(
 					(field_group("Application", None, &identity_fields(Some(&servers), true)))
 					@if image {
 						(field_group("Image", Some("What to run. podkit pulls it when you deploy."), &source_fields))
+					} @else if provider {
+						(field_group("Repository", Some("It is cloned with the provider's access, so no token or deploy key is needed."), &source_fields))
+						(field_group("Build", None, &build_fields()))
 					} @else {
 						(field_group("Repository", Some("Where the code lives. A private repository needs a credential for its URL."), &source_fields))
 						(field_group("Build", None, &build_fields()))
@@ -181,16 +214,26 @@ pub(super) fn copy_row(label: &str, value: &str) -> Markup {
 fn created_card(ctx: &TeamCtx, origin: &str, created: &Created, key: Option<&KeyView>) -> Markup {
 	let app = &created.app;
 	let webhook = format!("{origin}/webhooks/deploy/{}", app.id);
+	// Through a git provider podkit makes the webhook itself; the secret is only needed to
+	// make one by hand, when that did not work.
+	let by_provider = app.git_provider_id.is_some();
+	let by_hand = !by_provider || created.notice.is_some();
 	html! {
 		div id="app-form" {
 			(card(&html! {
-				(card_section("Application created", Some(if app.source_kind == SourceKind::Git {
+				(card_section("Application created", Some(if by_provider && !by_hand {
+					"podkit made the push webhook at your git provider: a push to the branch deploys it."
+				} else if app.source_kind == SourceKind::Git {
 					"Add the webhook to your git provider to deploy on every push."
 				} else {
 					"Call the webhook from your registry or CI to redeploy when the image changes."
 				}), None))
 				(card_content(&html! {
 					div class="flex flex-col gap-4" {
+						@if let Some(notice) = &created.notice {
+							div class="ui-banner ui-banner-warn" role="status" { (icon("triangle-alert")) div class="ui-banner-body" { (notice) } }
+						}
+						@if by_hand {
 						(copy_row("Webhook URL", &webhook))
 						(copy_row("Webhook secret", &created.webhook_secret))
 						@if let Some(key) = key {
@@ -201,6 +244,7 @@ fn created_card(ctx: &TeamCtx, origin: &str, created: &Created, key: Option<&Key
 						p class="text-sm text-muted-foreground" {
 							"Send it as the GitHub signature secret, or in an "
 							code class="font-mono" { "X-Gitlab-Token" } " or " code class="font-mono" { "X-Webhook-Secret" } " header."
+						}
 						}
 					}
 				}))

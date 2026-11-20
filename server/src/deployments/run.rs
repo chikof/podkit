@@ -348,6 +348,22 @@ async fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth
 			failed("failed to decrypt repository credential")
 		})
 	};
+	// A provider application clones with what the provider gives now: a token minted for this
+	// clone for a GitHub App, the stored access token for GitLab and Gitea.
+	if let (Some(provider), Some(repo)) =
+		(application.git_provider_id, application.git_repo.as_deref())
+	{
+		let access = crate::git_providers::service::clone_access(state, provider, repo)
+			.await
+			.map_err(|e| {
+				tracing::warn!(application = application.id.0, error = %e, "clone access failed");
+				failed(format!("could not get access to the repository: {e}"))
+			})?;
+		return Ok(GitAuth::HttpsToken {
+			token: access.token,
+			username: access.username,
+		});
+	}
 	if let Some(key) = application.deploy_key_id {
 		let sealed = crate::ssh_keys::sealed_private_key(&state.db, key)
 			.await
@@ -367,6 +383,7 @@ async fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth
 	if let Some(sealed) = application.git_token.as_deref() {
 		return Ok(GitAuth::HttpsToken {
 			token: decrypt(sealed)?,
+			username: None,
 		});
 	}
 	Ok(GitAuth::None)

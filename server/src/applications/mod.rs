@@ -1,7 +1,9 @@
 //! Applications: a git repo built and run as a container on one of the
 //! team's servers.
 
-use crate::ids::{ApplicationId, EnvironmentId, ProjectId, RegistryId, ServerId, SshKeyId};
+use crate::ids::{
+	ApplicationId, EnvironmentId, GitProviderId, ProjectId, RegistryId, ServerId, SshKeyId,
+};
 use crate::servers::Server;
 
 pub mod routes;
@@ -106,6 +108,12 @@ pub struct Application {
 	pub memory_limit_mb: Option<i32>,
 	/// Fractional CPU cores. `None` means unlimited.
 	pub cpu_limit: Option<f32>,
+	/// The git provider the repository is cloned through; set together with `git_repo`.
+	pub git_provider_id: Option<GitProviderId>,
+	/// `owner/name` of the repository at the provider.
+	pub git_repo: Option<String>,
+	/// Id of the push webhook podkit made at the provider for this application.
+	pub git_hook_id: Option<String>,
 }
 
 /// Fields needed to insert a new application row.
@@ -131,6 +139,8 @@ pub struct NewApplication {
 	pub webhook_secret: Option<Vec<u8>>,
 	pub memory_limit_mb: Option<i32>,
 	pub cpu_limit: Option<f32>,
+	pub git_provider_id: Option<GitProviderId>,
+	pub git_repo: Option<String>,
 }
 
 /// What an update does to the saved registry an application pulls with.
@@ -176,14 +186,15 @@ pub async fn insert(
 			INSERT INTO applications
 				(id, project_id, environment_id, server_id, name, slug, repo_url, git_ref, deploy_key_id, git_token,
 				 build_strategy, dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,
-				 source_kind, image, registry_auth, registry_id)
-			VALUES ($1, $2, $19, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $20)
+				 source_kind, image, registry_auth, registry_id, git_provider_id, git_repo)
+			VALUES ($1, $2, $19, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $20, $21, $22)
 			RETURNING
 				id AS "id: ApplicationId", project_id AS "project_id: ProjectId", environment_id AS "environment_id: EnvironmentId",
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				source_kind AS "source_kind: SourceKind", image, registry_auth, registry_id AS "registry_id: RegistryId",
 				deploy_key_id AS "deploy_key_id: SshKeyId", git_token, build_strategy AS "build_strategy: BuildStrategy",
-				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
+				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,
+				git_provider_id AS "git_provider_id: GitProviderId", git_repo, git_hook_id
 		"#,
 		new.id as ApplicationId,
 		new.project_id as ProjectId,
@@ -205,6 +216,8 @@ pub async fn insert(
 		new.registry_auth,
 		new.environment_id as EnvironmentId,
 		new.registry_id as Option<RegistryId>,
+		new.git_provider_id as Option<GitProviderId>,
+		new.git_repo,
 	)
 	.fetch_one(db)
 	.await
@@ -232,7 +245,8 @@ pub async fn update(
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				source_kind AS "source_kind: SourceKind", image, registry_auth, registry_id AS "registry_id: RegistryId",
 				deploy_key_id AS "deploy_key_id: SshKeyId", git_token, build_strategy AS "build_strategy: BuildStrategy",
-				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
+				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,
+				git_provider_id AS "git_provider_id: GitProviderId", git_repo, git_hook_id
 		"#,
 		id as ApplicationId,
 		u.name,
@@ -272,7 +286,8 @@ pub async fn find_by_id(
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				source_kind AS "source_kind: SourceKind", image, registry_auth, registry_id AS "registry_id: RegistryId",
 				deploy_key_id AS "deploy_key_id: SshKeyId", git_token, build_strategy AS "build_strategy: BuildStrategy",
-				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
+				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,
+				git_provider_id AS "git_provider_id: GitProviderId", git_repo, git_hook_id
 			FROM applications WHERE id = $1
 		"#,
 		id as ApplicationId,
@@ -293,7 +308,8 @@ pub async fn list_by_environment(
 				server_id AS "server_id: ServerId", name, slug, repo_url, git_ref,
 				source_kind AS "source_kind: SourceKind", image, registry_auth, registry_id AS "registry_id: RegistryId",
 				deploy_key_id AS "deploy_key_id: SshKeyId", git_token, build_strategy AS "build_strategy: BuildStrategy",
-				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit
+				dockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,
+				git_provider_id AS "git_provider_id: GitProviderId", git_repo, git_hook_id
 			FROM applications WHERE environment_id = $1 ORDER BY id
 		"#,
 		environment as EnvironmentId,
@@ -306,6 +322,22 @@ pub async fn delete(db: impl sqlx::PgExecutor<'_>, id: ApplicationId) -> Result<
 	sqlx::query!(
 		"DELETE FROM applications WHERE id = $1",
 		id as ApplicationId
+	)
+	.execute(db)
+	.await?;
+	Ok(())
+}
+
+/// Remembers the id of the push webhook made at the provider (or forgets it with `None`).
+pub async fn set_git_hook_id(
+	db: impl sqlx::PgExecutor<'_>,
+	id: ApplicationId,
+	hook: Option<&str>,
+) -> Result<(), sqlx::Error> {
+	sqlx::query!(
+		"UPDATE applications SET git_hook_id = $2 WHERE id = $1",
+		id as ApplicationId,
+		hook
 	)
 	.execute(db)
 	.await?;

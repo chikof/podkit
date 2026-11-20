@@ -1,0 +1,113 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT id AS \"id: GitProviderId\", team_id AS \"team_id: TeamId\", kind, name, base_url,\n\t\t\t\tcredentials, created_by AS \"created_by: UserId\", created_at\n\t\t\tFROM git_providers WHERE id = $2 AND team_id = $1\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: GitProviderId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "git_providers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "team_id: TeamId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "git_providers",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "git_providers",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "git_providers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "base_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "git_providers",
+            "name": "base_url"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "credentials",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "git_providers",
+            "name": "credentials"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_by: UserId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "git_providers",
+            "name": "created_by"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "git_providers",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "54f548a2c89acf8b9731d3b77d0879dd5bfb6155934a915e25de0ec9fe3b26aa"
+}

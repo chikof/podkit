@@ -49,5 +49,6 @@ id!(
 	SshKeyId,
 	RegistryId,
 	ApiTokenId,
+	GitProviderId,
 	JobId,
 );
