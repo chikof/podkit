@@ -151,6 +151,7 @@ async fn ensure_networks(podman: &Podman, spec: &DeploySpec) -> Result<(), Strin
 	Ok(())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn execute(
 	ctx: &Ctx,
 	spec: &DeploySpec,

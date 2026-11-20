@@ -146,6 +146,7 @@ fn gateway_args() -> Option<Result<(PathBuf, String), String>> {
 /// server behind streamable HTTP, run in the server's own container. It is
 /// recognised by being the first argument, so a command that itself contains
 /// `--gateway` is not mistaken for the sidecar.
+#[allow(clippy::type_complexity)]
 fn mcp_bridge_args() -> Option<Result<(String, String, Vec<String>), String>> {
 	let mut args = std::env::args().skip(1);
 	if args.next()? != "--mcp-bridge" {

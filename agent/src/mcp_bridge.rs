@@ -128,7 +128,7 @@ impl Bridge {
 			let mut lines = BufReader::new(stdout).lines();
 			while let Ok(Some(line)) = lines.next_line().await {
 				if !line.trim().is_empty() {
-					reader.from_child(&line).await;
+					reader.handle_child_line(&line).await;
 				}
 			}
 		});
@@ -145,7 +145,7 @@ impl Bridge {
 	}
 
 	/// Handles one line the child printed.
-	async fn from_child(&self, line: &str) {
+	async fn handle_child_line(&self, line: &str) {
 		let Ok(message) = serde_json::from_str::<Value>(line) else {
 			debug!(line, "the MCP server printed something that is not JSON");
 			return;
@@ -161,11 +161,10 @@ impl Bridge {
 						.unwrap_or_else(std::sync::PoisonError::into_inner)
 						.remove(&id)
 				});
-				match waiting {
-					Some(waiting) => {
-						let _ = waiting.send(message);
-					}
-					None => debug!(%id, "answer to a request nobody waits for"),
+				if let Some(waiting) = waiting {
+					let _ = waiting.send(message);
+				} else {
+					debug!(%id, "answer to a request nobody waits for");
 				}
 			}
 			// A request of the child's own: there is no client to ask.

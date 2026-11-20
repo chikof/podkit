@@ -325,6 +325,7 @@ async fn finish_stack(
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_lines)]
 async fn deploy_app(
 	s: &AppState,
 	user: UserId,

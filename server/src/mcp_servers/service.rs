@@ -408,23 +408,6 @@ pub async fn for_server(
 	Ok(mcp_servers::apps_of_server(&s.db, app.id).await?)
 }
 
-/// What `server` would add to an application's environment: names and URLs, the key masked.
-///
-/// # Errors
-/// As [`get`].
-pub async fn preview(
-	s: &AppState,
-	user: UserId,
-	team: TeamId,
-	project: ProjectId,
-	id: ApplicationId,
-) -> AppResult<Vec<(String, String)>> {
-	authorize(&s.db, user, team, Action::Read, Resource::Application).await?;
-	let target = in_team(s, team, id).await?;
-	let _ = project;
-	Ok(mcp_servers::preview(&target.slug))
-}
-
 #[derive(sqlx::FromRow)]
 struct Reachable {
 	id: ApplicationId,
@@ -717,6 +700,11 @@ async fn collect_usage_best_effort(s: &AppState, server: &servers::Server) {
 	if let Err(e) = result {
 		tracing::debug!(server = %server.id, error = %e, "could not collect MCP usage after listing tools");
 	}
+}
+
+/// Whether `app` is an MCP server. For pages that already loaded the application.
+pub async fn is_server(db: &PgPool, app: ApplicationId) -> bool {
+	mcp_servers::find(db, app).await.ok().flatten().is_some()
 }
 
 /// Whether the application may be removed: not while others are linked to it.

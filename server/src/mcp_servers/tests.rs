@@ -773,3 +773,136 @@ async fn mcp_resource_a_template_deploys_as_a_registered_unrouted_server(db: PgP
 		.await;
 	assert!(!page.to_string().contains("ghp_secret"));
 }
+
+mod pages {
+	use super::*;
+	use crate::ui::testing::{
+		assert_contains, assert_not_contains, get_html, post_signals, ui_login,
+	};
+
+	impl Setup {
+		async fn cookie(&self) -> String {
+			ui_login(&self.app, "alice").await
+		}
+
+		fn page(&self, mcp: i64) -> String {
+			format!("/teams/{}/projects/{}/mcp/{mcp}", self.team, self.project)
+		}
+
+		async fn link_count(&self) -> i64 {
+			sqlx::query_scalar("SELECT count(*) FROM application_mcp_links")
+				.fetch_one(&self.db)
+				.await
+				.unwrap()
+		}
+
+		fn tab(&self) -> String {
+			format!(
+				"/teams/{}/projects/{}/apps/{}/mcp",
+				self.team, self.project, self.consumer
+			)
+		}
+	}
+
+	#[sqlx::test]
+	async fn mcp_resource_page_shows_the_connection_and_escapes_tool_text(db: PgPool) {
+		let s = Setup::new(db).await;
+		let cookie = s.cookie().await;
+		let files = s.mcp("Files").await;
+		*s.agent.tools_line.lock().unwrap() = json!({
+			"tools": [{ "name": "read_file", "description": "<script>alert(1)</script>" }],
+		})
+		.to_string();
+		s.deploy(files).await;
+
+		let (status, _, body) = get_html(&s.app, &s.page(files), Some(&cookie)).await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_contains(&body, "http://llm.podkit.internal:8088/mcp/files");
+		assert_contains(&body, "List tools");
+		assert_eq!(body.matches("<h1").count(), 1);
+
+		let (status, _, patch) = post_signals(
+			&s.app,
+			&format!("{}/tools", s.page(files)),
+			Some(&cookie),
+			&json!({}),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{patch}");
+		assert_contains(&patch, "read_file");
+		assert_contains(&patch, "&lt;script&gt;");
+		assert_not_contains(&patch, "<script>alert");
+	}
+
+	#[sqlx::test]
+	async fn mcp_resource_app_tab_links_and_unlinks_without_showing_a_key(db: PgPool) {
+		let s = Setup::new(db).await;
+		let cookie = s.cookie().await;
+		let files = s.mcp("Files").await;
+
+		let (status, _, body) = get_html(&s.app, &s.tab(), Some(&cookie)).await;
+		assert_eq!(status, StatusCode::OK, "{body}");
+		assert_contains(&body, "Link an MCP server");
+
+		let (status, _, patch) = post_signals(
+			&s.app,
+			&format!("{}/link", s.tab()),
+			Some(&cookie),
+			&json!({ "mcpServer": files.to_string() }),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{patch}");
+		assert_contains(&patch, "MCP_FILES_URL");
+		let hash = s.agent.configs.lock().unwrap().last().unwrap().mcp_keys[0]
+			.key_hash
+			.clone();
+		assert_not_contains(&patch, &hash);
+
+		let (status, _, patch) = post_signals(
+			&s.app,
+			&format!("{}/unlink?server={files}", s.tab()),
+			Some(&cookie),
+			&json!({}),
+		)
+		.await;
+		assert_eq!(status, StatusCode::OK, "{patch}");
+		assert_contains(&patch, "No MCP server is linked");
+	}
+
+	#[sqlx::test]
+	async fn mcp_resource_pages_refuse_other_teams_and_anonymous_callers(db: PgPool) {
+		let s = Setup::new(db).await;
+		let files = s.mcp("Files").await;
+		user_with_team(&s.app, "mallory").await;
+		let mallory = ui_login(&s.app, "mallory").await;
+
+		let (status, _, _) = get_html(&s.app, &s.page(files), Some(&mallory)).await;
+		assert_eq!(status, StatusCode::NOT_FOUND);
+		let (status, _, _) = get_html(&s.app, &s.tab(), Some(&mallory)).await;
+		assert_eq!(status, StatusCode::NOT_FOUND);
+		let (status, _, _) = post_signals(
+			&s.app,
+			&format!("{}/link", s.tab()),
+			Some(&mallory),
+			&json!({ "mcpServer": files.to_string() }),
+		)
+		.await;
+		// An action's refusal is an event on the page's stream, not a status.
+		assert_eq!(status, StatusCode::OK);
+		assert_eq!(s.link_count().await, 0);
+		assert!(
+			s.agent
+				.configs
+				.lock()
+				.unwrap()
+				.iter()
+				.all(|c| c.mcp_keys.is_empty())
+		);
+
+		let (status, _, _) = get_html(&s.app, &s.page(files), None).await;
+		assert!(
+			status.is_redirection() || status == StatusCode::UNAUTHORIZED,
+			"{status}"
+		);
+	}
+}

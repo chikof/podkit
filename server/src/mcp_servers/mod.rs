@@ -68,11 +68,13 @@ impl Transport {
 /// Row of `mcp_servers`.
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct McpServer {
+	#[allow(dead_code)]
 	pub application_id: ApplicationId,
 	pub transport: Transport,
 	pub path: String,
 	/// stdio only: one argument per line; `None` runs the image's own command.
 	pub command: Option<String>,
+	#[allow(dead_code)]
 	pub created_at: OffsetDateTime,
 }
 
@@ -375,19 +377,6 @@ pub async fn env(state: &AppState, app: ApplicationId) -> AppResult<Vec<(String,
 	)];
 	out.append(&mut vars);
 	Ok(out)
-}
-
-/// The preview of [`env`] for a link that is not made: names and URLs, the key masked.
-#[must_use]
-pub fn preview(slug: &str) -> Vec<(String, String)> {
-	let prefix = env_name(slug);
-	vec![
-		(format!("{prefix}_URL"), gateway_url(slug)),
-		(
-			format!("{prefix}_KEY"),
-			crate::links::service::MASKED_KEY.to_owned(),
-		),
-	]
 }
 
 #[derive(sqlx::FromRow)]
