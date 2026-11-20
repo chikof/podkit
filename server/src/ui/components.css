@@ -1766,4 +1766,45 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 	.ui-todo-row { grid-template-columns: auto minmax(0, 1fr); row-gap: var(--s-2); }
 	.ui-todo-state, .ui-todo-act { grid-column: 2; justify-content: flex-start; }
 	.ui-todo-act a, .ui-todo-act button, .ui-infra-chip { min-height: 2.75rem; }
+/* == iac ========================================================================================= */
+/* Infrastructure as code: the plan as a diff. Tones and spacing are the system's; the colored lines
+   also carry a sign and a screen-reader word, so color is never the only cue. */
+.ui-iac { display: grid; gap: var(--s-4); min-width: 0; }
+.ui-iac-sum { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); margin: 0; font-size: var(--fs-sm); }
+.ui-iac-changes, .ui-iac-extra { display: grid; gap: var(--s-3); margin: 0; padding: 0; list-style: none; }
+.ui-iac-issues { display: grid; gap: var(--s-1); margin: var(--s-2) 0 0; padding: 0; list-style: none; }
+.ui-iac-change { min-width: 0; overflow: hidden; border: var(--bw) solid var(--border); border-radius: var(--r-md); background-color: var(--card); }
+.ui-iac-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); padding: var(--s-3) var(--s-4); }
+.ui-iac-kind, .ui-iac-where { color: var(--muted-foreground); font-size: var(--fs-sm); }
+.ui-iac-name { min-width: 0; font-weight: var(--fw-medium); overflow-wrap: anywhere; }
+.ui-iac-fields { margin: 0; padding: 0; list-style: none; border-top: var(--bw) solid var(--border); font-family: var(--font-mono); font-size: var(--fs-xs); }
+.ui-iac-line { display: grid; grid-template-columns: 1.25rem max-content minmax(0, 1fr); gap: var(--s-1) var(--s-3); align-items: baseline; padding: var(--s-1) var(--s-4); overflow-wrap: anywhere; }
+.ui-iac-line[data-sign="+"] { background-color: var(--success-soft); }
+.ui-iac-line[data-sign="-"] { background-color: var(--destructive-soft); }
+.ui-iac-sign { color: var(--muted-foreground); text-align: center; user-select: none; }
+.ui-iac-field { color: var(--muted-foreground); }
+.ui-iac-val { min-width: 0; }
+.ui-iac-pre { grid-column: 3; min-width: 0; max-height: 14rem; margin: 0; overflow: auto; white-space: pre-wrap; font: inherit; }
+.ui-iac-sub { margin: 0 0 var(--s-2); font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.ui-iac-extra-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); font-size: var(--fs-sm); }
+.ui-iac-leftover .ui-hint, .ui-iac-project .ui-iac-where { margin: 0; }
+.ui-iac-project { display: grid; gap: var(--s-3); min-width: 0; }
+.ui-iac-foot { display: flex; justify-content: flex-end; margin-block-start: var(--s-4); }
+.ui-iac-options { display: grid; gap: var(--s-2); min-width: 0; margin: 0; padding: 0; border: 0; }
+.ui-iac-options > legend { padding: 0; margin-block-end: var(--s-2); font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.ui-field[type="file"] { height: auto; min-height: 0; padding: var(--s-1); color: var(--muted-foreground); font-size: var(--fs-sm); cursor: pointer; }
+.ui-field[type="file"]::file-selector-button {
+	height: calc(var(--ctl-h) - 2 * var(--s-1) - 2 * var(--bw)); margin: 0 var(--s-3) 0 0; padding-inline: var(--s-3);
+	border: var(--bw) solid var(--border); border-radius: var(--r-sm); background-color: var(--card); color: var(--foreground);
+	font: inherit; font-weight: var(--fw-medium); cursor: pointer;
+	transition: background-color var(--dur-1) var(--ease);
+}
+.ui-field[type="file"]::file-selector-button:hover { background-color: var(--accent); }
+@media (pointer: coarse) {
+	.ui-field[type="file"]::file-selector-button { height: calc(2.75rem - 2 * var(--s-1) - 2 * var(--bw)); }
+}
+#iac-result { margin-block-start: var(--s-6); }
+#iac-result:empty { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+	.ui-iac { animation: ui-vt-in var(--dur-2) var(--ease) both; }
 }

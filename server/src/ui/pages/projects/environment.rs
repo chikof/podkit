@@ -475,29 +475,33 @@ fn tab_row(ctx: &TeamCtx, view: &EnvironmentView) -> Markup {
 					&html! { (icon("plus")) span class="sr-only" { "New environment" } },
 				))
 			}
-			@if can_update || can_delete {
-				(dropdown_menu(
-					"environment-menu",
-					&button_class(Variant::Ghost, Size::Icon),
-					&format!("Actions for the {} environment", view.environment.name),
-					&icon("ellipsis"),
-					&html! {
+			(dropdown_menu(
+				"environment-menu",
+				&button_class(Variant::Ghost, Size::Icon),
+				&format!("Actions for the {} environment", view.environment.name),
+				&icon("ellipsis"),
+				&html! {
+					@if can_update || can_delete {
 						(menu_label("Environment"))
-						@if can_update {
-							button type="button" class=(MENU_ITEM) command="show-modal" commandfor="environment-rename"
-								"data-on:click"="$_error = ''; el.commandForElement || document.getElementById('environment-rename').showModal()" {
-								(icon("pencil")) "Rename"
-							}
+					}
+					@if can_update {
+						button type="button" class=(MENU_ITEM) command="show-modal" commandfor="environment-rename"
+							"data-on:click"="$_error = ''; el.commandForElement || document.getElementById('environment-rename').showModal()" {
+							(icon("pencil")) "Rename"
 						}
-						@if can_delete {
-							button type="button" class=(MENU_ITEM_DANGER) command="show-modal" commandfor="environment-delete"
-								"data-on:click"="$_error = ''; el.commandForElement || document.getElementById('environment-delete').showModal()" {
-								(icon("trash-2")) "Delete"
-							}
+					}
+					@if can_delete {
+						button type="button" class=(MENU_ITEM_DANGER) command="show-modal" commandfor="environment-delete"
+							"data-on:click"="$_error = ''; el.commandForElement || document.getElementById('environment-delete').showModal()" {
+							(icon("trash-2")) "Delete"
 						}
-					},
-				))
-			}
+					}
+					(menu_label("Project"))
+					a href=(format!("{}/iac", project_url(ctx.team.id, view.project.id))) class=(MENU_ITEM) {
+						(icon("file-text")) "Infrastructure as code"
+					}
+				},
+			))
 		}
 	}
 }
