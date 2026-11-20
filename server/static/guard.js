@@ -17,6 +17,12 @@
 	const vals = (r) => $$("input:not([type=hidden]),textarea,select", r).map((e) => (/^(checkbox|radio)$/.test(e.type) ? e.checked : e.value)).join("\0");
 	const held = new WeakMap();
 	const dirty = (x) => held.has(x) && !x.matches("#palette,#discard-confirm") && vals(x) !== held.get(x);
+	/* Discarding gives the fields back their saved values, so the dialog does not reopen with what was thrown away.
+	   The events keep Datastar's bound signals in step with the fields. */
+	const blank = (x) => $$("form", x).forEach((f) => {
+		f.reset();
+		$$("input:not([type=hidden]),textarea,select", f).forEach((e) => ["input", "change"].forEach((t) => e.dispatchEvent(new Event(t, { bubbles: true }))));
+	});
 	const note = (x) => x.open && held.set(x, vals(x));
 	$$("dialog[open]").forEach(note);
 	new MutationObserver((ms) => ms.forEach((m) => note(m.target)))
@@ -25,7 +31,7 @@
 		const x = at(e);
 		if (!e.cancelable || !x || !dirty(x)) return;
 		e.preventDefault();
-		ask().then((ok) => ok && x.close());
+		ask().then((ok) => ok && (blank(x), x.close()));
 	}, true);
 
 	/* `data-dirty` on a save bar (save_bar.rs) is "unsaved changes": a link asks first, a reload gets the browser's prompt. */
