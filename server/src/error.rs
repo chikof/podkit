@@ -99,6 +99,9 @@ pub enum ServerError {
 	#[error("{0} not found")]
 	NotificationNotFound(&'static str),
 
+	#[error("uptime check not found")]
+	UptimeCheckNotFound,
+
 	#[error("registry not found")]
 	RegistryNotFound,
 
@@ -198,6 +201,7 @@ impl ServerError {
 			| Self::SshKeyNotFound
 			| Self::RegistryNotFound
 			| Self::NotificationNotFound(_)
+			| Self::UptimeCheckNotFound
 			| Self::TokenNotFound
 			| Self::GitProviderNotFound
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,

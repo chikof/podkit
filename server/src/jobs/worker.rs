@@ -81,6 +81,7 @@ pub async fn run_dispatcher(state: AppState, shutdown: CancellationToken) {
 		}
 		// Not a service of its own: the delivery queue is worked from this loop.
 		crate::notifications::delivery::wake(&state);
+		crate::uptime::runner::wake(&state);
 		tokio::select! {
 			() = state.jobs.notify.notified() => {}
 			() = tokio::time::sleep(Duration::from_secs(5)) => {}

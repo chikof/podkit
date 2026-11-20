@@ -62,6 +62,7 @@ mod state;
 mod teams;
 mod templates;
 mod ui;
+mod uptime;
 mod validate;
 mod volumes;
 mod webhooks;

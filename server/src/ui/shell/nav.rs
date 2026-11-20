@@ -70,6 +70,9 @@ pub fn infra_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	if can(Resource::Scan) {
 		items.push(item("Security", format!("{base}/security"), "shield"));
 	}
+	if can(Resource::Uptime) {
+		items.push(item("Uptime", format!("{base}/uptime"), "globe"));
+	}
 	if can(Resource::Backup) {
 		items.push(item(
 			"S3 destinations",

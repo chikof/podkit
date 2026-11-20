@@ -46,6 +46,7 @@ pub enum Resource {
 	GitProvider,
 	Scan,
 	Notification,
+	Uptime,
 }
 
 impl Resource {
@@ -71,6 +72,7 @@ impl Resource {
 			Self::GitProvider => "git_provider",
 			Self::Scan => "scan",
 			Self::Notification => "notification",
+			Self::Uptime => "uptime",
 		}
 	}
 }
@@ -131,7 +133,7 @@ impl Permissions {
 
 const ACTIONS: [Action; 4] = [Action::Create, Action::Read, Action::Update, Action::Delete];
 
-const RESOURCES: [Resource; 20] = [
+const RESOURCES: [Resource; 21] = [
 	Resource::Team,
 	Resource::Project,
 	Resource::Membership,
@@ -152,6 +154,7 @@ const RESOURCES: [Resource; 20] = [
 	Resource::GitProvider,
 	Resource::Scan,
 	Resource::Notification,
+	Resource::Uptime,
 ];
 
 /// Loads `user`'s permission set in `team` with one query. A non-member gets an

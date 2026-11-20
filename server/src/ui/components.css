@@ -2253,3 +2253,30 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-list-main p { margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .ui-list-main strong { overflow-wrap: anywhere; }
 .ui-dest-id h3 { overflow: hidden; margin: 0; font-size: var(--fs-md); font-weight: var(--fw-bold); text-overflow: ellipsis; white-space: nowrap; }
+
+/* == uptime == */
+/* The day strip: one bar per UTC day, oldest first; the label of the strip carries the number. */
+.ui-strip { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(2px, 1fr); gap: 2px; height: 1.75rem; margin: 0; padding: 0; list-style: none; }
+.ui-strip-day { border-radius: 2px; background-color: var(--border); }
+.ui-strip-day[data-level="ok"] { background-color: var(--success); }
+.ui-strip-day[data-level="partial"] { background-color: var(--warning); }
+.ui-strip-day[data-level="down"] { background-color: var(--destructive); }
+
+/* A check in the list and on the public status page. */
+.ui-probe-row { display: grid; gap: var(--s-3); padding: var(--s-4) 0; border-block-end: var(--bw) solid var(--border); }
+.ui-probe-row:last-child { border-block-end: 0; }
+.ui-probe-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-4); }
+.ui-probe-head > .ui-probe-name { flex: 1 1 14rem; min-width: 0; margin: 0; font-size: var(--fs-md); font-weight: var(--fw-bold); overflow-wrap: anywhere; }
+.ui-probe-name a { color: inherit; text-decoration: none; }
+.ui-probe-name a:hover { text-decoration: underline; }
+.ui-probe-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); }
+
+/* The public status page: a light page on its own, one column, no script. */
+.ui-pub { min-height: 100vh; padding: var(--s-7) var(--s-5); background-color: var(--background); color: var(--foreground); }
+.ui-pub-wrap { display: grid; gap: var(--s-6); max-width: 44rem; margin-inline: auto; }
+.ui-pub-head h1 { margin: 0; font-size: var(--fs-2xl); font-weight: var(--fw-bold); overflow-wrap: anywhere; }
+.ui-pub-summary { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-5); border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--success-soft); font-weight: var(--fw-medium); }
+.ui-pub-summary[data-state="down"] { background-color: var(--destructive-soft); }
+.ui-pub-summary[data-state="unknown"] { background-color: var(--muted); }
+.ui-pub-list { display: grid; margin: 0; padding: 0 var(--s-5); border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--card); list-style: none; }
+.ui-pub-foot { color: var(--subtle-foreground); font-size: var(--fs-sm); }

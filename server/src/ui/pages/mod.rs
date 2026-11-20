@@ -26,3 +26,4 @@ pub mod servers;
 pub mod settings;
 pub mod stacks;
 pub mod templates;
+pub mod uptime;

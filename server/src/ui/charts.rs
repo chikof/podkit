@@ -46,6 +46,8 @@ pub enum Unit {
 	Bytes,
 	/// `1.5 MB/s`.
 	BytesPerSec,
+	/// `120 ms`, `1.4 s`.
+	Millis,
 }
 
 /// One line. `values` has one entry per timestamp of the chart; `None` is a missing
@@ -95,6 +97,8 @@ pub fn format_value(unit: Unit, value: f64) -> String {
 		Unit::Percent => format!("{}%", trim(value, 1)),
 		Unit::Bytes => format_bytes(value),
 		Unit::BytesPerSec => format!("{}/s", format_bytes(value)),
+		Unit::Millis if value >= 1000.0 => format!("{} s", trim(value / 1000.0, 2)),
+		Unit::Millis => format!("{} ms", trim(value, 0)),
 	}
 }
 
@@ -143,6 +147,7 @@ fn axis(unit: Unit, max: f64, fixed: Option<f64>) -> (f64, f64) {
 	};
 	let step = match unit {
 		Unit::Percent => round_step(max.max(10.0) / 4.0),
+		Unit::Millis => round_step(max.max(40.0) / 4.0),
 		// Bytes tick at powers of two, so the labels are 256 MB, 512 MB, 768 MB, 1 GB.
 		Unit::Bytes | Unit::BytesPerSec => 2f64.powf((max / 4.0).max(1.0).log2().ceil()),
 	};
