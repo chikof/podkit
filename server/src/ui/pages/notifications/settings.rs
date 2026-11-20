@@ -697,6 +697,20 @@ fn add_alert_card(ctx: &TeamCtx, data: &Data) -> Markup {
 							option value="disk" { "Disk (% of the server)" }
 							option value="gpu" { "GPU (% of the server)" }
 							option value="mem_mb" { "Memory (MiB, for an app, database, model or stack)" }
+							optgroup label="Apps and stacks" {
+								option value="rps" { "Requests per second" }
+								option value="err_5xx" { "5xx responses (% of requests)" }
+								option value="p95_ms" { "p95 response time (ms)" }
+							}
+							optgroup label="Any resource" {
+								option value="restarts" { "Crashes and restarts in the last hour" }
+								option value="vol_mb" { "Volume use (MiB)" }
+								option value="vram_mb" { "GPU memory (MiB)" }
+							}
+							optgroup label="Databases and models" {
+								option value="db_conns" { "Database connections" }
+								option value="tok_s" { "Model tokens per second" }
+							}
 						}
 					}
 					div class="ui-pair" {

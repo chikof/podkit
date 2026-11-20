@@ -46,6 +46,12 @@ pub enum Unit {
 	Bytes,
 	/// `1.5 MB/s`.
 	BytesPerSec,
+	/// A rate with its own unit word: `Rate("req/s")` reads `3.33 req/s`.
+	Rate(&'static str),
+	/// `120 ms`, or `1.2 s` from a second up.
+	Millis,
+	/// A whole number: `12`.
+	Count,
 }
 
 /// One line. `values` has one entry per timestamp of the chart; `None` is a missing
@@ -75,6 +81,35 @@ pub struct Chart<'a> {
 	pub series: Vec<Series<'a>>,
 }
 
+/// What a marker stands for; it decides the line's look (dashed or solid, and its cap) so the
+/// two are told apart without colour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkerKind {
+	/// A deployment.
+	Deploy,
+	/// A crash, an OOM kill or a restart.
+	Event,
+}
+
+impl MarkerKind {
+	fn key(self) -> &'static str {
+		match self {
+			Self::Deploy => "deploy",
+			Self::Event => "event",
+		}
+	}
+}
+
+/// A vertical line at one moment of a chart, with the words the tooltip shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Marker {
+	/// Unix seconds.
+	pub at: i64,
+	pub kind: MarkerKind,
+	/// `Deploy #12 · running · abc1234`: plain text, escaped when drawn.
+	pub label: String,
+}
+
 // ---- Numbers -------------------------------------------------------------------------
 
 const SCALES: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
@@ -95,6 +130,18 @@ pub fn format_value(unit: Unit, value: f64) -> String {
 		Unit::Percent => format!("{}%", trim(value, 1)),
 		Unit::Bytes => format_bytes(value),
 		Unit::BytesPerSec => format!("{}/s", format_bytes(value)),
+		Unit::Rate(word) => {
+			let digits = if value.abs() >= 10.0 { 1 } else { 2 };
+			format!("{} {word}", trim(value, digits))
+		}
+		Unit::Millis => {
+			if value >= 1000.0 {
+				format!("{} s", trim(value / 1000.0, 2))
+			} else {
+				format!("{} ms", trim(value, usize::from(value < 100.0)))
+			}
+		}
+		Unit::Count => trim(value, 0),
 	}
 }
 
@@ -143,6 +190,9 @@ fn axis(unit: Unit, max: f64, fixed: Option<f64>) -> (f64, f64) {
 	};
 	let step = match unit {
 		Unit::Percent => round_step(max.max(10.0) / 4.0),
+		Unit::Rate(_) | Unit::Millis => round_step(max / 4.0),
+		// Whole numbers tick at whole numbers.
+		Unit::Count => round_step(max / 4.0).max(1.0),
 		// Bytes tick at powers of two, so the labels are 256 MB, 512 MB, 768 MB, 1 GB.
 		Unit::Bytes | Unit::BytesPerSec => 2f64.powf((max / 4.0).max(1.0).log2().ceil()),
 	};
@@ -348,7 +398,7 @@ fn stats(values: &[Option<f64>]) -> Option<Stats> {
 }
 
 /// The sentence a screen reader gets in place of the picture.
-fn summary(chart: &Chart<'_>) -> String {
+fn summary(chart: &Chart<'_>, markers: &[Marker]) -> String {
 	let mut out = format!("{}, {}.", chart.title, chart.range);
 	for s in &chart.series {
 		let name = if chart.series.len() > 1 { s.label } else { "" };
@@ -372,7 +422,20 @@ fn summary(chart: &Chart<'_>) -> String {
 			}
 		}
 	}
+	let marked: Vec<String> = in_window(chart, markers)
+		.map(|m| format!("{} at {}", m.label, full_time(m.at)))
+		.collect();
+	if !marked.is_empty() {
+		let _ = write!(out, " Marked: {}.", marked.join("; "));
+	}
 	out
+}
+
+/// The markers that fall inside the chart's window.
+fn in_window<'a>(chart: &'a Chart<'_>, markers: &'a [Marker]) -> impl Iterator<Item = &'a Marker> {
+	markers
+		.iter()
+		.filter(|m| (chart.from..=chart.to).contains(&m.at))
 }
 
 // ---- Rendering -----------------------------------------------------------------------
@@ -436,7 +499,7 @@ fn data_table(chart: &Chart<'_>, figure_id: &str) -> Markup {
 	}
 }
 
-fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
+fn svg(chart: &Chart<'_>, figure_id: &str, markers: &[Marker]) -> Markup {
 	let (top, step) = axis(chart.unit, data_max(chart), chart.max);
 	let plot = Plot {
 		from: chart.from,
@@ -466,7 +529,7 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 		div class="ui-chart" {
 			(chart_script())
 			div class="ui-chart-plot" tabindex="0" role="group" aria-label=(label)
-				style={ "--an:" (figure_anchor) } "data-points"=(points_json(chart, &plot)) {
+				style={ "--an:" (figure_anchor) } "data-points"=(points_json(chart, &plot, markers)) {
 				svg viewBox={ "0 0 " (WIDTH) " " (HEIGHT) } preserveAspectRatio="none" role="img"
 					aria-labelledby={ (figure_id) "-title" } aria-describedby={ (figure_id) "-summary" } {
 					@for tick in &ticks {
@@ -483,6 +546,9 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 							}
 						}
 					}
+				}
+				@for m in in_window(chart, markers) {
+					span class="ui-chart-mark" data-m=(m.kind.key()) style={ "--x:" (num((plot.x(m.at) - LEFT) / (WIDTH - LEFT - RIGHT) * 100.0)) } aria-hidden="true" {}
 				}
 				@for tick in &ticks {
 					span class="ui-chart-yl" style={ "--p:" (num((1.0 - tick / top) * 100.0)) } aria-hidden="true" { (format_value(chart.unit, *tick)) }
@@ -509,7 +575,7 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 /// seconds), the series labels (`s`) and colors (`c`), and one entry per reading `[time,
 /// [[y, "text"] | null, ...]]` where `y` is the point's height as a fraction of the plot and
 /// `text` is the value with its unit. Nothing is computed from it but positions.
-fn points_json(chart: &Chart<'_>, plot: &Plot) -> String {
+fn points_json(chart: &Chart<'_>, plot: &Plot, markers: &[Marker]) -> String {
 	let readings: Vec<serde_json::Value> = chart
 		.xs
 		.iter()
@@ -535,6 +601,9 @@ fn points_json(chart: &Chart<'_>, plot: &Plot) -> String {
 		"s": chart.series.iter().map(|s| s.label).collect::<Vec<_>>(),
 		"c": chart.series.iter().map(|s| s.color).collect::<Vec<_>>(),
 		"p": readings,
+		"m": in_window(chart, markers)
+			.map(|m| serde_json::json!([m.at, m.label, m.kind.key()]))
+			.collect::<Vec<_>>(),
 	})
 	.to_string()
 }
@@ -542,6 +611,14 @@ fn points_json(chart: &Chart<'_>, plot: &Plot) -> String {
 /// One chart as a `<figure id="chart-<id>">`. See the module docs.
 #[must_use]
 pub fn line_chart(chart: &Chart<'_>) -> Markup {
+	line_chart_with(chart, &[])
+}
+
+/// A chart with vertical markers (deployments, restarts): a line at each one inside the
+/// window, its words in the tooltip when the pointer or the arrow keys are near, and a
+/// sentence in the summary for assistive technology.
+#[must_use]
+pub fn line_chart_with(chart: &Chart<'_>, markers: &[Marker]) -> Markup {
 	let figure_id = format!("chart-{}", chart.id);
 	html! {
 		figure id=(figure_id) class="flex flex-col gap-2" {
@@ -560,13 +637,27 @@ pub fn line_chart(chart: &Chart<'_>) -> Markup {
 				}
 			}
 			@if has_data(chart) {
-				(svg(chart, &figure_id))
-				p id={ (figure_id) "-summary" } class="ui-visually-hidden" { (summary(chart)) }
+				(svg(chart, &figure_id, markers))
+				(legend(chart, markers))
+				p id={ (figure_id) "-summary" } class="ui-visually-hidden" { (summary(chart, markers)) }
 				(data_table(chart, &figure_id))
 			} @else {
 				p id={ (figure_id) "-summary" } class="flex h-32 items-center justify-center rounded-lg border border-dashed border-border px-4 text-center text-sm text-muted-foreground" {
 					"No readings in this range yet. podkit samples every 30 seconds."
 				}
+			}
+		}
+	}
+}
+
+/// What the marker lines mean, under the plot, for the kinds present.
+fn legend(chart: &Chart<'_>, markers: &[Marker]) -> Markup {
+	let has = |kind: MarkerKind| in_window(chart, markers).any(|m| m.kind == kind);
+	html! {
+		@if has(MarkerKind::Deploy) || has(MarkerKind::Event) {
+			p class="ui-chart-legend" aria-hidden="true" {
+				@if has(MarkerKind::Deploy) { span class="ui-chart-mark-key" data-m="deploy" { "Deploy" } }
+				@if has(MarkerKind::Event) { span class="ui-chart-mark-key" data-m="event" { "Crash, OOM or restart" } }
 			}
 		}
 	}
@@ -988,5 +1079,63 @@ mod tests {
 		assert!(html.contains("aria-hidden=\"true\""), "{html}");
 		assert!(!html.contains("<text"), "{html}");
 		assert!(!html.contains("<title"), "{html}");
+	}
+
+	#[test]
+	fn charts_rates_durations_and_counts_read_naturally() {
+		assert_eq!(format_value(Unit::Rate("req/s"), 3.333), "3.33 req/s");
+		assert_eq!(format_value(Unit::Rate("req/s"), 12.34), "12.3 req/s");
+		assert_eq!(format_value(Unit::Rate("tokens/s"), 0.0), "0 tokens/s");
+		assert_eq!(format_value(Unit::Millis, 4.3), "4.3 ms");
+		assert_eq!(format_value(Unit::Millis, 250.4), "250 ms");
+		assert_eq!(format_value(Unit::Millis, 1500.0), "1.5 s");
+		assert_eq!(format_value(Unit::Count, 12.0), "12");
+		// Whole numbers tick at whole numbers, never 0.25.
+		assert!(axis(Unit::Count, 3.0, None).1 >= 1.0);
+		let (top, step) = axis(Unit::Rate("req/s"), 37.0, None);
+		assert!(top >= 37.0 && step > 0.0);
+		assert!(axis(Unit::Millis, 0.0, None).0 > 0.0);
+	}
+
+	#[test]
+	fn charts_markers_inside_the_window_are_drawn_and_spoken_and_others_are_not() {
+		let xs = minutes(30);
+		let c = one(&xs, vec![Some(10.0); 30], Unit::Percent, Some(100.0));
+		let markers = [
+			Marker {
+				at: FROM + 1800,
+				kind: MarkerKind::Deploy,
+				label: "Deploy abc1234 · running".to_owned(),
+			},
+			Marker {
+				at: FROM + 600,
+				kind: MarkerKind::Event,
+				label: "Crash: exit code 1".to_owned(),
+			},
+			Marker {
+				at: FROM - 60,
+				kind: MarkerKind::Event,
+				label: "Before the window".to_owned(),
+			},
+			Marker {
+				at: FROM + 5000,
+				kind: MarkerKind::Deploy,
+				label: "After the window".to_owned(),
+			},
+		];
+		let html = line_chart_with(&c, &markers).into_string();
+		assert_eq!(html.matches("class=\"ui-chart-mark\"").count(), 2, "{html}");
+		assert!(html.contains("style=\"--x:50\""), "{html}");
+		// The words are in the tooltip data and in the sentence a screen reader gets.
+		assert!(html.contains("Crash: exit code 1"), "{html}");
+		assert!(html.contains("Marked: "), "{html}");
+		assert!(!html.contains("Before the window") && !html.contains("After the window"));
+		// Without markers the chart is the same as ever: no lines, no legend.
+		let plain = render(&c);
+		assert!(
+			!plain.contains("ui-chart-mark") && !plain.contains("Marked:"),
+			"{plain}"
+		);
+		assert_eq!(plain, line_chart_with(&c, &[]).into_string());
 	}
 }

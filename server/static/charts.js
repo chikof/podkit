@@ -15,6 +15,8 @@
 		const x = Math.min(1, Math.max(0, (t - c.f) / (c.t - c.f || 1))) * 100;
 		const when = `${new Date(t * 1000).toISOString().slice(0, 19).replace("T", " ")} UTC`;
 		const text = c.s.map((l, k) => [l, vs[k] ? vs[k][1] : "no reading"]);
+		/* markers (deploys, restarts) within a hand's width of this reading ride along in the card */
+		const tol = (c.t - c.f) / 60, marks = (c.m || []).filter((m) => Math.abs(m[0] - t) <= tol);
 		g._i = i;
 		$(".ui-chart-cross", g).style.left = `${x}%`;
 		$$(".ui-chart-dot", g).forEach((o, k) => {
@@ -25,13 +27,17 @@
 			const row = mk("div", { className: "ui-chart-row", textContent: l });
 			row.dataset.c = c.c[k];
 			return row.append(mk("span", { textContent: v })) || row;
+		}), ...marks.map(([, label, kind]) => {
+			const note = mk("div", { className: "ui-chart-note", textContent: label });
+			note.dataset.m = kind;
+			return note;
 		}));
 		$$(".ui-chart-cross,.ui-chart-tip", g).forEach((o) => (o.hidden = false));
 		if (!anchored) { /* no anchor positioning: right of the crosshair, left when it would overflow */
 			const px = (x / 100) * g.clientWidth, w = tip.offsetWidth;
 			tip.style.left = `${px + 12 + w > g.clientWidth ? Math.max(0, px - 12 - w) : px + 12}px`;
 		}
-		if (say) $("[aria-live]", g).textContent = `${when}, ${text.map((r) => r.join(" ")).join(", ")}`;
+		if (say) $("[aria-live]", g).textContent = `${when}, ${text.map((r) => r.join(" ")).concat(marks.map((m) => m[1])).join(", ")}`;
 	};
 	d.addEventListener("pointermove", (e) => {
 		const g = at(e)?.closest("[data-points]");

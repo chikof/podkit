@@ -11,9 +11,10 @@ use serde::Deserialize;
 
 use super::{Tab, database_url, forbid_unless_allowed, load, page};
 use crate::ids::{DatabaseId, ProjectId, TeamId};
+use crate::metrics::service::{Target, extras as load_extras};
 use crate::metrics::{Range, service as metrics_service};
 use crate::state::AppState;
-use crate::ui::components::{MetricsSection, metrics_section, resource_charts};
+use crate::ui::components::{Flavor, MetricsSection, Ops, metrics_section, resource_monitoring};
 use crate::ui::extract::TeamCtx;
 use crate::ui::{error, sse};
 
@@ -40,6 +41,17 @@ impl RangeQuery {
 	}
 }
 
+/// What the engine's activity counter is called on the chart.
+fn flavor_of(engine: proto::Engine) -> Flavor {
+	Flavor::Database {
+		ops: if engine == proto::Engine::Postgres {
+			Ops::Transactions
+		} else {
+			Ops::Commands
+		},
+	}
+}
+
 fn now() -> i64 {
 	time::OffsetDateTime::now_utc().unix_timestamp()
 }
@@ -63,6 +75,16 @@ async fn monitoring_page(
 	)
 	.await
 	.map_err(|e| error::page(&ctx, &e))?;
+	let extras = load_extras(
+		&s.db,
+		ctx.user.id,
+		ctx.team.id,
+		Target::Database(project.id, d.database.id),
+		range,
+	)
+	.await
+	.map_err(|e| error::page(&ctx, &e))?;
+	let flavor = flavor_of(d.database.engine());
 	let page_url = format!(
 		"{}/monitoring",
 		database_url(ctx.team.id, project.id, d.database.id)
@@ -74,7 +96,8 @@ async fn monitoring_page(
 		refresh_url: &refresh_url,
 		range,
 	};
-	let content = metrics_section(&section, &resource_charts(&points, range, now()));
+	let body = resource_monitoring(flavor, &points, &extras, range, now());
+	let content = metrics_section(&section, &body);
 	Ok(page(&s, &ctx, &project, &d, Tab::Monitoring, &content).await)
 }
 
@@ -86,9 +109,25 @@ async fn charts(
 	Query(query): Query<RangeQuery>,
 ) -> Response {
 	let range = query.range();
-	match metrics_service::database(&s.db, ctx.user.id, ctx.team.id, project, database, range).await
-	{
-		Ok(points) => sse::patch(&resource_charts(&points, range, now())).into_response(),
-		Err(e) => error::action(&e),
+	let team = ctx.team.id;
+	let points =
+		metrics_service::database(&s.db, ctx.user.id, team, project, database, range).await;
+	let extras = load_extras(
+		&s.db,
+		ctx.user.id,
+		team,
+		Target::Database(project, database),
+		range,
+	)
+	.await;
+	let engine = crate::databases::service::find(&s.db, ctx.user.id, team, project, database)
+		.await
+		.map(|d| d.engine());
+	match (points, extras) {
+		(Ok(points), Ok(extras)) => {
+			let flavor = flavor_of(engine.unwrap_or(proto::Engine::Postgres));
+			sse::patch(&resource_monitoring(flavor, &points, &extras, range, now())).into_response()
+		}
+		(Err(e), _) | (_, Err(e)) => error::action(&e),
 	}
 }

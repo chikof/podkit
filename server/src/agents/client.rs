@@ -65,6 +65,43 @@ impl AgentClient {
 			.await
 	}
 
+	/// Restarts, OOM kills and crashes of podkit containers in `since..until` (unix seconds),
+	/// from Podman's event log.
+	///
+	/// # Errors
+	/// See [`AgentClient::health`].
+	pub async fn events(
+		&self,
+		since: i64,
+		until: i64,
+	) -> Result<Vec<proto::ContainerEvent>, ServerError> {
+		self.json_within(
+			HARDWARE_TIMEOUT,
+			Method::GET,
+			&format!("/v1/events?since={since}&until={until}"),
+			None::<&()>,
+		)
+		.await
+	}
+
+	/// Connections, size and activity of the database containers in `targets`. A database
+	/// that does not answer is missing from the reply.
+	///
+	/// # Errors
+	/// See [`AgentClient::health`].
+	pub async fn db_stats(
+		&self,
+		targets: Vec<proto::DbStatsTarget>,
+	) -> Result<Vec<proto::DbStat>, ServerError> {
+		self.json_within(
+			HARDWARE_TIMEOUT,
+			Method::POST,
+			"/v1/db-stats",
+			Some(&proto::DbStatsRequest { targets }),
+		)
+		.await
+	}
+
 	/// Which image id a reference names on the server.
 	///
 	/// # Errors

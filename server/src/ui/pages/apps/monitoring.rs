@@ -11,9 +11,10 @@ use serde::Deserialize;
 
 use super::{Tab, app_url, forbid_unless_allowed, load, page};
 use crate::ids::{ApplicationId, ProjectId, TeamId};
+use crate::metrics::service::{Target, extras as load_extras};
 use crate::metrics::{Range, service as metrics_service};
 use crate::state::AppState;
-use crate::ui::components::{MetricsSection, metrics_section, resource_charts};
+use crate::ui::components::{Flavor, MetricsSection, metrics_section, resource_monitoring};
 use crate::ui::extract::TeamCtx;
 use crate::ui::{error, sse};
 
@@ -57,6 +58,15 @@ async fn monitoring_page(
 		metrics_service::application(&s.db, ctx.user.id, ctx.team.id, project.id, app.id, range)
 			.await
 			.map_err(|e| error::page(&ctx, &e))?;
+	let extras = load_extras(
+		&s.db,
+		ctx.user.id,
+		ctx.team.id,
+		Target::Application(project.id, app.id),
+		range,
+	)
+	.await
+	.map_err(|e| error::page(&ctx, &e))?;
 	let page_url = format!("{}/monitoring", app_url(ctx.team.id, project.id, app.id));
 	let refresh_url = format!("{page_url}/charts");
 	let section = MetricsSection {
@@ -65,7 +75,8 @@ async fn monitoring_page(
 		refresh_url: &refresh_url,
 		range,
 	};
-	let content = metrics_section(&section, &resource_charts(&points, range, now()));
+	let body = resource_monitoring(Flavor::Application, &points, &extras, range, now());
+	let content = metrics_section(&section, &body);
 	Ok(page(&s, &ctx, &project, &app, Tab::Monitoring, &content).await)
 }
 
@@ -77,8 +88,25 @@ async fn charts(
 	Query(query): Query<RangeQuery>,
 ) -> Response {
 	let range = query.range();
-	match metrics_service::application(&s.db, ctx.user.id, ctx.team.id, project, app, range).await {
-		Ok(points) => sse::patch(&resource_charts(&points, range, now())).into_response(),
-		Err(e) => error::action(&e),
+	let team = ctx.team.id;
+	let points = metrics_service::application(&s.db, ctx.user.id, team, project, app, range).await;
+	let extras = load_extras(
+		&s.db,
+		ctx.user.id,
+		team,
+		Target::Application(project, app),
+		range,
+	)
+	.await;
+	match (points, extras) {
+		(Ok(points), Ok(extras)) => sse::patch(&resource_monitoring(
+			Flavor::Application,
+			&points,
+			&extras,
+			range,
+			now(),
+		))
+		.into_response(),
+		(Err(e), _) | (_, Err(e)) => error::action(&e),
 	}
 }

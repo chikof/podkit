@@ -405,17 +405,22 @@ async fn metrics_record_stores_the_host_and_each_resource(db: PgPool) {
 }
 
 /// Everything team alice owns that has a metrics endpoint.
-struct Owned {
-	team: i64,
-	project: i64,
-	server: i64,
-	application: i64,
-	database: i64,
-	model: i64,
-	stack: i64,
+pub(super) struct Owned {
+	pub(super) team: i64,
+	pub(super) project: i64,
+	pub(super) server: i64,
+	pub(super) application: i64,
+	pub(super) database: i64,
+	pub(super) model: i64,
+	pub(super) stack: i64,
 }
 
-async fn own_everything(app: &axum::Router, db: &PgPool, token: &str, team: i64) -> Owned {
+pub(super) async fn own_everything(
+	app: &axum::Router,
+	db: &PgPool,
+	token: &str,
+	team: i64,
+) -> Owned {
 	let server = local_server(db, team).await;
 	let (s, project) = call(
 		app,

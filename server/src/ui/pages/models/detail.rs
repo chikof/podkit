@@ -19,6 +19,7 @@ use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, ModelId, ProjectId, TeamId};
 use crate::links::service::{self as links_service, ModelLinks};
+use crate::metrics::service::{Target, extras as load_extras};
 use crate::metrics::{Range, service as metrics_service};
 use crate::model_files::ModelFile;
 use crate::models::service::{self as models_service, LogSource};
@@ -28,9 +29,9 @@ use crate::projects::overview::model_mark;
 use crate::scanning::Subject;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, BUTTON_OUTLINE, LABEL, LogoSize, MetricsSection, SELECT, Size, TabItem, Tone,
-	Variant, badge, button_class, card, card_content, card_section, dialog, dialog_open_button,
-	empty_state, icon, logo, metrics_section, resource_charts, table, tabs,
+	BUTTON_DANGER, BUTTON_OUTLINE, Flavor, LABEL, LogoSize, MetricsSection, SELECT, Size, TabItem,
+	Tone, Variant, badge, button_class, card, card_content, card_section, dialog,
+	dialog_open_button, empty_state, icon, logo, metrics_section, resource_monitoring, table, tabs,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -467,9 +468,26 @@ async fn metrics(
 	Query(q): Query<MetricsQuery>,
 ) -> Response {
 	let range = parse_range(q.range.as_deref());
-	match metrics_service::model(&s.db, ctx.user.id, ctx.team.id, project, model_id, range).await {
-		Ok(points) => sse::patch(&resource_charts(&points, range, now())).into_response(),
-		Err(e) => error::action(&e),
+	let team = ctx.team.id;
+	let points = metrics_service::model(&s.db, ctx.user.id, team, project, model_id, range).await;
+	let extras = load_extras(
+		&s.db,
+		ctx.user.id,
+		team,
+		Target::Model(project, model_id),
+		range,
+	)
+	.await;
+	match (points, extras) {
+		(Ok(points), Ok(extras)) => sse::patch(&resource_monitoring(
+			Flavor::Model,
+			&points,
+			&extras,
+			range,
+			now(),
+		))
+		.into_response(),
+		(Err(e), _) | (_, Err(e)) => error::action(&e),
 	}
 }
 
@@ -484,6 +502,14 @@ async fn monitoring_tab(
 	let range = parse_range(range);
 	let points =
 		metrics_service::model(&s.db, ctx.user.id, ctx.team.id, project, model_id, range).await?;
+	let extras = load_extras(
+		&s.db,
+		ctx.user.id,
+		ctx.team.id,
+		Target::Model(project, model_id),
+		range,
+	)
+	.await?;
 	let page_url = format!(
 		"{}?tab=monitoring",
 		model_url(ctx.team.id, project, model_id)
@@ -497,7 +523,7 @@ async fn monitoring_tab(
 	};
 	Ok(metrics_section(
 		&section,
-		&resource_charts(&points, range, now()),
+		&resource_monitoring(Flavor::Model, &points, &extras, range, now()),
 	))
 }
 
