@@ -36,6 +36,7 @@ id!(
 	ApplicationId,
 	DeploymentId,
 	EnvVarId,
+	SharedVarId,
 	DomainId,
 	VolumeId,
 	DatabaseId,
@@ -61,4 +62,8 @@ id!(
 	MetricAlertId,
 	CronTaskId,
 	CronRunId,
+	VolumePolicyId,
+	VolumeBackupId,
+	VolumeRestoreId,
+	CloneId,
 );

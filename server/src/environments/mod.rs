@@ -7,6 +7,7 @@
 //! The composite foreign key `(environment_id, project_id)` on each resource
 //! table keeps a resource out of another project's environment.
 
+pub mod clone;
 mod routes;
 pub mod service;
 

@@ -26,5 +26,7 @@ pub mod search;
 pub mod security;
 pub mod servers;
 pub mod settings;
+pub mod shared_env;
 pub mod stacks;
 pub mod templates;
+pub mod volume_backups;

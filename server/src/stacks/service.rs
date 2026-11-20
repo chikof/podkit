@@ -234,6 +234,24 @@ fn files_of(s: &AppState, stack: &Stack) -> AppResult<BTreeMap<String, String>> 
 	})
 }
 
+/// The variables the stack's compose file is interpolated with: the shared variables of its
+/// team, project and environment under the stack's own (which win), with `${{shared.KEY}}`
+/// in the stack's values replaced. Never stored: only the stack's own go back to the database.
+pub async fn effective_env(s: &AppState, stack: &Stack) -> AppResult<BTreeMap<String, String>> {
+	let own = env_of(s, stack)?;
+	crate::shared_env::resolve::stack_inputs(s, stack.project_id, stack.environment_id, own)
+		.await
+		.map_err(|e| match e {
+			crate::shared_env::resolve::ResolveError::Missing { .. } => {
+				ServerError::Validation(e.to_string())
+			}
+			e => {
+				tracing::error!(stack = stack.id.0, "shared variables: {e}");
+				ServerError::Internal
+			}
+		})
+}
+
 fn env_of(s: &AppState, stack: &Stack) -> AppResult<BTreeMap<String, String>> {
 	stacks::decrypt_env(&s.secrets, stack).map_err(|e| {
 		tracing::error!(stack = stack.id.0, "{e}");
@@ -399,11 +417,14 @@ pub async fn detail(
 		tracing::debug!(stack = stack.id.0, "stack status refresh timed out");
 	}
 	let env = env_of(s, &stack)?;
+	let inputs = effective_env(s, &stack)
+		.await
+		.unwrap_or_else(|_| env.clone());
 	let files = files_of(s, &stack)?;
 	let (warnings, missing_vars) = match compose::parse(
 		&stack.compose_yaml,
 		&Inputs {
-			env: &env,
+			env: &inputs,
 			files: &files,
 		},
 	) {
@@ -558,7 +579,7 @@ pub async fn update(
 	Ok(updated)
 }
 
-async fn start_deploy(s: &AppState, stack: &Stack) -> AppResult<JobId> {
+pub(crate) async fn start_deploy(s: &AppState, stack: &Stack) -> AppResult<JobId> {
 	stacks::set_status(&s.db, stack.id, StackStatus::Deploying, None).await?;
 	queue_or_fail(
 		s,
@@ -584,7 +605,7 @@ pub async fn deploy(
 	if stack.status == StackStatus::Deleting {
 		return Err(ServerError::Conflict("stack is being deleted".to_string()));
 	}
-	let env = env_of(s, &stack)?;
+	let env = effective_env(s, &stack).await?;
 	let services = stacks::list_services(&s.db, stack.id).await?;
 	let files = files_of(s, &stack)?;
 	check(

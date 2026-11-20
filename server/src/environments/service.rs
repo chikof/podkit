@@ -35,7 +35,7 @@ const RESERVED_SLUGS: &[&str] = &[
 /// How many resources a refusal to delete names before saying "and N more".
 const LISTED: usize = 8;
 
-fn validate_fields(name: &str, slug: &str) -> AppResult<String> {
+pub(super) fn validate_fields(name: &str, slug: &str) -> AppResult<String> {
 	let name = name.trim();
 	if name.is_empty() || name.chars().count() > MAX_NAME_LEN {
 		return Err(ServerError::Validation(format!(
@@ -56,7 +56,7 @@ fn validate_fields(name: &str, slug: &str) -> AppResult<String> {
 	Ok(name.to_owned())
 }
 
-fn slug_conflict(e: sqlx::Error) -> ServerError {
+pub(super) fn slug_conflict(e: sqlx::Error) -> ServerError {
 	if db::is_unique_violation(&e, SLUG_UNIQUE) {
 		ServerError::Conflict(
 			"An environment with that slug already exists in this project.".to_owned(),

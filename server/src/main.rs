@@ -61,6 +61,7 @@ mod scanning;
 mod scope;
 mod search;
 mod servers;
+mod shared_env;
 mod ssh_keys;
 mod stacks;
 mod state;
@@ -68,6 +69,7 @@ mod teams;
 mod templates;
 mod ui;
 mod validate;
+mod volume_backups;
 mod volumes;
 mod webhooks;
 
@@ -172,6 +174,10 @@ async fn run() -> AppResult<()> {
 		shutdown.clone(),
 	));
 	tokio::spawn(backups::schedule::run(state.clone(), shutdown.clone()));
+	tokio::spawn(volume_backups::schedule::run(
+		state.clone(),
+		shutdown.clone(),
+	));
 	maintenance::spawn(state.clone());
 	tokio::spawn(signal_shutdown(shutdown.clone()));
 

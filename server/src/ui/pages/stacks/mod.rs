@@ -25,6 +25,7 @@ mod security;
 mod services;
 #[cfg(test)]
 mod tests;
+mod volumes;
 
 const PROJECT: &str = "/teams/{team_id}/projects/{project_id}/stacks";
 const STACK: &str = "/teams/{team_id}/projects/{project_id}/stacks/{stack_id}";
@@ -45,6 +46,7 @@ pub fn router() -> Router<AppState> {
 		.route(&at("/env"), get(env::page).post(env::set))
 		.route(&at("/env/unset"), post(env::unset))
 		.route(&at("/domains"), get(domains::page))
+		.route(&at("/volumes"), get(volumes::page))
 		.route(&at("/domains/{service}"), post(domains::set))
 		.route(&at("/domains/{service}/clear"), post(domains::clear))
 		.route(&at("/deployments"), get(runs::deployments))

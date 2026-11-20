@@ -21,7 +21,9 @@ use crate::jobs::{Job, JobFailure};
 use crate::logs::JobLog;
 use crate::servers::Server;
 use crate::state::AppState;
-use crate::{deployments, domains, env_vars, links, networks, registries, scope, volumes};
+use crate::{
+	deployments, domains, env_vars, links, networks, registries, scope, shared_env, volumes,
+};
 
 const LOST_CONNECTION: &str = "lost connection to server agent";
 
@@ -164,6 +166,8 @@ pub async fn run(
 				Event::DumpWritten { .. }
 				| Event::Progress { .. }
 				| Event::Exited { .. }
+				| Event::VolumeDumped { .. }
+				| Event::PartsUploaded { .. }
 				| Event::Done,
 			)) => {}
 			Some(Err(e)) => {
@@ -535,6 +539,18 @@ pub(crate) async fn load_env(
 		})?;
 		env.push((row.key, value));
 	}
+	// Inherit the shared variables (team < project < environment); the application's own win.
+	let mut env = shared_env::resolve::app_env(
+		state,
+		application.project_id,
+		application.environment_id,
+		env,
+	)
+	.await
+	.map_err(|e| {
+		tracing::error!(application = application.id.0, "shared variables: {e}");
+		failed(e.to_string())
+	})?;
 	// The gateway's variables are podkit's to set: they win over a user's of the same name.
 	let gateway = links::env(state, application.id).await.map_err(|e| {
 		tracing::error!(

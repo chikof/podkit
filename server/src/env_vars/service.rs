@@ -11,7 +11,7 @@ use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ApplicationId, EnvVarId, ProjectId, TeamId, UserId};
 use crate::state::AppState;
-use crate::{scope, validate};
+use crate::{scope, shared_env, validate};
 
 /// More pasted lines than this is almost certainly a mistake.
 const MAX_BULK_LINES: usize = 500;
@@ -64,6 +64,8 @@ pub async fn upsert(
 	authorize(&s.db, user, team, Action::Create, Resource::EnvVar).await?;
 	let app = scope::application(&s.db, team, project, app).await?;
 	check_key(key)?;
+	shared_env::service::validate_refs(&s.db, team, app.project_id, app.environment_id, key, value)
+		.await?;
 	let encrypted = seal(s, value)?;
 	let env_var = super::upsert(&s.db, app.id, key, &encrypted).await?;
 	audit::log(
@@ -214,6 +216,17 @@ pub async fn bulk_set(
 		)));
 	}
 	let (entries, errors) = parse_dotenv(text);
+	for (_, key, value) in &entries {
+		shared_env::service::validate_refs(
+			&s.db,
+			team,
+			app.project_id,
+			app.environment_id,
+			key,
+			value,
+		)
+		.await?;
+	}
 	let mut tx = s.db.begin().await?;
 	for (_, key, value) in &entries {
 		let encrypted = seal(s, value)?;

@@ -37,6 +37,7 @@ pub(super) enum Tab {
 	Compose,
 	Environment,
 	Domains,
+	Volumes,
 	Deployments,
 	Logs,
 	Monitoring,
@@ -52,6 +53,7 @@ impl Tab {
 			Self::Compose => "Compose",
 			Self::Environment => "Environment",
 			Self::Domains => "Domains",
+			Self::Volumes => "Volumes",
 			Self::Deployments => "Deployments",
 			Self::Logs => "Logs",
 			Self::Monitoring => "Monitoring",
@@ -67,6 +69,7 @@ impl Tab {
 			Self::Compose => "/compose",
 			Self::Environment => "/env",
 			Self::Domains => "/domains",
+			Self::Volumes => "/volumes",
 			Self::Deployments => "/deployments",
 			Self::Logs => "/logs",
 			Self::Monitoring => "/monitoring",
@@ -76,11 +79,12 @@ impl Tab {
 		}
 	}
 
-	const ALL: [Self; 10] = [
+	const ALL: [Self; 11] = [
 		Self::Services,
 		Self::Compose,
 		Self::Environment,
 		Self::Domains,
+		Self::Volumes,
 		Self::Deployments,
 		Self::Logs,
 		Self::Monitoring,
@@ -291,6 +295,7 @@ fn tab_row(ctx: &TeamCtx, l: &Loaded, active: Tab) -> Markup {
 		.filter(|t| match t {
 			Tab::Advanced => ctx.perms.can(Action::Delete, Resource::Stack),
 			Tab::Security => ctx.perms.can(Action::Read, Resource::Scan),
+			Tab::Volumes => ctx.perms.can(Action::Read, Resource::Backup),
 			_ => true,
 		})
 		.map(|t| (t, format!("{base}{}", t.path())))

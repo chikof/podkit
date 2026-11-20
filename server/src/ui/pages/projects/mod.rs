@@ -7,6 +7,9 @@ use crate::state::AppState;
 
 // The application pages reuse the resource status line and relative times.
 pub(in crate::ui) mod cards;
+mod clone;
+#[cfg(test)]
+mod clone_tests;
 mod environment;
 mod list;
 mod picker;
@@ -17,4 +20,5 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.merge(list::router())
 		.merge(environment::router())
+		.merge(clone::router())
 }

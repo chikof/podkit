@@ -160,6 +160,8 @@ async fn provision(
 				| Event::Progress { .. }
 				| Event::DumpWritten { .. }
 				| Event::Exited { .. }
+				| Event::VolumeDumped { .. }
+				| Event::PartsUploaded { .. }
 				| Event::Done,
 			)) => {}
 			Some(Err(e)) => {

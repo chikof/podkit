@@ -56,6 +56,13 @@ pub enum JobKind {
 	ImageRescan,
 	/// `target_id` is a cron run id. Runs a scheduled task's command once.
 	CronRun,
+	/// `target_id` is a volume backup id.
+	VolumeBackup,
+	/// `target_id` is a volume restore id.
+	VolumeRestore,
+	/// `target_id` is an environment clone id. Provisions the cloned databases, copies their
+	/// data and the volumes when asked, and deploys; the report says what each step did.
+	EnvironmentClone,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -361,6 +368,15 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 				Some(message),
 			)
 			.await
+		}
+		JobKind::VolumeBackup => {
+			crate::volume_backups::fail_backup(state, target_id, failure).await
+		}
+		JobKind::VolumeRestore => {
+			crate::volume_backups::fail_restore(state, target_id, failure).await
+		}
+		JobKind::EnvironmentClone => {
+			crate::environments::clone::fail_clone(state, target_id, failure).await
 		}
 	};
 	if let Err(e) = result {

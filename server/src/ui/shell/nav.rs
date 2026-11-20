@@ -107,6 +107,13 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 			"key-round",
 		));
 	}
+	if can(Resource::EnvVar) {
+		items.push(item(
+			"Shared variables",
+			format!("{base}/settings/shared-variables"),
+			"layers",
+		));
+	}
 	items.push(item(
 		"API tokens",
 		format!("{base}/settings/api-tokens"),

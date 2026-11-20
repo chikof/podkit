@@ -31,7 +31,7 @@ use proto::{DumpRequest, Event, RestoreRequest, UploadRequest};
 
 // shortcut: single PUT caps at 5 GiB, add multipart upload when users need larger dumps
 const MAX_DUMP_BYTES: u64 = 5 << 30;
-const RESTORE_CHUNK: usize = 64 * 1024;
+pub(crate) const RESTORE_CHUNK: usize = 64 * 1024;
 const STDERR_TAIL_LINES: usize = 20;
 const MAX_STDERR_LINE: usize = 8 * 1024;
 const ERROR_BODY_BYTES: usize = 512;
@@ -41,7 +41,12 @@ const CONTAINER_RESTORE_PATH: &str = "/tmp/podkit-restore";
 
 static RESTORE_SEQ: AtomicU64 = AtomicU64::new(0);
 
-type ExecOutput =
+/// A number no other restore in this process uses, for temp file and helper names.
+pub(crate) fn next_restore_seq() -> u64 {
+	RESTORE_SEQ.fetch_add(1, Ordering::Relaxed)
+}
+
+pub(crate) type ExecOutput =
 	Pin<Box<dyn futures_util::Stream<Item = Result<LogOutput, bollard::errors::Error>> + Send>>;
 type ExecInput = Pin<Box<dyn AsyncWrite + Send>>;
 
@@ -73,17 +78,17 @@ pub async fn restore(ctx: Arc<Ctx>, req: RestoreRequest, tx: mpsc::Sender<Event>
 }
 
 /// Deletes its file on drop unless [`TempFile::keep`] was called.
-struct TempFile {
-	path: PathBuf,
+pub(crate) struct TempFile {
+	pub(crate) path: PathBuf,
 	armed: bool,
 }
 
 impl TempFile {
-	fn new(path: PathBuf) -> Self {
+	pub(crate) fn new(path: PathBuf) -> Self {
 		Self { path, armed: true }
 	}
 
-	fn keep(mut self) -> PathBuf {
+	pub(crate) fn keep(mut self) -> PathBuf {
 		self.armed = false;
 		self.path.clone()
 	}
@@ -104,13 +109,13 @@ impl Drop for TempFile {
 
 /// Splits stderr into lines and remembers the last [`STDERR_TAIL_LINES`] of them.
 #[derive(Default)]
-struct StderrLines {
+pub(crate) struct StderrLines {
 	partial: Vec<u8>,
 	tail: VecDeque<String>,
 }
 
 impl StderrLines {
-	fn push(&mut self, bytes: &[u8]) -> Vec<String> {
+	pub(crate) fn push(&mut self, bytes: &[u8]) -> Vec<String> {
 		let mut lines = Vec::new();
 		let mut rest = bytes;
 		while let Some(pos) = rest.iter().position(|&b| b == b'\n') {
@@ -126,7 +131,7 @@ impl StderrLines {
 		lines
 	}
 
-	fn finish(&mut self) -> Option<String> {
+	pub(crate) fn finish(&mut self) -> Option<String> {
 		self.take_line()
 	}
 
@@ -154,7 +159,7 @@ impl StderrLines {
 	}
 }
 
-fn exit_failure(what: &str, code: i64, stderr: &StderrLines) -> String {
+pub(crate) fn exit_failure(what: &str, code: i64, stderr: &StderrLines) -> String {
 	let tail = stderr.tail_text();
 	if tail.is_empty() {
 		format!("{what} exited with code {code}")
@@ -163,7 +168,7 @@ fn exit_failure(what: &str, code: i64, stderr: &StderrLines) -> String {
 	}
 }
 
-fn describe(e: &(dyn std::error::Error + 'static)) -> String {
+pub(crate) fn describe(e: &(dyn std::error::Error + 'static)) -> String {
 	let mut out = e.to_string();
 	let mut source = e.source();
 	while let Some(cause) = source {
@@ -174,11 +179,11 @@ fn describe(e: &(dyn std::error::Error + 'static)) -> String {
 }
 
 // Presigned URLs carry credentials in the query string, so they never reach messages.
-fn http_error(e: reqwest::Error) -> String {
+pub(crate) fn http_error(e: reqwest::Error) -> String {
 	describe(&e.without_url())
 }
 
-async fn body_prefix(mut resp: reqwest::Response) -> String {
+pub(crate) async fn body_prefix(mut resp: reqwest::Response) -> String {
 	let mut buf = Vec::new();
 	while buf.len() < ERROR_BODY_BYTES {
 		match resp.chunk().await {
@@ -190,7 +195,7 @@ async fn body_prefix(mut resp: reqwest::Response) -> String {
 	String::from_utf8_lossy(&buf).into_owned()
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
 	let mut out = String::with_capacity(bytes.len() * 2);
 	for b in bytes {
 		let _ = write!(out, "{b:02x}");
@@ -198,13 +203,13 @@ fn hex(bytes: &[u8]) -> String {
 	out
 }
 
-struct Exec {
-	id: String,
-	output: ExecOutput,
-	input: ExecInput,
+pub(crate) struct Exec {
+	pub(crate) id: String,
+	pub(crate) output: ExecOutput,
+	pub(crate) input: ExecInput,
 }
 
-async fn exec_sh(
+pub(crate) async fn exec_sh(
 	docker: &Docker,
 	container: &str,
 	script: String,
@@ -235,7 +240,7 @@ async fn exec_sh(
 }
 
 /// Exit code of a finished exec. Podman can report `running` briefly after the output closes.
-async fn exit_code(docker: &Docker, exec_id: &str) -> Result<i64, String> {
+pub(crate) async fn exit_code(docker: &Docker, exec_id: &str) -> Result<i64, String> {
 	for _ in 0..50 {
 		let info = docker
 			.inspect_exec(exec_id)
@@ -251,7 +256,7 @@ async fn exit_code(docker: &Docker, exec_id: &str) -> Result<i64, String> {
 	Err("exec still running after its output closed".to_owned())
 }
 
-async fn forward_stderr(tx: &mpsc::Sender<Event>, line: String) -> Result<(), String> {
+pub(crate) async fn forward_stderr(tx: &mpsc::Sender<Event>, line: String) -> Result<(), String> {
 	tx.send(Event::Log {
 		stream: proto::Stream::Stderr,
 		line,
@@ -261,7 +266,7 @@ async fn forward_stderr(tx: &mpsc::Sender<Event>, line: String) -> Result<(), St
 }
 
 /// Consumes exec output, forwarding stderr lines and discarding stdout.
-async fn drain_output(
+pub(crate) async fn drain_output(
 	mut output: ExecOutput,
 	tx: &mpsc::Sender<Event>,
 	stderr: &mut StderrLines,
@@ -318,7 +323,7 @@ fn write_dump(file: std::fs::File, mut rx: mpsc::Receiver<Bytes>) -> io::Result<
 	Ok((sink.bytes, hex(&sink.hasher.finalize())))
 }
 
-async fn create_private_file(path: &Path) -> Result<tokio::fs::File, String> {
+pub(crate) async fn create_private_file(path: &Path) -> Result<tokio::fs::File, String> {
 	tokio::fs::OpenOptions::new()
 		.write(true)
 		.create(true)
@@ -329,7 +334,7 @@ async fn create_private_file(path: &Path) -> Result<tokio::fs::File, String> {
 		.map_err(|e| format!("create {}: {e}", path.display()))
 }
 
-async fn backups_dir(ctx: &Ctx) -> Result<PathBuf, String> {
+pub(crate) async fn backups_dir(ctx: &Ctx) -> Result<PathBuf, String> {
 	let dir = ctx.data_dir.join("backups");
 	tokio::fs::create_dir_all(&dir)
 		.await
@@ -457,7 +462,7 @@ async fn upload_inner(ctx: &Ctx, req: &UploadRequest) -> Result<(), String> {
 // --- restore ---
 
 /// Blocking [`Read`] over a channel of byte chunks. Channel close is EOF; an `Err` item is returned once.
-struct ChannelReader {
+pub(crate) struct ChannelReader {
 	rx: mpsc::Receiver<io::Result<Bytes>>,
 	current: Bytes,
 }
@@ -492,7 +497,7 @@ impl Read for ChannelReader {
 
 /// Gunzips into [`RESTORE_CHUNK`]-sized chunks. Errors are also sent down `out` so the
 /// consumer never mistakes a truncated stream for a complete one.
-fn inflate(reader: ChannelReader, out: &mpsc::Sender<io::Result<Bytes>>) -> io::Result<()> {
+pub(crate) fn inflate<R: Read>(reader: R, out: &mpsc::Sender<io::Result<Bytes>>) -> io::Result<()> {
 	let mut gz = GzDecoder::new(reader);
 	loop {
 		let mut buf = vec![0u8; RESTORE_CHUNK];
