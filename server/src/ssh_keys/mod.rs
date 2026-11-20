@@ -268,3 +268,6 @@ pub async fn switch_server(
 	.await?;
 	Ok(done.rows_affected() > 0)
 }
+
+#[cfg(test)]
+mod tests;

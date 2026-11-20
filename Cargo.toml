@@ -95,3 +95,9 @@ assert_is_empty = "allow"
 
 [workspace.lints.rust]
 missing_docs = "warn"
+
+# Generating an RSA-4096 key is a prime search: far too slow unoptimized.
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+[profile.dev.package.rsa]
+opt-level = 3
