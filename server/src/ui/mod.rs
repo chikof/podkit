@@ -98,6 +98,7 @@ pub fn router() -> Router<AppState> {
 		.merge(pages::servers::router())
 		.merge(pages::settings::router())
 		.merge(pages::search::router())
+		.merge(pages::security::router())
 		.merge(pages::stacks::router())
 		.merge(pages::templates::router())
 		.merge(theme::router())

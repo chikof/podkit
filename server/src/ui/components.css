@@ -1649,3 +1649,7 @@ code.font-mono { font-size: 0.92em; }
 .ui-sev[data-level="low"] .ui-sev-mark, .ui-sev[data-level="unknown"] .ui-sev-mark { background: transparent; box-shadow: inset 0 0 0 1.5px currentcolor; }
 .ui-sev[data-level="clean"] .ui-sev-mark { clip-path: polygon(10% 55%, 25% 40%, 42% 58%, 78% 15%, 92% 30%, 42% 90%); border-radius: 0; inline-size: 0.625rem; block-size: 0.625rem; }
 .ui-sev-act { padding: 0.125rem 0.5rem; border-radius: 999px; border: 1px solid var(--destructive); color: var(--destructive); font-size: 0.75rem; font-weight: 600; line-height: 1.125rem; white-space: nowrap; }
+
+/* == security pages == */
+/* The badge sits above the row-wide link of a resource list, so it is a link of its own. */
+.ui-res-kind .ui-sev-group { position: relative; z-index: 1; margin-inline-start: var(--s-2); }

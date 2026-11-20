@@ -10,7 +10,12 @@ use time::OffsetDateTime;
 use super::{Badge, BadgeState, CACHE_FOR, Counts, ResourceKind, ScanStatus, Severity, is_act_now};
 use crate::ids::{DeploymentId, ScanId, ScanIgnoreId, ServerId, TeamId, UserId};
 
-/// A scan, without its SBOM.
+/// A scan, without its SBOM. The stored counts and the time are read by the tests; the pages
+/// take the team's counts (ignores applied) from the findings instead.
+#[cfg_attr(
+	not(test),
+	allow(dead_code, reason = "the stored counts are only checked by the tests")
+)]
 #[derive(Debug, Clone, sqlx::FromRow)]
 pub struct Scan {
 	pub id: ScanId,
@@ -26,19 +31,15 @@ pub struct Scan {
 	pub force: bool,
 	pub critical: i32,
 	pub high: i32,
-	pub medium: i32,
-	pub low: i32,
-	pub unknown: i32,
 	pub act_now: i32,
 	pub db_built: Option<String>,
 	pub tools: Option<String>,
 	pub error: Option<String>,
-	pub created_at: OffsetDateTime,
 }
 
 const SCAN_COLUMNS: &str = "s.id, s.team_id, s.server_id, s.image_digest, s.image_ref, s.status,
 	s.started_at, s.finished_at, s.rescanned_at, s.sbom_bytes, s.force, s.critical, s.high,
-	s.medium, s.low, s.unknown, s.act_now, s.db_built, s.tools, s.error, s.created_at";
+	s.act_now, s.db_built, s.tools, s.error";
 
 /// One finding as stored, with whether the team has ignored it right now.
 #[derive(Debug, Clone, sqlx::FromRow)]

@@ -9,8 +9,8 @@ use time::{Duration, OffsetDateTime};
 
 use super::store::{self, FindingFilter, Scan, StoredFinding, StoredIgnore};
 use super::{
-	Badge, BadgeState, Counts, MAX_IGNORE_DAYS, ResourceKind, ScanStatus, Subject, Target,
-	decompress, queue_fresh,
+	Badge, BadgeState, Counts, MAX_IGNORE_DAYS, ResourceKind, Subject, Target, decompress,
+	queue_fresh,
 };
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};

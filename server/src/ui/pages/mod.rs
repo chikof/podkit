@@ -12,6 +12,7 @@ pub mod databases;
 pub mod models;
 pub mod projects;
 pub mod search;
+pub mod security;
 pub mod servers;
 pub mod settings;
 pub mod stacks;

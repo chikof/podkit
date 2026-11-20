@@ -17,7 +17,7 @@ pub mod run;
 pub mod service;
 pub mod store;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 pub use queue::{Target, queue, queue_daily_rescans, queue_fresh};
 

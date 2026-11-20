@@ -25,6 +25,7 @@ use crate::ui::components::{
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
 use crate::ui::live::{job_log, log_view};
+use crate::ui::pages::security;
 use crate::ui::status::{Status, poll, status_badge};
 use crate::ui::{error, sse};
 
@@ -288,6 +289,13 @@ async fn detail(
 	let can_update = ctx.perms.can(Action::Update, Resource::Server) && !server.is_local;
 	let can_delete = ctx.perms.can(Action::Delete, Resource::Server) && !server.is_local;
 	let log_url = format!("{}/log", detail_url(ctx.team.id, server.id));
+	let scan_settings = if security::can_see(&ctx) {
+		crate::scanning::service::settings(&s.db, ctx.user.id, ctx.team.id, server.id)
+			.await
+			.ok()
+	} else {
+		None
+	};
 
 	let mut crumbs = crumbs(&ctx);
 	crumbs.push((server.name.as_str(), None));
@@ -296,6 +304,9 @@ async fn detail(
 			(header(ctx.team.id, server, false, &actions(&ctx, server, can_update, can_delete)))
 			(form_error())
 			(status_region(&ctx, server, found.bootstrap.as_ref()))
+			@if let Some(settings) = scan_settings {
+				(security::settings_card(&ctx, server.id, settings))
+			}
 			@if !server.is_local {
 				section class="ui-stack" aria-labelledby="bootstrap-title" {
 					h2 id="bootstrap-title" class="ui-sec-h" { "Bootstrap log" }

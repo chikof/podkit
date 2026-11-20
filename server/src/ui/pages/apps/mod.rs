@@ -42,6 +42,7 @@ mod header;
 mod logs;
 mod models_tab;
 mod monitoring;
+mod security;
 mod volumes;
 mod webhooks;
 
@@ -60,6 +61,7 @@ pub fn router() -> Router<AppState> {
 		.merge(volumes::router())
 		.merge(models_tab::router())
 		.merge(monitoring::router())
+		.merge(security::router())
 		.merge(webhooks::router())
 		.merge(advanced::router())
 }
@@ -124,12 +126,13 @@ enum Tab {
 	Models,
 	Webhooks,
 	Monitoring,
+	Security,
 	Settings,
 	Advanced,
 }
 
 impl Tab {
-	const ALL: [Self; 10] = [
+	const ALL: [Self; 11] = [
 		Self::Deployments,
 		Self::Logs,
 		Self::Env,
@@ -138,6 +141,7 @@ impl Tab {
 		Self::Models,
 		Self::Webhooks,
 		Self::Monitoring,
+		Self::Security,
 		Self::Settings,
 		Self::Advanced,
 	];
@@ -152,6 +156,7 @@ impl Tab {
 			Self::Models => "Models",
 			Self::Webhooks => "Webhooks",
 			Self::Monitoring => "Monitoring",
+			Self::Security => "Security",
 			Self::Settings => "Settings",
 			Self::Advanced => "Advanced",
 		}
@@ -169,6 +174,7 @@ impl Tab {
 			Self::Models => "/models",
 			Self::Webhooks => "/webhooks",
 			Self::Monitoring => "/monitoring",
+			Self::Security => "/security",
 			Self::Settings => "/settings",
 			Self::Advanced => "/advanced",
 		}
@@ -185,6 +191,7 @@ impl Tab {
 			Self::Volumes => can(Action::Read, Resource::Volume),
 			Self::Models => can(Action::Read, Resource::Model),
 			Self::Monitoring => can(Action::Read, Resource::Application),
+			Self::Security => can(Action::Read, Resource::Scan),
 			Self::Webhooks => can(Action::Update, Resource::Application),
 			Self::Advanced => {
 				can(Action::Update, Resource::Application)

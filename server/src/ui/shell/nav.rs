@@ -31,6 +31,9 @@ pub fn main_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	if can(Resource::Model) {
 		items.push(item("Models", format!("{base}/models"), "brain"));
 	}
+	if can(Resource::Scan) {
+		items.push(item("Security", format!("{base}/security"), "shield"));
+	}
 	if can(Resource::Backup) {
 		items.push(item(
 			"S3 Destinations",

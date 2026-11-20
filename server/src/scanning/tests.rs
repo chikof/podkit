@@ -32,10 +32,11 @@ use crate::tests::{
 	user_with_team,
 };
 
-const REPORT: &str = include_str!("../../../agent/tests/fixtures/grype-report.json");
-const SBOM: &str = include_str!("../../tests/fixtures/sbom.cdx.json");
-const DIGEST: &str = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
-const IMAGE: &str = "docker.io/library/alpine:3.14";
+pub(crate) const REPORT: &str = include_str!("../../../agent/tests/fixtures/grype-report.json");
+pub(crate) const SBOM: &str = include_str!("../../tests/fixtures/sbom.cdx.json");
+pub(crate) const DIGEST: &str =
+	"sha256:1111111111111111111111111111111111111111111111111111111111111111";
+pub(crate) const IMAGE: &str = "docker.io/library/alpine:3.14";
 
 /// What Grype and Syft would answer for the fixture image.
 fn result() -> ScanResult {
@@ -50,7 +51,7 @@ fn result() -> ScanResult {
 }
 
 #[derive(Clone, Default)]
-struct Calls {
+pub(crate) struct Calls {
 	scans: Arc<Mutex<Vec<Value>>>,
 }
 
@@ -62,7 +63,7 @@ impl Calls {
 
 /// A fake agent on the local server's socket: resolves every image to [`DIGEST`],
 /// answers scans with [`result`] (without an SBOM for a rescan), and records them.
-fn fake_agent(state: &AppState) -> Calls {
+pub(crate) fn fake_agent(state: &AppState) -> Calls {
 	let calls = Calls::default();
 	let scans = calls.scans.clone();
 	let router = Router::new()
@@ -88,18 +89,18 @@ fn fake_agent(state: &AppState) -> Calls {
 	calls
 }
 
-struct Fx {
-	app: Router,
-	state: AppState,
-	db: PgPool,
-	token: String,
-	team: i64,
-	project: i64,
-	server: i64,
+pub(crate) struct Fx {
+	pub(crate) app: Router,
+	pub(crate) state: AppState,
+	pub(crate) db: PgPool,
+	pub(crate) token: String,
+	pub(crate) team: i64,
+	pub(crate) project: i64,
+	pub(crate) server: i64,
 }
 
 impl Fx {
-	async fn new(db: PgPool) -> Self {
+	pub(crate) async fn new(db: PgPool) -> Self {
 		let state = state(db.clone());
 		let app = crate::routes::routes(state.clone()).await.unwrap();
 		let (token, team) = user_with_team(&app, "alice").await;
@@ -126,11 +127,11 @@ impl Fx {
 		}
 	}
 
-	fn url(&self, tail: &str) -> String {
+	pub(crate) fn url(&self, tail: &str) -> String {
 		format!("/api/v1/teams/{}/security{tail}", self.team)
 	}
 
-	fn target(image: &str) -> Target<'_> {
+	pub(crate) fn target(image: &str) -> Target<'_> {
 		Target {
 			kind: ResourceKind::Application,
 			resource_id: 5001,
@@ -140,14 +141,14 @@ impl Fx {
 	}
 
 	/// Queues a scan of the seeded application's image, as a deploy does.
-	async fn queue(&self, image: &str) -> ScanId {
+	pub(crate) async fn queue(&self, image: &str) -> ScanId {
 		super::queue(&self.state, ServerId(self.server), Self::target(image))
 			.await
 			.expect("a scan is queued")
 	}
 
 	/// Runs a scan's job the way the worker does.
-	async fn run(&self, scan: ScanId) -> Result<(), crate::jobs::JobFailure> {
+	pub(crate) async fn run(&self, scan: ScanId) -> Result<(), crate::jobs::JobFailure> {
 		let job = jobs::latest_for(&self.db, JobKind::ImageScan, scan.0)
 			.await
 			.unwrap()
@@ -158,11 +159,11 @@ impl Fx {
 		outcome
 	}
 
-	async fn scan(&self, id: ScanId) -> store::Scan {
+	pub(crate) async fn scan(&self, id: ScanId) -> store::Scan {
 		store::find(&self.db, id).await.unwrap().unwrap()
 	}
 
-	async fn counts(&self, id: ScanId) -> Counts {
+	pub(crate) async fn counts(&self, id: ScanId) -> Counts {
 		store::effective_counts(&self.db, TeamId(self.team), &[id])
 			.await
 			.unwrap()
@@ -171,11 +172,11 @@ impl Fx {
 			.unwrap_or_default()
 	}
 
-	async fn alice(&self) -> UserId {
+	pub(crate) async fn alice(&self) -> UserId {
 		UserId(user_id(&self.db, "alice").await)
 	}
 
-	fn app_subject() -> Subject {
+	pub(crate) fn app_subject() -> Subject {
 		Subject::Application(ApplicationId(5001))
 	}
 }
@@ -939,4 +940,51 @@ async fn scanning_the_api_returns_the_resource_tab_and_filters_findings(db: PgPo
 	)
 	.await;
 	assert_eq!(s, StatusCode::ACCEPTED);
+}
+
+// --- what the page tests read and bend, kept here so `ui` never touches the database ---
+
+/// The id of the first scan stored.
+pub(crate) async fn first_scan_id(db: &PgPool) -> i64 {
+	sqlx::query_scalar("SELECT id FROM image_scans ORDER BY id LIMIT 1")
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// The id of the first ignore stored.
+pub(crate) async fn first_ignore_id(db: &PgPool) -> i64 {
+	sqlx::query_scalar("SELECT id FROM scan_ignores ORDER BY id LIMIT 1")
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// Makes the scanner's link of a finding something hostile.
+pub(crate) async fn set_finding_url(db: &PgPool, vuln: &str, url: &str) {
+	sqlx::query("UPDATE scan_findings SET url = $2 WHERE vuln_id = $1")
+		.bind(vuln)
+		.bind(url)
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+/// Makes the package name of a finding something hostile.
+pub(crate) async fn set_finding_package(db: &PgPool, vuln: &str, package: &str) {
+	sqlx::query("UPDATE scan_findings SET package = $2 WHERE vuln_id = $1")
+		.bind(vuln)
+		.bind(package)
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+/// A server's scanning switch and caps as stored: on, CPUs, MiB.
+pub(crate) async fn server_scan_settings(db: &PgPool, server: i64) -> (bool, f64, i32) {
+	sqlx::query_as("SELECT scan_enabled, scan_cpus, scan_memory_mb FROM servers WHERE id = $1")
+		.bind(server)
+		.fetch_one(db)
+		.await
+		.unwrap()
 }

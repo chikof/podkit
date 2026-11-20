@@ -12,6 +12,7 @@ use serde_json::json;
 use super::frame::{self, Loaded, Tab};
 use crate::ids::{ProjectId, StackId, TeamId};
 use crate::jobs::JobStatus;
+use crate::scanning::Subject;
 use crate::stacks::service;
 use crate::state::AppState;
 use crate::ui::components::{
@@ -21,6 +22,7 @@ use crate::ui::components::{
 use crate::ui::extract::TeamCtx;
 use crate::ui::live::{container_log, error_line, job_log};
 use crate::ui::pages::apps::chrome;
+use crate::ui::pages::security;
 use crate::ui::{error, sse};
 
 /// The lines a Logs view may ask for.
@@ -85,7 +87,14 @@ pub(super) async fn deployments(
 	Path((_, project, id)): Path<(TeamId, ProjectId, StackId)>,
 ) -> Result<Markup, Response> {
 	let l = frame::load(&s, &ctx, project, id).await?;
-	Ok(frame::page(&ctx, &l, Tab::Deployments, &job_card(&ctx, &l)))
+	let line = security::subject_line(&s, &ctx, l.project.id, Subject::Stack(id)).await;
+	let content = html! {
+		div class="ui-stack" {
+			(line)
+			(job_card(&ctx, &l))
+		}
+	};
+	Ok(frame::page(&ctx, &l, Tab::Deployments, &content))
 }
 
 pub(super) async fn deployment_log(

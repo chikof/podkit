@@ -13,6 +13,7 @@ use crate::ids::{ProjectId, StackId, TeamId};
 use crate::metrics::service as metrics;
 use crate::metrics::{Range, ResourcePoint};
 use crate::projects::{self, Project};
+use crate::scanning::Subject;
 use crate::stacks::service::{self, StackDetail};
 use crate::stacks::{ServiceStatus, Stack, StackStatus};
 use crate::state::AppState;
@@ -26,6 +27,7 @@ use crate::ui::error;
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page};
 use crate::ui::pages::apps::chrome;
+use crate::ui::pages::security;
 use crate::ui::sse::{self, js_string};
 use crate::ui::status::{Status, poll};
 
@@ -38,6 +40,7 @@ pub(super) enum Tab {
 	Deployments,
 	Logs,
 	Monitoring,
+	Security,
 	Advanced,
 }
 
@@ -51,6 +54,7 @@ impl Tab {
 			Self::Deployments => "Deployments",
 			Self::Logs => "Logs",
 			Self::Monitoring => "Monitoring",
+			Self::Security => "Security",
 			Self::Advanced => "Advanced",
 		}
 	}
@@ -64,11 +68,12 @@ impl Tab {
 			Self::Deployments => "/deployments",
 			Self::Logs => "/logs",
 			Self::Monitoring => "/monitoring",
+			Self::Security => "/security",
 			Self::Advanced => "/advanced",
 		}
 	}
 
-	const ALL: [Self; 8] = [
+	const ALL: [Self; 9] = [
 		Self::Services,
 		Self::Compose,
 		Self::Environment,
@@ -76,6 +81,7 @@ impl Tab {
 		Self::Deployments,
 		Self::Logs,
 		Self::Monitoring,
+		Self::Security,
 		Self::Advanced,
 	];
 }
@@ -86,6 +92,8 @@ pub(super) struct Loaded {
 	pub detail: StackDetail,
 	/// The newest CPU and memory reading, for the figures under the head.
 	pub usage: Option<ResourcePoint>,
+	/// The security badge of the head; empty when nothing was scanned or it may not be read.
+	pub security: Markup,
 }
 
 impl Loaded {
@@ -115,10 +123,13 @@ pub(super) async fn load(
 		.await
 		.ok()
 		.and_then(|points| points.last().cloned());
+	let security =
+		security::header_badge(s, ctx, project.id, Subject::Stack(detail.stack.id)).await;
 	Ok(Loaded {
 		project,
 		detail,
 		usage,
+		security,
 	})
 }
 
@@ -220,6 +231,7 @@ fn header(ctx: &TeamCtx, l: &Loaded, tab: Tab) -> Markup {
 				&stack.name,
 				&html! {
 					(chrome::dot(chrome::stack_shape(status), status.label()))
+					(l.security)
 					span class="inline-flex items-center gap-2" {
 						(services) @if services == 1 { " service" } @else { " services" }
 						" \u{b7} " (source_line(stack))
@@ -274,6 +286,7 @@ fn tab_row(ctx: &TeamCtx, l: &Loaded, active: Tab) -> Markup {
 		.into_iter()
 		.filter(|t| match t {
 			Tab::Advanced => ctx.perms.can(Action::Delete, Resource::Stack),
+			Tab::Security => ctx.perms.can(Action::Read, Resource::Scan),
 			_ => true,
 		})
 		.map(|t| (t, format!("{base}{}", t.path())))
