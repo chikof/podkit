@@ -72,7 +72,7 @@ impl Drop for Cleanup {
 
 /// What can go in a Podman volume or container name, an HF repo id or a
 /// revision. Keeps odd input out of argv and API paths.
-fn valid_ref(s: &str, allow_slash: bool) -> bool {
+pub(crate) fn valid_ref(s: &str, allow_slash: bool) -> bool {
 	!s.is_empty()
 		&& s.len() <= 255
 		&& !s.starts_with(['-', '.', '/'])
@@ -231,9 +231,13 @@ async fn volume_bytes(docker: &Docker, container: &str) -> Option<u64> {
 	parse_du(&text)
 }
 
-async fn ensure_image(podman: &Podman, tx: &mpsc::Sender<Event>) -> Result<(), String> {
+pub(crate) async fn ensure_image(
+	podman: &Podman,
+	image: &str,
+	tx: &mpsc::Sender<Event>,
+) -> Result<(), String> {
 	if podman
-		.inspect_image(IMAGE)
+		.inspect_image(image)
 		.await
 		.map_err(|e| format!("image check failed: {e}"))?
 		.is_some()
@@ -244,11 +248,11 @@ async fn ensure_image(podman: &Podman, tx: &mpsc::Sender<Event>) -> Result<(), S
 		tx,
 		Event::Log {
 			stream: Stream::System,
-			line: format!("pulling {IMAGE}"),
+			line: format!("pulling {image}"),
 		},
 	)
 	.await?;
-	let mut pull = std::pin::pin!(podman.pull_image(IMAGE));
+	let mut pull = std::pin::pin!(podman.pull_image(image));
 	while let Some(item) = pull.next().await {
 		item.map_err(|e| format!("image pull failed: {e}"))?;
 	}
@@ -264,7 +268,7 @@ async fn execute(
 	let podman = ctx.podman();
 	let token = req.token.as_deref();
 
-	ensure_image(&podman, tx).await?;
+	ensure_image(&podman, IMAGE, tx).await?;
 	podman
 		.ensure_volume(&req.volume)
 		.await

@@ -74,7 +74,7 @@ url = "=2.5.8"
 croner = "=4.0.3"
 ssh-key = { version = "=0.6.7", default-features = false, features = ["alloc", "std", "ed25519", "rsa", "ecdsa", "getrandom"] }
 rsa = { version = "=0.9.10", default-features = false, features = ["std", "pem"] }
-rusty-s3 = { version = "=0.11.0", default-features = false, features = ["rustcrypto"] }
+rusty-s3 = { version = "=0.11.0", default-features = false, features = ["rustcrypto", "xml"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider", "stream"] }
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 tower = { version = "=0.5.3", features = ["util"] }

@@ -23,8 +23,10 @@ use crate::ui::components::{
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::form_error;
+use crate::ui::pages::volume_backups::{self as vb, Kind};
 use crate::ui::sse::js_string;
 use crate::ui::{error, sse};
+use crate::volume_backups::subject::Owner;
 use crate::volumes::Volume;
 use crate::volumes::service as volumes;
 
@@ -118,6 +120,20 @@ async fn volumes_page(
 	let base = app_url(ctx.team.id, project.id, app.id);
 	let can_create = ctx.perms.can(Action::Create, Resource::Volume);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::Volume);
+	let backups = if list.is_empty() || !ctx.perms.can(Action::Read, Resource::Backup) {
+		html! {}
+	} else {
+		let (views, destinations) = vb::views_for(&s, &ctx, project.id, Owner::App(app.id))
+			.await
+			.map_err(|e| error::page(&ctx, &e))?;
+		vb::panel(
+			&ctx,
+			Kind::App,
+			&format!("{base}/volumes"),
+			&views,
+			&destinations,
+		)
+	};
 
 	let add = format!(
 		"evt.preventDefault(); @post({})",
@@ -133,6 +149,7 @@ async fn volumes_page(
 					(volume_list(&base, &list, can_delete))
 				}
 			}))
+			(backups)
 			@if can_create {
 				(card(&html! {
 					(card_section("Add a volume", None, None))

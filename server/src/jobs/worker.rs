@@ -172,6 +172,12 @@ async fn dispatch(
 		JobKind::ImageScan | JobKind::ImageRescan => {
 			crate::scanning::run::run(state, job, token, log).await
 		}
+		JobKind::VolumeBackup => {
+			crate::volume_backups::run::run_backup(state, job, token, log).await
+		}
+		JobKind::VolumeRestore => {
+			crate::volume_backups::run::run_restore(state, job, token, log).await
+		}
 	}
 }
 

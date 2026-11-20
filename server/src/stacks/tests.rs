@@ -1156,6 +1156,13 @@ async fn migration_down_removes_the_tables_and_permissions(db: PgPool) {
 			.await
 			.unwrap();
 	assert_eq!(permissions, 4);
+	// Volume backups hang off stacks, so they go first.
+	sqlx::raw_sql(include_str!(
+		"../../migrations/0054_volume_backups.down.sql"
+	))
+	.execute(&s.db)
+	.await
+	.unwrap();
 	for statement in DOWN.split(';').map(str::trim).filter(|q| !q.is_empty()) {
 		sqlx::query(sqlx::AssertSqlSafe(statement.to_string()))
 			.execute(&s.db)
