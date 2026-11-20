@@ -15,6 +15,7 @@
 //! Later cards add NEW files under `components/` instead of editing these.
 
 mod avatar;
+mod avatar_field;
 mod badge;
 mod banner;
 mod breadcrumb;
@@ -38,11 +39,13 @@ mod skeleton;
 mod stepper;
 mod table;
 mod tabs;
+mod team_mark;
 mod theme_toggle;
 mod toast;
 mod tooltip;
 
-pub use avatar::avatar;
+pub use avatar::{avatar, user_avatar, user_avatar_lg};
+pub use avatar_field::{AvatarField, avatar_field};
 pub use badge::{Status, Tone, badge, status_badge, status_dot};
 pub use banner::{BannerKind, banner};
 pub use breadcrumb::breadcrumb;
@@ -82,6 +85,7 @@ pub use skeleton::{skeleton, skeleton_row};
 pub use stepper::{Current, stepper};
 pub use table::table;
 pub use tabs::{RadioTab, TabItem, radio_tabs, tabs};
+pub use team_mark::{MarkSize, team_mark};
 pub use theme_toggle::theme_toggle;
 pub use toast::{toast, toast_region, toast_region_with};
 pub use tooltip::tooltip;

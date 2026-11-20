@@ -198,6 +198,39 @@ pub mod users {
 			.await
 	}
 
+	/// What the web UI shows of the signed-in person: name and picture hash.
+	#[derive(Debug, Clone)]
+	pub struct Header {
+		pub name: String,
+		pub avatar: Option<String>,
+	}
+
+	pub async fn header_of(
+		db: impl PgExecutor<'_>,
+		id: UserId,
+	) -> Result<Option<Header>, sqlx::Error> {
+		sqlx::query_as!(
+			Header,
+			r#"
+				SELECT name, (SELECT hash FROM user_avatars WHERE user_id = users.id) AS avatar
+				FROM users WHERE id = $1
+			"#,
+			id as UserId
+		)
+		.fetch_optional(db)
+		.await
+	}
+
+	/// The sign-in email, for the account page.
+	pub async fn email_of(
+		db: impl PgExecutor<'_>,
+		id: UserId,
+	) -> Result<Option<String>, sqlx::Error> {
+		sqlx::query_scalar!("SELECT email FROM users WHERE id = $1", id as UserId)
+			.fetch_optional(db)
+			.await
+	}
+
 	pub async fn find_by_email(
 		db: impl PgExecutor<'_>,
 		email: &str,

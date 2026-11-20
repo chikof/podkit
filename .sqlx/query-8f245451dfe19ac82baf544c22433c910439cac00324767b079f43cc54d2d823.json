@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT mime, bytes, hash FROM team_avatars WHERE team_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "mime",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "team_avatars",
+            "name": "mime"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "bytes",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "team_avatars",
+            "name": "bytes"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "hash",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "team_avatars",
+            "name": "hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8f245451dfe19ac82baf544c22433c910439cac00324767b079f43cc54d2d823"
+}

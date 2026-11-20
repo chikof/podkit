@@ -1,7 +1,11 @@
-//! Avatar: a person or team as a round monogram (initials), named for assistive
-//! technology. podkit stores no profile pictures, so there is no image variant.
+//! Avatar: a person as a rounded square, named for assistive technology. It shows the
+//! picture they uploaded when there is one and their initials otherwise. The picture sits
+//! on top of the initials, so a picture that fails to load leaves the monogram showing.
 
 use maud::{Markup, html};
+
+use crate::avatars;
+use crate::ids::UserId;
 
 /// Up to two initials: the first letters of the first two words (`Ada Lovelace` is `AL`,
 /// `ada` is `A`), or `?` for a name with no letters or digits.
@@ -20,10 +24,38 @@ fn initials(name: &str) -> String {
 	}
 }
 
+/// The monogram alone, for a name with no account behind it (the `/_ui` sheet).
 pub fn avatar(name: &str) -> Markup {
 	html! {
 		span class="ui-avatar" data-h=(super::logo::tint(name)) role="img" aria-label=(name) {
 			(initials(name))
+		}
+	}
+}
+
+/// A person: their picture when `hash` says they have one, else the monogram.
+pub fn user_avatar(name: &str, user: UserId, hash: Option<&str>) -> Markup {
+	person(name, user, hash, "ui-avatar ui-avatar-pic-host")
+}
+
+/// [`user_avatar`] at 64 px, for the account page.
+pub fn user_avatar_lg(name: &str, user: UserId, hash: Option<&str>) -> Markup {
+	person(
+		name,
+		user,
+		hash,
+		"ui-avatar ui-avatar-pic-host ui-avatar-lg",
+	)
+}
+
+fn person(name: &str, user: UserId, hash: Option<&str>, class: &'static str) -> Markup {
+	html! {
+		span class=(class) data-h=(super::logo::tint(name)) role="img" aria-label=(name) {
+			(initials(name))
+			@if let Some(hash) = hash {
+				img class="ui-avatar-pic" src=(avatars::user_url(user, hash)) alt="" width="64" height="64"
+					decoding="async";
+			}
 		}
 	}
 }

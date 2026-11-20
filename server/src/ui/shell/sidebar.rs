@@ -10,7 +10,8 @@ use maud::{Markup, html};
 
 use super::nav::{self, NavItem};
 use crate::ui::components::{
-	MENU_ITEM, avatar, dropdown_menu, icon, menu_label, menu_link, menu_separator,
+	MENU_ITEM, MarkSize, dropdown_menu, icon, menu_label, menu_link, menu_separator, team_mark,
+	user_avatar,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::theme::{self, Theme};
@@ -61,7 +62,7 @@ fn link(item: &NavItem, current: bool) -> Markup {
 /// The team's name as a button that lists the user's teams.
 fn team_menu(ctx: &TeamCtx) -> Markup {
 	let trigger = html! {
-		span class="ui-team-mark" aria-hidden="true" { (initial(&ctx.team.name)) }
+		(team_mark(&ctx.team, MarkSize::Medium))
 		span class="ui-team-name" { (ctx.team.name) }
 		span class="ui-team-chev" { (icon("chevrons-up-down")) }
 	};
@@ -81,7 +82,7 @@ pub fn team_items(ctx: &TeamCtx) -> Markup {
 		@for team in &ctx.teams {
 			a href={ "/teams/" (team.id.0) "/projects" } class=(MENU_ITEM)
 				aria-current=[(team.id == ctx.team.id).then_some("true")] {
-				span class="ui-team-mark ui-team-mark-sm" aria-hidden="true" { (initial(&team.name)) }
+				(team_mark(team, MarkSize::Small))
 				span class="ui-menu-grow" { (team.name) }
 				@if team.id == ctx.team.id { (icon("check")) }
 			}
@@ -92,18 +93,12 @@ pub fn team_items(ctx: &TeamCtx) -> Markup {
 	}
 }
 
-fn initial(name: &str) -> String {
-	name.chars()
-		.find(|c| c.is_alphanumeric())
-		.map_or_else(|| "?".to_owned(), |c| c.to_uppercase().collect())
-}
-
 /// The signed-in user: the avatar and name at the foot of the sidebar. The menu has the
 /// theme and Sign out. On a small screen only the avatar stays.
 fn user_menu(ctx: &TeamCtx) -> Markup {
 	let current = theme::current();
 	let trigger = html! {
-		(avatar(&ctx.user.name))
+		(user_avatar(&ctx.user.name, ctx.user.id, ctx.user.avatar.as_deref()))
 		span class="ui-user-name" { (ctx.user.name) }
 	};
 	let theme_item = |choice: Theme, label: &str, icon_name: &str| {
@@ -117,6 +112,7 @@ fn user_menu(ctx: &TeamCtx) -> Markup {
 	};
 	let items = html! {
 		(menu_label(&ctx.user.name))
+		(menu_link(&format!("/teams/{}/account", ctx.team.id), &html! { (icon("user")) "Account" }))
 		(menu_separator())
 		(menu_label("Theme"))
 		form method="post" action="/theme" class="contents" {

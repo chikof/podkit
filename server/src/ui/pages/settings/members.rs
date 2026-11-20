@@ -16,7 +16,7 @@ use crate::ids::{RoleId, TeamId, UserId};
 use crate::members::service::{self, MemberDetail, Role};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, INPUT, LABEL, SELECT, avatar, card, card_content, card_heading, icon,
+	BUTTON, INPUT, LABEL, SELECT, card, card_content, card_heading, icon, user_avatar,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -77,7 +77,7 @@ fn member_list(ctx: &TeamCtx, data: &Data) -> Markup {
 						tr {
 							th scope="row" {
 								div class="ui-who" {
-									(avatar(&m.display_name))
+									(user_avatar(&m.display_name, m.user_id, m.avatar.as_deref()))
 									div {
 										b { (m.display_name) }
 										small { (m.email) }

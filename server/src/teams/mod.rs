@@ -16,6 +16,8 @@ pub struct Team {
 	pub name: String,
 	pub slug: String,
 	pub logo: String,
+	/// Hash of the team's picture, when it has one (see `avatars`).
+	pub avatar: Option<String>,
 }
 
 /// Lists every team a user is a member of.
@@ -26,7 +28,8 @@ pub async fn list_for_user(
 	sqlx::query_as!(
 		Team,
 		r#"
-			SELECT teams.id AS "id: TeamId", teams.name, teams.slug, teams.logo
+			SELECT teams.id AS "id: TeamId", teams.name, teams.slug, teams.logo,
+				(SELECT hash FROM team_avatars WHERE team_id = teams.id) AS avatar
 			FROM teams
 			JOIN team_members ON teams.id = team_members.team_id
 			WHERE team_members.user_id = $1
@@ -57,7 +60,8 @@ pub async fn create_with_owner(
 		r#"
 			INSERT INTO teams (id, name, slug, logo)
 			VALUES ($1, $2, $3, $4)
-			RETURNING id AS "id: TeamId", name, slug, logo
+			RETURNING id AS "id: TeamId", name, slug, logo,
+				(SELECT hash FROM team_avatars WHERE team_id = teams.id) AS avatar
 		"#,
 		TeamId::generate() as TeamId,
 		name,

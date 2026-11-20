@@ -56,6 +56,8 @@ fn to_login(parts: &Parts) -> Response {
 pub struct UiUser {
 	pub id: UserId,
 	pub name: String,
+	/// Hash of their picture, when they have one.
+	pub avatar: Option<String>,
 }
 
 impl FromRequestParts<AppState> for UiUser {
@@ -73,12 +75,16 @@ impl FromRequestParts<AppState> for UiUser {
 			Ok(None) => return Err(to_login(parts)),
 			Err(e) => return Err(error::respond(&parts.method, None, &e.into())),
 		};
-		let name = match users::name_of(&state.db, id).await {
-			Ok(Some(name)) => name,
+		let header = match users::header_of(&state.db, id).await {
+			Ok(Some(header)) => header,
 			Ok(None) => return Err(to_login(parts)),
 			Err(e) => return Err(error::respond(&parts.method, None, &e.into())),
 		};
-		Ok(Self { id, name })
+		Ok(Self {
+			id,
+			name: header.name,
+			avatar: header.avatar,
+		})
 	}
 }
 

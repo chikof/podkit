@@ -16,6 +16,7 @@ pub mod iac;
 pub mod keys;
 pub mod models;
 pub mod networks;
+pub mod profile;
 pub mod projects;
 pub mod registries;
 pub mod search;

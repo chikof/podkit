@@ -140,6 +140,9 @@ pub enum ServerError {
 	#[error("invalid AGE_SECRET_KEY: {0}")]
 	InvalidSecretKey(String),
 
+	#[error("{0}")]
+	PayloadTooLarge(String),
+
 	#[error("you don't have permission to do that")]
 	Forbidden,
 
@@ -194,6 +197,7 @@ impl ServerError {
 			| Self::TokenNotFound
 			| Self::GitProviderNotFound
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,
+			Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
 			Self::Unprocessable { .. } => StatusCode::UNPROCESSABLE_ENTITY,
 			Self::Forbidden | Self::MissingScope(_) | Self::RegistrationClosed => {
 				StatusCode::FORBIDDEN

@@ -8,9 +8,10 @@ use tower_http::compression::predicate::{Predicate, SizeAbove};
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
-	applications, auth, backups, catalog, databases, deployments, domains, env_vars, environments,
-	git_providers, iac, links, logos, members, metrics, model_files, models, networks, projects,
-	registries, scanning, servers, ssh_keys, stacks, teams, templates, ui, volumes, webhooks,
+	applications, auth, avatars, backups, catalog, databases, deployments, domains, env_vars,
+	environments, git_providers, iac, links, logos, members, metrics, model_files, models,
+	networks, projects, registries, scanning, servers, ssh_keys, stacks, teams, templates, ui,
+	volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -30,6 +31,7 @@ async fn health() -> &'static str {
 pub async fn routes(state: AppState) -> AppResult<Router> {
 	let api = Router::new()
 		.nest("/auth", auth::router())
+		.merge(avatars::api_router())
 		.nest("/teams", teams::router())
 		.nest("/teams/{team_id}", members::router())
 		.nest("/teams/{team_id}/projects", projects::router())
@@ -106,6 +108,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.merge(ui::router())
 		.merge(logos::router())
 		.merge(git_providers::public_router())
+		.merge(avatars::public_router())
 		.route("/health", get(health))
 		.nest("/api/v1", api)
 		.nest("/webhooks", webhooks::router())
