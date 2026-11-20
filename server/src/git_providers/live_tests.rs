@@ -186,10 +186,8 @@ async fn run_job(st: &AppState, deployment: &Deployment) -> Deployment {
 	after
 }
 
-/// KNOWN FAILURE: the clone step. `git` (also a plain `git ls-remote` with the same
-/// `http.extraHeader` Basic credentials) prompts for a username against Gitea 1.24 although the same
-/// header returns 200 for `info/refs` over HTTP. Everything before the clone passes: provider
-/// connected with a real token, repositories listed, application created, webhook made.
+/// Connects a real Gitea, deploys an application from it, pushes a commit, and sees the push
+/// webhook redeploy.
 ///
 /// `podman` has to be on the PATH, or `PODMAN` has to name it.
 ///

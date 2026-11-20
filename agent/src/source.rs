@@ -144,12 +144,13 @@ async fn clone(
 				"{}:{token}",
 				username.as_deref().unwrap_or("x-access-token")
 			));
-			cmd.env("GIT_CONFIG_COUNT", "1")
-				.env("GIT_CONFIG_KEY_0", "http.extraHeader")
-				.env(
-					"GIT_CONFIG_VALUE_0",
-					format!("Authorization: Basic {basic}"),
-				);
+			// GIT_CONFIG_PARAMETERS, not GIT_CONFIG_COUNT/KEY_n/VALUE_n: some git builds ignore
+			// the latter, and the header would silently not be sent. The value is shell-quoted
+			// by git's own rules; base64 holds no quote.
+			cmd.env(
+				"GIT_CONFIG_PARAMETERS",
+				format!("'http.extraHeader=Authorization: Basic {basic}'"),
+			);
 			secrets.push(token.clone());
 			secrets.push(basic);
 		}
