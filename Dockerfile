@@ -9,6 +9,7 @@ RUN apk add --no-cache clang lld musl-dev git
 
 RUN --mount=type=bind,source=crates,target=crates \
     --mount=type=bind,source=agent,target=agent \
+    --mount=type=bind,source=cli,target=cli \
     --mount=type=bind,source=server,target=server \
     --mount=type=bind,source=.sqlx,target=.sqlx \
     --mount=type=bind,source=Cargo.toml,target=Cargo.toml \
