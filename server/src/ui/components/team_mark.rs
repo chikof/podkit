@@ -39,7 +39,7 @@ pub fn team_mark(team: &Team, size: MarkSize) -> Markup {
 			(initial(&team.name))
 			@if let Some(hash) = &team.avatar {
 				img class="ui-avatar-pic" src=(avatars::team_url(team.id, hash)) alt="" width="64" height="64"
-					loading="lazy" decoding="async";
+					decoding="async";
 			}
 		}
 	}

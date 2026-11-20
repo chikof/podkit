@@ -54,7 +54,7 @@ fn person(name: &str, user: UserId, hash: Option<&str>, class: &'static str) -> 
 			(initials(name))
 			@if let Some(hash) = hash {
 				img class="ui-avatar-pic" src=(avatars::user_url(user, hash)) alt="" width="64" height="64"
-					loading="lazy" decoding="async";
+					decoding="async";
 			}
 		}
 	}

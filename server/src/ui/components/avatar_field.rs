@@ -46,7 +46,7 @@ pub fn avatar_field(field: &AvatarField<'_>) -> Markup {
 			}
 			div class="ui-avatar-field-body" {
 				div class="ui-field-group" {
-					label class="ui-label" for=(field.id) { "Picture" }
+					label class="ui-label" for=(field.id) { "Image file" }
 					input id=(field.id) class="ui-file" type="file" name="file" accept=(ACCEPT) required
 						aria-describedby=(hint_id) "data-on:change"=(on_change());
 					p id=(hint_id) class="ui-hint" { "PNG, JPEG, WebP or GIF, up to 2 MB. It is cropped to a square." }
