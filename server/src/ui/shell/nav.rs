@@ -65,6 +65,11 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 		));
 	}
 	items.push(item(
+		"API tokens",
+		format!("{base}/settings/api-tokens"),
+		"terminal",
+	));
+	items.push(item(
 		"Appearance",
 		format!("{base}/settings/appearance"),
 		"sun",

@@ -16,15 +16,17 @@ use serde_json::json;
 use super::frame::crumbs;
 use super::issues::{IssueRow, issues_of, placeholder, problems, valid};
 use super::{project_url, stack_url};
+use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{EnvironmentId, ProjectId, ServerId, TeamId};
 use crate::projects;
+use crate::registries;
 use crate::servers::{self, ServerStatus};
 use crate::stacks::service::{self, CreateInput};
 use crate::state::AppState;
 use crate::ui::components::{
 	BUTTON, CHECKBOX, INPUT, LABEL, SELECT, Size, TEXTAREA, Variant, button_class, card,
-	card_content, card_header,
+	card_content, card_header, registry_choice, registry_select,
 };
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
@@ -55,6 +57,14 @@ pub(super) async fn new_page(
 		.into_iter()
 		.filter(|x| x.status == ServerStatus::Active)
 		.collect();
+	let can_pick = ctx.perms.can(Action::Read, Resource::Registry);
+	let saved = if can_pick {
+		registries::service::list(&s.db, ctx.user.id, ctx.team.id)
+			.await
+			.map_err(fail)?
+	} else {
+		Vec::new()
+	};
 	let base = project_url(ctx.team.id, project.id);
 	let post = |action: &str| {
 		format!(
@@ -68,6 +78,7 @@ pub(super) async fn new_page(
 		"compose": "",
 		"envText": "",
 		"deploy": true,
+		"registry_id": "",
 		"environment": q.environment.map(|e| e.to_string()).unwrap_or_default(),
 		"_error": "",
 	});
@@ -92,6 +103,9 @@ pub(super) async fn new_page(
 						}
 						@if servers.is_empty() {
 							p class="text-sm text-destructive" { "No server is active, so nothing can be deployed yet. Check the Servers page." }
+						}
+						@if can_pick {
+							(registry_select(&saved, ctx.team.id))
 						}
 						label class=(LABEL) {
 							"docker-compose.yml"
@@ -142,6 +156,7 @@ pub(super) struct Signals {
 	env_text: String,
 	deploy: bool,
 	environment: String,
+	registry_id: String,
 }
 
 /// `NAME=value` per line. Blank lines and `#` comments are skipped; a leading `export ` and
@@ -245,7 +260,7 @@ pub(super) async fn create(
 				environment_id: environment,
 				source: None,
 				deploy: sig.deploy,
-				registry: None,
+				registry: registry_choice(&sig.registry_id)?,
 			},
 		)
 		.await?;

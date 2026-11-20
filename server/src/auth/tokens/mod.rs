@@ -24,7 +24,7 @@ use time::OffsetDateTime;
 use crate::ids::{ApiTokenId, ProjectId, TeamId, UserId};
 
 pub use gate::gate;
-pub use routes::router;
+pub use routes::{expiry, router};
 
 /// Every token starts with this, so a pasted one is recognisable (and scannable).
 pub const PREFIX: &str = "pk_";
