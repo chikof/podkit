@@ -462,6 +462,18 @@ pub async fn create(
 	let server = scope::server(&s.db, team, server_id).await?;
 
 	validate_basics(&body)?;
+	crate::quotas::service::check_create(
+		s,
+		team,
+		"application",
+		&crate::quotas::service::reserved(
+			crate::quotas::QuotaKind::Applications,
+			body.memory_limit_mb,
+			body.cpu_limit,
+			false,
+		),
+	)
+	.await?;
 	let (source, provider) = match body.git_provider_id {
 		Some(id) => {
 			if !body.repo_url.trim().is_empty() {

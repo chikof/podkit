@@ -52,6 +52,7 @@ async fn create(
 	Json(body): Json<CreateTeamRequest>,
 ) -> AppResult<Json<TeamResponse>> {
 	let team = service::create(&s.db, user.id, &body.name, &body.slug, &body.logo).await?;
+	crate::billing::team_created(&s, &team).await;
 	Ok(Json(TeamResponse::from(&team)))
 }
 

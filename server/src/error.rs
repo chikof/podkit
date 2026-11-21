@@ -152,6 +152,11 @@ pub enum ServerError {
 	#[error("{0}")]
 	PayloadTooLarge(String),
 
+	/// A team limit, or the billing provider, says no. The message is a sentence for the person
+	/// who asked: which limit, how much is used, where to raise it.
+	#[error("{0}")]
+	QuotaExceeded(String),
+
 	#[error("you don't have permission to do that")]
 	Forbidden,
 
@@ -210,6 +215,7 @@ impl ServerError {
 			| Self::GitProviderNotFound
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,
 			Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
+			Self::QuotaExceeded(_) => StatusCode::PAYMENT_REQUIRED,
 			Self::Unprocessable { .. } => StatusCode::UNPROCESSABLE_ENTITY,
 			Self::Forbidden | Self::MissingScope(_) | Self::RegistrationClosed => {
 				StatusCode::FORBIDDEN

@@ -56,6 +56,8 @@ pub fn state(db: PgPool) -> AppState {
 		logs: Arc::new(LogHub::new(log_dir)),
 		http: reqwest::Client::new(),
 		shutdown: tokio_util::sync::CancellationToken::new(),
+		#[cfg(feature = "cloud")]
+		billing: crate::billing::Billing::cloud(),
 		config: Arc::new(Config {
 			ingress_port: 8088,
 			https_port: 8443,

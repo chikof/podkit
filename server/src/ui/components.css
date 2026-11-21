@@ -2380,3 +2380,27 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-note-meta > * + *::before { content: "\00b7"; margin-inline-end: var(--s-3); }
 /* A notification at phone width: the buttons go under the text instead of taking a column from it. */
 @media (max-width: 30rem) { .ui-note { grid-template-columns: minmax(0, 1fr); } }
+
+/* == usage and limits (B12) ==
+   Settings → Usage & limits: a bar per quota, with the state also written in words so it never
+   rests on colour alone, and the form that sets the limits. */
+.ui-usage-group { display: grid; gap: var(--s-5); }
+.ui-usage-group + .ui-usage-group { margin-block-start: var(--s-7); }
+.ui-usage-group > h3 { margin: 0; color: var(--muted-foreground); font-size: var(--fs-xs); font-weight: var(--fw-medium); letter-spacing: 0.04em; text-transform: uppercase; }
+.ui-usage-list { display: grid; gap: var(--s-5); margin: 0; padding: 0; list-style: none; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
+.ui-usage-row { display: grid; align-content: start; gap: var(--s-2); min-width: 0; }
+.ui-usage-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s-1) var(--s-4); }
+.ui-usage-name { font-size: var(--fs-sm); font-weight: var(--fw-medium); }
+.ui-usage-fig { color: var(--muted-foreground); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.ui-usage-note { font-size: var(--fs-xs); font-weight: var(--fw-medium); }
+.ui-usage-note[data-level="warn"] { color: var(--warning); }
+.ui-usage-note[data-level="full"] { color: var(--destructive); }
+/* The fill follows the state. One pseudo-element per rule: a browser drops a rule that names two. */
+.ui-progress[data-level="warn"]::-webkit-progress-value { background-color: var(--warning); }
+.ui-progress[data-level="warn"]::-moz-progress-bar { background-color: var(--warning); }
+.ui-progress[data-level="full"]::-webkit-progress-value { background-color: var(--destructive); }
+.ui-progress[data-level="full"]::-moz-progress-bar { background-color: var(--destructive); }
+.ui-quota-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--s-4) var(--s-6); }
+.ui-quota-grid label { min-width: 0; }
+.ui-quota-unit { color: var(--muted-foreground); font-weight: var(--fw-regular); }
+.ui-usage-actions { display: flex; flex-wrap: wrap; gap: var(--s-3); }

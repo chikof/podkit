@@ -11,6 +11,7 @@ mod members;
 mod registration;
 mod team;
 mod tokens;
+mod usage;
 
 /// The settings frame, for pages of other areas that sit among them (the Hugging Face token).
 pub use audit::activity;
@@ -24,4 +25,5 @@ pub fn router() -> Router<AppState> {
 		.merge(appearance::router())
 		.merge(tokens::router())
 		.merge(audit::router())
+		.merge(usage::router())
 }

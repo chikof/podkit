@@ -3,6 +3,8 @@ resolver = "2"
 members = [
 	"agent",
 	"cli",
+	"crates/billing",
+	"crates/cloud",
 	"crates/crypto",
 	"crates/proto",
 	"server",

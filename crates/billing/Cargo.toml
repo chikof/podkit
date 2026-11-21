@@ -1,0 +1,17 @@
+[package]
+name = "podkit-billing"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The billing extension point of podkit: a trait, its types and a provider that does nothing."
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+
+[lints]
+workspace = true

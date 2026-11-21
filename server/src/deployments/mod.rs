@@ -201,6 +201,7 @@ pub async fn queue(
 		})
 		.transpose()?;
 	let commit_sha = reuse.and_then(|t| t.commit_sha.as_deref());
+	crate::quotas::service::check_deploy_in_project(state, app.project_id, "application").await?;
 
 	let deployment = insert(&state.db, app.id, triggered_by, commit_sha, image_tag).await?;
 	if let Err(e) = jobs::enqueue(

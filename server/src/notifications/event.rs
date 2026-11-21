@@ -86,10 +86,14 @@ pub enum EventKind {
 	MetricAlert,
 	/// A metric alert's value is back under its threshold.
 	MetricRecovered,
+	/// A team passed 80% of one of its limits.
+	QuotaWarning,
+	/// A team reached a limit and something was refused.
+	QuotaExceeded,
 }
 
 impl EventKind {
-	pub const ALL: [Self; 19] = [
+	pub const ALL: [Self; 21] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
@@ -109,6 +113,8 @@ impl EventKind {
 		Self::UptimeUp,
 		Self::MetricAlert,
 		Self::MetricRecovered,
+		Self::QuotaWarning,
+		Self::QuotaExceeded,
 	];
 
 	pub fn as_str(self) -> &'static str {
@@ -132,6 +138,8 @@ impl EventKind {
 			Self::UptimeUp => "uptime_up",
 			Self::MetricAlert => "metric_alert",
 			Self::MetricRecovered => "metric_recovered",
+			Self::QuotaWarning => "quota_warning",
+			Self::QuotaExceeded => "quota_exceeded",
 		}
 	}
 
@@ -160,6 +168,8 @@ impl EventKind {
 			Self::UptimeUp => "Uptime check up",
 			Self::MetricAlert => "Metric alert",
 			Self::MetricRecovered => "Metric alert recovered",
+			Self::QuotaWarning => "Quota almost used",
+			Self::QuotaExceeded => "Quota reached",
 		}
 	}
 
@@ -175,6 +185,7 @@ impl EventKind {
 			Self::ContainerOom | Self::CrashLoop | Self::ModelCrashed => "Containers and models",
 			Self::UptimeDown | Self::UptimeUp => "Uptime",
 			Self::MetricAlert | Self::MetricRecovered => "Metric alerts",
+			Self::QuotaWarning | Self::QuotaExceeded => "Quotas",
 		}
 	}
 
@@ -194,7 +205,9 @@ impl EventKind {
 			| Self::CertExpiring
 			| Self::ContainerOom
 			| Self::ModelCrashed
-			| Self::MetricAlert => Severity::Warning,
+			| Self::MetricAlert
+			| Self::QuotaWarning
+			| Self::QuotaExceeded => Severity::Warning,
 			Self::ServerUnreachable | Self::Vulnerability | Self::CrashLoop | Self::UptimeDown => {
 				Severity::Critical
 			}
