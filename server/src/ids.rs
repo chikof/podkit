@@ -68,4 +68,8 @@ id!(
 	CloneId,
 	UptimeCheckId,
 	UptimeIncidentId,
+	AuthProviderId,
+	IdentityId,
+	PasskeyId,
+	RecoveryCodeId,
 );

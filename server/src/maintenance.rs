@@ -16,6 +16,9 @@ pub fn spawn(state: AppState) {
 			if let Err(e) = session::purge_expired(&state.db).await {
 				tracing::warn!("failed to purge expired sessions: {e}");
 			}
+			if let Err(e) = crate::auth::flow::purge_expired(&state.db).await {
+				tracing::warn!("failed to purge expired sign-in steps: {e}");
+			}
 			if let Err(e) = purge_jobs(&state).await {
 				tracing::warn!("failed to purge old jobs: {e}");
 			}

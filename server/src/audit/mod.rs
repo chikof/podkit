@@ -162,6 +162,13 @@ pub fn note_token(token: ApiTokenId) {
 	});
 }
 
+/// The address and browser of the request being served; `(None, None)` outside a request.
+pub fn origin() -> (Option<String>, Option<String>) {
+	REQUEST
+		.try_with(|m| (m.ip.clone(), m.user_agent.clone()))
+		.unwrap_or_default()
+}
+
 /// Who is acting, for one [`record`].
 #[derive(Debug, Clone)]
 pub struct Ctx {
@@ -462,6 +469,10 @@ fn past_tense(verb: &str) -> Option<&'static str> {
 		"revoke" => "Revoked",
 		"add" => "Added",
 		"upload" => "Uploaded",
+		"login" => "Opened",
+		"login_failed" => "Refused",
+		"enable" => "Enabled",
+		"disable" => "Disabled",
 		_ => return None,
 	})
 }

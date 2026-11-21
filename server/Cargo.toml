@@ -73,3 +73,4 @@ encre-css.workspace = true
 # Live model-download test runs the real agent in process.
 agent = { path = "../agent" }
 jsonschema = { version = "=0.61.2", default-features = false }
+webauthn-authenticator-rs = { version = "=0.5.4", features = ["softpasskey"] }

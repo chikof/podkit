@@ -9,6 +9,7 @@ use tower_cookies::{Cookie, Cookies, cookie::SameSite};
 use zeroize::Zeroizing;
 
 use super::{AuthUser, SessionToken, service, session, users};
+use crate::audit::{Diff, Target};
 use crate::{error::ServerError, state::AppState};
 
 pub fn router() -> Router<AppState> {
@@ -50,6 +51,10 @@ async fn register(
 pub struct Credentials {
 	pub email: String,
 	pub password: String,
+	/// A code from the authenticator app, or a recovery code, for an account with two-step
+	/// verification. Without one such an account is told to send it.
+	#[serde(default)]
+	pub code: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -70,7 +75,7 @@ async fn login(
 /// podkit serves plain HTTP; HTTPS ends at a reverse proxy, which reports the
 /// original scheme in `X-Forwarded-Proto`. A client forging the header only
 /// makes its own cookie stricter.
-fn reached_over_https(headers: &HeaderMap) -> bool {
+pub fn reached_over_https(headers: &HeaderMap) -> bool {
 	headers
 		.get("x-forwarded-proto")
 		.and_then(|v| v.to_str().ok())
@@ -78,43 +83,95 @@ fn reached_over_https(headers: &HeaderMap) -> bool {
 		.is_some_and(|proto| proto.trim().eq_ignore_ascii_case("https"))
 }
 
+/// Checks an email and password and says whose they are; no session is opened.
+pub async fn verify_password(
+	db: &sqlx::PgPool,
+	email: &str,
+	password: String,
+) -> Result<crate::ids::UserId, ServerError> {
+	let Some(user) = users::find_by_email(db, email).await? else {
+		// Run verify anyway to prevent timing-based user enumeration
+		crypto::verify(Zeroizing::new(password), crypto::DUMMY_HASH.clone())
+			.await
+			.ok();
+		return Err(ServerError::InvalidCredentials);
+	};
+
+	// An account made by an identity provider has a random password nobody knows: this
+	// cannot succeed for it, and says the same as a wrong one.
+	let valid = crypto::verify(Zeroizing::new(password), user.password_hash)
+		.await
+		.map_err(|e| hashing_failed(&e))?;
+	if !valid {
+		return Err(ServerError::InvalidCredentials);
+	}
+	Ok(user.id)
+}
+
+/// The `session` cookie. `Secure` only for HTTPS requests, so sign-in also works on
+/// plain-HTTP homelab installs.
+pub fn session_cookie(headers: &HeaderMap, token: &str) -> Cookie<'static> {
+	Cookie::build(("session", token.to_owned()))
+		.http_only(true)
+		.secure(reached_over_https(headers))
+		.same_site(SameSite::Strict)
+		.max_age(session::SESSION_TTL)
+		.path("/")
+		.build()
+}
+
+/// Opens a session for `user`, sets the cookie and records the sign-in in the audit log
+/// of the person's teams. Returns the session token. Whatever proves who the person is
+/// (password and second factor, an identity provider, a passkey) has happened before.
+pub async fn open_session(
+	s: &AppState,
+	cookies: &Cookies,
+	headers: &HeaderMap,
+	user: crate::ids::UserId,
+	method: session::Method,
+) -> Result<String, ServerError> {
+	let token = session::create_with(&s.db, user, method).await?;
+	cookies.add(session_cookie(headers, &token));
+	super::record_everywhere(
+		&s.db,
+		user,
+		"session.login",
+		Target::none("session").named(format!("({})", method.as_str())),
+		Diff::new().set("method", method.as_str()),
+	)
+	.await;
+	Ok(token)
+}
+
 /// Verifies credentials, opens a session and sets the `session` cookie.
-/// Returns the session token. The cookie is `Secure` only for HTTPS requests,
-/// so sign-in also works on plain-HTTP homelab installs.
+/// Returns the session token. An account with two-step verification must send `code`
+/// (the JSON API has no second page to ask on); a person who has only a passkey signs in
+/// on the web or with an API token.
 pub async fn log_in(
 	s: &AppState,
 	cookies: &Cookies,
 	headers: &HeaderMap,
 	body: Credentials,
 ) -> Result<String, ServerError> {
-	let Some(user) = users::find_by_email(&s.db, &body.email).await? else {
-		// Run verify anyway to prevent timing-based user enumeration
-		crypto::verify(Zeroizing::new(body.password), crypto::DUMMY_HASH.clone())
-			.await
-			.ok();
-		return Err(ServerError::InvalidCredentials);
-	};
-
-	let valid = crypto::verify(Zeroizing::new(body.password), user.password_hash)
-		.await
-		.map_err(|e| hashing_failed(&e))?;
-	if !valid {
-		return Err(ServerError::InvalidCredentials);
+	let code = body.code.clone();
+	let user = verify_password(&s.db, &body.email, body.password).await?;
+	if crate::two_factor::service::enrolled(&s.db, user).await? {
+		let Some(code) = code.filter(|c| !c.trim().is_empty()) else {
+			return Err(ServerError::TwoFactorCodeRequired);
+		};
+		if !crate::two_factor::service::check_code(s, user, &code).await? {
+			super::record_everywhere(
+				&s.db,
+				user,
+				"session.login_failed",
+				Target::none("session").named("(second factor)"),
+				Diff::new().set("method", "password"),
+			)
+			.await;
+			return Err(ServerError::InvalidCredentials);
+		}
 	}
-
-	let token = session::create(&s.db, user.id).await?;
-
-	cookies.add(
-		Cookie::build(("session", token.clone()))
-			.http_only(true)
-			.secure(reached_over_https(headers))
-			.same_site(SameSite::Strict)
-			.max_age(session::SESSION_TTL)
-			.path("/")
-			.build(),
-	);
-
-	Ok(token)
+	open_session(s, cookies, headers, user, session::Method::Password).await
 }
 
 async fn logout(

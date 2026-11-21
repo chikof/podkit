@@ -29,6 +29,14 @@ pub enum ServerError {
 	#[error("Invalid credentials")]
 	InvalidCredentials,
 
+	/// The account has two-step verification on and the sign-in came without a code.
+	#[error("two-step verification code required")]
+	TwoFactorCodeRequired,
+
+	/// The team requires two-step verification and the caller has none set up.
+	#[error("this team requires two-step verification; set it up under Account, Security")]
+	TwoFactorRequired,
+
 	#[error("{0}")]
 	Validation(String),
 
@@ -178,9 +186,10 @@ impl ServerError {
 			| Self::Validation(_)
 			| Self::RoleNotAllowed
 			| Self::CannotDeleteLocalServer => StatusCode::BAD_REQUEST,
-			Self::InvalidToken | Self::InvalidCredentials | Self::TokenExpired => {
-				StatusCode::UNAUTHORIZED
-			}
+			Self::InvalidToken
+			| Self::InvalidCredentials
+			| Self::TwoFactorCodeRequired
+			| Self::TokenExpired => StatusCode::UNAUTHORIZED,
 			Self::EmailTaken
 			| Self::AlreadyMember
 			| Self::DomainTaken
@@ -211,9 +220,10 @@ impl ServerError {
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,
 			Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
 			Self::Unprocessable { .. } => StatusCode::UNPROCESSABLE_ENTITY,
-			Self::Forbidden | Self::MissingScope(_) | Self::RegistrationClosed => {
-				StatusCode::FORBIDDEN
-			}
+			Self::Forbidden
+			| Self::TwoFactorRequired
+			| Self::MissingScope(_)
+			| Self::RegistrationClosed => StatusCode::FORBIDDEN,
 			Self::AgentUnavailable | Self::HuggingFaceUnavailable | Self::GitProvider(_) => {
 				StatusCode::BAD_GATEWAY
 			}
