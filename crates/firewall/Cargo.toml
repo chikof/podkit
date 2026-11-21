@@ -1,0 +1,31 @@
+[package]
+name = "podkit-firewall"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Privileged helper that owns the `inet podkit` nftables table"
+
+[lib]
+name = "podkit_firewall"
+path = "src/lib.rs"
+
+[[bin]]
+name = "podkit-firewall"
+path = "src/main.rs"
+
+[dependencies]
+proto.workspace = true
+tokio = { workspace = true, features = ["rt", "net", "io-util", "time", "macros", "signal"] }
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+better-tracing.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

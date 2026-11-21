@@ -4,6 +4,7 @@ members = [
 	"agent",
 	"cli",
 	"crates/crypto",
+	"crates/firewall",
 	"crates/proto",
 	"server",
 ]
