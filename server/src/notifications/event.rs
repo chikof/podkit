@@ -86,10 +86,12 @@ pub enum EventKind {
 	MetricAlert,
 	/// A metric alert's value is back under its threshold.
 	MetricRecovered,
+	/// An import from Coolify, Dokploy or CapRover stopped on a change that failed.
+	ImportFailed,
 }
 
 impl EventKind {
-	pub const ALL: [Self; 19] = [
+	pub const ALL: [Self; 20] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
@@ -109,6 +111,7 @@ impl EventKind {
 		Self::UptimeUp,
 		Self::MetricAlert,
 		Self::MetricRecovered,
+		Self::ImportFailed,
 	];
 
 	pub fn as_str(self) -> &'static str {
@@ -132,6 +135,7 @@ impl EventKind {
 			Self::UptimeUp => "uptime_up",
 			Self::MetricAlert => "metric_alert",
 			Self::MetricRecovered => "metric_recovered",
+			Self::ImportFailed => "import_failed",
 		}
 	}
 
@@ -160,6 +164,7 @@ impl EventKind {
 			Self::UptimeUp => "Uptime check up",
 			Self::MetricAlert => "Metric alert",
 			Self::MetricRecovered => "Metric alert recovered",
+			Self::ImportFailed => "Import failed",
 		}
 	}
 
@@ -175,6 +180,7 @@ impl EventKind {
 			Self::ContainerOom | Self::CrashLoop | Self::ModelCrashed => "Containers and models",
 			Self::UptimeDown | Self::UptimeUp => "Uptime",
 			Self::MetricAlert | Self::MetricRecovered => "Metric alerts",
+			Self::ImportFailed => "Imports",
 		}
 	}
 
@@ -194,7 +200,8 @@ impl EventKind {
 			| Self::CertExpiring
 			| Self::ContainerOom
 			| Self::ModelCrashed
-			| Self::MetricAlert => Severity::Warning,
+			| Self::MetricAlert
+			| Self::ImportFailed => Severity::Warning,
 			Self::ServerUnreachable | Self::Vulnerability | Self::CrashLoop | Self::UptimeDown => {
 				Severity::Critical
 			}

@@ -9,8 +9,8 @@ use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
 	applications, audit, auth, avatars, backups, catalog, cron, databases, deployments, domains,
-	env_vars, environments, git_providers, iac, links, logos, mcp, mcp_servers, members, metrics,
-	model_files, models, networks, notifications, projects, registries, scanning, servers,
+	env_vars, environments, git_providers, iac, importers, links, logos, mcp, mcp_servers, members,
+	metrics, model_files, models, networks, notifications, projects, registries, scanning, servers,
 	ssh_keys, stacks, teams, templates, ui, uptime, volume_backups, volumes, webhooks,
 };
 
@@ -50,6 +50,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			cron::router(),
 		)
 		.nest("/teams/{team_id}/import", iac::import_router())
+		.nest("/teams/{team_id}/importers", importers::router())
 		.nest("/teams/{team_id}/servers", servers::router())
 		.nest("/teams/{team_id}/ssh-keys", ssh_keys::router())
 		.nest("/teams/{team_id}/git-providers", git_providers::router())

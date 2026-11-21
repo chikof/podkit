@@ -1,0 +1,131 @@
+{
+  "_provenance": "Hand-recorded to the shapes of Coolify's OpenAPI schemas (github.com/coollabsio/coolify, openapi.json: Project, Environment, Application, EnvironmentVariable, Database, Service, ScheduledTask) and of the controllers that serialize them (app/Http/Controllers/Api/{Project,Applications,Databases,Services}Controller.php). Names, hosts and secrets are invented; the keys are the request paths the importer sends.",
+  "/api/v1/projects": [
+    { "uuid": "p-shop", "name": "Shop", "description": "The storefront" },
+    { "uuid": "p-empty", "name": "Empty", "description": null }
+  ],
+  "/api/v1/projects/p-shop": {
+    "uuid": "p-shop",
+    "name": "Shop",
+    "description": "The storefront",
+    "environments": [
+      { "id": 1, "name": "production", "project_id": 1, "description": null },
+      { "id": 2, "name": "staging", "project_id": 1, "description": null }
+    ]
+  },
+  "/api/v1/projects/p-empty": {
+    "uuid": "p-empty",
+    "name": "Empty",
+    "description": null,
+    "environments": [{ "id": 3, "name": "production", "project_id": 2, "description": null }]
+  },
+  "/api/v1/applications": [
+    {
+      "uuid": "app-web",
+      "name": "web",
+      "environment_id": 1,
+      "build_pack": "nixpacks",
+      "fqdn": "https://shop.example.com,https://www.shop.example.com",
+      "git_repository": "coollabsio/coolify-examples",
+      "git_full_url": null,
+      "git_branch": "v4.x",
+      "ports_exposes": "3000",
+      "ports_mappings": null,
+      "base_directory": "/nodejs",
+      "limits_memory": "512m",
+      "limits_cpus": "1.5",
+      "install_command": "npm ci",
+      "pre_deployment_command": "npm run migrate",
+      "health_check_enabled": true,
+      "custom_labels": "traefik.http.routers.web.rule=Host(`shop.example.com`)",
+      "private_key_id": null,
+      "status": "running:healthy",
+      "settings": {
+        "is_auto_deploy_enabled": true,
+        "is_preview_deployments_enabled": true,
+        "is_container_label_readonly_enabled": false
+      }
+    },
+    {
+      "uuid": "app-api",
+      "name": "api",
+      "environment_id": 2,
+      "build_pack": "dockerimage",
+      "docker_registry_image_name": "ghcr.io/acme/api",
+      "docker_registry_image_tag": "1.4.2",
+      "fqdn": "https://api.staging.example.com:8080",
+      "ports_exposes": "8080",
+      "limits_memory": "0",
+      "limits_cpus": "0",
+      "settings": { "is_container_label_readonly_enabled": true }
+    },
+    {
+      "uuid": "app-docker",
+      "name": "billing",
+      "environment_id": 1,
+      "build_pack": "dockerfile",
+      "git_repository": "git@github.com:acme/billing.git",
+      "git_branch": "main",
+      "dockerfile_location": "/docker/Dockerfile",
+      "ports_exposes": "9000,9001",
+      "fqdn": "https://billing.example.com/app",
+      "private_key_id": 4,
+      "swarm_replicas": 3,
+      "settings": {}
+    },
+    {
+      "uuid": "app-compose",
+      "name": "wiki",
+      "environment_id": 1,
+      "build_pack": "dockercompose",
+      "docker_compose_raw": "services:\n  wiki:\n    image: ghcr.io/requarks/wiki:2\n    ports:\n      - '3000'\n",
+      "docker_compose_domains": "[{\"name\":\"wiki\",\"domain\":\"https://wiki.example.com\"}]",
+      "settings": {}
+    },
+    {
+      "uuid": "app-lost",
+      "name": "ghost",
+      "environment_id": 99,
+      "build_pack": "nixpacks",
+      "git_repository": "acme/ghost",
+      "settings": {}
+    }
+  ],
+  "/api/v1/applications/app-web/envs": [
+    { "uuid": "e1", "key": "DATABASE_URL", "value": "postgres://shop:coolify-secret-DB-9f3a@db:5432/shop", "real_value": "postgres://shop:coolify-secret-DB-9f3a@db:5432/shop", "is_preview": false, "is_buildtime": true, "is_runtime": true, "is_shown_once": false },
+    { "uuid": "e2", "key": "SESSION_KEY", "value": "coolify-secret-KEY-77b1", "real_value": "coolify-secret-KEY-77b1", "is_preview": false, "is_buildtime": false, "is_runtime": true, "is_shown_once": false },
+    { "uuid": "e3", "key": "NEXT_PUBLIC_API", "value": "https://api.example.com", "real_value": "https://api.example.com", "is_preview": false, "is_buildtime": true, "is_runtime": false, "is_shown_once": false },
+    { "uuid": "e4", "key": "PREVIEW_ONLY", "value": "preview-secret-0001", "real_value": "preview-secret-0001", "is_preview": true, "is_buildtime": false, "is_runtime": true, "is_shown_once": false },
+    { "uuid": "e5", "key": "LOCKED", "value": null, "real_value": null, "is_preview": false, "is_buildtime": false, "is_runtime": true, "is_shown_once": true },
+    { "uuid": "e6", "key": "not a name", "value": "x", "real_value": "x", "is_preview": false, "is_buildtime": false, "is_runtime": true, "is_shown_once": false }
+  ],
+  "/api/v1/applications/app-web/storages": {
+    "persistent_storages": [
+      { "name": "web-uploads", "mount_path": "/app/uploads", "host_path": null },
+      { "name": "web-host", "mount_path": "/var/log/web", "host_path": "/srv/logs" }
+    ],
+    "file_storages": [{ "fs_path": "/data/coolify/applications/web/config.json", "mount_path": "/app/config.json" }]
+  },
+  "/api/v1/applications/app-web/scheduled-tasks": [
+    { "uuid": "t1", "name": "Nightly cleanup", "command": "npm run cleanup", "frequency": "daily", "container": null, "timeout": 120, "enabled": true },
+    { "uuid": "t2", "name": "Odd", "command": "true", "frequency": "every other tuesday", "container": null, "timeout": 30, "enabled": true }
+  ],
+  "/api/v1/applications/app-api/envs": [
+    { "uuid": "e7", "key": "API_TOKEN", "value": "coolify-secret-API-5c2d", "real_value": "coolify-secret-API-5c2d", "is_preview": false, "is_buildtime": false, "is_runtime": true, "is_shown_once": false }
+  ],
+  "/api/v1/applications/app-compose/envs": [
+    { "uuid": "e8", "key": "WIKI_DB", "value": "coolify-secret-WIKI-aa10", "real_value": "coolify-secret-WIKI-aa10", "is_preview": false, "is_buildtime": false, "is_runtime": true, "is_shown_once": false }
+  ],
+  "/api/v1/databases": [
+    { "uuid": "db-pg", "name": "shop-db", "database_type": "standalone-postgresql", "image": "postgres:16-alpine", "environment_id": 1, "is_public": true, "public_port": 5433, "limits_memory": "1g", "limits_cpus": "0", "postgres_user": "shop", "postgres_password": "coolify-secret-PGPASS-31", "postgres_conf": "max_connections=200", "internal_db_url": "postgres://shop:coolify-secret-PGPASS-31@shop-db:5432/shop", "init_scripts": [], "enable_ssl": false },
+    { "uuid": "db-redis", "name": "cache", "database_type": "standalone-redis", "image": "redis:7.2", "environment_id": 1, "is_public": false, "public_port": null, "limits_memory": "0", "limits_cpus": "0", "redis_password": "coolify-secret-REDIS-77", "init_scripts": [], "enable_ssl": true },
+    { "uuid": "db-maria", "name": "legacy", "database_type": "standalone-mariadb", "image": "mariadb:11", "environment_id": 2, "is_public": false, "public_port": null, "init_scripts": [] }
+  ],
+  "/api/v1/services": [
+    { "uuid": "svc-plausible", "name": "plausible", "environment_id": 1, "service_type": "plausible", "docker_compose_raw": "services:\n  plausible:\n    image: ghcr.io/plausible/community-edition:v2\n    environment:\n      - SERVICE_FQDN_PLAUSIBLE_8000\n      - SECRET_KEY_BASE=$SERVICE_PASSWORD_64_PLAUSIBLE\n" },
+    { "uuid": "svc-empty", "name": "nothing", "environment_id": 1, "service_type": "x", "docker_compose_raw": null }
+  ],
+  "/api/v1/services/svc-plausible/envs": [
+    { "uuid": "e9", "key": "BASE_URL", "value": "https://stats.example.com", "real_value": "https://stats.example.com", "is_preview": false, "is_buildtime": false, "is_runtime": true, "is_shown_once": false }
+  ]
+}

@@ -125,6 +125,11 @@ pub enum ServerError {
 	#[error("{0}")]
 	GitProvider(String),
 
+	/// A platform being imported from (Coolify, Dokploy, CapRover) refused or could not be
+	/// reached. The message never carries the credential.
+	#[error("{0}")]
+	Import(String),
+
 	/// The request is well-formed but names something podkit does not run,
 	/// e.g. a compose key outside the supported subset. `issues` is shown to
 	/// the caller next to the message.
@@ -214,9 +219,10 @@ impl ServerError {
 			Self::Forbidden | Self::MissingScope(_) | Self::RegistrationClosed => {
 				StatusCode::FORBIDDEN
 			}
-			Self::AgentUnavailable | Self::HuggingFaceUnavailable | Self::GitProvider(_) => {
-				StatusCode::BAD_GATEWAY
-			}
+			Self::AgentUnavailable
+			| Self::HuggingFaceUnavailable
+			| Self::GitProvider(_)
+			| Self::Import(_) => StatusCode::BAD_GATEWAY,
 		}
 	}
 }
