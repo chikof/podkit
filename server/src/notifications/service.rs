@@ -13,6 +13,7 @@ use super::event::{EventKind, Severity};
 use super::format::Message;
 use super::settings::{self, MAX_DEDUP_MINUTES, Security, Settings, Smtp};
 use super::{hooks, send};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{self, Action, Resource, authorize};
 use crate::db::is_unique_violation;
 use crate::error::{AppResult, ServerError};
@@ -27,6 +28,11 @@ const MAX_NAME_LEN: usize = 60;
 
 fn invalid(what: &str) -> ServerError {
 	ServerError::Validation(format!("invalid {what}"))
+}
+
+/// One audit event for a change of this slice.
+async fn note(db: &PgPool, user: UserId, team: TeamId, action: &str, target: Target, diff: Diff) {
+	audit::log(db, user, team, action, target, diff).await;
 }
 
 fn name_of(raw: &str) -> AppResult<String> {
@@ -92,20 +98,32 @@ pub async fn create_channel(
 		.as_ref()
 		.map(|secret| seal_secret(&s.secrets, secret))
 		.transpose()?;
-	sqlx::query_as::<_, Channel>(sqlx::AssertSqlSafe(format!(
+	let channel = sqlx::query_as::<_, Channel>(sqlx::AssertSqlSafe(format!(
 		"INSERT INTO notification_channels (id, team_id, name, kind, config, hint, secret)
 		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING {CHANNEL_COLUMNS}"
 	)))
 	.bind(NotificationChannelId::generate())
 	.bind(team)
-	.bind(name)
+	.bind(&name)
 	.bind(kind)
 	.bind(Json(&built.config))
 	.bind(&built.hint)
 	.bind(sealed)
 	.fetch_one(&s.db)
 	.await
-	.map_err(|e| name_taken(e, "notification_channels_team_id_name_key", "channel"))
+	.map_err(|e| name_taken(e, "notification_channels_team_id_name_key", "channel"))?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"notification_channel.create",
+		Target::new("notification_channel", channel.id.0).named(&channel.name),
+		Diff::new()
+			.set("kind", kind.as_str())
+			.set("secret_set", built.secret.is_some()),
+	)
+	.await;
+	Ok(channel)
 }
 
 /// What an edit may change. `fields` replaces the settings it carries; a blank secret keeps the
@@ -160,20 +178,33 @@ pub async fn update_channel(
 			current.secret.clone(),
 		)
 	};
-	sqlx::query_as::<_, Channel>(sqlx::AssertSqlSafe(format!(
+	let updated = sqlx::query_as::<_, Channel>(sqlx::AssertSqlSafe(format!(
 		"UPDATE notification_channels SET name = $3, enabled = $4, config = $5, hint = $6, secret = $7
 		WHERE id = $1 AND team_id = $2 RETURNING {CHANNEL_COLUMNS}"
 	)))
 	.bind(id)
 	.bind(team)
-	.bind(name)
+	.bind(&name)
 	.bind(enabled)
 	.bind(Json(&config))
 	.bind(&hint)
 	.bind(sealed)
 	.fetch_one(&s.db)
 	.await
-	.map_err(|e| name_taken(e, "notification_channels_team_id_name_key", "channel"))
+	.map_err(|e| name_taken(e, "notification_channels_team_id_name_key", "channel"))?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"notification_channel.update",
+		Target::new("notification_channel", id.0).named(&updated.name),
+		Diff::new()
+			.changed("name", current.name.as_str(), updated.name.as_str())
+			.changed("enabled", current.enabled, updated.enabled)
+			.changed("hint", current.hint.as_str(), updated.hint.as_str()),
+	)
+	.await;
+	Ok(updated)
 }
 
 fn or_keep(given: &str, stored: Option<&str>) -> String {
@@ -200,6 +231,15 @@ pub async fn remove_channel(
 	if done.rows_affected() == 0 {
 		return Err(not_found("channel"));
 	}
+	audit::log(
+		db,
+		user,
+		team,
+		"notification_channel.delete",
+		Target::new("notification_channel", id.0),
+		Diff::new(),
+	)
+	.await;
 	Ok(())
 }
 
@@ -334,11 +374,25 @@ pub async fn save_smtp(
 	.bind(host)
 	.bind(i32::from(port))
 	.bind(security.as_str())
-	.bind(username)
+	.bind(username.clone())
 	.bind(password)
 	.bind(from)
 	.execute(&s.db)
 	.await?;
+	note(
+		&s.db,
+		user,
+		team,
+		"notification_smtp.set",
+		Target::none("notification_smtp"),
+		Diff::new()
+			.set("host", host)
+			.set("port", i64::from(port))
+			.set("security", security.as_str())
+			.set("username_set", username.is_some())
+			.secret("password"),
+	)
+	.await;
 	Ok(())
 }
 
@@ -349,6 +403,15 @@ pub async fn clear_smtp(db: &PgPool, user: UserId, team: TeamId) -> AppResult<()
 		.bind(team)
 		.execute(db)
 		.await?;
+	note(
+		db,
+		user,
+		team,
+		"notification_smtp.clear",
+		Target::none("notification_smtp"),
+		Diff::new(),
+	)
+	.await;
 	Ok(())
 }
 
@@ -376,7 +439,20 @@ pub async fn save_settings(
 	{
 		return Err(invalid("noise control settings"));
 	}
-	Ok(settings::save(db, team, new).await?)
+	settings::save(db, team, new).await?;
+	note(
+		db,
+		user,
+		team,
+		"notification_settings.update",
+		Target::none("notification_settings"),
+		Diff::new()
+			.set("dedup_minutes", i64::from(new.dedup_minutes))
+			.set("quiet_start_min", i64::from(new.quiet_start_min))
+			.set("quiet_end_min", i64::from(new.quiet_end_min)),
+	)
+	.await;
+	Ok(())
 }
 
 // --- rules ----------------------------------------------------------------------------------
@@ -498,7 +574,7 @@ pub async fn create_rule(
 	)
 	.bind(id)
 	.bind(team)
-	.bind(name)
+	.bind(&name)
 	.bind(&kinds)
 	.bind(input.project_id)
 	.bind(input.environment_id)
@@ -509,6 +585,17 @@ pub async fn create_rule(
 	.map_err(|e| name_taken(e, "notification_rules_team_id_name_key", "rule"))?;
 	set_rule_channels(&mut tx, id, &input.channel_ids).await?;
 	tx.commit().await?;
+	note(
+		db,
+		user,
+		team,
+		"notification_rule.create",
+		Target::new("notification_rule", id.0).named(&name),
+		Diff::new()
+			.set("kinds", kinds.clone())
+			.set("channels", input.channel_ids.len()),
+	)
+	.await;
 	Ok(id)
 }
 
@@ -550,7 +637,7 @@ pub async fn update_rule(
 	)
 	.bind(id)
 	.bind(team)
-	.bind(name)
+	.bind(&name)
 	.bind(&kinds)
 	.bind(input.project_id)
 	.bind(input.environment_id)
@@ -561,6 +648,17 @@ pub async fn update_rule(
 	.map_err(|e| name_taken(e, "notification_rules_team_id_name_key", "rule"))?;
 	set_rule_channels(&mut tx, id, &input.channel_ids).await?;
 	tx.commit().await?;
+	note(
+		db,
+		user,
+		team,
+		"notification_rule.update",
+		Target::new("notification_rule", id.0).named(&name),
+		Diff::new()
+			.set("kinds", kinds.clone())
+			.set("channels", input.channel_ids.len()),
+	)
+	.await;
 	Ok(())
 }
 
@@ -594,6 +692,15 @@ pub async fn set_rule_enabled(
 	if done.rows_affected() == 0 {
 		return Err(not_found("rule"));
 	}
+	note(
+		db,
+		user,
+		team,
+		"notification_rule.update",
+		Target::new("notification_rule", id.0),
+		Diff::new().set("enabled", enabled),
+	)
+	.await;
 	Ok(())
 }
 
@@ -613,6 +720,15 @@ pub async fn remove_rule(
 	if done.rows_affected() == 0 {
 		return Err(not_found("rule"));
 	}
+	note(
+		db,
+		user,
+		team,
+		"notification_rule.delete",
+		Target::new("notification_rule", id.0),
+		Diff::new(),
+	)
+	.await;
 	Ok(())
 }
 
@@ -704,7 +820,7 @@ pub async fn create_alert(
 	)
 	.bind(id)
 	.bind(team)
-	.bind(name)
+	.bind(&name)
 	.bind(&input.scope)
 	.bind(server)
 	.bind(kind)
@@ -717,6 +833,18 @@ pub async fn create_alert(
 	.execute(db)
 	.await
 	.map_err(|e| name_taken(e, "metric_alerts_team_id_name_key", "metric alert"))?;
+	note(
+		db,
+		user,
+		team,
+		"metric_alert.create",
+		Target::new("metric_alert", id.0).named(&name),
+		Diff::new()
+			.set("metric", metric.as_str())
+			.set("threshold", input.threshold)
+			.set("duration_minutes", i64::from(input.duration_minutes)),
+	)
+	.await;
 	Ok(id)
 }
 
@@ -742,6 +870,15 @@ pub async fn set_alert_enabled(
 	if done.rows_affected() == 0 {
 		return Err(not_found("metric alert"));
 	}
+	note(
+		db,
+		user,
+		team,
+		"metric_alert.update",
+		Target::new("metric_alert", id.0),
+		Diff::new().set("enabled", enabled),
+	)
+	.await;
 	Ok(())
 }
 
@@ -761,6 +898,15 @@ pub async fn remove_alert(
 	if done.rows_affected() == 0 {
 		return Err(not_found("metric alert"));
 	}
+	note(
+		db,
+		user,
+		team,
+		"metric_alert.delete",
+		Target::new("metric_alert", id.0),
+		Diff::new(),
+	)
+	.await;
 	Ok(())
 }
 

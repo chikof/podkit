@@ -4,6 +4,7 @@
 use sqlx::PgPool;
 
 use super::{HealthConfig, Kind};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ApplicationId, ProjectId, TeamId, UserId};
@@ -120,5 +121,22 @@ pub async fn save(
 		}
 		None => super::remove(db, app.id).await?,
 	}
+	audit::log(
+		db,
+		user,
+		team,
+		"app.health",
+		Target::new("application", app.id.0)
+			.named(&app.slug)
+			.in_project(project),
+		Diff::new().set(
+			"gate",
+			config.map_or_else(
+				|| "off".to_owned(),
+				|c| format!("{:?}", c.kind).to_lowercase(),
+			),
+		),
+	)
+	.await;
 	Ok(())
 }

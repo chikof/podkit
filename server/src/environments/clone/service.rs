@@ -12,6 +12,7 @@ use super::plan::{self, Plan, Snapshot};
 use super::{
 	CloneStatus, EnvironmentClone, Options, Step, copy, find_by_id, find_scoped, run, save_report,
 };
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::environments::Environment;
 use crate::error::{AppResult, ServerError};
@@ -300,6 +301,20 @@ pub async fn clone(
 	.execute(&mut *tx)
 	.await?;
 	tx.commit().await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"environment.clone",
+		Target::new("environment", environment.id.0)
+			.named(&name)
+			.in_project(project),
+		Diff::new()
+			.set("source", snap.environment.name.clone())
+			.set("data", options.data)
+			.set("deploy", options.deploy),
+	)
+	.await;
 
 	finish_setup(s, id, &snap).await?;
 	find_by_id(&s.db, id).await?.ok_or(ServerError::Internal)

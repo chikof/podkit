@@ -11,6 +11,7 @@ use sqlx::PgPool;
 
 use super::resolve::{self, ResolveError};
 use super::{Level, Scope};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::env_vars;
 use crate::error::{AppResult, ServerError};
@@ -108,6 +109,18 @@ pub async fn set(
 		.encrypt(value)
 		.map_err(|e| ServerError::Validation(format!("failed to encrypt value: {e}")))?;
 	let row = super::upsert(&s.db, scope, key, &encrypted, is_secret, user).await?;
+	audit::log(
+		&s.db,
+		user,
+		scope.team(),
+		"shared_var.set",
+		target_of(scope, row.id, &row.key),
+		Diff::new()
+			.set("scope", scope_name(scope))
+			.set("is_secret", row.is_secret)
+			.secret("value"),
+	)
+	.await;
 	Ok(SharedVarView {
 		id: row.id,
 		key: row.key,
@@ -125,9 +138,38 @@ pub async fn remove(
 ) -> AppResult<String> {
 	authorize(&s.db, user, scope.team(), Action::Delete, Resource::EnvVar).await?;
 	check_scope(&s.db, scope).await?;
-	super::delete(&s.db, scope, id)
+	let key = super::delete(&s.db, scope, id)
 		.await?
-		.ok_or(ServerError::EnvVarNotFound)
+		.ok_or(ServerError::EnvVarNotFound)?;
+	audit::log(
+		&s.db,
+		user,
+		scope.team(),
+		"shared_var.delete",
+		target_of(scope, id, &key),
+		Diff::new().set("scope", scope_name(scope)),
+	)
+	.await;
+	Ok(key)
+}
+
+fn scope_name(scope: Scope) -> &'static str {
+	match scope {
+		Scope::Team(_) => "team",
+		Scope::Project(..) => "project",
+		Scope::Environment(..) => "environment",
+	}
+}
+
+/// The audited target of a shared variable: its name, in the project it belongs to if any.
+fn target_of(scope: Scope, id: SharedVarId, key: &str) -> Target {
+	let target = Target::new("shared_var", id.0).named(key);
+	match scope {
+		Scope::Team(_) => target,
+		Scope::Project(_, project) | Scope::Environment(_, project, _) => {
+			target.in_project(project)
+		}
+	}
 }
 
 // --- who is affected -----------------------------------------------------------------

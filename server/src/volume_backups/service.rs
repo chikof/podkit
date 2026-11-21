@@ -8,6 +8,7 @@ use super::{
 	Consistency, DEFAULT_KEEP, MAX_KEEP, Policy, Restore, RestoreMode, RestoreState, VolumeBackup,
 	advance_restore,
 };
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::auth::users;
 use crate::backups::{self, BackupStatus, next_run, parse_schedule};
@@ -253,7 +254,7 @@ pub async fn save_settings(
 	};
 
 	let policy = super::ensure_policy(&s.db, &subject).await?;
-	Ok(super::save_policy(
+	let saved = super::save_policy(
 		&s.db,
 		policy.id,
 		input.target_id,
@@ -262,7 +263,42 @@ pub async fn save_settings(
 		keep,
 		input.consistency.unwrap_or(Consistency::Live),
 	)
-	.await?)
+	.await?;
+	note(
+		s,
+		user,
+		team,
+		&subject,
+		"volume_backup.settings",
+		Diff::new()
+			.set("schedule", schedule.unwrap_or_default())
+			.set("keep", i64::from(keep))
+			.set("destination_set", input.target_id.is_some()),
+	)
+	.await;
+	Ok(saved)
+}
+
+/// One audit event about a volume's backups.
+async fn note(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	subject: &Subject,
+	action: &str,
+	diff: Diff,
+) {
+	audit::log(
+		&s.db,
+		user,
+		team,
+		action,
+		Target::none("volume")
+			.named(&subject.label)
+			.in_project(subject.project),
+		diff,
+	)
+	.await;
 }
 
 /// Queues a backup of the volume to its destination and returns immediately. Caller
@@ -285,7 +321,17 @@ pub async fn create(
 			"a backup or restore of this volume is already running".to_owned(),
 		));
 	}
-	Ok(super::queue_backup(s, &subject, &policy, target, Some(user)).await?)
+	let backup = super::queue_backup(s, &subject, &policy, target, Some(user)).await?;
+	note(
+		s,
+		user,
+		team,
+		&subject,
+		"volume_backup.create",
+		Diff::new().set("backup", backup.id.0),
+	)
+	.await;
+	Ok(backup)
 }
 
 /// The volume's backups, newest first, paged with `before` and `limit` (1..=200).
@@ -325,6 +371,15 @@ pub async fn remove(
 		return Err(ServerError::Conflict("backup is in progress".to_owned()));
 	}
 	super::run::purge(s, &backup).await?;
+	note(
+		s,
+		user,
+		team,
+		&subject,
+		"volume_backup.delete",
+		Diff::new().set("backup", backup.id.0),
+	)
+	.await;
 	Ok(backup.id)
 }
 
@@ -341,6 +396,10 @@ async fn backup_of(s: &AppState, subject: &Subject, id: VolumeBackupId) -> AppRe
 /// is exactly the volume's mount path or compose name: the check lives here so a
 /// forged request cannot skip it. The owner is stopped while the archive is written
 /// and started again after. Caller must hold `update volume` on the team.
+#[allow(
+	clippy::too_many_lines,
+	reason = "one transaction that picks the destination volume, then queues the job"
+)]
 pub async fn restore(
 	s: &AppState,
 	user: UserId,
@@ -449,6 +508,18 @@ pub async fn restore(
 		}
 		return Err(e.into());
 	}
+	note(
+		s,
+		user,
+		team,
+		&subject,
+		"volume_backup.restore",
+		Diff::new()
+			.set("backup", backup.id.0)
+			.set("restore", restore.id.0)
+			.set("mode", format!("{:?}", input.mode)),
+	)
+	.await;
 	Ok(restore)
 }
 

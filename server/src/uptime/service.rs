@@ -16,6 +16,7 @@ use super::{
 	day_stats, uptime_percent,
 };
 use crate::applications::dashed_ip;
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::db::is_unique_violation;
 use crate::error::{AppResult, ServerError};
@@ -326,7 +327,29 @@ pub async fn create(
 	.await
 	.map_err(name_taken)?;
 	s.jobs.notify.notify_one();
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"uptime_check.create",
+		Target::new("uptime_check", check.id.0).named(&check.name),
+		Diff::new()
+			.set("kind", v.kind.as_str())
+			.set("target", target_label(&check))
+			.set("interval_secs", i64::from(v.interval_secs))
+			.set("status_visible", v.status_visible),
+	)
+	.await;
 	Ok(check)
+}
+
+/// What a check points at, for the log: a URL without credentials, or `host:port`.
+fn target_label(c: &Check) -> String {
+	match (&c.url, &c.host) {
+		(Some(url), _) => audit::scrub_url(url),
+		(None, Some(host)) => format!("{host}:{}", c.port.unwrap_or_default()),
+		(None, None) => String::new(),
+	}
 }
 
 /// Replaces a check's settings. A new target starts over: no verdict, no streaks. Needs
@@ -388,6 +411,28 @@ pub async fn update(
 		.await?;
 	}
 	s.jobs.notify.notify_one();
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"uptime_check.update",
+		Target::new("uptime_check", check.id.0).named(&check.name),
+		Diff::new()
+			.changed("name", current.name.as_str(), check.name.as_str())
+			.changed("target", target_label(&current), target_label(&check))
+			.changed("enabled", current.enabled, check.enabled)
+			.changed(
+				"interval_secs",
+				i64::from(current.interval_secs),
+				i64::from(check.interval_secs),
+			)
+			.changed(
+				"status_visible",
+				current.status_visible,
+				check.status_visible,
+			),
+	)
+	.await;
 	Ok(check)
 }
 
@@ -425,6 +470,15 @@ pub async fn remove(db: &PgPool, user: UserId, team: TeamId, id: UptimeCheckId) 
 		.execute(&mut *tx)
 		.await?;
 	tx.commit().await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"uptime_check.delete",
+		Target::new("uptime_check", id.0).named(&current.name),
+		Diff::new(),
+	)
+	.await;
 	Ok(())
 }
 
@@ -542,9 +596,18 @@ pub async fn set_status_page(
 	)
 	.bind(team)
 	.bind(enabled)
-	.bind(title)
+	.bind(&title)
 	.execute(db)
 	.await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"uptime_status_page.update",
+		Target::none("uptime_status_page"),
+		Diff::new().set("enabled", enabled).set("title", title),
+	)
+	.await;
 	Ok(())
 }
 
@@ -571,6 +634,15 @@ pub async fn set_auto_checks(db: &PgPool, user: UserId, team: TeamId, on: bool) 
 	.bind(on)
 	.execute(db)
 	.await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"uptime_settings.update",
+		Target::none("uptime_settings"),
+		Diff::new().set("auto_checks", on),
+	)
+	.await;
 	Ok(())
 }
 

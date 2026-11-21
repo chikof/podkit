@@ -11,6 +11,7 @@ use super::limits::{MAX_BACKOFF_S, MAX_COMMAND, MAX_NAME, MAX_RETRIES, MAX_TIMEO
 use super::scheduler::MAX_QUEUED;
 use super::store::{self, NewTask};
 use super::{Concurrency, CronRun, CronTask, Kind, Trigger, schedule};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::db::is_unique_violation;
 use crate::error::{AppResult, ServerError};
@@ -232,7 +233,22 @@ pub async fn create(
 	} else {
 		None
 	};
-	store::insert_task(db, &new).await.map_err(name_taken)
+	let created = store::insert_task(db, &new).await.map_err(name_taken)?;
+	audit::log(
+		db,
+		user,
+		team,
+		"cron.create",
+		Target::new("cron_task", created.id.0)
+			.named(&created.name)
+			.in_project(project),
+		Diff::new()
+			.set("schedule", created.schedule.clone())
+			.set("timezone", created.timezone.clone())
+			.set("enabled", created.enabled),
+	)
+	.await;
+	Ok(created)
 }
 
 /// The project's tasks, optionally narrowed to an environment or an application; needs
@@ -326,6 +342,7 @@ pub async fn update(
 ) -> AppResult<CronTask> {
 	authorize(db, user, team, Action::Update, Resource::Cron).await?;
 	let mut task = scope::cron_task(db, team, project, id).await?;
+	let before = task.clone();
 	if let Some(name) = &input.name {
 		task.name = clean_name(name)?;
 	}
@@ -375,7 +392,42 @@ pub async fn update(
 	check_numbers(task.timeout_s, task.max_retries, task.retry_backoff_s)?;
 	schedule::validate(&task.schedule, &task.timezone).map_err(invalid)?;
 	task.next_run_at = next_slot(&task, OffsetDateTime::now_utc())?;
-	store::update_task(db, &task).await.map_err(name_taken)
+	let updated = store::update_task(db, &task).await.map_err(name_taken)?;
+	audit::log(
+		db,
+		user,
+		team,
+		"cron.update",
+		Target::new("cron_task", updated.id.0)
+			.named(&updated.name)
+			.in_project(project),
+		Diff::new()
+			.changed("name", before.name.as_str(), updated.name.as_str())
+			.changed("command", before.command.as_str(), updated.command.as_str())
+			.changed(
+				"schedule",
+				before.schedule.as_str(),
+				updated.schedule.as_str(),
+			)
+			.changed(
+				"timezone",
+				before.timezone.as_str(),
+				updated.timezone.as_str(),
+			)
+			.changed("enabled", before.enabled, updated.enabled)
+			.changed(
+				"timeout_s",
+				i64::from(before.timeout_s),
+				i64::from(updated.timeout_s),
+			)
+			.changed(
+				"max_retries",
+				i64::from(before.max_retries),
+				i64::from(updated.max_retries),
+			),
+	)
+	.await;
+	Ok(updated)
 }
 
 /// Pauses or resumes a task; needs `update cron`.
@@ -428,6 +480,17 @@ pub async fn remove(
 		let _ = jobs::worker::cancel(state, crate::ids::JobId(job)).await?;
 	}
 	store::delete_task(&state.db, task.id).await?;
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"cron.delete",
+		Target::new("cron_task", task.id.0)
+			.named(&task.name)
+			.in_project(project),
+		Diff::new(),
+	)
+	.await;
 	Ok(task.id)
 }
 
@@ -463,6 +526,17 @@ pub async fn run_now(
 	let now = OffsetDateTime::now_utc();
 	let run = store::enqueue_run(&mut conn, &task, Trigger::Manual, 1, None, now).await?;
 	state.jobs.notify.notify_one();
+	audit::log(
+		&state.db,
+		user,
+		team,
+		"cron.run",
+		Target::new("cron_task", task.id.0)
+			.named(&task.name)
+			.in_project(project),
+		Diff::new().set("trigger", "manual"),
+	)
+	.await;
 	Ok(run)
 }
 
@@ -523,6 +597,15 @@ pub async fn cancel(
 		.filter(|_| run.status.is_active())
 		.ok_or_else(|| ServerError::Conflict("the run is already over".to_owned()))?;
 	if jobs::worker::cancel(state, job).await? {
+		audit::log(
+			&state.db,
+			user,
+			team,
+			"cron.cancel",
+			Target::new("cron_task", task.0).in_project(project),
+			Diff::new().set("run", run.id.0),
+		)
+		.await;
 		Ok(())
 	} else {
 		Err(ServerError::Conflict("the run is already over".to_owned()))
