@@ -1,0 +1,11 @@
+kernel: 6.18.63; wireguard module loaded: 0
+modinfo: filename:       /run/booted-system/kernel-modules/lib/modules/6.18.63/kernel/drivers/net/wireguard/wireguard.ko.xz alias:          net-pf-16-proto-16-family-wireguard 
+--- as plain user (host netns):
+RTNETLINK answers: Operation not permitted
+--- inside a user+net namespace (what rootless Podman gives a container):
+2: wgtest0: <POINTOPOINT,NOARP> mtu 1420 qdisc noop state DOWN mode DEFAULT group default qlen 1000
+    link/none 
+--- tun device (userspace WireGuard, e.g. wireguard-go/boringtun):
+crw-rw-rw- 1 root root 10, 200 Nov 19 08:22 /dev/net/tun
+tun create in userns: OK
+2: tuntest0: <POINTOPOINT,MULTICAST,NOARP> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 500

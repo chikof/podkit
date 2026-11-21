@@ -1,0 +1,34 @@
+image,size_MB,save_s,archive_MB,load_s,gzip_archive_MB,gzip_total_s,zstd_archive_MB,zstd_total_s
+docker.io/library/alpine:3.24,8,0.08,8,0.11,3,0.24,3,0.19
+localhost/pkm1-app:v1,157,0.89,157,0.63,86,2.22,76,0.92
+docker.io/library/python:3.13-slim,116,0.31,116,0.51,45,1.55,35,0.76
+docker.io/library/postgres:18,459,1.76,459,1.32,174,5.13,143,2.08
+--- registry:2 (loopback), push v1 then v2 (only the 1 MiB layer differs)
+Trying to pull docker.io/library/registry:2...
+Getting image source signatures
+Copying blob sha256:6d464ea18732475d5c3591f1eba3ee96a974808791a5fe103ea1c33199f2eb74
+Copying blob sha256:44cf07d57ee4424189f012074a59110ee2065adfdde9c7d9826bebdffce0a885
+Copying blob sha256:8e82f80af0de06ae95429a79d00ae7e98c0f5ded5555a06c024757d81371a742
+Copying blob sha256:bbbdd6c6894b7d41bab22098e3a0fff77de4a231f5b407224ead5b3f26cc4ff3
+Copying blob sha256:3493bf46cdec3b8ecbb96c0b1cd7fc5f90964306b7c55a0136dac0beeaa627f9
+Copying config sha256:26b2eb03618e749084668eaff68cff8f81dda12d06ac641be7a6398b82a6f25b
+Writing manifest to image destination
+push v1 (cold): 0.38s   push v2 (delta only): 0.10s
+pull v1 into empty store: 0.84s   pull v2 (layers present): 0.08s
+--- save|load of v2 onto a store that already has v1 (no layer dedup on the wire)
+save|load v2 over v1: 0.46s, wire bytes = whole image (157 MB)
+--- cleanup
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing container c1e7489d5c6c37bfc311f95f0498768022610c1c358548053512443a0202ad79: acquiring lock 0 for container c1e7489d5c6c37bfc311f95f0498768022610c1c358548053512443a0202ad79: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing container aece38aedbfb00c72a610066265553bf0ea8a2d7709fb6829d736e56925adba8: acquiring lock 1 for container aece38aedbfb00c72a610066265553bf0ea8a2d7709fb6829d736e56925adba8: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing container c4f8c4b7814df854d8231dda416bcbea59b6a9dba79100263e824e4a55aa107a: acquiring lock 3 for container c4f8c4b7814df854d8231dda416bcbea59b6a9dba79100263e824e4a55aa107a: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing container ee726cb612412fe2dc6fdcf7d3521d737a4882e6d471335a4b7ea2a082b47d82: acquiring lock 5 for container ee726cb612412fe2dc6fdcf7d3521d737a4882e6d471335a4b7ea2a082b47d82: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing container 4eb175395d9206929b6890f4fcf3b0453e146cf8cce3f1d1ae6d6aaaeb2db65d: acquiring lock 6 for container 4eb175395d9206929b6890f4fcf3b0453e146cf8cce3f1d1ae6d6aaaeb2db65d: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing volume podkit-vol-77150552927096832: acquiring lock 2 for volume podkit-vol-77150552927096832: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing volume model-files-77151290893914112: acquiring lock 4 for volume model-files-77151290893914112: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing volume 9db1285565f70acdca351ecb2e6ed58a0065b17f23bbbd6635043a721db7a6f7: acquiring lock 9 for volume 9db1285565f70acdca351ecb2e6ed58a0065b17f23bbbd6635043a721db7a6f7: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing volume 79b9270ce2276047c02733b9b0057ff85e09f712cb27d4addf3066cba00cdf04: acquiring lock 10 for volume 79b9270ce2276047c02733b9b0057ff85e09f712cb27d4addf3066cba00cdf04: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing volume 3faba2964c3d01a2f7eee0268f54f23e28c49dcfd2c8e94b5ed11175bf5e7696: acquiring lock 12 for volume 3faba2964c3d01a2f7eee0268f54f23e28c49dcfd2c8e94b5ed11175bf5e7696: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing volume pk-s1-cold: acquiring lock 11 for volume pk-s1-cold: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing volume 325a81a871ce14179fbd5ed4af95387ed017c8e81f26c68b15e5854fbd03ae79: acquiring lock 14 for volume 325a81a871ce14179fbd5ed4af95387ed017c8e81f26c68b15e5854fbd03ae79: file exists"
+time="2026-11-20T03:24:31Z" level=error msg="Refreshing volume 11779a2602971424fb5fa9ca5e68903276f76cf323b5477d3dd8927560d1238b: acquiring lock 13 for volume 11779a2602971424fb5fa9ca5e68903276f76cf323b5477d3dd8927560d1238b: file exists"
+done
