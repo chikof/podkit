@@ -30,6 +30,7 @@ use crate::ui::layout::{Crumb, app_page};
 use crate::ui::sse;
 use crate::ui::sse::js_string;
 
+mod access;
 mod advanced;
 pub mod chrome;
 mod create;
@@ -63,6 +64,7 @@ pub fn router() -> Router<AppState> {
 		.merge(logs::router())
 		.merge(env::router())
 		.merge(domains::router())
+		.merge(access::router())
 		.merge(volumes::router())
 		.merge(models_tab::router())
 		.merge(mcp_tab::router())

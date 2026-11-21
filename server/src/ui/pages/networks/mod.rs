@@ -7,6 +7,7 @@
 //! reads the database or decides who may do what.
 
 pub mod panel;
+pub mod policy;
 #[cfg(test)]
 mod tests;
 
@@ -301,6 +302,9 @@ async fn page(
 		Vec::new()
 	};
 	let base = networks_url(ctx.team.id, id);
+	let policy = crate::access_rules::policy::build(&s.db, ctx.team.id, id, views.clone())
+		.await
+		.map_err(|e| error::page(&ctx, &crate::error::ServerError::from(e)))?;
 
 	let actions = html! {
 		@if can_update {
@@ -328,8 +332,10 @@ async fn page(
 						"Every environment gets a private network, so production and staging cannot reach each other. Create a network to connect resources on purpose."
 					}
 				}
+				(policy::warnings(ctx.team.id, &policy.warnings))
 				(list(&ctx, &base, &views, can_update))
 			}
+			(policy::section(ctx.team.id, &policy))
 			@if can_update {
 				(new_dialog(&base))
 				(import_dialog(&base, &suggestions))

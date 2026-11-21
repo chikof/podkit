@@ -343,9 +343,17 @@ pub(crate) async fn build_spec(
 			command: mcp.args(),
 		});
 	}
-	let routing = mcp.is_none().then(|| Routing {
+	// Internal-only takes the application off the ingress, the way an MCP server is.
+	let access = crate::access_rules::for_deploy(&state.db, application.id)
+		.await
+		.map_err(|e| {
+			tracing::error!("failed to load access rules: {e}");
+			failed("failed to load the access rules")
+		})?;
+	let routing = (mcp.is_none() && !access.internal_only).then(|| Routing {
 		http_hosts: vec![applications::public_hostname(&application.slug, server)],
 		https_hosts,
+		access: access.rules,
 	});
 
 	Ok(DeploySpec {

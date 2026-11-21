@@ -6,6 +6,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod cidr;
+
 /// `GET /v1/health` response.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Health {
@@ -763,6 +765,51 @@ pub struct Routing {
 	pub http_hosts: Vec<String>,
 	/// Hosts served on the HTTPS entrypoint with ACME certs.
 	pub https_hosts: Vec<String>,
+	/// Who may reach the hosts and how; `None` adds no middleware. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub access: Option<AccessRules>,
+}
+
+/// What Traefik does to requests before they reach a service: the middlewares the agent
+/// writes as labels, in the order they run (IP lists, rate limit, basic auth, body size,
+/// security headers).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AccessRules {
+	/// Source ranges that may connect (CIDR or single addresses); empty allows everyone.
+	#[serde(default)]
+	pub allow: Vec<String>,
+	/// Source ranges refused. Traefik has no deny list, so the agent subtracts these from
+	/// `allow` (see [`cidr::effective_allow`]).
+	#[serde(default)]
+	pub deny: Vec<String>,
+	/// Requests per second one client may average; `None` has no limit.
+	#[serde(default)]
+	pub rate_average: Option<u32>,
+	/// Requests above the average a client may send in a burst.
+	#[serde(default)]
+	pub rate_burst: Option<u32>,
+	/// `user:hash` entries for HTTP basic auth (a bcrypt hash); empty asks for no login.
+	#[serde(default)]
+	pub basic_auth: Vec<String>,
+	/// HSTS, frame-deny, nosniff and a referrer policy on every response.
+	#[serde(default)]
+	pub security_headers: bool,
+	/// Largest request body in bytes; `None` has no limit.
+	#[serde(default)]
+	pub max_body_bytes: Option<u64>,
+}
+
+impl AccessRules {
+	/// Whether any middleware would be written.
+	#[must_use]
+	pub fn is_empty(&self) -> bool {
+		self.allow.is_empty()
+			&& self.deny.is_empty()
+			&& self.rate_average.is_none()
+			&& self.basic_auth.is_empty()
+			&& !self.security_headers
+			&& self.max_body_bytes.is_none()
+	}
 }
 
 /// A named volume mount.

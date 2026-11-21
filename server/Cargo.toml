@@ -30,6 +30,7 @@ zeroize.workspace = true
 crypto.workspace = true
 sqlx.workspace = true
 sha2.workspace = true
+bcrypt.workspace = true
 hmac.workspace = true
 getrandom.workspace = true
 proto.workspace = true

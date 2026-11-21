@@ -118,8 +118,14 @@ fn client_ip(req: &Request) -> Option<String> {
 		.extensions()
 		.get::<ConnectInfo<SocketAddr>>()
 		.map(|c| c.0.ip());
+	client_addr(peer, req.headers()).map(|ip| ip.to_string())
+}
+
+/// The address of whoever made a request: the socket's peer, or when that is a proxy on this
+/// machine or network (Traefik in front of podkit), the first `X-Forwarded-For` entry.
+pub fn client_addr(peer: Option<IpAddr>, headers: &axum::http::HeaderMap) -> Option<IpAddr> {
 	let forwarded = || {
-		req.headers()
+		headers
 			.get("x-forwarded-for")
 			.and_then(|v| v.to_str().ok())
 			.and_then(|v| v.split(',').next())
@@ -130,7 +136,6 @@ fn client_ip(req: &Request) -> Option<String> {
 		Some(peer) if !is_proxy(peer) => Some(peer),
 		_ => forwarded().or(peer),
 	}
-	.map(|ip| ip.to_string())
 }
 
 fn user_agent(req: &Request) -> Option<String> {

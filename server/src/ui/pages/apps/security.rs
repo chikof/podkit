@@ -5,9 +5,10 @@ use axum::Router;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use axum::routing::get;
-use maud::Markup;
+use maud::{Markup, html};
 
-use super::{Tab, app_url, forbid_unless_allowed, load, page};
+use super::{Tab, access, app_url, forbid_unless_allowed, load, page};
+use crate::auth::permission::{Action, Resource};
 use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::scanning::Subject;
 use crate::state::AppState;
@@ -38,5 +39,18 @@ async fn security_page(
 		&query,
 	)
 	.await?;
+	// What Traefik does to requests, for someone who may see the domains.
+	let rules = if ctx.perms.can(Action::Read, Resource::Domain) {
+		crate::access_rules::service::get(&s.db, ctx.user.id, ctx.team.id, project.id, app.id)
+			.await
+			.ok()
+	} else {
+		None
+	};
+	let base = app_url(ctx.team.id, project.id, app.id);
+	let content = html! {
+		@if let Some(rules) = &rules { (access::security_card(&base, rules)) }
+		(content)
+	};
 	Ok(page(&s, &ctx, &project, &app, Tab::Security, &content).await)
 }

@@ -181,6 +181,7 @@ fn translate(stack: i64, s: &Service, settings: &Settings<'_>) -> Result<DeployS
 	}
 
 	let routing = domain.map(|d| Routing {
+		access: None,
 		http_hosts: vec![d.host.clone()],
 		https_hosts: if settings.ingress.acme_email.is_some() {
 			vec![d.host.clone()]

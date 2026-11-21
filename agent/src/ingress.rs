@@ -4,7 +4,8 @@ use std::fmt::Write as _;
 use std::path::Path;
 
 use futures_util::StreamExt;
-use proto::{Ingress, PublishedPort};
+use proto::cidr::{self, Cidr};
+use proto::{AccessRules, Ingress, PublishedPort};
 use sha2::{Digest, Sha256};
 
 use crate::podman::{ContainerSpec, Podman, PodmanError};
@@ -321,6 +322,104 @@ pub fn secure_routing_labels(service: &str, https_hosts: &[String]) -> Vec<(Stri
 	]
 }
 
+/// Sent when nobody may connect: a range no client address is in.
+const NOBODY: &str = "255.255.255.255/32";
+
+/// Seconds of HSTS the security-headers preset sends (one year).
+const HSTS_SECONDS: u32 = 31_536_000;
+
+/// Docker-provider labels for the middlewares of `access`, and for attaching them to the
+/// routers of `routing_labels` (`service`) and `secure_routing_labels` (`service-secure`).
+/// `http` and `https` say which of the two routers exist.
+///
+/// Order is the order they run: the IP list first (a refused client costs nothing more), then
+/// the rate limit (so a password guesser is slowed before the login is checked), basic auth,
+/// the body size, and the headers on the way out. The option names are Traefik's:
+/// <https://doc.traefik.io/traefik/middlewares/http/ipallowlist/>, `ratelimit`,
+/// `basicauth`, `buffering` and `headers` on the same site.
+///
+/// # Errors
+/// A range of the rules does not parse.
+pub fn access_labels(
+	service: &str,
+	access: &AccessRules,
+	http: bool,
+	https: bool,
+) -> Result<Vec<(String, String)>, String> {
+	let mut labels = Vec::new();
+	let mut chain: Vec<String> = Vec::new();
+	let mut add = |name: &str, option: &str, value: String| {
+		labels.push((
+			format!("traefik.http.middlewares.{service}-{name}.{option}"),
+			value,
+		));
+	};
+	if !access.allow.is_empty() || !access.deny.is_empty() {
+		let ranges = cidr::effective_allow(&access.allow, &access.deny)?;
+		let range = if ranges.is_empty() {
+			NOBODY.to_string()
+		} else {
+			ranges
+				.iter()
+				.map(Cidr::to_string)
+				.collect::<Vec<_>>()
+				.join(",")
+		};
+		add("allow", "ipallowlist.sourcerange", range);
+		chain.push(format!("{service}-allow"));
+	}
+	if let Some(average) = access.rate_average {
+		add("rate", "ratelimit.average", average.to_string());
+		add(
+			"rate",
+			"ratelimit.burst",
+			access.rate_burst.unwrap_or(1).max(1).to_string(),
+		);
+		chain.push(format!("{service}-rate"));
+	}
+	if !access.basic_auth.is_empty() {
+		add("auth", "basicauth.users", access.basic_auth.join(","));
+		chain.push(format!("{service}-auth"));
+	}
+	if let Some(bytes) = access.max_body_bytes {
+		add("body", "buffering.maxrequestbodybytes", bytes.to_string());
+		chain.push(format!("{service}-body"));
+	}
+	if access.security_headers {
+		add("headers", "headers.stsseconds", HSTS_SECONDS.to_string());
+		add(
+			"headers",
+			"headers.stsincludesubdomains",
+			"true".to_string(),
+		);
+		add("headers", "headers.framedeny", "true".to_string());
+		add("headers", "headers.contenttypenosniff", "true".to_string());
+		add(
+			"headers",
+			"headers.referrerpolicy",
+			"strict-origin-when-cross-origin".to_string(),
+		);
+		chain.push(format!("{service}-headers"));
+	}
+	if chain.is_empty() {
+		return Ok(labels);
+	}
+	let chain = chain.join(",");
+	if http {
+		labels.push((
+			format!("traefik.http.routers.{service}.middlewares"),
+			chain.clone(),
+		));
+	}
+	if https {
+		labels.push((
+			format!("traefik.http.routers.{service}-secure.middlewares"),
+			chain,
+		));
+	}
+	Ok(labels)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -331,6 +430,140 @@ mod tests {
 			https_port: 443,
 			acme_email: None,
 		}
+	}
+
+	fn rules() -> AccessRules {
+		AccessRules {
+			allow: vec!["10.0.0.0/8".to_string()],
+			rate_average: Some(5),
+			rate_burst: Some(10),
+			basic_auth: vec!["ann:$2y$10$abc".to_string(), "bob:$2y$10$def".to_string()],
+			security_headers: true,
+			max_body_bytes: Some(1_048_576),
+			..AccessRules::default()
+		}
+	}
+
+	fn get<'a>(labels: &'a [(String, String)], key: &str) -> Option<&'a str> {
+		labels
+			.iter()
+			.find(|(k, _)| k == key)
+			.map(|(_, v)| v.as_str())
+	}
+
+	#[test]
+	fn access_labels_write_every_middleware_and_chain_them_in_order() {
+		let labels = access_labels("app-7", &rules(), true, true).unwrap();
+		let m = |k: &str| get(&labels, &format!("traefik.http.middlewares.app-7-{k}"));
+		assert_eq!(m("allow.ipallowlist.sourcerange"), Some("10.0.0.0/8"));
+		assert_eq!(m("rate.ratelimit.average"), Some("5"));
+		assert_eq!(m("rate.ratelimit.burst"), Some("10"));
+		assert_eq!(
+			m("auth.basicauth.users"),
+			Some("ann:$2y$10$abc,bob:$2y$10$def")
+		);
+		assert_eq!(m("body.buffering.maxrequestbodybytes"), Some("1048576"));
+		assert_eq!(m("headers.headers.stsseconds"), Some("31536000"));
+		assert_eq!(m("headers.headers.framedeny"), Some("true"));
+		assert_eq!(m("headers.headers.contenttypenosniff"), Some("true"));
+		assert_eq!(
+			m("headers.headers.referrerpolicy"),
+			Some("strict-origin-when-cross-origin")
+		);
+		let chain = "app-7-allow,app-7-rate,app-7-auth,app-7-body,app-7-headers";
+		assert_eq!(
+			get(&labels, "traefik.http.routers.app-7.middlewares"),
+			Some(chain)
+		);
+		assert_eq!(
+			get(&labels, "traefik.http.routers.app-7-secure.middlewares"),
+			Some(chain)
+		);
+	}
+
+	#[test]
+	fn access_labels_only_attach_to_routers_that_exist() {
+		let labels = access_labels("app-7", &rules(), true, false).unwrap();
+		assert!(get(&labels, "traefik.http.routers.app-7.middlewares").is_some());
+		assert!(get(&labels, "traefik.http.routers.app-7-secure.middlewares").is_none());
+		let none = access_labels("app-7", &AccessRules::default(), true, true).unwrap();
+		assert!(none.is_empty());
+	}
+
+	#[test]
+	fn access_labels_each_option_alone() {
+		let only = |r: AccessRules| access_labels("s", &r, true, false).unwrap();
+		let rate = only(AccessRules {
+			rate_average: Some(2),
+			..AccessRules::default()
+		});
+		assert_eq!(
+			get(&rate, "traefik.http.middlewares.s-rate.ratelimit.burst"),
+			Some("1")
+		);
+		assert_eq!(
+			get(&rate, "traefik.http.routers.s.middlewares"),
+			Some("s-rate")
+		);
+		let body = only(AccessRules {
+			max_body_bytes: Some(10),
+			..AccessRules::default()
+		});
+		assert_eq!(
+			get(&body, "traefik.http.routers.s.middlewares"),
+			Some("s-body")
+		);
+		let auth = only(AccessRules {
+			basic_auth: vec!["a:b".into()],
+			..AccessRules::default()
+		});
+		assert_eq!(
+			get(&auth, "traefik.http.routers.s.middlewares"),
+			Some("s-auth")
+		);
+		let headers = only(AccessRules {
+			security_headers: true,
+			..AccessRules::default()
+		});
+		assert_eq!(
+			get(&headers, "traefik.http.routers.s.middlewares"),
+			Some("s-headers")
+		);
+	}
+
+	#[test]
+	fn access_labels_turn_a_deny_list_into_the_ranges_that_remain() {
+		let deny = AccessRules {
+			deny: vec!["10.0.0.128/25".into()],
+			allow: vec!["10.0.0.0/24".into()],
+			..AccessRules::default()
+		};
+		let labels = access_labels("s", &deny, true, false).unwrap();
+		assert_eq!(
+			get(
+				&labels,
+				"traefik.http.middlewares.s-allow.ipallowlist.sourcerange"
+			),
+			Some("10.0.0.0/25")
+		);
+		// Everything denied: nobody gets in, rather than everybody.
+		let all = AccessRules {
+			deny: vec!["0.0.0.0/0".into(), "::/0".into()],
+			..AccessRules::default()
+		};
+		let labels = access_labels("s", &all, true, false).unwrap();
+		assert_eq!(
+			get(
+				&labels,
+				"traefik.http.middlewares.s-allow.ipallowlist.sourcerange"
+			),
+			Some(NOBODY)
+		);
+		let bad = AccessRules {
+			allow: vec!["nope".into()],
+			..AccessRules::default()
+		};
+		assert!(access_labels("s", &bad, true, false).is_err());
 	}
 
 	#[test]

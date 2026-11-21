@@ -19,6 +19,7 @@ use crate::logs::LogHub;
 use crate::routes::routes;
 use crate::state::{AppState, Config};
 
+mod access_rules;
 mod agents;
 mod applications;
 mod audit;

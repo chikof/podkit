@@ -8,6 +8,7 @@ use std::net::IpAddr;
 
 use axum::Router;
 use axum::extract::{Path, State};
+use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use datastar::axum::ReadSignals;
@@ -15,6 +16,7 @@ use maud::{Markup, html};
 use serde::Deserialize;
 use serde_json::json;
 
+use super::access;
 use super::{AppPath, Tab, app_url, load, page, public_link, saved_slot};
 use crate::applications::service::ApplicationView;
 use crate::auth::permission::{Action, Resource};
@@ -138,12 +140,17 @@ fn default_address(s: &AppState, app: &ApplicationView) -> Markup {
 async fn domains_page(
 	State(s): State<AppState>,
 	ctx: TeamCtx,
+	parts: Parts,
 	Path((_, project, app)): Path<(TeamId, ProjectId, ApplicationId)>,
 ) -> Result<Markup, Response> {
 	let (project, app) = load(&s, &ctx, project, app).await?;
 	let list = domains::list(&s.db, ctx.user.id, ctx.team.id, project.id, app.id)
 		.await
 		.map_err(|e| error::page(&ctx, &e))?;
+	let rules =
+		crate::access_rules::service::get(&s.db, ctx.user.id, ctx.team.id, project.id, app.id)
+			.await
+			.map_err(|e| error::page(&ctx, &e))?;
 	let base = app_url(ctx.team.id, project.id, app.id);
 	let can_create = ctx.perms.can(Action::Create, Resource::Domain);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::Domain);
@@ -153,8 +160,11 @@ async fn domains_page(
 		"evt.preventDefault(); @post({})",
 		js_string(&format!("{base}/domains"))
 	);
+	let mut signals = access::signals(&rules);
+	signals.insert("domain_hostname".to_owned(), json!(""));
+	signals.insert("_error".to_owned(), json!(""));
 	let content = html! {
-		div class="flex flex-col gap-6" data-signals=(json!({ "domain_hostname": "", "_error": "" }).to_string()) {
+		div class="flex flex-col gap-6" data-signals=(serde_json::Value::Object(signals).to_string()) {
 			@if !https { (https_banner()) }
 			(saved_slot(&ctx, &base, false))
 			(default_address(&s, &app))
@@ -181,6 +191,7 @@ async fn domains_page(
 					}))
 				}))
 			}
+			(access::section(&ctx, &base, &rules, access::client_ip(&parts)))
 			(card(&html! {
 				(card_section("DNS setup", None, None))
 				(card_content(&dns_help(&list.server_host)))
