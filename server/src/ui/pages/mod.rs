@@ -5,6 +5,7 @@
 //! To add an area: create `pages/<area>/mod.rs` with `pub fn router()`, add a `pub mod`
 //! line here and one `.merge(pages::<area>::router())` line in `ui/mod.rs`.
 
+pub mod account_security;
 pub mod accounts;
 pub mod apps;
 pub mod backups;
@@ -27,6 +28,7 @@ pub mod security;
 pub mod servers;
 pub mod settings;
 pub mod shared_env;
+pub mod sign_in;
 pub mod stacks;
 pub mod templates;
 pub mod uptime;

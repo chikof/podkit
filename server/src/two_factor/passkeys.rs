@@ -284,3 +284,38 @@ pub async fn finish_login(
 	}
 	Ok(user)
 }
+
+/// What the browser needs to keep a password manager's passkeys in step with ours (the
+/// Signal API, see `passkey.js`): the relying party id, the account's handle and the
+/// credential ids, all as unpadded base64url.
+#[derive(Debug, Clone)]
+pub struct SyncInfo {
+	pub rp_id: String,
+	pub user_id: String,
+	/// Space separated.
+	pub credential_ids: String,
+}
+
+pub async fn sync_info(db: &PgPool, origin: &str, user: UserId) -> AppResult<SyncInfo> {
+	use base64::Engine as _;
+	use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+	let rp_id = Url::parse(origin)
+		.ok()
+		.and_then(|u| u.host_str().map(str::to_owned))
+		.unwrap_or_default();
+	let ids = sqlx::query_scalar!(
+		"SELECT credential_id FROM passkeys WHERE user_id = $1 ORDER BY id",
+		user.0
+	)
+	.fetch_all(db)
+	.await?;
+	Ok(SyncInfo {
+		rp_id,
+		user_id: URL_SAFE_NO_PAD.encode(handle(user).as_bytes()),
+		credential_ids: ids
+			.iter()
+			.map(|id| URL_SAFE_NO_PAD.encode(id))
+			.collect::<Vec<_>>()
+			.join(" "),
+	})
+}

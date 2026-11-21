@@ -50,7 +50,6 @@ pub struct Flow {
 	pub user: Option<UserId>,
 	pub provider: Option<AuthProviderId>,
 	pub data: Value,
-	pub attempts: i32,
 }
 
 fn digest(token: &str) -> Vec<u8> {
@@ -85,7 +84,6 @@ struct Row {
 	user_id: Option<i64>,
 	provider_id: Option<i64>,
 	data: Value,
-	attempts: i32,
 }
 
 impl From<Row> for Flow {
@@ -94,7 +92,6 @@ impl From<Row> for Flow {
 			user: r.user_id.map(UserId),
 			provider: r.provider_id.map(AuthProviderId),
 			data: r.data,
-			attempts: r.attempts,
 		}
 	}
 }
@@ -108,7 +105,7 @@ pub async fn take(
 	Ok(sqlx::query_as!(
 		Row,
 		"DELETE FROM auth_flows WHERE token_hash = $1 AND kind = $2 AND expires_at > NOW()
-		RETURNING user_id, provider_id, data, attempts",
+		RETURNING user_id, provider_id, data",
 		digest(token),
 		kind.as_str()
 	)
@@ -125,7 +122,7 @@ pub async fn peek(
 ) -> Result<Option<Flow>, sqlx::Error> {
 	Ok(sqlx::query_as!(
 		Row,
-		"SELECT user_id, provider_id, data, attempts FROM auth_flows
+		"SELECT user_id, provider_id, data FROM auth_flows
 		WHERE token_hash = $1 AND kind = $2 AND expires_at > NOW()",
 		digest(token),
 		kind.as_str()

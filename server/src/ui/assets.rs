@@ -23,6 +23,7 @@ static PAGE_JS: &str = include_str!("../../static/page.js");
 static CANVAS_JS: &str = include_str!("../../static/canvas.js");
 static CHARTS_JS: &str = include_str!("../../static/charts.js");
 static GUARD_JS: &str = include_str!("../../static/guard.js");
+static PASSKEY_JS: &str = include_str!("../../static/passkey.js");
 static HANKEN_GROTESK: &[u8] = include_bytes!("../../static/fonts/hanken-grotesk-var.woff2");
 static SPLINE_SANS_MONO: &[u8] = include_bytes!("../../static/fonts/spline-sans-mono-var.woff2");
 
@@ -48,6 +49,14 @@ pub static CHARTS_JS_HREF: LazyLock<String> =
 	LazyLock::new(|| hashed("/static/charts.js", CHARTS_JS));
 /// Loaded only by pages with a dialog or a save bar (see [`guard_script`]).
 pub static GUARD_JS_HREF: LazyLock<String> = LazyLock::new(|| hashed("/static/guard.js", GUARD_JS));
+/// Loaded only by the pages that use passkeys (see [`passkey_script`]).
+pub static PASSKEY_JS_HREF: LazyLock<String> =
+	LazyLock::new(|| hashed("/static/passkey.js", PASSKEY_JS));
+
+/// The tag a page with a passkey button emits; once per page, and no other page loads it.
+pub fn passkey_script() -> maud::Markup {
+	maud::html! { script type="module" src=(*PASSKEY_JS_HREF) {} }
+}
 
 /// The tag a chart emits for its hover layer. A module loads once per page, however many
 /// charts ask, and a page without one never downloads it.
@@ -71,6 +80,7 @@ pub fn router() -> Router<AppState> {
 		.route("/static/canvas.js", get(canvas_js))
 		.route("/static/charts.js", get(charts_js))
 		.route("/static/guard.js", get(guard_js))
+		.route("/static/passkey.js", get(passkey_js))
 		.route("/static/fonts/hanken-grotesk-var.woff2", get(sans))
 		.route("/static/fonts/spline-sans-mono-var.woff2", get(mono))
 }
@@ -142,6 +152,16 @@ async fn guard_js() -> impl IntoResponse {
 			(header::CACHE_CONTROL, IMMUTABLE),
 		],
 		GUARD_JS,
+	)
+}
+
+async fn passkey_js() -> impl IntoResponse {
+	(
+		[
+			(header::CONTENT_TYPE, "text/javascript; charset=utf-8"),
+			(header::CACHE_CONTROL, IMMUTABLE),
+		],
+		PASSKEY_JS,
 	)
 }
 

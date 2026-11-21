@@ -82,6 +82,14 @@ pub async fn enrolled(db: &PgPool, user: UserId) -> Result<bool, sqlx::Error> {
 	.await
 }
 
+/// Whether the account has a password a person knows (an account made by an identity
+/// provider does not), so the Security page knows whether to ask for it.
+pub async fn has_password(db: &PgPool, user: UserId) -> Result<bool, sqlx::Error> {
+	sqlx::query_scalar!("SELECT has_password FROM users WHERE id = $1", user.0)
+		.fetch_one(db)
+		.await
+}
+
 /// Checks the password of an account that has one. A person who signs in only through an
 /// identity provider has none, so there is nothing to ask.
 pub async fn confirm_password(db: &PgPool, user: UserId, password: &str) -> AppResult<()> {

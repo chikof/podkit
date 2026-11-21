@@ -31,6 +31,14 @@ fn view(err: &ServerError) -> View {
 			message: err.to_string(),
 		};
 	}
+	if matches!(err, ServerError::TwoFactorRequired) {
+		return View {
+			status,
+			title: "Two-step verification required",
+			heading: "This team requires two-step verification",
+			message: err.to_string(),
+		};
+	}
 	match status {
 		StatusCode::NOT_FOUND => View {
 			status,

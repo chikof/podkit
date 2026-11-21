@@ -6,6 +6,7 @@ use crate::state::AppState;
 
 mod appearance;
 mod audit;
+mod authentication;
 mod frame;
 mod members;
 mod registration;
@@ -21,6 +22,7 @@ pub fn router() -> Router<AppState> {
 		.merge(team::router())
 		.merge(members::router())
 		.merge(registration::router())
+		.merge(authentication::router())
 		.merge(appearance::router())
 		.merge(tokens::router())
 		.merge(audit::router())

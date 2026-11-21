@@ -129,20 +129,34 @@ pub fn otpauth_uri(issuer: &str, account: &str, secret_b32: &str) -> String {
 	)
 }
 
-/// `data` as a QR code, as an SVG element. The picture is only geometry (paths of dark
-/// squares): none of `data` is text in it.
-pub fn qr_svg(data: &str) -> Option<String> {
-	use qrcode::render::svg;
+/// A QR code as the geometry of its dark squares, for the page to draw as an SVG `<path>`.
+/// Drawing it from numbers, not from a rendered SVG string, keeps the page free of
+/// pre-escaped markup.
+pub struct Qr {
+	/// Modules on a side, quiet zone included.
+	pub size: usize,
+	/// Path data: one unit square (`M x y h1 v1 h-1z`) per dark module.
+	pub path: String,
+}
+
+/// Width of the empty border, in modules (the QR standard asks for four).
+const QUIET: usize = 4;
+
+/// `data` as a QR code.
+pub fn qr(data: &str) -> Option<Qr> {
+	use std::fmt::Write as _;
 	let code = qrcode::QrCode::new(data.as_bytes()).ok()?;
-	let svg = code
-		.render::<svg::Color>()
-		.min_dimensions(200, 200)
-		.quiet_zone(true)
-		.dark_color(svg::Color("#000000"))
-		.light_color(svg::Color("#ffffff"))
-		.build();
-	// Drop the XML declaration: the element is inlined into a page.
-	svg.find("<svg").map(|at| svg[at..].to_owned())
+	let width = code.width();
+	let mut path = String::new();
+	for (i, color) in code.to_colors().into_iter().enumerate() {
+		if color == qrcode::Color::Dark {
+			let _ = write!(path, "M{} {}h1v1h-1z", i % width + QUIET, i / width + QUIET);
+		}
+	}
+	Some(Qr {
+		size: width + 2 * QUIET,
+		path,
+	})
 }
 
 #[cfg(test)]
@@ -215,8 +229,8 @@ mod tests {
 			uri,
 			"otpauth://totp/podkit:a%20b%2Bc%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=podkit&algorithm=SHA1&digits=6&period=30"
 		);
-		let svg = qr_svg(&uri).expect("a QR code");
-		assert!(svg.starts_with("<svg"), "{}", &svg[..40.min(svg.len())]);
-		assert!(!svg.contains("JBSWY3DPEHPK3PXP"));
+		let code = qr(&uri).expect("a QR code");
+		assert!(code.size > 8 && code.path.starts_with('M'));
+		assert!(!code.path.contains("JBSWY3DPEHPK3PXP"));
 	}
 }

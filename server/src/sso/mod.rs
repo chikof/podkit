@@ -15,7 +15,7 @@ mod stub;
 #[cfg(test)]
 mod tests;
 
-pub use providers::{GroupRole, Kind, Provider, Scope};
+pub use providers::Kind;
 
 /// Who an identity provider says the person is, after its answer was verified.
 #[derive(Debug, Clone)]

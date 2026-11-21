@@ -34,7 +34,8 @@ impl Method {
 	}
 }
 
-/// Starts a session for `user` and returns the plaintext token (shown once).
+/// Starts a password session for `user` and returns the plaintext token (shown once).
+#[cfg(test)]
 pub async fn create(db: impl PgExecutor<'_>, user: UserId) -> Result<String, sqlx::Error> {
 	create_with(db, user, Method::Password).await
 }

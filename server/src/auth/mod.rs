@@ -23,8 +23,7 @@ pub mod tokens;
 
 pub use events::record_everywhere;
 pub use routes::{
-	Credentials, log_in, log_out, open_session, reached_over_https, router, session_cookie,
-	verify_password,
+	Credentials, log_in, log_out, open_session, reached_over_https, router, verify_password,
 };
 
 /// The authenticated caller: a live session, or an API token acting as the user who made
