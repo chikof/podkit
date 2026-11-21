@@ -133,7 +133,7 @@ async fn body(
 		})
 	};
 	Ok(html! {
-		div class="ui-wide" "data-signals"=(signals) {
+		div class="ui-wide ui-page-body" "data-signals"=(signals) {
 			header class="ui-page-head" {
 				div class="ui-page-title" {
 					p class="ui-eyebrow" { (project.name) " \u{b7} " (kind.label()) }

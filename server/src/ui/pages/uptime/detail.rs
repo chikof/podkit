@@ -84,7 +84,7 @@ fn charts(points: &[LatencyPoint], range: Range, now: i64) -> Markup {
 fn facts(check: &Check, days: &[crate::uptime::DayStat], now: OffsetDateTime) -> Markup {
 	html! {
 		dl class="ui-dest-facts" {
-			dt { "Checks" }
+			dt { "Address" }
 			dd class="ui-mono" { (check.target()) }
 			dt { "Every" }
 			dd { (check.interval_secs) " s, gives up after " (check.timeout_secs) " s" }
@@ -123,8 +123,8 @@ fn facts(check: &Check, days: &[crate::uptime::DayStat], now: OffsetDateTime) ->
 				dt { "Uptime" }
 				dd { (percent_text(p)) " over 30 days" }
 			}
-			dt { "Made by" }
-			dd { @if check.auto_key.is_some() { "podkit, for an application domain" } @else { "a person" } }
+			dt { "Added by" }
+			dd { @if check.auto_key.is_some() { "podkit, for an application domain" } @else { "a team member" } }
 		}
 	}
 }

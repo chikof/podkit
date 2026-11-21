@@ -313,7 +313,7 @@ pub fn section(ctx: &TeamCtx, url: &str, v: &View) -> Markup {
 			(card(&html! {
 				(card_section(&format!("Backups \u{b7} {}", v.subject.label), None, Some(&action)))
 				(card_content(&html! {
-					dl class="ui-facts" {
+					dl class="ui-facts ui-vb-facts" {
 						div {
 							dt { "Destination" }
 							dd { (v.target_name.as_deref().unwrap_or("None")) }
@@ -391,7 +391,7 @@ fn settings_dialog(
 			form id="vb-settings-form" class="flex flex-col gap-4" "data-on:submit"=(save) {
 				label class=(LABEL) {
 					"Destination"
-					select class=(SELECT) "data-bind:vb_target" {
+					select class=(SELECT) autofocus "data-bind:vb_target" {
 						button { selectedcontent {} }
 						option value="" { "None" }
 						@for (target, name) in destinations {

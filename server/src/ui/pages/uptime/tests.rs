@@ -358,9 +358,10 @@ async fn uptime_the_public_page_shows_only_picked_checks_and_no_internal_address
 	] {
 		assert_not_contains(&body, leak);
 	}
-	// A light page with no script and no request to anyone else.
+	// A page in the reader's own scheme (no class on <html>), with no script and no request to anyone else.
 	assert_not_contains(&body, "<script");
-	assert_contains(&body, "class=\"light\"");
+	assert_contains(&body, "content=\"light dark\"");
+	assert_not_contains(&body, "class=\"light\"");
 	assert_not_contains(&body, "http://");
 	assert_not_contains(&body, "https://");
 	assert_eq!(body.matches("<h1").count(), 1);

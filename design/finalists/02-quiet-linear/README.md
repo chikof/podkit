@@ -337,3 +337,29 @@ New parts and rules from the infrastructure batch, as built. `REVIEW-infra.md` h
 **Canvas** (`design/canvas/README.md` is the spec; `server/src/ui/pages/canvas` the build). Differences from the mockup that stay: nodes with no links all sit in layer 0, so a project without links is one tall column; a frame narrower than 340 px gets a tighter two-line head (name, then the count) that ends above its first node; the Canvas / List switch is the boxed group (2 px inset, selected tab on `--muted-strong`), not underline tabs.
 
 **IaC plan.** Each change is a card: a kind tag (Create on success, Update on warning, Delete on destructive), the resource kind and name, the environment, and "Will redeploy" in the info tone; under it the changed fields as a diff, one line each with a sign (`+` or `-`), tinted `--success-soft` or `--destructive-soft`. Sign, word and tint together: never colour alone. The summary row counts each kind. Apply is a primary button below the last change; it opens a confirm dialog.
+
+## 12. Patterns from wave A (from the DR-A review)
+
+New parts and rules from wave A (notifications, audit log, shared variables, health gate, scheduled tasks, MCP servers, volume backups, uptime and the status page, environment clone, charts). `REVIEW-wave-A.md` has the punch list and `review-wave-A/` the screenshots.
+
+**Page rhythm.** A page's head and its cards sit in one grid with the page gap (`--page-gap`, 24 px): use `ui-page-body` (with `ui-wide` where the page needs the wide column). A bare `ui-wide` div, or a `ui-stack` (12 px), is not a grid with that gap, and the first card then sat 12 px under the lede and touched the head's buttons (scheduled tasks, notification history).
+
+**Groups on a long settings page** (Settings, Notifications). Inside a section the heading, the list and its add form are 12 px apart; between sections it is 32 px (`.ui-notif-sections`), so a section reads as a group. A stack of sections that are only 12 px apart reads as one long list.
+
+**Empty states.** Inside a card the icon and text start on the card's inset (`--card-pad`); alone on a page the box is dashed. The icon must be in the sprite (`server/static/icons.svg`, names in `scripts/vendor-ui-assets.py`): a missing one draws an empty box and nothing reports it. `plug` was added for the MCP tab.
+
+**A list of rows in a card body** (the uptime checks): the body takes no vertical padding (`.ui-card-b:has(> ul > .ui-probe-row)`), the rows keep their own 12 px, so the first row is 16 px under the header like every other list.
+
+**A lone chart takes the row.** The two-column chart grid lets a single chart (a check's response time) span both columns (`#metrics-body > div > :only-child`). Two or more charts keep the two columns.
+
+**Facts as a row** (volume backup settings): label over value, one column per fact, wrapping to two at 390 px (`.ui-vb-facts`, `repeat(auto-fit, minmax(8rem, 1fr))`). Facts as lines (`.ui-fact`, `.ui-dest-facts`) stay for a resource's detail card. `.ui-facts` is defined three times in `components.css`; a new use takes its own class instead of relying on which rule wins.
+
+**Public pages follow the reader's scheme.** The status page sets no `class` on `<html>` and `color-scheme: light dark`, so a dark system gets the dark tokens, with the same banner, strip and chip colours as the app. It still loads no script and no cookie.
+
+**Notification rows.** An unread row is tinted `--primary-soft` and carries a word (`New`), a severity chip and the time; the time and the repeat count are separated by a middle dot. At 390 px the Open / Mark read buttons go under the text instead of taking a column from it.
+
+**Choice cards.** Three options (the overlap policy of a task) share the row (`repeat(auto-fit, minmax(min(100%, 13rem), 1fr))`); at 390 px they stack.
+
+**Dialogs.** The first field has `autofocus`; a destructive confirmation focuses the safe button (Cancel, Keep it). Every wave A dialog was opened and checked; the volume backup settings dialog used to focus the close button.
+
+**Where a form is saved from (open).** The application Settings, a scheduled task's settings and the audit retention use the save bar. The uptime check's settings, the status page card, the email server and the noise control keep a `Save` in their card footer. Both work; pick one for edit forms (the save bar) and keep footer buttons for add forms.

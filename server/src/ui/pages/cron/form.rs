@@ -201,7 +201,7 @@ pub(super) fn hint(runs: &Result<Vec<OffsetDateTime>, String>, timezone: &str) -
 		div id="cron-hint" class="text-sm font-normal" role="status" {
 			@match runs {
 				Ok(runs) => {
-					p class="text-muted-foreground" { "Next runs, in " (timezone) }
+					p class="text-xs text-muted-foreground" { "Next runs, in " (timezone) }
 					ol class="mt-1 flex flex-col gap-0.5 font-mono text-xs text-muted-foreground" {
 						@for run in runs { li { (schedule::local_text(*run, timezone)) } }
 					}
@@ -525,7 +525,7 @@ async fn new_page(
 		}
 	};
 	let body = html! {
-		div class="ui-wide" "data-signals"=(signals) {
+		div class="ui-wide ui-page-body" "data-signals"=(signals) {
 			header class="ui-page-head" {
 				div class="ui-page-title" {
 					p class="ui-eyebrow" { (project.name) " / " (env.name) }

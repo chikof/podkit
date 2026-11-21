@@ -916,7 +916,7 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 	let data = load(&s, &ctx).await.map_err(|e| error::page(&ctx, &e))?;
 	let now = OffsetDateTime::now_utc();
 	let content = html! {
-		div class="ui-stack" "data-signals"=(signals(&data)) {
+		div class="ui-stack ui-notif-sections" "data-signals"=(signals(&data)) {
 			(channels_section(&ctx, &data, now))
 			(smtp_section(&ctx, &data))
 			(rules_section(&ctx, &data))

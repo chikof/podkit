@@ -1,4 +1,4 @@
-//! The public status page, `/status/<team slug>`: a light page with the checks a team picked,
+//! The public status page, `/status/<team slug>`: a plain page, in the reader's light or dark, with the checks a team picked,
 //! each by the name it chose, its state and its last 90 days. It is plain HTML and CSS: no script,
 //! no cookie, no request to anyone else, and it is cacheable.
 //!
@@ -73,11 +73,11 @@ fn document(page: &PublicPage, today: time::Date) -> Markup {
 	let (state, glyph, text) = summary(&page.checks);
 	html! {
 		(DOCTYPE)
-		html lang="en" class="light" {
+		html lang="en" {
 			head {
 				meta charset="utf-8";
 				meta name="viewport" content="width=device-width, initial-scale=1";
-				meta name="color-scheme" content="light";
+				meta name="color-scheme" content="light dark";
 				meta name="robots" content="noindex";
 				title { (page.title) " · Status" }
 				link rel="stylesheet" href=(*APP_CSS_HREF);

@@ -100,7 +100,7 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 	);
 	let manage = ctx.perms.can(Action::Read, Resource::Notification);
 	let body = html! {
-		div class="ui-stack" {
+		div class="ui-page-body" {
 			header class="ui-page-head" {
 				div class="ui-page-title" {
 					h1 { "Notifications" }

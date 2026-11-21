@@ -120,7 +120,7 @@ async fn list_page(
 		}
 	};
 	let body = html! {
-		div class="ui-wide" {
+		div class="ui-wide ui-page-body" {
 			header class="ui-page-head" {
 				div class="ui-page-title" {
 					p class="ui-eyebrow" { (project.name) }

@@ -2313,7 +2313,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-probe-name a:hover { text-decoration: underline; }
 .ui-probe-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); }
 
-/* The public status page: a light page on its own, one column, no script. */
+/* The public status page: a plain page in the reader's own light or dark, one column, no script. */
 .ui-pub { min-height: 100vh; padding: var(--s-7) var(--s-5); background-color: var(--background); color: var(--foreground); }
 .ui-pub-wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s-6); max-width: 44rem; margin-inline: auto; }
 .ui-pub-head h1 { margin: 0; font-size: var(--fs-2xl); font-weight: var(--fw-bold); overflow-wrap: anywhere; }
@@ -2360,3 +2360,23 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-busy-list small { margin-inline-start: var(--s-2); color: var(--muted-foreground); font-size: var(--fs-xs); }
 .ui-busy-list b { flex: none; font-weight: var(--fw-medium); font-variant-numeric: tabular-nums; }
 .ui-busy-none { margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); }
+
+/* == wave A design review (DR-A) ==
+   Fixes found when the wave A pages were walked in both themes at 1440 and 390 px. */
+/* Sections of the notification settings: the heading, its list and its add form sit 12 px apart, so a section needed more than
+   the same 12 px to its neighbour to read as a group. */
+.ui-notif-sections { gap: var(--s-7); }
+/* Three choice cards share the form's width instead of four 12rem tracks with one empty. */
+.ui-cron-policy .ui-choice-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }
+/* A list of checks inside a card: the body's padding and the row's own made the first row 40 px under the header. */
+.ui-card-b:has(> ul > .ui-probe-row) { padding-block: 0; }
+/* A lone chart (an uptime check's response time) takes the whole row, not half of it. */
+#metrics-body > div > :only-child { grid-column: 1 / -1; }
+/* Volume backup settings read as one row of figures, label over value. */
+.ui-vb-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: var(--s-4) var(--s-6); }
+.ui-vb-facts > div { display: grid; align-content: start; gap: var(--s-1); min-width: 0; }
+.ui-vb-facts dd { overflow-wrap: anywhere; }
+/* The time and the repeat count of a notification: a dot between them, not a bare gap. */
+.ui-note-meta > * + *::before { content: "\00b7"; margin-inline-end: var(--s-3); }
+/* A notification at phone width: the buttons go under the text instead of taking a column from it. */
+@media (max-width: 30rem) { .ui-note { grid-template-columns: minmax(0, 1fr); } }
