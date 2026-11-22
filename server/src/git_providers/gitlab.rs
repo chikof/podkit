@@ -20,14 +20,18 @@ fn token<'a>(t: &'a Target<'_>) -> Result<&'a str, ServerError> {
 	}
 }
 
-fn req(t: &Target<'_>, method: reqwest::Method, path: &str) -> Result<RequestBuilder, ServerError> {
+pub(super) fn req(
+	t: &Target<'_>,
+	method: reqwest::Method,
+	path: &str,
+) -> Result<RequestBuilder, ServerError> {
 	Ok(t.http
 		.request(method, format!("{}/api/v4{path}", t.base_url))
 		.header("private-token", token(t)?)
 		.header("user-agent", "podkit"))
 }
 
-fn project(repo: &str) -> Result<String, ServerError> {
+pub(super) fn project(repo: &str) -> Result<String, ServerError> {
 	if !valid_repo(repo) {
 		return Err(ServerError::Validation(
 			"That repository name is not valid.".to_owned(),

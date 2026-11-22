@@ -9,7 +9,8 @@ use std::time::Duration;
 use reqwest::{RequestBuilder, Response, StatusCode};
 use serde::Deserialize;
 
-use super::{Credentials, Kind, gitea, github, gitlab};
+use super::{Credentials, Kind, ci, gitea, github, gitlab};
+use crate::autodeploy::rules::Ci;
 use crate::error::ServerError;
 
 /// How long one provider call may take.
@@ -52,6 +53,64 @@ pub struct CloneAccess {
 	pub token: String,
 	/// The user name to send with it, when the host wants the account's own (Gitea).
 	pub username: Option<String>,
+}
+
+/// The context (GitHub, Gitea) or name (GitLab) of the commit status podkit posts. Checks of
+/// this name are left out when the commit's checks are read, so podkit never waits for itself.
+pub const STATUS_CONTEXT: &str = "podkit/deploy";
+
+/// Where a deploy of a commit stands, as a provider's commit status says it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusState {
+	Pending,
+	Success,
+	Failure,
+	/// A newer commit replaced this one before it ran.
+	Cancelled,
+}
+
+/// A commit status to post.
+pub struct StatusPost<'a> {
+	pub state: StatusState,
+	/// One short line, cut to what providers accept.
+	pub description: &'a str,
+	/// Where the deploy can be followed, when podkit has an address people can reach.
+	pub link: Option<&'a str>,
+}
+
+/// Whether `sha` is safe to put in a path: hex, 4 to 64 characters.
+#[must_use]
+pub fn valid_sha(sha: &str) -> bool {
+	(4..=64).contains(&sha.len()) && sha.bytes().all(|b| b.is_ascii_hexdigit())
+}
+
+/// Git's all-zero id: the "before" of a push that made a branch.
+#[must_use]
+pub fn is_zero_sha(sha: &str) -> bool {
+	!sha.is_empty() && sha.bytes().all(|b| b == b'0')
+}
+
+pub(super) fn checked_sha(sha: &str) -> Result<&str, ServerError> {
+	if valid_sha(sha) {
+		Ok(sha)
+	} else {
+		Err(ServerError::Validation(
+			"That commit id is not valid.".to_owned(),
+		))
+	}
+}
+
+pub(super) fn short_description(text: &str) -> String {
+	text.chars().take(140).collect()
+}
+
+/// `files` in order, without blanks and duplicates.
+pub(super) fn dedup(files: impl IntoIterator<Item = String>) -> Vec<String> {
+	let mut seen = std::collections::HashSet::new();
+	files
+		.into_iter()
+		.filter(|f| !f.is_empty() && seen.insert(f.clone()))
+		.collect()
 }
 
 /// A provider as the clients see it. No `Debug`: it carries the credentials.
@@ -112,6 +171,46 @@ impl Target<'_> {
 			token,
 			username,
 		})
+	}
+
+	/// What the checks of commit `sha` add up to: GitHub check suites and commit statuses,
+	/// GitLab pipelines, Gitea commit statuses.
+	pub async fn ci(&self, repo: &str, sha: &str) -> Result<Ci, ServerError> {
+		match self.kind {
+			Kind::GithubApp => ci::github_ci(self, repo, sha).await,
+			Kind::Gitlab => ci::gitlab_ci(self, repo, sha).await,
+			Kind::Gitea => ci::gitea_ci(self, repo, sha).await,
+		}
+	}
+
+	/// The files a push changed, from the provider: `before..after` where it is known,
+	/// otherwise the commits the push brought (`commits`).
+	pub async fn changed_files(
+		&self,
+		repo: &str,
+		before: Option<&str>,
+		after: &str,
+		commits: &[String],
+	) -> Result<Vec<String>, ServerError> {
+		match self.kind {
+			Kind::GithubApp => ci::github_changed_files(self, repo, before, after).await,
+			Kind::Gitlab => ci::gitlab_changed_files(self, repo, before, after).await,
+			Kind::Gitea => ci::gitea_changed_files(self, repo, after, commits).await,
+		}
+	}
+
+	/// Posts the deploy's state on commit `sha`.
+	pub async fn post_status(
+		&self,
+		repo: &str,
+		sha: &str,
+		post: &StatusPost<'_>,
+	) -> Result<(), ServerError> {
+		match self.kind {
+			Kind::GithubApp => ci::github_post_status(self, repo, sha, post).await,
+			Kind::Gitlab => ci::gitlab_post_status(self, repo, sha, post).await,
+			Kind::Gitea => ci::gitea_post_status(self, repo, sha, post).await,
+		}
 	}
 
 	/// Makes a push webhook on `repo` that calls `url` signed with `secret`. `None` for a

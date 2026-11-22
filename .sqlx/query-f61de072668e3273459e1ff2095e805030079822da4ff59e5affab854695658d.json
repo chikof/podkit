@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n\t\t\tSELECT id AS \"id: ApplicationId\" FROM applications\n\t\t\tWHERE git_provider_id = $1 AND lower(git_repo) = lower($2) AND git_ref = $3\n\t\t\t\tAND source_kind = 'git'\n\t\t\tORDER BY id\n\t\t",
+  "query": "\n\t\t\tSELECT id AS \"id: ApplicationId\" FROM applications\n\t\t\tWHERE git_provider_id = $1 AND lower(git_repo) = lower($2)\n\t\t\t\tAND source_kind = 'git'\n\t\t\tORDER BY id\n\t\t",
   "describe": {
     "columns": [
       {
@@ -18,7 +18,6 @@
     "parameters": {
       "Left": [
         "Int8",
-        "Text",
         "Text"
       ]
     },
@@ -26,5 +25,5 @@
       false
     ]
   },
-  "hash": "98070fe5055bffefb1e4287292aa475556b5a3e232f007b74911cc70082c97d9"
+  "hash": "f61de072668e3273459e1ff2095e805030079822da4ff59e5affab854695658d"
 }

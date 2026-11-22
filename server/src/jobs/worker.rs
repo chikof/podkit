@@ -141,6 +141,7 @@ async fn run_job(state: AppState, job: Job, token: CancellationToken) {
 		fail_target(&state, job.kind, job.target_id, failure).await;
 	}
 	crate::notifications::hooks::job_finished(&state, &job, &result).await;
+	crate::autodeploy::engine::deploy_finished(&state, &job, &result);
 
 	// The log ends only after the final status is stored, so a client that sees
 	// `event: end` and refetches reads a settled state.

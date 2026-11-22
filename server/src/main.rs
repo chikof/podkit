@@ -23,6 +23,7 @@ mod agents;
 mod applications;
 mod audit;
 mod auth;
+mod autodeploy;
 mod avatars;
 mod backups;
 mod catalog;
@@ -153,6 +154,8 @@ async fn run() -> AppResult<()> {
 	}
 
 	worker::recover(&state).await?;
+	// Pushes that were waiting for their checks or a freeze when podkit stopped.
+	autodeploy::engine::wake(&state);
 	match registries::service::backfill(&state).await {
 		Ok(0) => {}
 		Ok(moved) => info!(

@@ -7,6 +7,7 @@
 //! only to talk to the provider and never reaches an API response, a page or a log.
 
 pub mod api;
+mod ci;
 pub mod flow;
 mod gitea;
 mod github;
@@ -252,23 +253,22 @@ pub async fn usage_by_team(
 	Ok(out)
 }
 
-/// The git applications that deploy `branch` of `repo` through `provider`.
+/// The git applications that clone `repo` through `provider`, whatever branch they follow:
+/// autodeploy decides per application whether a push to a ref deploys.
 pub async fn applications_for_push(
 	db: impl PgExecutor<'_>,
 	provider: GitProviderId,
 	repo: &str,
-	branch: &str,
 ) -> Result<Vec<ApplicationId>, sqlx::Error> {
 	let rows = sqlx::query!(
 		r#"
 			SELECT id AS "id: ApplicationId" FROM applications
-			WHERE git_provider_id = $1 AND lower(git_repo) = lower($2) AND git_ref = $3
+			WHERE git_provider_id = $1 AND lower(git_repo) = lower($2)
 				AND source_kind = 'git'
 			ORDER BY id
 		"#,
 		provider as GitProviderId,
-		repo,
-		branch
+		repo
 	)
 	.fetch_all(db)
 	.await?;
@@ -297,4 +297,4 @@ mod live_tests;
 #[cfg(test)]
 pub(crate) mod stubs;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
