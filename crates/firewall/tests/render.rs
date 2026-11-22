@@ -85,6 +85,15 @@ fn only_the_podkit_table_is_touched() {
 }
 
 #[test]
+fn container_to_host_traffic_is_accepted_in_input() {
+	// aardvark-dns on the bridge gateway and host.containers.internal arrive via input.
+	let script = render(&Policy::default(), &[]);
+	let input = script.split("chain input").nth(1).unwrap();
+	let input = input.split("chain forward").next().unwrap();
+	assert!(input.contains("iifname \"podman*\" accept"));
+}
+
+#[test]
 fn published_ports_are_filtered_in_forward() {
 	let policy = Policy {
 		allows: vec![Allow {

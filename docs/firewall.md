@@ -18,13 +18,15 @@ flushes the ruleset. Docker, Podman/netavark, `fail2ban` or your own tables are 
 
 | Chain | Rule |
 |---|---|
-| input (policy drop) | established and related, loopback, ICMP and ICMPv6 |
+| input (policy drop) | established and related, loopback, traffic from `podman*` interfaces, ICMP and ICMPv6 |
 | input | SSH port (22, or the server's configured port), from anywhere or from the ranges you set |
 | input | TCP 80 and 443 |
 | input | your explicit allows: protocol, port and optionally a source range |
 | forward (policy accept) | established and related, loopback, traffic from `podman*` interfaces |
 | forward | DNAT'd traffic (a published port) to 80 or 443, or to a port you allowed, from the range you gave |
 | forward | every other DNAT'd packet is dropped |
+
+Container-to-host traffic (aardvark-dns on the bridge gateway, `host.containers.internal`) arrives on the `podman*` bridges through `input`, so those interfaces are accepted there; this exposes nothing external. It is covered by a render test; it is not verified against a real netavark bridge on a host.
 
 ### The SSH rule cannot lock podkit out
 

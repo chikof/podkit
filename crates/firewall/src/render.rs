@@ -94,6 +94,7 @@ pub fn render(policy: &Policy, keep: &[IpAddr]) -> String {
 	out.push_str("\t\tct state established,related accept\n");
 	out.push_str("\t\tct state invalid drop\n");
 	out.push_str("\t\tiifname \"lo\" accept\n");
+	out.push_str("\t\tiifname \"podman*\" accept\n");
 	out.push_str("\t\tip protocol icmp accept\n");
 	out.push_str("\t\tmeta l4proto ipv6-icmp accept\n");
 	let sources = ssh_sources(policy, keep);
