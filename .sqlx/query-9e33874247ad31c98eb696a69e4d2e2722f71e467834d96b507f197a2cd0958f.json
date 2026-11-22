@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM totp_credentials WHERE user_id = $1 AND confirmed_at IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9e33874247ad31c98eb696a69e4d2e2722f71e467834d96b507f197a2cd0958f"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT credential_id FROM passkeys WHERE user_id = $1 ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "credential_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "passkeys",
+            "name": "credential_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8531c7e23bcddd97a5a2e803a8ff7da6e5b62b395c05577af881cd2834a48925"
+}

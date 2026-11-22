@@ -9,7 +9,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgPool;
-use time::OffsetDateTime;
 
 use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
@@ -95,7 +94,6 @@ pub struct Provider {
 	pub group_claim: Option<String>,
 	pub group_roles: Vec<GroupRole>,
 	pub enabled: bool,
-	pub created_at: OffsetDateTime,
 }
 
 /// A provider with the secret still sealed, for the sign-in round trip only.
@@ -131,7 +129,6 @@ struct Row {
 	group_claim: Option<String>,
 	group_roles: serde_json::Value,
 	enabled: bool,
-	created_at: OffsetDateTime,
 	client_secret: Vec<u8>,
 }
 
@@ -158,7 +155,6 @@ impl Row {
 			group_claim: self.group_claim,
 			group_roles: serde_json::from_value(self.group_roles).unwrap_or_default(),
 			enabled: self.enabled,
-			created_at: self.created_at,
 		})
 	}
 }
@@ -194,7 +190,7 @@ pub async fn list(db: &PgPool, user: UserId, scope: Scope) -> AppResult<Vec<Prov
 			sqlx::query_as!(
 				Row,
 				"SELECT id, team_id, kind, slug, name, issuer, client_id, scopes, jit,
-					allow_unverified_email, group_claim, group_roles, enabled, created_at, client_secret
+					allow_unverified_email, group_claim, group_roles, enabled, client_secret
 				FROM auth_providers WHERE team_id = $1 ORDER BY name, id",
 				team
 			)
@@ -205,7 +201,7 @@ pub async fn list(db: &PgPool, user: UserId, scope: Scope) -> AppResult<Vec<Prov
 			sqlx::query_as!(
 				Row,
 				"SELECT id, team_id, kind, slug, name, issuer, client_id, scopes, jit,
-					allow_unverified_email, group_claim, group_roles, enabled, created_at, client_secret
+					allow_unverified_email, group_claim, group_roles, enabled, client_secret
 				FROM auth_providers WHERE team_id IS NULL ORDER BY name, id"
 			)
 			.fetch_all(db)
@@ -240,7 +236,7 @@ async fn sealed_in(
 			sqlx::query_as!(
 				Row,
 				"SELECT id, team_id, kind, slug, name, issuer, client_id, scopes, jit,
-					allow_unverified_email, group_claim, group_roles, enabled, created_at, client_secret
+					allow_unverified_email, group_claim, group_roles, enabled, client_secret
 				FROM auth_providers WHERE id = $1 AND team_id = $2",
 				id.0,
 				team
@@ -252,7 +248,7 @@ async fn sealed_in(
 			sqlx::query_as!(
 				Row,
 				"SELECT id, team_id, kind, slug, name, issuer, client_id, scopes, jit,
-					allow_unverified_email, group_claim, group_roles, enabled, created_at, client_secret
+					allow_unverified_email, group_claim, group_roles, enabled, client_secret
 				FROM auth_providers WHERE id = $1 AND team_id IS NULL",
 				id.0
 			)
@@ -268,7 +264,7 @@ pub async fn find_enabled(db: &PgPool, id: AuthProviderId) -> AppResult<Sealed> 
 	sqlx::query_as!(
 		Row,
 		"SELECT id, team_id, kind, slug, name, issuer, client_id, scopes, jit,
-			allow_unverified_email, group_claim, group_roles, enabled, created_at, client_secret
+			allow_unverified_email, group_claim, group_roles, enabled, client_secret
 		FROM auth_providers WHERE id = $1 AND enabled",
 		id.0
 	)

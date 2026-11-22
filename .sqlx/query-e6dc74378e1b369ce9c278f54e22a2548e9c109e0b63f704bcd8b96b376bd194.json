@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM passkeys WHERE id = $1 AND user_id = $2 RETURNING name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "passkeys",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e6dc74378e1b369ce9c278f54e22a2548e9c109e0b63f704bcd8b96b376bd194"
+}

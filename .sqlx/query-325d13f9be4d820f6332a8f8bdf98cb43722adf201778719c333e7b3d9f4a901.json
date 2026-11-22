@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT (\n\t\t\t\tEXISTS (SELECT 1 FROM roles WHERE id = $2 AND team_id IS NULL AND name = 'Owner')\n\t\t\t\tAND (SELECT COUNT(*) FROM team_members WHERE team_id = $1 AND role_id = $2) <= 1\n\t\t\t) AS \"last!\"\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "325d13f9be4d820f6332a8f8bdf98cb43722adf201778719c333e7b3d9f4a901"
+}

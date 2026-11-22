@@ -37,6 +37,7 @@ use crate::ui::components::{
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
+use crate::ui::pages::account_security::when;
 use crate::ui::sse::{self, js_string};
 use crate::ui::{error, shell};
 
@@ -132,6 +133,9 @@ fn status_line(policy: &policy::Policy, without: &[String]) -> Markup {
 					"Every member has a second step."
 				} @else {
 					(without.len()) " of the members have none yet: " (without.join(", ")) "."
+				}
+				@if let Some(deadline) = policy.deadline {
+					" Their time runs out " (when(deadline)) "."
 				}
 			}
 		}

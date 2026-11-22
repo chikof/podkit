@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id AS \"id: RoleId\" FROM roles WHERE team_id IS NULL AND is_default ORDER BY id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: RoleId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "roles",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e14342d009c1c4ffd951b9584e6d701c033ca6daf3d725954faf2bab048291a1"
+}

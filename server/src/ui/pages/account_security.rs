@@ -89,7 +89,7 @@ fn base(ctx: &TeamCtx) -> String {
 }
 
 /// `2026-11-17 20:03 UTC`: no locale, no script, the same everywhere.
-fn when(t: OffsetDateTime) -> String {
+pub(crate) fn when(t: OffsetDateTime) -> String {
 	let t = t.to_offset(time::UtcOffset::UTC);
 	format!(
 		"{}-{:02}-{:02} {:02}:{:02} UTC",
@@ -125,12 +125,7 @@ fn browser(user_agent: Option<&str>) -> String {
 // --- pieces of the page ----------------------------------------------------------
 
 /// The authenticator app card; patched whole after a step.
-fn totp_card(
-	ctx: &TeamCtx,
-	status: &Status,
-	pending: Option<&Enrollment>,
-	has_password: bool,
-) -> Markup {
+fn totp_card(ctx: &TeamCtx, status: &Status, pending: Option<&Enrollment>) -> Markup {
 	let base = base(ctx);
 	let content = if let Some(setup) = pending {
 		let qr = totp::qr(&setup.uri);
@@ -173,7 +168,6 @@ fn totp_card(
 						&format!("{base}/totp/disable"),
 						"Turn off the authenticator app?",
 						"Signing in will need only your password again, unless you have a passkey.",
-						has_password,
 						Variant::Outline,
 					))
 				}
@@ -194,14 +188,7 @@ fn totp_card(
 }
 
 /// A button that opens the shared "Confirm with your password" dialog for `action`.
-fn confirm_button(
-	label: &str,
-	action: &str,
-	title: &str,
-	text: &str,
-	has_password: bool,
-	variant: Variant,
-) -> Markup {
+fn confirm_button(label: &str, action: &str, title: &str, text: &str, variant: Variant) -> Markup {
 	let open = format!(
 		"$_act = {}; $_title = {}; $_text = {}; $pw = ''; $_confirm_error = ''; el.commandForElement || document.getElementById('confirm-dialog').showModal()",
 		js_string(action),
@@ -256,7 +243,7 @@ fn codes_block(codes: &[String], back: &str) -> Markup {
 	}
 }
 
-fn recovery_card(ctx: &TeamCtx, status: &Status, has_password: bool) -> Markup {
+fn recovery_card(ctx: &TeamCtx, status: &Status) -> Markup {
 	let base = base(ctx);
 	html! { div id="recovery-card" { (card(&html! {
 		(card_heading("Recovery codes", Some("One-time codes for when your phone or passkey is not at hand.")))
@@ -269,7 +256,6 @@ fn recovery_card(ctx: &TeamCtx, status: &Status, has_password: bool) -> Markup {
 						&format!("{base}/recovery"),
 						"Make new recovery codes?",
 						"The old codes stop working at once.",
-						has_password,
 						Variant::Outline,
 					))
 				}
@@ -280,7 +266,7 @@ fn recovery_card(ctx: &TeamCtx, status: &Status, has_password: bool) -> Markup {
 	})) } }
 }
 
-fn passkeys_card(ctx: &TeamCtx, status: &Status, has_password: bool, rp_sync: &Markup) -> Markup {
+fn passkeys_card(ctx: &TeamCtx, status: &Status, rp_sync: &Markup) -> Markup {
 	let base = base(ctx);
 	card(&html! {
 		(card_heading("Passkeys", Some("Sign in with your fingerprint, face or a security key. A passkey also counts as two-step verification.")))
@@ -300,7 +286,6 @@ fn passkeys_card(ctx: &TeamCtx, status: &Status, has_password: bool, rp_sync: &M
 								&format!("{base}/passkeys/{}/remove", p.id),
 								&format!("Remove the passkey {}?", p.name),
 								"You will not be able to sign in with it any more.",
-								has_password,
 								Variant::Ghost,
 							))
 						}
@@ -458,9 +443,9 @@ async fn render(
 		(banners)
 		div class="ui-account" "data-signals"=(json!({ "code": "", "_error": "", "pw": "", "_act": "", "_title": "", "_text": "", "_confirm_error": "" }).to_string()) {
 			(codes_block(revealed, &base))
-			(totp_card(ctx, &status, pending.as_ref(), has_password))
-			(recovery_card(ctx, &status, has_password))
-			(passkeys_card(ctx, &status, has_password, &rp_sync))
+			(totp_card(ctx, &status, pending.as_ref()))
+			(recovery_card(ctx, &status))
+			(passkeys_card(ctx, &status, &rp_sync))
 			(sessions_card(ctx, &sessions))
 			@if !linkages.is_empty() { (linked_card(ctx, &linkages)) }
 			(confirm_dialog(has_password))
@@ -499,8 +484,7 @@ fn done(cookies: &Cookies, ctx: &TeamCtx, message: &str) -> Response {
 
 async fn card_now(s: &AppState, ctx: &TeamCtx, pending: Option<&Enrollment>) -> AppResult<Markup> {
 	let status = tf::status(&s.db, ctx.user.id).await?;
-	let has_password = tf::has_password(&s.db, ctx.user.id).await?;
-	Ok(totp_card(ctx, &status, pending, has_password))
+	Ok(totp_card(ctx, &status, pending))
 }
 
 async fn totp_start(State(s): State<AppState>, ctx: TeamCtx) -> Response {
@@ -553,11 +537,7 @@ async fn totp_confirm(
 async fn reveal(s: &AppState, ctx: &TeamCtx, codes: &[String]) -> Response {
 	let result = async {
 		let status = tf::status(&s.db, ctx.user.id).await?;
-		let has_password = tf::has_password(&s.db, ctx.user.id).await?;
-		Ok::<_, ServerError>((
-			totp_card(ctx, &status, None, has_password),
-			recovery_card(ctx, &status, has_password),
-		))
+		Ok::<_, ServerError>((totp_card(ctx, &status, None), recovery_card(ctx, &status)))
 	}
 	.await;
 	match result {

@@ -1,0 +1,185 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, team_id, kind, slug, name, issuer, client_id, scopes, jit,\n\t\t\t\t\tallow_unverified_email, group_claim, group_roles, enabled, client_secret\n\t\t\t\tFROM auth_providers WHERE id = $1 AND team_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "team_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "slug",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "issuer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "issuer"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "scopes",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "scopes"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "jit",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "jit"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "allow_unverified_email",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "allow_unverified_email"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "group_claim",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "group_claim"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "group_roles",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "group_roles"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "client_secret",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "client_secret"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2d899a4949b821e4c1754e20c579305c0bccca6614ec64adc7759ec844a4d266"
+}

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_identities (id, provider_id, user_id, subject, email)\n\t\tVALUES ($1, $2, $3, $4, $5) ON CONFLICT (provider_id, subject) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "89419f422d6c1194eb4797bb1adb0eb558915801469378bb8ce6971bf477fe0a"
+}

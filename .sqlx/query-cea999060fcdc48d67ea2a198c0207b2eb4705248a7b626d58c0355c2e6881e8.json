@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE totp_credentials SET last_step = $2 WHERE user_id = $1 AND last_step < $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cea999060fcdc48d67ea2a198c0207b2eb4705248a7b626d58c0355c2e6881e8"
+}

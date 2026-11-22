@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT has_password FROM users WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "has_password",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "has_password"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2d9cf1792e8055873757b5eae0ba05fe748e1fa763d2b80a509a6b98bfd65526"
+}
