@@ -53,6 +53,7 @@ jiff.workspace = true
 ssh-key.workspace = true
 rsa.workspace = true
 rusty-s3.workspace = true
+podkit-firewall = { path = "../crates/firewall" }
 tempfile.workspace = true
 flate2.workspace = true
 dotenvy = "0.15.7"

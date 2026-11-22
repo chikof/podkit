@@ -277,6 +277,25 @@ pub async fn server_unreachable(state: &AppState, id: i64, message: &str) {
 	.await;
 }
 
+/// A firewall change was not confirmed and the helper took it back.
+pub async fn firewall_reverted(state: &AppState, id: i64, why: &str) {
+	let Some((team, name)) = server(&state.db, id).await else {
+		return;
+	};
+	super::emit(
+		state,
+		Event::new(
+			team,
+			EventKind::FirewallReverted,
+			format!("firewall:{id}"),
+			format!("Firewall change on {name} was reverted"),
+		)
+		.body(clip(why, 300))
+		.link(format!("/teams/{team}/servers/{id}/firewall")),
+	)
+	.await;
+}
+
 /// A server that was unreachable answers again.
 pub async fn server_recovered(state: &AppState, id: i64) {
 	let Some((team, name)) = server(&state.db, id).await else {

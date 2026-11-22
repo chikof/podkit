@@ -86,6 +86,8 @@ pub enum Response {
 	},
 	/// Done.
 	Done,
+	/// Never sent by the helper: what the agent answers when no helper is installed.
+	NotInstalled,
 	/// Refused or failed.
 	Error {
 		/// What went wrong, safe to show.

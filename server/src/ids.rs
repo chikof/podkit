@@ -68,4 +68,5 @@ id!(
 	CloneId,
 	UptimeCheckId,
 	UptimeIncidentId,
+	FirewallRuleId,
 );

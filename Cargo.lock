@@ -3931,6 +3931,7 @@ dependencies = [
  "jsonschema",
  "lettre",
  "maud",
+ "podkit-firewall",
  "proto",
  "reqwest",
  "rsa",

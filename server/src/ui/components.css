@@ -2380,3 +2380,14 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-note-meta > * + *::before { content: "\00b7"; margin-inline-end: var(--s-3); }
 /* A notification at phone width: the buttons go under the text instead of taking a column from it. */
 @media (max-width: 30rem) { .ui-note { grid-template-columns: minmax(0, 1fr); } }
+
+/* == server firewall (B4) ==
+   The Firewall tab of a server: the always-open list, the add form and the diff of a preview. */
+.ui-sec-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3); }
+.ui-fw-always { display: grid; gap: var(--s-2); margin: 0; padding: 0; list-style: none; font-size: var(--fs-sm); }
+.ui-fw-always b { font-weight: var(--fw-medium); margin-inline-end: var(--s-2); }
+.ui-fw-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); align-items: end; gap: var(--s-4); }
+.ui-fw-diff { margin: 0; padding: var(--s-4); overflow: auto; max-block-size: 24rem; border: var(--bw) solid var(--border); border-radius: var(--radius); background: var(--muted); font-family: var(--font-mono); font-size: var(--fs-xs); line-height: 1.5; tab-size: 4; }
+.ui-fw-line { display: block; white-space: pre; }
+.ui-fw-line.ui-fw-plus { background: var(--success-soft); }
+.ui-fw-line.ui-fw-minus { background: var(--destructive-soft); }

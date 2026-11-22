@@ -23,6 +23,8 @@ const HEALTH_TIMEOUT: Duration = Duration::from_secs(5);
 /// `df` and `nvidia-smi` may each take a few seconds on a busy host.
 const HARDWARE_TIMEOUT: Duration = Duration::from_secs(20);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+/// The helper runs `nft`, which takes a moment on a big ruleset.
+const FIREWALL_TIMEOUT: Duration = Duration::from_secs(25);
 /// A scan exports the image and runs two containers; the biggest images take minutes.
 const SCAN_TIMEOUT: Duration = Duration::from_mins(25);
 const MAX_LINE_BYTES: usize = 1024 * 1024;
@@ -98,6 +100,25 @@ impl AgentClient {
 			Method::POST,
 			"/v1/db-stats",
 			Some(&proto::DbStatsRequest { targets }),
+		)
+		.await
+	}
+
+	/// One request to the firewall helper on the server, through the agent. A server without
+	/// the helper is answered as `not_installed`.
+	///
+	/// # Errors
+	/// `Validation` carrying the agent's message when it cannot reach the helper; see
+	/// [`AgentClient::health`] otherwise.
+	pub async fn firewall(
+		&self,
+		request: &podkit_firewall::protocol::Request,
+	) -> Result<podkit_firewall::protocol::Response, ServerError> {
+		self.json_within_messages(
+			FIREWALL_TIMEOUT,
+			Method::POST,
+			"/v1/firewall",
+			Some(request),
 		)
 		.await
 	}
