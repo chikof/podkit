@@ -180,7 +180,7 @@ fn add_form(base: &str) -> Markup {
 			}
 			div class="ui-field-group" {
 				label for="fw-port" class=(LABEL) { "Port" }
-				input id="fw-port" class=(INPUT) type="number" inputmode="numeric" min="1" max="65535" required "data-bind:fw_port";
+				input id="fw-port" class=(INPUT) type="number" inputmode="numeric" min="1" max="65535" "data-bind:fw_port";
 			}
 			div class="ui-field-group" {
 				label for="fw-source" class=(LABEL) { "From (optional)" }
@@ -453,7 +453,7 @@ async fn add(
 	};
 	match service::add(&s, ctx.user.id, ctx.team.id, server, &input).await {
 		Ok(_) => refreshed(&s, &ctx, server).await,
-		Err(e) => error::action(&e),
+		Err(e) => sse::toast(&error::message(&e)).into_response(),
 	}
 }
 
@@ -464,7 +464,7 @@ async fn remove(
 ) -> Response {
 	match service::remove(&s, ctx.user.id, ctx.team.id, server, rule).await {
 		Ok(()) => refreshed(&s, &ctx, server).await,
-		Err(e) => error::action(&e),
+		Err(e) => sse::toast(&error::message(&e)).into_response(),
 	}
 }
 
@@ -476,7 +476,7 @@ async fn save_ssh(
 ) -> Response {
 	match service::save_ssh_sources(&s, ctx.user.id, ctx.team.id, server, &sig.fw_ssh).await {
 		Ok(()) => refreshed(&s, &ctx, server).await,
-		Err(e) => error::action(&e),
+		Err(e) => sse::toast(&error::message(&e)).into_response(),
 	}
 }
 
@@ -487,7 +487,7 @@ async fn preview(
 ) -> Response {
 	match service::preview(&s, ctx.user.id, ctx.team.id, server).await {
 		Ok(p) => sse::patch(&diff_view(&p)).into_response(),
-		Err(e) => sse::toast(&crate::ui::error::message(&e)).into_response(),
+		Err(e) => sse::toast(&error::message(&e)).into_response(),
 	}
 }
 
