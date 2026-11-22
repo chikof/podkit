@@ -25,6 +25,7 @@ mod audit;
 mod auth;
 mod avatars;
 mod backups;
+mod builds;
 mod catalog;
 mod change;
 mod config;

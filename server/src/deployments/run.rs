@@ -14,6 +14,7 @@ use tracing::warn;
 
 use super::{Deployment, DeploymentStatus};
 use crate::applications::{self, Application, BuildStrategy, SourceKind, StoredRegistryAuth};
+use crate::builds;
 use crate::error::ServerError;
 use crate::health_gate::machine::{Machine, Signal};
 use crate::ids::{DeploymentId, TeamId};
@@ -65,6 +66,29 @@ pub async fn run(
 
 	advance(state, &mut deployment, DeploymentStatus::Building).await?;
 
+	// A git application is built before anything starts: on its own server (taking one of
+	// its build places), or on a build server and moved over.
+	let mut build_slot = None;
+	if application.source_kind == SourceKind::Git && deployment.image_tag.is_none() {
+		let plan = builds::plan_for(&state.db, server.team_id, application.id, server.id)
+			.await
+			.map_err(|e| db_failure(&e))?;
+		if plan.remote {
+			build_elsewhere(
+				state,
+				&application,
+				&mut deployment,
+				&server,
+				&plan,
+				cancel,
+				log,
+			)
+			.await?;
+		} else {
+			build_slot = Some(take_slot(&plan, &server.name, cancel, log).await?);
+		}
+	}
+
 	let spec = build_spec(state, &application, &deployment, &server).await?;
 
 	let client = state.agents.client(state, &server).await.map_err(|e| {
@@ -107,6 +131,8 @@ pub async fn run(
 						phase,
 						Phase::Starting | Phase::HealthCheck | Phase::Swapping
 					) {
+					// The build is over: the next one may take its place.
+					drop(build_slot.take());
 					advance(state, &mut deployment, DeploymentStatus::Deploying).await?;
 					deploying = true;
 				}
@@ -168,6 +194,7 @@ pub async fn run(
 				| Event::Exited { .. }
 				| Event::VolumeDumped { .. }
 				| Event::PartsUploaded { .. }
+				| Event::Built { .. }
 				| Event::Done,
 			)) => {}
 			Some(Err(e)) => {
@@ -181,6 +208,91 @@ pub async fn run(
 			}
 		}
 	}
+}
+
+/// Takes one of the build places of the server that builds, waiting for a free one.
+async fn take_slot(
+	plan: &builds::Plan,
+	server_name: &str,
+	cancel: &CancellationToken,
+	log: &mut JobLog,
+) -> Result<builds::slots::Slot, JobFailure> {
+	if let Some(slot) = builds::slots::try_take(plan.server, plan.max_concurrent) {
+		return Ok(slot);
+	}
+	log.push(
+		proto::Stream::System,
+		&format!(
+			"waiting for a build place on {server_name} (it builds {} at a time)",
+			plan.max_concurrent
+		),
+	)
+	.await;
+	builds::slots::acquire(plan.server, plan.max_concurrent, cancel)
+		.await
+		.ok_or(JobFailure::Cancelled)
+}
+
+/// Builds a git application on its build server and moves the image to `server`. On return
+/// the deployment names the image, so the deploy that follows runs it without building.
+async fn build_elsewhere(
+	state: &AppState,
+	application: &Application,
+	deployment: &mut Deployment,
+	server: &Server,
+	plan: &builds::Plan,
+	cancel: &CancellationToken,
+	log: &mut JobLog,
+) -> Result<(), JobFailure> {
+	let builder = scope::server(&state.db, server.team_id, plan.server)
+		.await
+		.map_err(|_| failed("the build server no longer exists"))?;
+	if builder.status != crate::servers::ServerStatus::Active {
+		return Err(failed(format!(
+			"the build server {} is not ready (its agent is not running)",
+			builder.name
+		)));
+	}
+	let Source::Git {
+		repo_url,
+		git_ref,
+		auth,
+		build,
+		..
+	} = app_source(state, application, deployment).await?
+	else {
+		return Err(failed("application has no repository"));
+	};
+	log.push(
+		proto::Stream::System,
+		&format!("building on {}", builder.name),
+	)
+	.await;
+	let slot = take_slot(plan, &builder.name, cancel, log).await?;
+	let builder_client = state.agents.client(state, &builder).await.map_err(|e| {
+		warn!(server = %builder.id, "cannot reach the build server's agent: {e}");
+		failed("the build server's agent is unavailable")
+	})?;
+	let request = proto::BuildRequest {
+		service: format!("app-{}", application.id),
+		repo_url,
+		git_ref,
+		auth,
+		build,
+		options: plan.options(),
+	};
+	let (image, commit_sha) =
+		builds::delivery::build(&builder_client, &request, cancel, log).await?;
+	drop(slot);
+
+	let target = state.agents.client(state, server).await.map_err(|e| {
+		warn!(server = %server.id, "cannot reach server agent: {e}");
+		failed("server agent unavailable")
+	})?;
+	builds::delivery::deliver(&builder_client, &target, &image, cancel, log).await?;
+	deployment.image_tag = Some(image);
+	deployment.commit_sha = Some(commit_sha);
+	Ok(())
 }
 
 /// Feeds the health machine and stores the state it reaches. Best effort: the deploy itself
@@ -433,6 +545,9 @@ pub(crate) async fn app_source(
 				},
 				BuildStrategy::Nixpacks => Build::Nixpacks,
 			},
+			options: builds::options_for(&state.db, application)
+				.await
+				.map_err(|e| db_failure(&e))?,
 		}),
 	}
 }

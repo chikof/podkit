@@ -70,7 +70,109 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/gateway/usage/drain", post(gateway_drain))
 		.route("/v1/gateway/chat", post(gateway_chat))
 		.route("/v1/gateway/mcp/tools", post(gateway_mcp_tools))
+		.route("/v1/build", post(build_route))
+		.route("/v1/build-cache", get(build_cache_info))
+		.route("/v1/build-cache/prune", post(build_cache_prune))
+		.route("/v1/images/export", get(image_export))
+		.route("/v1/images/import", post(image_import))
 		.with_state(ctx)
+}
+
+async fn build_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::BuildRequest>,
+) -> Response {
+	ndjson(move |tx| crate::build::run(ctx, req, tx))
+}
+
+async fn build_cache_info(
+	State(ctx): State<Arc<Ctx>>,
+) -> Result<Json<proto::BuildCacheInfo>, ApiError> {
+	crate::build_cache::info(&ctx.podman())
+		.await
+		.map(Json)
+		.map_err(|e| ApiError::podman("could not measure the build cache", &e))
+}
+
+async fn build_cache_prune(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::BuildCachePrune>,
+) -> Result<Json<proto::BuildCachePruned>, ApiError> {
+	crate::build_cache::prune(&ctx.podman(), req.max_bytes)
+		.await
+		.map(Json)
+		.map_err(|e| ApiError::podman("could not prune the build cache", &e))
+}
+
+#[derive(Deserialize)]
+struct ImageQuery {
+	reference: String,
+}
+
+fn check_image(reference: &str) -> Result<(), ApiError> {
+	if crate::build::valid_image_reference(reference) {
+		Ok(())
+	} else {
+		Err(ApiError::new(
+			StatusCode::BAD_REQUEST,
+			"only images podkit built can be moved",
+		))
+	}
+}
+
+/// The image as a tar archive, streamed; its content id is in the [`proto::IMAGE_ID_HEADER`]
+/// header so the other end can check what arrived.
+async fn image_export(
+	State(ctx): State<Arc<Ctx>>,
+	Query(q): Query<ImageQuery>,
+) -> Result<Response, ApiError> {
+	check_image(&q.reference)?;
+	let podman = ctx.podman();
+	let id = podman
+		.inspect_image(&q.reference)
+		.await
+		.map_err(|e| ApiError::podman("could not look the image up", &e))?
+		.and_then(|i| i.id)
+		.ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, "no such image on this server"))?;
+	let body = Body::from_stream(podman.export_image_owned(q.reference));
+	Ok((
+		[
+			(
+				header::CONTENT_TYPE.as_str(),
+				"application/x-tar".to_string(),
+			),
+			(proto::IMAGE_ID_HEADER, id),
+		],
+		body,
+	)
+		.into_response())
+}
+
+/// Loads an archive from the request body and answers with the content id of the image now
+/// stored under `reference`. A body that stops halfway loads nothing.
+async fn image_import(
+	State(ctx): State<Arc<Ctx>>,
+	Query(q): Query<ImageQuery>,
+	body: Body,
+) -> Result<Json<proto::ImageImported>, ApiError> {
+	check_image(&q.reference)?;
+	let podman = ctx.podman();
+	podman
+		.import_image(body.into_data_stream())
+		.await
+		.map_err(|e| ApiError::podman("loading the image failed", &e))?;
+	let id = podman
+		.inspect_image(&q.reference)
+		.await
+		.map_err(|e| ApiError::podman("could not look the image up", &e))?
+		.and_then(|i| i.id)
+		.ok_or_else(|| {
+			ApiError::new(
+				StatusCode::UNPROCESSABLE_ENTITY,
+				"the archive did not hold that image",
+			)
+		})?;
+	Ok(Json(proto::ImageImported { image_id: id }))
 }
 
 struct ApiError {

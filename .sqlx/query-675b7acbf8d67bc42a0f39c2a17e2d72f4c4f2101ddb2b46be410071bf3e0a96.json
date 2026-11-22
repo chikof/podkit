@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO build_settings (team_id, build_server_id, cpu_limit, memory_limit_mb)\n\t\t\tVALUES ($1, $2, $3, $4)\n\t\t\tON CONFLICT (team_id) DO UPDATE SET\n\t\t\t\tbuild_server_id = EXCLUDED.build_server_id,\n\t\t\t\tcpu_limit = EXCLUDED.cpu_limit,\n\t\t\t\tmemory_limit_mb = EXCLUDED.memory_limit_mb\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Float4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "675b7acbf8d67bc42a0f39c2a17e2d72f4c4f2101ddb2b46be410071bf3e0a96"
+}

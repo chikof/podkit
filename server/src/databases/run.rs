@@ -162,6 +162,7 @@ async fn provision(
 				| Event::Exited { .. }
 				| Event::VolumeDumped { .. }
 				| Event::PartsUploaded { .. }
+				| Event::Built { .. }
 				| Event::Done,
 			)) => {}
 			Some(Err(e)) => {

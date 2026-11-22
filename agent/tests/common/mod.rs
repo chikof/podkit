@@ -29,7 +29,12 @@ pub fn directory_tar(src: &Path, out: &Path) {
 /// Builds `tag` and drains the output, panicking on a build error.
 pub async fn build(podman: &Podman, tag: &str, dockerfile: &str, context_tar: &Path) {
 	let output = podman
-		.build_image(tag, dockerfile, context_tar)
+		.build_image(
+			tag,
+			dockerfile,
+			context_tar,
+			&proto::BuildOptions::default(),
+		)
 		.await
 		.expect("open build context");
 	let mut output = std::pin::pin!(output);

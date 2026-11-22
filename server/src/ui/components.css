@@ -2380,3 +2380,9 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-note-meta > * + *::before { content: "\00b7"; margin-inline-end: var(--s-3); }
 /* A notification at phone width: the buttons go under the text instead of taking a column from it. */
 @media (max-width: 30rem) { .ui-note { grid-template-columns: minmax(0, 1fr); } }
+
+/* == builds ==
+   A server on Settings → Builds: its name and standing, then the fields that tune it, with a rule between one
+   server and the next. */
+.ui-build-server { display: grid; gap: var(--s-4); min-width: 0; padding-block-end: var(--s-6); border-block-end: var(--bw) solid var(--border); }
+.ui-build-server:last-child { padding-block-end: 0; border-block-end: 0; }

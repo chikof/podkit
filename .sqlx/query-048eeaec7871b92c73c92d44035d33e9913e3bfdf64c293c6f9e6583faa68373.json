@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO server_build_settings (server_id, max_concurrent, cache_max_mb)\n\t\t\tVALUES ($1, $2, $3)\n\t\t\tON CONFLICT (server_id) DO UPDATE SET\n\t\t\t\tmax_concurrent = EXCLUDED.max_concurrent,\n\t\t\t\tcache_max_mb = EXCLUDED.cache_max_mb\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "048eeaec7871b92c73c92d44035d33e9913e3bfdf64c293c6f9e6583faa68373"
+}
