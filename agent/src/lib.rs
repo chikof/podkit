@@ -22,6 +22,7 @@ pub mod scan;
 pub mod source;
 pub mod stats;
 pub mod supervisor;
+pub mod terminal;
 pub mod volume_backup;
 
 use std::path::PathBuf;

@@ -1,0 +1,120 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT id AS \"id: TerminalSessionId\", user_id AS \"user_id: UserId\", target_kind, target_id,\n\t\t\t\tservice, started_at, ended_at, end_reason, (transcript IS NOT NULL) AS \"has_transcript!\"\n\t\t\tFROM terminal_sessions WHERE team_id = $1\n\t\t\tORDER BY started_at DESC, id DESC LIMIT $2\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: TerminalSessionId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "terminal_sessions",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id: UserId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "terminal_sessions",
+            "name": "user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "target_kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "terminal_sessions",
+            "name": "target_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "target_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "terminal_sessions",
+            "name": "target_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "service",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "terminal_sessions",
+            "name": "service"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "started_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "terminal_sessions",
+            "name": "started_at"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "ended_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "terminal_sessions",
+            "name": "ended_at"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "end_reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "terminal_sessions",
+            "name": "end_reason"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "has_transcript!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "ccf2feb22333cc8b75c9a8c0a7efe4db73a74e5cae1ca5d7bc335107c121935f"
+}

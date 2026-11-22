@@ -67,6 +67,7 @@ mod stacks;
 mod state;
 mod teams;
 mod templates;
+mod terminal;
 mod ui;
 mod uptime;
 mod validate;

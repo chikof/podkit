@@ -468,6 +468,20 @@ fn past_tense(verb: &str) -> Option<&'static str> {
 
 /// "Deployed application web": what the log shows in its list.
 fn summary(action: &str, target: &Target) -> String {
+	// A terminal session is about the resource it is in, so it reads "Opened terminal in
+	// application web" rather than "Started application web".
+	if let Some(verb) = action.strip_prefix("terminal.") {
+		let kind = target.kind.replace('_', " ");
+		let what = match verb {
+			"start" => "Opened terminal in",
+			"end" => "Closed terminal in",
+			_ => "Terminal in",
+		};
+		return match &target.name {
+			Some(name) => format!("{what} {kind} {name}"),
+			None => format!("{what} {kind}"),
+		};
+	}
 	let verb = action.rsplit('.').next().unwrap_or(action);
 	let verb = past_tense(verb).map_or_else(|| verb.replace('_', " "), str::to_owned);
 	let kind = target.kind.replace('_', " ");

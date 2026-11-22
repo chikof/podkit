@@ -48,6 +48,7 @@ mod monitoring;
 mod networks_tab;
 mod provider_source;
 mod security;
+mod terminal_tab;
 mod volumes;
 mod webhooks;
 
@@ -61,6 +62,7 @@ pub fn router() -> Router<AppState> {
 		.merge(header::router())
 		.merge(deployments_tab::router())
 		.merge(logs::router())
+		.merge(terminal_tab::router())
 		.merge(env::router())
 		.merge(domains::router())
 		.merge(volumes::router())
@@ -128,6 +130,7 @@ fn crumbs<'a>(ctx: &TeamCtx, project: &'a Project, last: &'a str) -> Vec<Crumb<'
 enum Tab {
 	Deployments,
 	Logs,
+	Terminal,
 	Env,
 	Domains,
 	Volumes,
@@ -143,9 +146,10 @@ enum Tab {
 }
 
 impl Tab {
-	const ALL: [Self; 14] = [
+	const ALL: [Self; 15] = [
 		Self::Deployments,
 		Self::Logs,
+		Self::Terminal,
 		Self::Env,
 		Self::Domains,
 		Self::Volumes,
@@ -164,6 +168,7 @@ impl Tab {
 		match self {
 			Self::Deployments => "Deployments",
 			Self::Logs => "Logs",
+			Self::Terminal => "Terminal",
 			Self::Env => "Environment",
 			Self::Domains => "Domains",
 			Self::Volumes => "Volumes",
@@ -185,6 +190,7 @@ impl Tab {
 		match self {
 			Self::Deployments => "",
 			Self::Logs => "/logs",
+			Self::Terminal => "/terminal",
 			Self::Env => "/env",
 			Self::Domains => "/domains",
 			Self::Volumes => "/volumes",
@@ -205,6 +211,7 @@ impl Tab {
 		let can = |action, resource| ctx.perms.can(action, resource);
 		match self {
 			Self::Settings | Self::Logs => true,
+			Self::Terminal => can(Action::Create, Resource::Terminal),
 			Self::Env => can(Action::Read, Resource::EnvVar),
 			Self::Domains => can(Action::Read, Resource::Domain),
 			Self::Deployments => can(Action::Read, Resource::Deployment),

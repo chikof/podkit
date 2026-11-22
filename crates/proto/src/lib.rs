@@ -1463,6 +1463,47 @@ pub struct ScanResult {
 pub const GATED_MODEL_MESSAGE: &str =
 	"gated model: accept the license on huggingface.co and add an HF token";
 
+// --- terminal ------------------------------------------------------------------------
+
+/// The web terminal speaks WebSocket on both hops (browser to server, server to agent):
+/// **binary** frames are the raw terminal bytes (keystrokes towards the container, output
+/// towards the browser), **text** frames are JSON: [`TerminalControl`] towards the
+/// container, [`TerminalNotice`] towards the browser.
+///
+/// Agent route: `GET /v1/containers/{id}/terminal?cols=<n>&rows=<n>`.
+pub const TERMINAL_MAX_COLS: u16 = 500;
+/// See [`TERMINAL_MAX_COLS`].
+pub const TERMINAL_MAX_ROWS: u16 = 200;
+
+/// A control message from the browser, as a JSON text frame.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum TerminalControl {
+	/// The terminal changed size.
+	Resize {
+		/// Width in characters.
+		cols: u16,
+		/// Height in lines.
+		rows: u16,
+	},
+}
+
+/// A message from the container side, as a JSON text frame.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum TerminalNotice {
+	/// The shell ended. `code` is its exit status when Podman reported one.
+	Exit {
+		/// The exit status.
+		code: Option<i64>,
+	},
+	/// The terminal could not start or broke.
+	Error {
+		/// What to tell the user.
+		message: String,
+	},
+}
+
 /// Body of every non-2xx agent response.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorBody {

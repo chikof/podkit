@@ -40,6 +40,7 @@ pub(super) enum Tab {
 	Volumes,
 	Deployments,
 	Logs,
+	Terminal,
 	Monitoring,
 	Networks,
 	Security,
@@ -56,6 +57,7 @@ impl Tab {
 			Self::Volumes => "Volumes",
 			Self::Deployments => "Deployments",
 			Self::Logs => "Logs",
+			Self::Terminal => "Terminal",
 			Self::Monitoring => "Monitoring",
 			Self::Networks => "Networks",
 			Self::Security => "Security",
@@ -72,6 +74,7 @@ impl Tab {
 			Self::Volumes => "/volumes",
 			Self::Deployments => "/deployments",
 			Self::Logs => "/logs",
+			Self::Terminal => "/terminal",
 			Self::Monitoring => "/monitoring",
 			Self::Networks => "/networks",
 			Self::Security => "/security",
@@ -79,7 +82,7 @@ impl Tab {
 		}
 	}
 
-	const ALL: [Self; 11] = [
+	const ALL: [Self; 12] = [
 		Self::Services,
 		Self::Compose,
 		Self::Environment,
@@ -87,6 +90,7 @@ impl Tab {
 		Self::Volumes,
 		Self::Deployments,
 		Self::Logs,
+		Self::Terminal,
 		Self::Monitoring,
 		Self::Networks,
 		Self::Security,
@@ -296,6 +300,7 @@ fn tab_row(ctx: &TeamCtx, l: &Loaded, active: Tab) -> Markup {
 			Tab::Advanced => ctx.perms.can(Action::Delete, Resource::Stack),
 			Tab::Security => ctx.perms.can(Action::Read, Resource::Scan),
 			Tab::Volumes => ctx.perms.can(Action::Read, Resource::Backup),
+			Tab::Terminal => crate::ui::pages::terminal::allowed(ctx),
 			_ => true,
 		})
 		.map(|t| (t, format!("{base}{}", t.path())))

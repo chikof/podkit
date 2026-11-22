@@ -857,6 +857,10 @@ mod tests {
 			("/static/page.js", "text/javascript"),
 			("/static/charts.js", "text/javascript"),
 			("/static/guard.js", "text/javascript"),
+			("/static/terminal.js", "text/javascript"),
+			("/static/xterm.js", "text/javascript"),
+			("/static/xterm-fit.js", "text/javascript"),
+			("/static/xterm.css", "text/css"),
 			("/static/fonts/hanken-grotesk-var.woff2", "font/woff2"),
 			("/static/fonts/spline-sans-mono-var.woff2", "font/woff2"),
 		] {

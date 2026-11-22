@@ -11,7 +11,7 @@ use crate::{
 	applications, audit, auth, avatars, backups, catalog, cron, databases, deployments, domains,
 	env_vars, environments, git_providers, iac, links, logos, mcp, mcp_servers, members, metrics,
 	model_files, models, networks, notifications, projects, registries, scanning, servers,
-	ssh_keys, stacks, teams, templates, ui, uptime, volume_backups, volumes, webhooks,
+	ssh_keys, stacks, teams, templates, terminal, ui, uptime, volume_backups, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -62,6 +62,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest("/teams/{team_id}/api-tokens", auth::tokens::router())
 		.nest("/teams/{team_id}/notifications", notifications::router())
 		.nest("/teams/{team_id}/uptime", uptime::router())
+		.nest("/teams/{team_id}/terminal", terminal::router())
 		.nest(
 			"/teams/{team_id}/servers/{server_id}/metrics",
 			metrics::router(),
@@ -134,6 +135,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 	Ok(Router::new()
 		.merge(ui::router())
 		.merge(mcp)
+		.merge(terminal::ws_router())
 		.merge(logos::router())
 		.merge(git_providers::public_router())
 		.merge(avatars::public_router())
