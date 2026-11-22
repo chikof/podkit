@@ -72,6 +72,8 @@ base64 = "=0.23.1"
 flate2 = "=1.1.11"
 tar = "=0.4.46"
 url = "=2.5.8"
+# The log search of the agent; no perf or unicode-heavy extras, to keep the binary small.
+regex = { version = "=1.13.1", default-features = false, features = ["std", "unicode"] }
 croner = { version = "=4.0.3", default-features = false, features = ["jiff"] }
 # The zone database is bundled: a minimal container has no /usr/share/zoneinfo.
 jiff = { version = "=0.2.46", default-features = false, features = ["std", "tzdb-bundle-always"] }
