@@ -32,7 +32,7 @@ use crate::ui::layout::{Crumb, app_page, form_error};
 use crate::ui::sse::js_string;
 use crate::ui::{error, sse};
 
-mod plan_view;
+pub(super) mod plan_view;
 #[cfg(test)]
 mod tests;
 

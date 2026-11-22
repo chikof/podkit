@@ -276,6 +276,7 @@ fn unmapped_settings(b: &mut Builder, at: &str, app: &Value) {
 	}
 }
 
+#[allow(clippy::too_many_lines, reason = "one block per setting of an app")]
 fn application(b: &mut Builder, snap: &Snapshot, at: &Place, id: &str) {
 	let Some(app) = snap.get(&one("application", "applicationId", id)) else {
 		b.skipped(id, "the application could not be read");

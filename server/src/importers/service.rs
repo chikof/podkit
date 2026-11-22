@@ -31,7 +31,7 @@ use crate::notifications::event::{Event, EventKind, clip};
 use crate::state::AppState;
 
 /// How long a preview can be applied.
-const KEEP: Duration = Duration::from_secs(15 * 60);
+const KEEP: Duration = Duration::from_mins(15);
 /// How many previews are kept at once, all teams together.
 const MAX_KEPT: usize = 32;
 
@@ -226,7 +226,6 @@ pub async fn preview(
 /// What an apply of a preview did.
 #[derive(Debug)]
 pub struct Applied {
-	pub source: Source,
 	pub outcome: ImportOutcome,
 }
 
@@ -277,7 +276,7 @@ pub async fn apply(
 		)
 		.await;
 	}
-	Ok(Applied { source, outcome })
+	Ok(Applied { outcome })
 }
 
 /// What went wrong in an apply, in a sentence; `None` when it went well.

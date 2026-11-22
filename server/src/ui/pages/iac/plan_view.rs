@@ -269,21 +269,28 @@ pub fn empty() -> Markup {
 	html! { div id=(RESULT) aria-live="polite" {} }
 }
 
+/// A refused plan or a team import: one plan per project, without the result region around it.
+pub fn projects_inner(plans: &[ProjectPlan]) -> Markup {
+	html! {
+		div class="ui-iac" {
+			@for p in plans {
+				section class="ui-iac-project" {
+					h3 class="ui-iac-sub" {
+						(p.name) " " span class="ui-iac-where" { (p.slug) }
+					}
+					(plan(&p.plan))
+				}
+			}
+		}
+	}
+}
+
 /// A refused plan or a team import: one plan per project.
 pub fn projects(plans: &[ProjectPlan], apply: Option<&Markup>) -> Markup {
 	let ok = plans.iter().all(|p| !p.plan.has_issues());
 	html! {
 		div id=(RESULT) aria-live="polite" {
-			div class="ui-iac" {
-				@for p in plans {
-					section class="ui-iac-project" {
-						h3 class="ui-iac-sub" {
-							(p.name) " " span class="ui-iac-where" { (p.slug) }
-						}
-						(plan(&p.plan))
-					}
-				}
-			}
+			(projects_inner(plans))
 			@if let Some(apply) = apply {
 				@if ok && plans.iter().any(|p| !p.plan.changes.is_empty()) {
 					div class="ui-iac-foot" { (apply) }
@@ -293,22 +300,27 @@ pub fn projects(plans: &[ProjectPlan], apply: Option<&Markup>) -> Markup {
 	}
 }
 
-/// What an import did, project by project.
-pub fn imported(done: &[crate::iac::service::Imported]) -> Markup {
+/// What an import did, project by project, without the result region around it.
+pub fn imported_inner(done: &[crate::iac::service::Imported]) -> Markup {
 	html! {
-		div id=(RESULT) aria-live="polite" {
-			div class="ui-iac" {
-				@for d in done {
-					section class="ui-iac-project" {
-						h3 class="ui-iac-sub" { (d.slug) }
-						@if d.applied.plan.has_issues() {
-							(plan(&d.applied.plan))
-						} @else {
-							(report(&d.applied.report))
-						}
+		div class="ui-iac" {
+			@for d in done {
+				section class="ui-iac-project" {
+					h3 class="ui-iac-sub" { (d.slug) }
+					@if d.applied.plan.has_issues() {
+						(plan(&d.applied.plan))
+					} @else {
+						(report(&d.applied.report))
 					}
 				}
 			}
 		}
+	}
+}
+
+/// What an import did, project by project.
+pub fn imported(done: &[crate::iac::service::Imported]) -> Markup {
+	html! {
+		div id=(RESULT) aria-live="polite" { (imported_inner(done)) }
 	}
 }

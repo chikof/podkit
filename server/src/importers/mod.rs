@@ -36,7 +36,7 @@ use crate::iac::objects::{Secrets, names};
 pub use routes::router;
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 /// A platform podkit can import from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, serde::Deserialize)]
@@ -145,13 +145,9 @@ pub struct Counts {
 }
 
 impl Report {
-	/// Notes of one level.
-	pub fn of(&self, level: Level) -> impl Iterator<Item = &Note> {
-		self.notes.iter().filter(move |n| n.level == level)
-	}
-
 	/// The report as lines of text, for the command line: `Coolify: custom labels are not
 	/// supported (shop/production/web)`.
+	#[cfg(test)]
 	#[must_use]
 	pub fn lines(&self, source: Source) -> Vec<String> {
 		self.notes
@@ -270,6 +266,7 @@ pub fn slugify(name: &str) -> String {
 }
 
 /// `base`, or `base-2`, `base-3` … until `taken` does not have it.
+#[allow(clippy::maybe_infinite_iter, reason = "ends at the first free name")]
 fn unique(base: &str, taken: impl Fn(&str) -> bool) -> String {
 	if !taken(base) {
 		return base.to_owned();

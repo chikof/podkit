@@ -60,7 +60,7 @@ pub fn base_url(raw: &str) -> Result<String, ServerError> {
 		parsed.host_str().unwrap_or_default()
 	);
 	if let Some(port) = parsed.port() {
-		base.push_str(&format!(":{port}"));
+		base = format!("{base}:{port}");
 	}
 	base.push_str(parsed.path().trim_end_matches('/'));
 	Ok(base)

@@ -130,16 +130,14 @@ async fn apply(
 		return Ok(done(&applied, None));
 	}
 	let (preview, applied) = service::run(&s, user.id, team, &body.request(source), deploy).await?;
-	Ok(match applied {
-		Some(applied) => done(&applied, Some(&preview)),
-		None => {
-			let mut out = previewed(&preview);
-			out["error"] = json!(if preview.plans.is_empty() {
-				"nothing to import; see the report"
-			} else {
-				"the plan has issues; nothing was changed"
-			});
-			(StatusCode::UNPROCESSABLE_ENTITY, axum::Json(out)).into_response()
-		}
-	})
+	if let Some(applied) = applied {
+		return Ok(done(&applied, Some(&preview)));
+	}
+	let mut out = previewed(&preview);
+	out["error"] = json!(if preview.plans.is_empty() {
+		"nothing to import; see the report"
+	} else {
+		"the plan has issues; nothing was changed"
+	});
+	Ok((StatusCode::UNPROCESSABLE_ENTITY, axum::Json(out)).into_response())
 }

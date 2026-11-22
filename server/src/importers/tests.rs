@@ -26,9 +26,9 @@ use crate::tests::{
 	PgPool, app, call, count, db_test, member_role, revoke_permission, user_with_team,
 };
 
-const COOLIFY: &str = include_str!("../../tests/fixtures/importers/coolify.json");
-const DOKPLOY: &str = include_str!("../../tests/fixtures/importers/dokploy.json");
-const CAPROVER: &str = include_str!("../../tests/fixtures/importers/caprover.json");
+pub(crate) const COOLIFY: &str = include_str!("../../tests/fixtures/importers/coolify.json");
+pub(crate) const DOKPLOY: &str = include_str!("../../tests/fixtures/importers/dokploy.json");
+pub(crate) const CAPROVER: &str = include_str!("../../tests/fixtures/importers/caprover.json");
 
 /// The secret values of each fixture that an import carries, and the ones it must leave
 /// behind (preview variables, basic-auth passwords, webhook tokens, database passwords that
@@ -566,7 +566,7 @@ fn credentials_never_show_in_debug_output() {
 // ----- fetching, against a stub of each API
 
 /// What the stub of a platform expects and serves.
-struct Stub {
+pub(crate) struct Stub {
 	source: Source,
 	responses: BTreeMap<String, Value>,
 	/// `(header, value)` every request must carry.
@@ -617,7 +617,7 @@ async fn handle(State(stub): State<Arc<Stub>>, req: Request<Body>) -> Response {
 	}
 }
 
-async fn serve(source: Source, fixture_text: &str) -> (String, Arc<Stub>) {
+pub(crate) async fn serve(source: Source, fixture_text: &str) -> (String, Arc<Stub>) {
 	let auth = match source {
 		Source::Coolify => ("authorization", "Bearer right-token".to_owned()),
 		Source::Dokploy => ("x-api-key", "right-token".to_owned()),

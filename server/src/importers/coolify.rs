@@ -123,6 +123,10 @@ fn hosts(list: &str) -> (Vec<String>, Option<i32>, bool) {
 
 /// The variables of an `envs` response. Values need `read:sensitive`; without it the field is
 /// missing, and the count is returned so the report can say so once.
+#[allow(
+	clippy::struct_field_names,
+	reason = "`vars` is the list; `hidden` and `preview` count the rest"
+)]
 struct Vars {
 	vars: Vec<(String, String)>,
 	hidden: usize,
@@ -403,6 +407,7 @@ fn cron_of(b: &mut Builder, at: &Place, app_key: &str, shown: &str, tasks: &[Val
 	}
 }
 
+#[allow(clippy::too_many_lines, reason = "one block per setting of an app")]
 fn application(b: &mut Builder, snap: &Snapshot, places: &[(i64, Place)], app: &Value) {
 	let name = text(app, "name").unwrap_or("application").to_owned();
 	let Some(at) = place_of(places, &app["environment_id"]).cloned() else {

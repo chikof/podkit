@@ -90,6 +90,7 @@ fn external_image(app: &Value) -> Option<String> {
 	(!image.contains(&format!("img-captain-{name}"))).then(|| image.to_owned())
 }
 
+#[allow(clippy::too_many_lines, reason = "one block per setting of an app")]
 fn application(b: &mut Builder, at: &Place, app: &Value) {
 	let Some(name) = text(app, "appName") else {
 		return;

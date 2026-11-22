@@ -2380,3 +2380,12 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-note-meta > * + *::before { content: "\00b7"; margin-inline-end: var(--s-3); }
 /* A notification at phone width: the buttons go under the text instead of taking a column from it. */
 @media (max-width: 30rem) { .ui-note { grid-template-columns: minmax(0, 1fr); } }
+
+/* == importers (B11) == */
+/* What was read from the source, as one wrapped line of counts. */
+.ui-import-counts { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); margin: 0; padding: 0; list-style: none; font-size: var(--fs-sm); color: var(--muted-foreground); }
+/* The report groups: a heading with its count, a line of help, then one line per note. */
+.ui-import-group { display: grid; gap: var(--s-2); min-width: 0; }
+.ui-import-group .ui-iac-sub, .ui-import-group .ui-hint { margin: 0; }
+.ui-import-notes { display: grid; gap: var(--s-2); margin: 0; padding: 0; list-style: none; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.ui-import-notes > li { padding-inline-start: var(--s-3); border-inline-start: var(--bw) solid var(--border); }

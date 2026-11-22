@@ -13,6 +13,7 @@ pub mod cron;
 pub mod databases;
 pub mod git_providers;
 pub mod iac;
+pub mod importers;
 pub mod infrastructure;
 pub mod keys;
 pub mod mcp;
