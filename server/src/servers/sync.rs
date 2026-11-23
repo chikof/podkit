@@ -145,6 +145,12 @@ async fn mark_crashed(
 		}) else {
 			continue;
 		};
+		// One replica of several going down is not the deployment crashing: the others
+		// still serve, and the agent keeps restarting it. The replica list shows it.
+		if sibling_alive(&containers, deployment) {
+			tracing::warn!(deployment = %deployment.id, "{message}, other replicas are still up");
+			continue;
+		}
 		tracing::warn!(deployment = %deployment.id, "{message}");
 		let done = sqlx::query!(
 			"UPDATE deployments SET status = 'crashed', error_message = $2, finished_at = NOW() WHERE id = $1 AND status = 'running'",
@@ -182,6 +188,21 @@ async fn mark_crashed(
 		}
 	}
 	Ok(())
+}
+
+/// Whether another replica of the deployment is running: then its first container being
+/// gone is a replica's problem, not the deployment's.
+fn sibling_alive(containers: &[ContainerInfo], deployment: &RunningDeployment) -> bool {
+	containers.iter().any(|c| {
+		c.id != deployment.container_id
+			&& c.state == ContainerState::Running
+			&& crate::replicas::status::number_of(
+				&c.name,
+				deployment.application_id.0,
+				deployment.id.0,
+			)
+			.is_some()
+	})
 }
 
 /// A running row is crashed when its container is gone, or exited/dead with
@@ -261,5 +282,34 @@ mod tests {
 			message(&[container(ContainerState::Running, None, false)]),
 			None
 		);
+	}
+
+	#[test]
+	fn replicas_one_gone_replica_is_not_a_crashed_deployment() {
+		let deployment = RunningDeployment {
+			id: DeploymentId(7),
+			application_id: ApplicationId(3),
+			container_id: "a".to_owned(),
+		};
+		let info = |name: &str, id: &str, state| ContainerInfo {
+			id: id.to_owned(),
+			name: name.to_owned(),
+			state,
+			exit_code: None,
+			gave_up: false,
+		};
+		let others = [
+			info("podkit-app-3-7-r2", "b", ContainerState::Running),
+			info("podkit-app-3-6", "z", ContainerState::Running),
+		];
+		assert!(sibling_alive(&others, &deployment));
+		// Nothing of this deployment is running (an older deployment's container does not
+		// count): that is a crash.
+		let dead = [
+			info("podkit-app-3-7-r2", "b", ContainerState::Exited),
+			info("podkit-app-3-6", "z", ContainerState::Running),
+		];
+		assert!(!sibling_alive(&dead, &deployment));
+		assert!(!sibling_alive(&[], &deployment));
 	}
 }

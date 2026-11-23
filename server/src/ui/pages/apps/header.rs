@@ -196,6 +196,22 @@ fn live_health(rows: &[DeploymentView]) -> Markup {
 	}
 }
 
+/// The replicas of a running application set to run several copies; none otherwise.
+async fn replica_status(
+	s: &AppState,
+	ctx: &TeamCtx,
+	app: &ApplicationView,
+	running: bool,
+) -> Option<crate::replicas::service::Live> {
+	if !running {
+		return None;
+	}
+	crate::replicas::service::status(s, ctx.user.id, ctx.team.id, app.project_id, app.id)
+		.await
+		.ok()
+		.flatten()
+}
+
 /// `#app-header`: what polling and the actions re-render. `rows` are the newest deployments
 /// (newest first), for the Rollback entry and the uptime.
 pub async fn header(
@@ -255,6 +271,8 @@ pub async fn header(
 		(None, None) => ("Not deployed".to_owned(), Shape::Pending),
 	};
 	let health = live_health(rows);
+	// Only an application set to run several copies has a list; the others pay nothing here.
+	let replicas = replica_status(s, ctx, app, running).await;
 	html! {
 		div id="app-header" class="flex flex-col gap-5" {
 			(poll(&format!("{base}/header"), busy))
@@ -297,6 +315,9 @@ pub async fn header(
 			))
 			p class="text-sm text-destructive" role="alert" "data-show"="$_action_error" "data-text"="$_action_error" style="display: none" {}
 			(chrome::stats("Live figures", &figures))
+			@if let Some(live) = &replicas {
+				(super::replica_list::chips(live))
+			}
 		}
 	}
 }

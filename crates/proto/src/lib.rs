@@ -510,6 +510,26 @@ pub struct DeploySpec {
 	/// "stays running" check. Absent in older payloads.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub health: Option<HealthGate>,
+	/// Several copies of the container behind one route. `None` is a single container.
+	/// Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub replicas: Option<Replicas>,
+}
+
+/// How many copies of a service run, and how a deploy replaces them. The copies are
+/// distinct containers (`podkit-{service}-{instance_id}`, then `-r2`, `-r3`, ...) with
+/// identical Traefik labels, so Traefik balances over them round robin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Replicas {
+	/// Containers to run, 1 to 10.
+	pub count: u32,
+	/// Containers a rolling update may start on top of the old ones at one time.
+	pub max_surge: u32,
+	/// Old containers a rolling update may take away before their replacements are healthy.
+	/// Only used when `max_surge` is 0.
+	pub max_unavailable: u32,
+	/// Pin a client to one replica with a cookie.
+	pub sticky: bool,
 }
 
 /// What makes a container healthy, and how long a deploy waits for it. The agent turns the
@@ -1316,6 +1336,10 @@ pub struct ContainerHealth {
 	pub health: Option<HealthStatus>,
 	/// The supervisor stopped restarting it.
 	pub gave_up: bool,
+	/// Times the supervisor restarted it recently (its failure window). Absent from older
+	/// agents.
+	#[serde(default)]
+	pub restarts: u32,
 }
 
 /// Database engines.

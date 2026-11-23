@@ -138,6 +138,7 @@ fn health_gate_watch_reads_a_container_report() {
 		exit_code: None,
 		health,
 		gave_up,
+		restarts: 0,
 	};
 	let passing = report(ContainerState::Running, Some(HealthStatus::Healthy), false);
 	assert_eq!(watch::signal(&passing), Signal::CheckPassed);

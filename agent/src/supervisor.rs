@@ -119,6 +119,19 @@ impl Supervisor {
 		self.0.state.lock().await.gave_up.contains(name)
 	}
 
+	/// Deaths of `name` inside the failure window: how often it was restarted lately.
+	pub async fn recent_failures(&self, name: &str) -> u32 {
+		let st = self.0.state.lock().await;
+		let now = Instant::now();
+		st.failures.get(name).map_or(0, |history| {
+			let live = history
+				.iter()
+				.filter(|t| now.saturating_duration_since(**t) <= FAILURE_WINDOW)
+				.count();
+			u32::try_from(live).unwrap_or(u32::MAX)
+		})
+	}
+
 	async fn persist(&self, desired: &BTreeSet<String>) {
 		let result = match serde_json::to_vec(desired) {
 			Ok(bytes) => write_atomic(&self.0.path, &bytes).await,

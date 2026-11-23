@@ -47,6 +47,13 @@ fn traefik_command(ingress: &Ingress) -> Vec<String> {
 		"--metrics.prometheus.addentrypointslabels=false".to_string(),
 		"--metrics.prometheus.addserviceslabels=true".to_string(),
 		format!("--metrics.prometheus.buckets={LATENCY_BUCKETS}"),
+		// A killed replica takes its network with it, so a connection to it hangs until it
+		// times out. Notice the container going away at once, and give up on a dial quickly,
+		// so the retry of a request lands on a replica that is still there. Both flags are
+		// in `traefik --help` (`--providers.providersthrottleduration`,
+		// `--serverstransport.forwardingtimeouts.dialtimeout`).
+		"--providers.providersthrottleduration=200ms".to_string(),
+		"--serverstransport.forwardingtimeouts.dialtimeout=500ms".to_string(),
 	];
 	if let Some(email) = &ingress.acme_email {
 		command.push("--entrypoints.websecure.address=:443".to_string());
@@ -287,6 +294,52 @@ pub fn routing_labels(
 		));
 	}
 	labels
+}
+
+/// Labels that make Traefik try the next replica when one does not answer: a killed or
+/// restarting container refuses the connection until Traefik's provider notices it is gone,
+/// and the retry middleware sends such a request to another server of the service instead of
+/// failing it (<https://doc.traefik.io/traefik/middlewares/http/retry/>: the request is
+/// retried when no response came back, on the next server). `https` also covers the secure
+/// router.
+#[must_use]
+pub fn retry_labels(service: &str, https: bool) -> Vec<(String, String)> {
+	let middleware = format!("{service}-retry");
+	let mut labels = vec![
+		(
+			format!("traefik.http.middlewares.{middleware}.retry.attempts"),
+			REPLICA_RETRIES.to_string(),
+		),
+		(
+			format!("traefik.http.routers.{service}.middlewares"),
+			middleware.clone(),
+		),
+	];
+	if https {
+		labels.push((
+			format!("traefik.http.routers.{service}-secure.middlewares"),
+			middleware,
+		));
+	}
+	labels
+}
+
+/// Attempts per request over the replicas of a service (the first try included).
+const REPLICA_RETRIES: u32 = 3;
+
+/// Labels that pin a client to one replica: Traefik sets a cookie on the first response
+/// and routes by it afterwards. The label names follow the docker provider's flattening of
+/// `http.services.<name>.loadBalancer.sticky.cookie.{name,httpOnly,sameSite}`
+/// (<https://doc.traefik.io/traefik/routing/services/#sticky-sessions>). The cookie is
+/// not `secure`: podkit works over plain HTTP, and a secure cookie would never come back.
+#[must_use]
+pub fn sticky_labels(service: &str) -> Vec<(String, String)> {
+	let base = format!("traefik.http.services.{service}.loadbalancer.sticky.cookie");
+	vec![
+		(format!("{base}.name"), format!("podkit-{service}")),
+		(format!("{base}.httponly"), "true".to_string()),
+		(format!("{base}.samesite"), "lax".to_string()),
+	]
 }
 
 /// Labels for an HTTPS router over `https_hosts`, sharing the backend service

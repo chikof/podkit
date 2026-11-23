@@ -52,6 +52,8 @@ mod monitoring;
 mod networks_tab;
 mod previews_card;
 mod provider_source;
+mod replica_list;
+mod replicas;
 mod security;
 mod terminal_tab;
 mod volumes;

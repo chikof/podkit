@@ -62,6 +62,7 @@ mod notifications;
 mod previews;
 mod projects;
 mod registries;
+mod replicas;
 mod routes;
 mod scanning;
 mod scope;

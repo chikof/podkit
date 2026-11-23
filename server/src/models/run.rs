@@ -276,6 +276,7 @@ fn build_spec(
 		options: proto::ContainerOptions::default(),
 		attach: Vec::new(),
 		health: None,
+		replicas: None,
 	}
 }
 

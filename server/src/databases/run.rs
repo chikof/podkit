@@ -230,6 +230,7 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 		options: proto::ContainerOptions::default(),
 		attach: Vec::new(),
 		health: None,
+		replicas: None,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,

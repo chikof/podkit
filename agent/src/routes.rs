@@ -507,6 +507,7 @@ async fn health_response(
 		.flatten(),
 		health: crate::podman::health_of(info),
 		gave_up: ctx.supervisor.is_gave_up(&name).await,
+		restarts: ctx.supervisor.recent_failures(&name).await,
 		name,
 	}
 }

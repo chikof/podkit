@@ -421,8 +421,22 @@ pub(crate) async fn build_spec(
 			read_only: false,
 		})
 		.collect::<Vec<_>>();
-	// A volume can only be mounted by one container at a time.
-	let strategy = if volumes.is_empty() {
+	// A volume can only be mounted by one container at a time, unless the owner marked the
+	// volumes shared: then the copies roll like any others.
+	let replica_config = crate::replicas::config(&state.db, application.id)
+		.await
+		.map_err(|e| {
+			tracing::error!("failed to load replica settings: {e}");
+			failed("failed to load the replica settings")
+		})?;
+	if let Some(config) = &replica_config {
+		// A volume added after the setting was saved is caught here, before anything starts.
+		config
+			.check_volumes(volumes.len())
+			.map_err(|e| failed(e.to_string()))?;
+	}
+	let scaled = replica_config.is_some_and(|c| c.is_scaled());
+	let strategy = if volumes.is_empty() || scaled {
 		Strategy::Rolling
 	} else {
 		Strategy::Recreate
@@ -467,6 +481,7 @@ pub(crate) async fn build_spec(
 		https_hosts,
 		access: access.rules,
 	});
+	let routed = routing.is_some();
 
 	Ok(DeploySpec {
 		service: format!("app-{}", application.id),
@@ -511,6 +526,7 @@ pub(crate) async fn build_spec(
 			acme_email: state.config.acme_email.clone(),
 		},
 		health,
+		replicas: replica_config.map(|c| c.spec(routed)),
 	})
 }
 

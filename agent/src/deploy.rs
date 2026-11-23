@@ -5,7 +5,7 @@
 //! disconnects), so everything created along the way is undone by [`Cleanup`]'s
 //! `Drop` as well as by its explicit [`Cleanup::run`] on failure.
 
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,6 +21,7 @@ use tracing::warn;
 use crate::Ctx;
 use crate::ingress::{self, NETWORK};
 use crate::podman::{self, ContainerSpec, Podman};
+use crate::replicas;
 use crate::source;
 use crate::supervisor::Supervisor;
 
@@ -28,6 +29,8 @@ const HEALTH_CHECK_ATTEMPTS: u32 = 3;
 const HEALTH_CHECK_INTERVAL: Duration = Duration::from_secs(1);
 /// Traefik's docker provider polls; give it time to pick the new container up.
 const SWAP_DELAY: Duration = Duration::from_secs(3);
+/// Between two old replicas being retired: longer than Traefik's provider throttle.
+const RETIRE_GAP: Duration = Duration::from_millis(600);
 const KEEP_IMAGES: usize = 3;
 const FAILURE_LOG_TAIL: u32 = 20;
 
@@ -45,11 +48,11 @@ pub async fn run(ctx: Arc<Ctx>, spec: DeploySpec, tx: mpsc::Sender<Event>) {
 	let _ = tx.send(terminal).await;
 }
 
-/// Removes the container this deploy created unless it was swapped in.
+/// Removes the containers this deploy created unless they were swapped in.
 struct Cleanup {
 	podman: Podman,
 	supervisor: Supervisor,
-	container: Option<String>,
+	containers: Vec<String>,
 }
 
 impl Cleanup {
@@ -57,20 +60,20 @@ impl Cleanup {
 		Self {
 			podman: ctx.podman(),
 			supervisor: ctx.supervisor.clone(),
-			container: None,
+			containers: Vec::new(),
 		}
 	}
 
 	fn arm(&mut self, name: String) {
-		self.container = Some(name);
+		self.containers.push(name);
 	}
 
 	fn disarm(&mut self) {
-		self.container = None;
+		self.containers.clear();
 	}
 
 	async fn run(&mut self) {
-		if let Some(name) = self.container.take() {
+		for name in std::mem::take(&mut self.containers) {
 			retire(&self.podman, &self.supervisor, &name, false).await;
 		}
 	}
@@ -78,10 +81,16 @@ impl Cleanup {
 
 impl Drop for Cleanup {
 	fn drop(&mut self) {
-		if let Some(name) = self.container.take() {
-			let (podman, supervisor) = (self.podman.clone(), self.supervisor.clone());
-			tokio::spawn(async move { retire(&podman, &supervisor, &name, false).await });
+		let names = std::mem::take(&mut self.containers);
+		if names.is_empty() {
+			return;
 		}
+		let (podman, supervisor) = (self.podman.clone(), self.supervisor.clone());
+		tokio::spawn(async move {
+			for name in names {
+				retire(&podman, &supervisor, &name, false).await;
+			}
+		});
 	}
 }
 
@@ -180,8 +189,6 @@ async fn execute(
 		}
 	};
 
-	let service = &spec.service;
-	let new_name = format!("podkit-{service}-{}", spec.instance_id);
 	let resolved;
 	let spec = if let Some(with_command) = with_bridge_command(&podman, spec, &image).await? {
 		resolved = with_command;
@@ -190,6 +197,10 @@ async fn execute(
 		spec
 	};
 	let service = &spec.service;
+	let count = spec.replicas.map_or(1, |r| r.count as usize);
+	let names: Vec<String> = (0..count)
+		.map(|i| replicas::name(service, spec.instance_id, i))
+		.collect();
 
 	phase(tx, Phase::Starting).await?;
 	ensure_networks(&podman, spec).await?;
@@ -221,61 +232,108 @@ async fn execute(
 		.await
 		.map_err(|e| format!("listing containers failed: {e}"))?;
 	for name in existing.iter().filter_map(crate::podman::summary_name) {
-		if retires_first(spec.strategy, name, &new_name) {
+		if names.iter().any(|n| retires_first(spec.strategy, name, n)) {
 			retire(&podman, &ctx.supervisor, name, true).await;
 		} else {
 			old.push(name.to_string());
 		}
 	}
+	// Oldest first: a rolling update replaces them in that order.
+	let prefix = format!("podkit-{service}-");
+	old.sort_by_key(|n| n.strip_prefix(&prefix).and_then(replicas::order_key));
+	let mut old: VecDeque<String> = old.into();
 
-	let container_id = podman
-		.create_container(container_spec(spec, &image, &new_name, &file_binds))
-		.await
-		.map_err(|e| format!("container create failed: {e}"))?;
-	cleanup.arm(new_name.clone());
-	podman
-		.start(&new_name)
-		.await
-		.map_err(|e| format!("container start failed: {e}"))?;
-	if spec.options.restart == Restart::Always {
-		ctx.supervisor.add(&new_name).await;
-	}
-
-	phase(tx, Phase::HealthCheck).await?;
-	let healthy = match &spec.health {
-		Some(gate) => crate::health::wait_healthy(&podman, &new_name, gate, tx)
-			.await
-			.map_err(|why| format!("the new container did not become healthy: {why}")),
-		None => health_check(&podman, &new_name).await,
-	};
-	if let Err(message) = healthy {
-		report_container_tail(&podman, &new_name, tx).await;
-		if !old.is_empty() {
-			log(
-				tx,
-				Stream::System,
-				"the previous container is still serving",
-			)
-			.await?;
+	let (surge, unavailable) = spec.replicas.map_or((1, 0), |r| {
+		(r.max_surge as usize, r.max_unavailable as usize)
+	});
+	let mut container_id = None;
+	for step in replicas::plan(old.len(), count, surge, unavailable) {
+		for _ in 0..step.retire_before {
+			if let Some(name) = old.pop_front() {
+				log(tx, Stream::System, format!("replacing {name}")).await?;
+				retire(&podman, &ctx.supervisor, &name, true).await;
+			}
 		}
-		return Err(message);
-	}
-
-	if spec.strategy == Strategy::Rolling {
-		phase(tx, Phase::Swapping).await?;
-		if spec.routing.is_some() {
-			sync_ingress_networks(&podman).await;
+		for &index in &step.start {
+			let name = &names[index];
+			if count > 1 {
+				log(
+					tx,
+					Stream::System,
+					format!("starting replica {} of {count}", index + 1),
+				)
+				.await?;
+			}
+			let id = podman
+				.create_container(container_spec(spec, &image, name, &file_binds))
+				.await
+				.map_err(|e| format!("container create failed: {e}"))?;
+			if index == 0 {
+				container_id = Some(id);
+			}
+			cleanup.arm(name.clone());
+			podman
+				.start(name)
+				.await
+				.map_err(|e| format!("container start failed: {e}"))?;
+			if spec.options.restart == Restart::Always {
+				ctx.supervisor.add(name).await;
+			}
 		}
-		if !old.is_empty() {
+
+		phase(tx, Phase::HealthCheck).await?;
+		let started: Vec<&String> = step.start.iter().map(|&i| &names[i]).collect();
+		let verdicts = futures_util::future::join_all(
+			started
+				.iter()
+				.map(|name| wait_healthy(&podman, spec, name, tx)),
+		)
+		.await;
+		if let Some(message) = verdicts.into_iter().find_map(Result::err) {
+			if let Some(name) = started.first() {
+				report_container_tail(&podman, name, tx).await;
+			}
+			if !old.is_empty() {
+				log(
+					tx,
+					Stream::System,
+					if count > 1 {
+						"the previous replicas are still serving"
+					} else {
+						"the previous container is still serving"
+					},
+				)
+				.await?;
+			}
+			return Err(message);
+		}
+
+		if spec.strategy == Strategy::Rolling {
+			phase(tx, Phase::Swapping).await?;
 			if spec.routing.is_some() {
-				tokio::time::sleep(drain_delay(spec)).await;
+				sync_ingress_networks(&podman).await;
 			}
-			for name in &old {
-				retire(&podman, &ctx.supervisor, name, true).await;
+			if step.retire_after > 0 && !old.is_empty() {
+				if spec.routing.is_some() {
+					tokio::time::sleep(drain_delay(spec)).await;
+				}
+				for turn in 0..step.retire_after {
+					if let Some(name) = old.pop_front() {
+						// One at a time, with a pause for Traefik to drop each from its
+						// servers: a retry then always finds a live replica, where
+						// several gone at once could leave a request nowhere to go.
+						if turn > 0 && spec.routing.is_some() {
+							tokio::time::sleep(RETIRE_GAP).await;
+						}
+						retire(&podman, &ctx.supervisor, &name, true).await;
+					}
+				}
 			}
 		}
+		// What is healthy now stays, even when a later round fails.
+		cleanup.disarm();
 	}
-	cleanup.disarm();
+	let container_id = container_id.ok_or_else(|| "no container was started".to_string())?;
 	if spec.routing.is_some() {
 		sync_ingress_networks(&podman).await;
 	}
@@ -289,6 +347,22 @@ async fn execute(
 		image,
 		commit_sha,
 	})
+}
+
+/// One new container's verdict: the health gate when the spec has one, otherwise that it
+/// stays running.
+async fn wait_healthy(
+	podman: &Podman,
+	spec: &DeploySpec,
+	name: &str,
+	tx: &mpsc::Sender<Event>,
+) -> Result<(), String> {
+	match &spec.health {
+		Some(gate) => crate::health::wait_healthy(podman, name, gate, tx)
+			.await
+			.map_err(|why| format!("the new container did not become healthy: {why}")),
+		None => health_check(podman, name).await,
+	}
 }
 
 /// Whether an existing container of the service goes before the new one starts. Recreate
@@ -492,6 +566,12 @@ fn validate(spec: &DeploySpec) -> Result<(), String> {
 		validate_access(access)?;
 	}
 	validate_options(spec)?;
+	if let Some(replicas) = &spec.replicas {
+		replicas::validate(replicas)?;
+		if replicas.sticky && spec.routing.is_none() {
+			return Err("sticky sessions need a routed service".to_string());
+		}
+	}
 	if let Some(gate) = &spec.health {
 		crate::health::validate(gate)?;
 	}
@@ -571,6 +651,17 @@ fn traefik_labels(spec: &DeploySpec) -> Vec<(String, String)> {
 		&spec.service,
 		&routing.https_hosts,
 	));
+	// Replicas: the sticky cookie and the retry middleware (B9). The retry middleware goes
+	// before the access chain, so it wraps the whole chain and the service.
+	if spec.replicas.is_some_and(|r| r.sticky) {
+		labels.extend(ingress::sticky_labels(&spec.service));
+	}
+	if spec.replicas.is_some() && !routing.http_hosts.is_empty() {
+		labels.extend(ingress::retry_labels(
+			&spec.service,
+			!routing.https_hosts.is_empty(),
+		));
+	}
 	if let Some(access) = &routing.access {
 		// `validate` already refused rules that do not parse.
 		labels.extend(
@@ -583,7 +674,27 @@ fn traefik_labels(spec: &DeploySpec) -> Vec<(String, String)> {
 			.unwrap_or_default(),
 		);
 	}
-	labels
+	merge_router_middlewares(labels)
+}
+
+/// Two features (replica retries and access rules) each attach middlewares to a router with a
+/// `traefik.http.routers.<name>.middlewares` label; a repeated label key would make the last
+/// one win and silently drop the other. One label per key, the values chained in the order
+/// they were added.
+fn merge_router_middlewares(labels: Vec<(String, String)>) -> Vec<(String, String)> {
+	let is_chain =
+		|key: &str| key.starts_with("traefik.http.routers.") && key.ends_with(".middlewares");
+	let mut out: Vec<(String, String)> = Vec::with_capacity(labels.len());
+	for (key, value) in labels {
+		if is_chain(&key)
+			&& let Some(existing) = out.iter_mut().find(|(k, _)| *k == key)
+		{
+			existing.1 = format!("{},{value}", existing.1);
+			continue;
+		}
+		out.push((key, value));
+	}
+	out
 }
 
 fn container_spec(
@@ -948,7 +1059,30 @@ mod tests {
 			options: proto::ContainerOptions::default(),
 			attach: Vec::new(),
 			health: None,
+			replicas: None,
 		}
+	}
+
+	#[test]
+	fn replica_retry_and_access_rules_share_one_middleware_chain() {
+		let mut s = spec();
+		s.replicas = Some(proto::Replicas {
+			count: 2,
+			max_surge: 1,
+			max_unavailable: 0,
+			sticky: false,
+		});
+		s.routing.as_mut().unwrap().access = Some(proto::AccessRules {
+			security_headers: true,
+			..proto::AccessRules::default()
+		});
+		let labels = traefik_labels(&s);
+		let chains: Vec<&String> = labels
+			.iter()
+			.filter(|(k, _)| k == "traefik.http.routers.app-1.middlewares")
+			.map(|(_, v)| v)
+			.collect();
+		assert_eq!(chains, vec!["app-1-retry,app-1-headers"]);
 	}
 
 	fn nvidia_cdi() -> Cdi {
@@ -1215,6 +1349,88 @@ mod tests {
 			prune_candidates(&images, &used, "app-1"),
 			["podkit-app-1:4", "podkit-app-1:6"]
 		);
+	}
+
+	#[test]
+	fn replicas_every_copy_carries_the_same_routing_labels() {
+		let mut s = spec();
+		s.replicas = Some(proto::Replicas {
+			count: 3,
+			max_surge: 1,
+			max_unavailable: 0,
+			sticky: false,
+		});
+		assert!(validate(&s).is_ok());
+		let labels = |name: &str| container_spec(&s, "img", name, &[]).labels;
+		// One Traefik service, so the containers are its servers and are balanced round
+		// robin; their names differ.
+		assert_eq!(labels("podkit-app-1-9"), labels("podkit-app-1-9-r2"));
+		assert!(labels("c").contains(&(
+			"traefik.http.services.app-1.loadbalancer.server.port".to_string(),
+			"8080".to_string()
+		)));
+		assert!(
+			!labels("c")
+				.iter()
+				.any(|(k, _)| k.contains("loadbalancer.sticky"))
+		);
+		// A request that reaches a dead replica is retried on another one.
+		let get = |key: &str| {
+			labels("c")
+				.into_iter()
+				.find(|(k, _)| k == key)
+				.map(|(_, v)| v)
+		};
+		assert_eq!(
+			get("traefik.http.routers.app-1.middlewares").as_deref(),
+			Some("app-1-retry")
+		);
+		assert!(get("traefik.http.middlewares.app-1-retry.retry.attempts").is_some());
+		// A single container has no other replica to retry on, and keeps its labels as they were.
+		s.replicas = None;
+		assert!(
+			!container_spec(&s, "img", "c", &[])
+				.labels
+				.iter()
+				.any(|(k, _)| k.contains("retry"))
+		);
+	}
+
+	#[test]
+	fn replicas_sticky_sessions_add_the_cookie_labels() {
+		let mut s = spec();
+		s.replicas = Some(proto::Replicas {
+			count: 2,
+			max_surge: 1,
+			max_unavailable: 0,
+			sticky: true,
+		});
+		let labels = container_spec(&s, "img", "c", &[]).labels;
+		let get = |key: &str| {
+			labels
+				.iter()
+				.find(|(k, _)| k == key)
+				.map(|(_, v)| v.as_str())
+		};
+		let base = "traefik.http.services.app-1.loadbalancer.sticky.cookie";
+		assert_eq!(get(&format!("{base}.name")), Some("podkit-app-1"));
+		assert_eq!(get(&format!("{base}.httponly")), Some("true"));
+		assert_eq!(get(&format!("{base}.samesite")), Some("lax"));
+		// A service off the ingress has no cookie to set.
+		s.routing = None;
+		assert!(validate(&s).is_err());
+	}
+
+	#[test]
+	fn replicas_out_of_range_are_refused_before_anything_starts() {
+		let mut s = spec();
+		s.replicas = Some(proto::Replicas {
+			count: 11,
+			max_surge: 1,
+			max_unavailable: 0,
+			sticky: false,
+		});
+		assert!(validate(&s).is_err());
 	}
 
 	fn gate() -> proto::HealthGate {

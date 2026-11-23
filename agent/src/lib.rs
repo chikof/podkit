@@ -21,6 +21,7 @@ pub mod podman;
 pub mod probe;
 pub mod prometheus;
 pub mod registry;
+pub mod replicas;
 pub mod routes;
 pub mod scan;
 pub mod source;

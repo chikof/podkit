@@ -18,6 +18,7 @@ use super::form::{
 use super::header::header;
 use super::health;
 use super::provider_source::{provider_fields, provider_label};
+use super::replicas;
 use super::{AppPath, Tab, app_url, load, page, toast_ok};
 use crate::applications::service::{self, ApplicationView};
 use crate::applications::{BuildStrategy, SourceKind};
@@ -26,6 +27,8 @@ use crate::git_providers;
 use crate::health_gate::{self, HealthConfig};
 use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::registries::Registry;
+use crate::replicas::ReplicaConfig;
+use crate::replicas::service::Settings;
 use crate::ssh_keys::service::KeyView;
 use crate::state::AppState;
 use crate::ui::components::{card, card_content, card_section, save_bar, save_bar_saved};
@@ -73,6 +76,7 @@ fn summary(
 	app: &ApplicationView,
 	provider: Option<&str>,
 	health_config: Option<&HealthConfig>,
+	replica_config: &ReplicaConfig,
 ) -> Markup {
 	html! {
 		(card(&html! {
@@ -132,6 +136,10 @@ fn summary(
 			}))
 		}))
 		(card(&html! {
+			(card_section("Replicas", None, None))
+			(card_content(&replicas::summary(replica_config)))
+		}))
+		(card(&html! {
 			(card_section("Health", None, None))
 			(card_content(&health::summary(health_config)))
 		}))
@@ -145,17 +153,23 @@ fn section(title: &str, description: Option<&str>, fields: &Markup) -> Markup {
 	})
 }
 
-/// Every signal the form's fields are bound to: the application's, and the Health section's.
-fn form_signals(app: &ApplicationView, health: Option<&HealthConfig>) -> String {
+/// Every signal the form's fields are bound to: the application's, the Replicas section's and
+/// the Health section's.
+fn form_signals(
+	app: &ApplicationView,
+	health: Option<&HealthConfig>,
+	replica_config: &ReplicaConfig,
+) -> String {
 	let mut signals: serde_json::Map<String, serde_json::Value> =
 		serde_json::from_str(&prefilled_signals(app)).unwrap_or_default();
 	signals.extend(health::signals(health));
+	signals.extend(replicas::signals(replica_config));
 	serde_json::Value::Object(signals).to_string()
 }
 
 #[allow(
 	clippy::too_many_arguments,
-	reason = "the page hands the form what it loaded: the application, its vault and registries, its provider and its health"
+	reason = "the page hands the form what it loaded: the application, its vault and registries, its provider, its health and its replicas"
 )]
 fn edit_form(
 	base: &str,
@@ -166,14 +180,20 @@ fn edit_form(
 	team: TeamId,
 	provider: Option<&str>,
 	health_config: Option<&HealthConfig>,
+	replica_settings: &Settings,
 ) -> Markup {
 	let save = format!(
 		"evt.preventDefault(); @post({})",
 		crate::ui::sse::js_string(&format!("{base}/settings"))
 	);
-	let watched: Vec<&str> = SAVE_FIELDS.iter().chain(health::FIELDS).copied().collect();
+	let watched: Vec<&str> = SAVE_FIELDS
+		.iter()
+		.chain(health::FIELDS)
+		.chain(replicas::FIELDS)
+		.copied()
+		.collect();
 	html! {
-		div class="flex flex-col gap-6" data-signals=(form_signals(app, health_config)) {
+		div class="flex flex-col gap-6" data-signals=(form_signals(app, health_config, &replica_settings.config)) {
 			form class="flex flex-col gap-6" "data-on:submit"=(save) {
 				(section(
 					"Application",
@@ -194,6 +214,15 @@ fn edit_form(
 					}
 				}
 				(section("Runtime", None, &runtime_fields()))
+				(section(
+					"Replicas",
+					Some(
+						"Several copies of the application behind its one URL. Applies from the next deploy. \
+						 The first time you go from one replica to several, or turn sticky sessions on or off, \
+						 that deploy briefly interrupts the route.",
+					),
+					&replicas::fields(replica_settings),
+				))
 				(section(
 					"Health",
 					Some("Deploys wait for the new container to be healthy before it takes over. Applies from the next deploy."),
@@ -225,6 +254,13 @@ async fn general_page(
 			.await
 			.ok()
 			.flatten();
+	let replica_settings =
+		crate::replicas::service::settings(&s.db, ctx.user.id, ctx.team.id, project.id, app.id)
+			.await
+			.unwrap_or(Settings {
+				config: ReplicaConfig::default(),
+				volumes: 0,
+			});
 	let content = if ctx.perms.can(Action::Update, Resource::Application) {
 		let (keys, can_create_key) = load_keys(&s, &ctx).await;
 		let registries = crate::registries::service::list(&s.db, ctx.user.id, ctx.team.id)
@@ -239,9 +275,10 @@ async fn general_page(
 			ctx.team.id,
 			provider.as_deref(),
 			health_config.as_ref(),
+			&replica_settings,
 		)
 	} else {
-		html! { div class="flex flex-col gap-6" { (summary(&app, provider.as_deref(), health_config.as_ref())) } }
+		html! { div class="flex flex-col gap-6" { (summary(&app, provider.as_deref(), health_config.as_ref(), &replica_settings.config)) } }
 	};
 	Ok(page(&s, &ctx, &project, &app, Tab::Settings, &content).await)
 }
@@ -260,7 +297,20 @@ async fn save(
 		// The health fields are checked before anything is stored, so a bad number cannot
 		// leave the application half saved.
 		let health = health::input(&sig).map(|form| form.parse()).transpose()?;
+		let replicas = replicas::input(&sig).map(|form| form.parse()).transpose()?;
+		if let Some(parsed) = &replicas {
+			// Refused up front, with the rest of the form: a replica setting the volumes
+			// cannot carry must not leave the application half saved.
+			let current =
+				crate::replicas::service::settings(&s.db, ctx.user.id, ctx.team.id, project, app)
+					.await?;
+			parsed.check_volumes(current.volumes)?;
+		}
 		service::update(&s, ctx.user.id, ctx.team.id, project, app, input).await?;
+		if let Some(parsed) = replicas {
+			crate::replicas::service::save(&s.db, ctx.user.id, ctx.team.id, project, app, &parsed)
+				.await?;
+		}
 		if let Some(parsed) = health {
 			health_gate::service::save(
 				&s.db,
