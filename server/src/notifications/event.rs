@@ -90,10 +90,12 @@ pub enum EventKind {
 	PreviewFailed,
 	/// A firewall change was not confirmed and the helper took it back.
 	FirewallReverted,
+	/// Log forwarding to Loki or an OTLP collector is dropping lines.
+	LogExportFailing,
 }
 
 impl EventKind {
-	pub const ALL: [Self; 21] = [
+	pub const ALL: [Self; 22] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
@@ -115,6 +117,7 @@ impl EventKind {
 		Self::MetricRecovered,
 		Self::PreviewFailed,
 		Self::FirewallReverted,
+		Self::LogExportFailing,
 	];
 
 	pub fn as_str(self) -> &'static str {
@@ -140,6 +143,7 @@ impl EventKind {
 			Self::MetricRecovered => "metric_recovered",
 			Self::PreviewFailed => "preview_failed",
 			Self::FirewallReverted => "firewall_reverted",
+			Self::LogExportFailing => "log_export_failing",
 		}
 	}
 
@@ -170,6 +174,7 @@ impl EventKind {
 			Self::MetricRecovered => "Metric alert recovered",
 			Self::PreviewFailed => "Preview failed",
 			Self::FirewallReverted => "Firewall change reverted",
+			Self::LogExportFailing => "Log forwarding failing",
 		}
 	}
 
@@ -190,6 +195,7 @@ impl EventKind {
 			Self::ContainerOom | Self::CrashLoop | Self::ModelCrashed => "Containers and models",
 			Self::UptimeDown | Self::UptimeUp => "Uptime",
 			Self::MetricAlert | Self::MetricRecovered => "Metric alerts",
+			Self::LogExportFailing => "Logs",
 		}
 	}
 
@@ -211,7 +217,8 @@ impl EventKind {
 			| Self::ModelCrashed
 			| Self::MetricAlert
 			| Self::PreviewFailed
-			| Self::FirewallReverted => Severity::Warning,
+			| Self::FirewallReverted
+			| Self::LogExportFailing => Severity::Warning,
 			Self::ServerUnreachable | Self::Vulnerability | Self::CrashLoop | Self::UptimeDown => {
 				Severity::Critical
 			}

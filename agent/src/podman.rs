@@ -887,6 +887,31 @@ impl Podman {
 			.map(|item| item.map_err(PodmanError::from))
 	}
 
+	/// Container logs with Podman's own timestamp in front of every line, from `since` (unix
+	/// seconds; 0 for the beginning) on, following new output when `follow`. The stream ends
+	/// when the container stops, or at the end of what is stored when not following.
+	pub fn logs_stamped(
+		&self,
+		name: &str,
+		since: i64,
+		follow: bool,
+	) -> impl Stream<Item = Result<LogOutput, PodmanError>> + '_ {
+		self.docker
+			.logs(
+				name,
+				Some(LogsOptions {
+					follow,
+					stdout: true,
+					stderr: true,
+					timestamps: true,
+					since: i32::try_from(since).unwrap_or(i32::MAX),
+					tail: "all".to_string(),
+					..Default::default()
+				}),
+			)
+			.map(|item| item.map_err(PodmanError::from))
+	}
+
 	/// Runs `cmd` in a running container and returns its exit status and stdout. Stderr is
 	/// dropped. Nothing is written to the command's stdin.
 	///

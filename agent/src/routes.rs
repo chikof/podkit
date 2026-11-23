@@ -39,6 +39,9 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/events", get(events))
 		.route("/v1/db-stats", post(db_stats))
 		.route("/v1/firewall", post(firewall_route))
+		.route("/v1/logs/search", post(logs_search))
+		.route("/v1/logs/config", put(logs_config))
+		.route("/v1/logs/status", get(logs_status))
 		.route("/v1/deploy", post(deploy_route))
 		.route("/v1/containers", get(list_containers))
 		.route("/v1/containers/{id}/start", post(start_container))
@@ -218,6 +221,33 @@ async fn firewall_route(body: Bytes) -> Result<Response, ApiError> {
 		.await
 		.map_err(|e| ApiError::new(StatusCode::BAD_GATEWAY, e))?;
 	Ok(([(header::CONTENT_TYPE, "application/json")], answer).into_response())
+}
+
+/// Searches the stored container logs; see [`crate::logstore`].
+async fn logs_search(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::LogSearchRequest>,
+) -> Result<Json<proto::LogSearchResult>, ApiError> {
+	crate::logstore::for_dir(&ctx.data_dir)
+		.search(req)
+		.await
+		.map(Json)
+		.map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))
+}
+
+/// How long the logs are kept and where they are forwarded.
+async fn logs_config(
+	State(ctx): State<Arc<Ctx>>,
+	Json(config): Json<proto::LogConfig>,
+) -> Result<StatusCode, ApiError> {
+	crate::logstore::for_dir(&ctx.data_dir)
+		.set_config(config)
+		.map(|()| StatusCode::NO_CONTENT)
+		.map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))
+}
+
+async fn logs_status(State(ctx): State<Arc<Ctx>>) -> Json<proto::LogStatus> {
+	Json(crate::logstore::for_dir(&ctx.data_dir).status())
 }
 
 async fn deploy_route(State(ctx): State<Arc<Ctx>>, Json(spec): Json<DeploySpec>) -> Response {

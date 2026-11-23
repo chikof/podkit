@@ -130,6 +130,36 @@ impl AgentClient {
 		.await
 	}
 
+	/// Searches the container logs the agent keeps.
+	///
+	/// # Errors
+	/// `Validation` carrying the agent's message for a query it refuses (a regular expression
+	/// that does not compile); see [`AgentClient::health`] otherwise.
+	pub async fn log_search(
+		&self,
+		req: &proto::LogSearchRequest,
+	) -> Result<proto::LogSearchResult, ServerError> {
+		self.json_within_messages(REQUEST_TIMEOUT, Method::POST, "/v1/logs/search", Some(req))
+			.await
+	}
+
+	/// Tells the agent how long and how much to keep, and where to forward.
+	///
+	/// # Errors
+	/// See [`AgentClient::json`].
+	pub async fn log_config(&self, config: &proto::LogConfig) -> Result<(), ServerError> {
+		self.send_json(Method::PUT, "/v1/logs/config", config).await
+	}
+
+	/// What the agent's log store holds and how forwarding is doing.
+	///
+	/// # Errors
+	/// See [`AgentClient::health`].
+	pub async fn log_status(&self) -> Result<proto::LogStatus, ServerError> {
+		self.json_within(HEALTH_TIMEOUT, Method::GET, "/v1/logs/status", None::<&()>)
+			.await
+	}
+
 	/// Which image id a reference names on the server.
 	///
 	/// # Errors

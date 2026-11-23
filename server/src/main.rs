@@ -46,6 +46,7 @@ mod ids;
 mod infrastructure;
 mod jobs;
 mod links;
+mod log_search;
 mod logos;
 mod logs;
 mod maintenance;

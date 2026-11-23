@@ -5,6 +5,7 @@ pub mod git_providers;
 pub mod grid;
 pub mod health;
 pub mod infrastructure_ui;
+pub mod log_search;
 pub mod models_env;
 pub mod notifications_ui;
 pub mod registries_ui;

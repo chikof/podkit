@@ -2418,3 +2418,16 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-terminal:fullscreen { height: 100dvh; border-radius: 0; border: 0; }
 .ui-terminal[data-full] { position: fixed; inset: 0; z-index: 60; height: 100dvh; border-radius: 0; border: 0; }
 @media (max-width: 40rem) { .ui-terminal { height: min(30rem, 65dvh); } }
+/* == logs ==
+   The stored-log search: its form and chips, and the viewer's line with a day and a source. */
+.ui-logs-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--s-4); align-items: end; }
+.ui-logs-checks { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-5); min-height: var(--ctl-h); }
+.ui-logs-act { display: flex; align-items: center; }
+.ui-logs-chips { display: grid; gap: var(--s-2); }
+.ui-log-line.ui-log-stored:has(> .ui-log-ts) { grid-template-columns: 14ch 5ch minmax(0, 14ch) minmax(0, 1fr); }
+.ui-log-src { overflow: hidden; color: var(--muted-foreground); text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 40rem) {
+	.ui-log-line.ui-log-stored:has(> .ui-log-ts) { grid-template-columns: 14ch 5ch minmax(0, 1fr); }
+	.ui-log-stored > .ui-log-src { grid-column: 1 / -1; grid-row: 2; }
+	.ui-log-stored > .ui-log-tx { grid-column: 1 / -1; }
+}

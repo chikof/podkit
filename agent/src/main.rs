@@ -234,6 +234,9 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 			.build()?,
 	});
 
+	// Follows the containers' logs into the log store (retention, search, export).
+	agent::logstore::collector::spawn(ctx.podman(), agent::logstore::for_dir(&ctx.data_dir));
+
 	// A sidecar from before a restart or an upgrade is replaced by one of this binary.
 	if let Some(config) = agent::gateway::sidecar::read_config(&gateway_dir)
 		.await

@@ -191,6 +191,175 @@ pub struct ContainerEvent {
 	pub exit_code: Option<i64>,
 }
 
+/// How serious a stored log line says it is. Lines that say nothing count as [`Self::Info`]
+/// when a search filters by level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogLevel {
+	/// Trace and debug.
+	Debug,
+	/// Everything routine.
+	Info,
+	/// Warnings.
+	Warn,
+	/// Errors, fatals, panics.
+	Error,
+}
+
+impl LogLevel {
+	/// The word stored, sent and shown.
+	#[must_use]
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Debug => "debug",
+			Self::Info => "info",
+			Self::Warn => "warn",
+			Self::Error => "error",
+		}
+	}
+
+	/// The inverse of [`Self::as_str`].
+	#[must_use]
+	pub fn parse(s: &str) -> Option<Self> {
+		match s {
+			"debug" => Some(Self::Debug),
+			"info" => Some(Self::Info),
+			"warn" => Some(Self::Warn),
+			"error" => Some(Self::Error),
+			_ => None,
+		}
+	}
+}
+
+/// One stored log line: a line of the agent's per-resource log files and an element of a
+/// search answer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogRecord {
+	/// Unix milliseconds, as Podman stamped the line.
+	pub ts: i64,
+	/// stdout or stderr.
+	pub stream: Stream,
+	/// The deployment (for an application) or job the container belonged to.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub dep: Option<i64>,
+	/// The level the line says it has, when it says one.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub level: Option<LogLevel>,
+	/// The line, without its newline.
+	pub line: String,
+	/// The `podkit.service` of the container (`app-7`). Not written to the files (the
+	/// directory says it); filled in by a search.
+	#[serde(default, skip_serializing_if = "String::is_empty")]
+	pub svc: String,
+}
+
+/// `POST /v1/logs/search` body.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogSearchRequest {
+	/// `podkit.service` values (`app-7`, `stack-3`: a stack stands for all its services).
+	/// Empty searches everything the agent holds.
+	#[serde(default)]
+	pub services: Vec<String>,
+	/// Unix milliseconds, inclusive.
+	#[serde(default)]
+	pub since: Option<i64>,
+	/// Unix milliseconds, exclusive.
+	#[serde(default)]
+	pub until: Option<i64>,
+	/// Words the line must contain (any case), or a regular expression when `regex`.
+	#[serde(default)]
+	pub text: Option<String>,
+	/// Whether `text` is a regular expression.
+	#[serde(default)]
+	pub regex: bool,
+	/// Levels to keep; empty keeps all.
+	#[serde(default)]
+	pub levels: Vec<LogLevel>,
+	/// Only lines of this deployment.
+	#[serde(default)]
+	pub deployment: Option<i64>,
+	/// Most lines to return (the agent caps it).
+	pub limit: u32,
+	/// Which end of the range the limit keeps: the newest lines (the default) or the oldest.
+	#[serde(default = "yes")]
+	pub newest: bool,
+}
+
+fn yes() -> bool {
+	true
+}
+
+/// `POST /v1/logs/search` answer: at most `limit` lines, oldest first.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogSearchResult {
+	/// The matching lines.
+	pub records: Vec<LogRecord>,
+	/// The agent stopped reading before the end of the range (it took too long), so older
+	/// or newer lines may be missing.
+	#[serde(default)]
+	pub partial: bool,
+	/// More lines matched than `limit`: the ones at the far end are not in `records`.
+	#[serde(default)]
+	pub truncated: bool,
+}
+
+/// Where the agent forwards logs to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LogExportKind {
+	/// Loki's push API (`POST /loki/api/v1/push`, JSON).
+	Loki,
+	/// OTLP over HTTP with JSON encoding (`POST /v1/logs`).
+	Otlp,
+}
+
+/// Forwarding of every stored line to a log backend.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogExport {
+	/// The protocol.
+	pub kind: LogExportKind,
+	/// The endpoint, complete with its path.
+	pub url: String,
+	/// The value of the `Authorization` header, when the backend wants one.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub authorization: Option<String>,
+	/// Loki's tenant (`X-Scope-OrgID`).
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub tenant: Option<String>,
+	/// Added to every line as a Loki label or an OTLP resource attribute: the team and the
+	/// server's name.
+	#[serde(default)]
+	pub labels: Vec<(String, String)>,
+}
+
+/// `PUT /v1/logs/config` body: how long and how much the agent keeps, and where it forwards.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogConfig {
+	/// Lines older than this many days are deleted.
+	pub retention_days: u32,
+	/// The oldest files go while the logs take more than this many bytes.
+	pub max_bytes: u64,
+	/// Forwarding, if any.
+	#[serde(default)]
+	pub export: Option<LogExport>,
+}
+
+/// `GET /v1/logs/status` answer.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogStatus {
+	/// Bytes the log files take.
+	pub bytes: u64,
+	/// Number of log files.
+	pub files: u64,
+	/// Containers being followed right now.
+	pub following: u64,
+	/// Lines not forwarded because the backend was slow or refused them.
+	pub export_dropped: u64,
+	/// Unix milliseconds of the oldest stored line (by file), if any.
+	#[serde(default)]
+	pub oldest: Option<i64>,
+}
+
 /// `POST /v1/db-stats` body: which database containers to read.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DbStatsRequest {
