@@ -16,6 +16,7 @@ use axum::response::Response;
 use datastar::consts::ElementPatchMode;
 use maud::{Markup, html};
 
+use crate::applications::SourceKind;
 use crate::applications::service::{self, ApplicationView};
 use crate::auth::permission::{Action, Resource};
 use crate::deployments::service as deployments;
@@ -39,6 +40,7 @@ mod domains;
 mod env;
 mod form;
 mod general;
+mod git_tab;
 mod header;
 mod health;
 mod logs;
@@ -70,6 +72,7 @@ pub fn router() -> Router<AppState> {
 		.merge(cron_tab::router())
 		.merge(monitoring::router())
 		.merge(security::router())
+		.merge(git_tab::router())
 		.merge(webhooks::router())
 		.merge(advanced::router())
 }
@@ -135,6 +138,7 @@ enum Tab {
 	Mcp,
 	Networks,
 	Cron,
+	Git,
 	Webhooks,
 	Monitoring,
 	Security,
@@ -143,7 +147,7 @@ enum Tab {
 }
 
 impl Tab {
-	const ALL: [Self; 14] = [
+	const ALL: [Self; 15] = [
 		Self::Deployments,
 		Self::Logs,
 		Self::Env,
@@ -153,6 +157,7 @@ impl Tab {
 		Self::Mcp,
 		Self::Networks,
 		Self::Cron,
+		Self::Git,
 		Self::Webhooks,
 		Self::Monitoring,
 		Self::Security,
@@ -171,6 +176,7 @@ impl Tab {
 			Self::Mcp => "MCP",
 			Self::Networks => "Networks",
 			Self::Cron => "Cron",
+			Self::Git => "Git",
 			Self::Webhooks => "Webhooks",
 			Self::Monitoring => "Monitoring",
 			Self::Security => "Security",
@@ -192,6 +198,7 @@ impl Tab {
 			Self::Mcp => "/mcp",
 			Self::Networks => "/networks",
 			Self::Cron => "/cron",
+			Self::Git => "/git",
 			Self::Webhooks => "/webhooks",
 			Self::Monitoring => "/monitoring",
 			Self::Security => "/security",
@@ -210,7 +217,7 @@ impl Tab {
 			Self::Deployments => can(Action::Read, Resource::Deployment),
 			Self::Volumes => can(Action::Read, Resource::Volume),
 			Self::Models => can(Action::Read, Resource::Model),
-			Self::Networks | Self::Monitoring | Self::Mcp => {
+			Self::Networks | Self::Monitoring | Self::Mcp | Self::Git => {
 				can(Action::Read, Resource::Application)
 			}
 			Self::Security => can(Action::Read, Resource::Scan),
@@ -229,6 +236,7 @@ fn tab_row(ctx: &TeamCtx, app: &ApplicationView, active: Tab) -> Markup {
 	let links: Vec<(Tab, String)> = Tab::ALL
 		.into_iter()
 		.filter(|t| t.allowed(ctx))
+		.filter(|t| *t != Tab::Git || app.source_kind == SourceKind::Git)
 		.map(|t| (t, format!("{base}{}", t.path())))
 		.collect();
 	let items: Vec<TabItem<'_>> = links

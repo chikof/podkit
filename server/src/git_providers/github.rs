@@ -29,7 +29,7 @@ pub fn api_base(base_url: &str) -> String {
 	}
 }
 
-fn headers(req: RequestBuilder) -> RequestBuilder {
+pub(super) fn headers(req: RequestBuilder) -> RequestBuilder {
 	req.header("accept", "application/vnd.github+json")
 		.header("user-agent", "podkit")
 		.header("x-github-api-version", "2022-11-28")
@@ -364,7 +364,7 @@ pub fn manifest(
 		"setup_on_update": true,
 		"public": false,
 		"request_oauth_on_install": false,
-		"default_permissions": { "contents": "read", "metadata": "read" },
+		"default_permissions": { "contents": "read", "metadata": "read", "checks": "read", "statuses": "write" },
 		"default_events": [],
 	});
 	if let Some(hook) = hook_url {

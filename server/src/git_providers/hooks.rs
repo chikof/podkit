@@ -11,7 +11,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::{Credentials, applications_for_push, first_delivery, service};
-use crate::deployments;
+use crate::autodeploy::engine::{self, Outcome};
 use crate::error::{AppResult, ServerError};
 use crate::ids::GitProviderId;
 use crate::state::AppState;
@@ -77,17 +77,30 @@ pub(super) async fn github(
 			let Ok(push) = serde_json::from_slice::<Push>(&body) else {
 				return Err(ServerError::Validation("not a push event".to_owned()));
 			};
-			let Some(branch) = branch_of(&push.git_ref).filter(|_| !push.deleted) else {
+			let tag = push.git_ref.starts_with("refs/tags/");
+			if (branch_of(&push.git_ref).is_none() && !tag) || push.deleted {
 				return Ok(Json(json!({ "ignored": "not a branch push" })).into_response());
-			};
-			let mut queued = 0;
-			for app in applications_for_push(&s.db, id, &push.repository.full_name, branch).await? {
+			}
+			let event = engine::Push::from_payload(&body);
+			let (mut queued, mut held) = (0, 0);
+			for app in applications_for_push(&s.db, id, &push.repository.full_name).await? {
 				if let Some(app) = crate::applications::find_by_id(&s.db, app).await? {
-					deployments::queue(&s, &app, None, None).await?;
-					queued += 1;
+					match engine::handle(&s, &app, &event).await? {
+						Outcome::Deployed(_) => queued += 1,
+						Outcome::Waiting | Outcome::Frozen => held += 1,
+						_ => {}
+					}
 				}
 			}
-			Ok((StatusCode::ACCEPTED, Json(json!({ "queued": queued }))).into_response())
+			// A tag that no application deploys is not a push anything follows.
+			if tag && queued + held == 0 {
+				return Ok(Json(json!({ "ignored": "not a branch push" })).into_response());
+			}
+			Ok((
+				StatusCode::ACCEPTED,
+				Json(json!({ "queued": queued, "held": held })),
+			)
+				.into_response())
 		}
 		_ => Ok(Json(json!({ "ignored": "event" })).into_response()),
 	}

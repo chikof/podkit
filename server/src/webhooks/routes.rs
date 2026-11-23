@@ -6,12 +6,15 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
 use serde::Serialize;
+use serde_json::json;
 
 use super::{delivery_id, header, is_authorized};
+use crate::applications::SourceKind;
+use crate::autodeploy::engine::{Outcome, Push};
 use crate::error::{AppResult, ServerError};
 use crate::ids::ApplicationId;
 use crate::state::AppState;
-use crate::{applications, deployments};
+use crate::{applications, autodeploy, deployments};
 
 pub fn router() -> Router<AppState> {
 	Router::new().route("/deploy/{application_id}", post(deploy))
@@ -20,6 +23,8 @@ pub fn router() -> Router<AppState> {
 #[derive(Serialize)]
 struct Ignored {
 	ignored: bool,
+	#[serde(skip_serializing_if = "Option::is_none")]
+	reason: Option<&'static str>,
 }
 
 /// Provider-agnostic push-to-deploy webhook.
@@ -63,27 +68,48 @@ async fn deploy(
 		&& !crate::git_providers::first_delivery(&s.db, &format!("app:{application_id}:{delivery}"))
 			.await?
 	{
-		return Ok(Json(Ignored { ignored: true }).into_response());
+		return Ok(ignored(None));
 	}
 
 	let not_a_push = header(&headers, "x-github-event").is_some_and(|event| event != "push")
 		|| header(&headers, "x-gitea-event").is_some_and(|event| event != "push")
 		|| header(&headers, "x-gitlab-event").is_some_and(|event| event != "Push Hook");
 	if not_a_push {
-		return Ok(Json(Ignored { ignored: true }).into_response());
+		return Ok(ignored(None));
 	}
 
-	// An application cloned through a git provider deploys the branch it follows, not
-	// every branch that gets a push.
-	if application.git_provider_id.is_some()
-		&& let Some(pushed) = serde_json::from_slice::<serde_json::Value>(&body)
-			.ok()
-			.and_then(|v| v.get("ref").and_then(|r| r.as_str()).map(str::to_owned))
-		&& crate::git_providers::branch_of(&pushed) != Some(application.git_ref.as_str())
-	{
-		return Ok(Json(Ignored { ignored: true }).into_response());
+	// A git application goes through autodeploy: the branch it follows (or its patterns),
+	// path filters, the commit's checks, freezes and skip markers. An image application is
+	// told to redeploy by whatever calls the URL.
+	if application.source_kind == SourceKind::Git {
+		let push = Push::from_payload(&body);
+		return Ok(
+			match autodeploy::engine::handle(&s, &application, &push).await? {
+				Outcome::Deployed(d) => {
+					(StatusCode::ACCEPTED, Json(json!({ "deployment": d.id.0 }))).into_response()
+				}
+				Outcome::Waiting => held("waiting_ci"),
+				Outcome::Frozen => held("frozen"),
+				Outcome::Skipped => ignored(Some("skipped")),
+				Outcome::Filtered => ignored(Some("filtered")),
+				Outcome::Failed => ignored(Some("checks")),
+				Outcome::Ignored => ignored(None),
+			},
+		);
 	}
 
 	deployments::queue(&s, &application, None, None).await?;
 	Ok(StatusCode::ACCEPTED.into_response())
+}
+
+fn held(state: &'static str) -> Response {
+	(StatusCode::ACCEPTED, Json(json!({ "held": state }))).into_response()
+}
+
+fn ignored(reason: Option<&'static str>) -> Response {
+	Json(Ignored {
+		ignored: true,
+		reason,
+	})
+	.into_response()
 }

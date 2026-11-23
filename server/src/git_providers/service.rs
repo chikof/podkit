@@ -546,3 +546,53 @@ pub(super) async fn for_webhook(db: &PgPool, id: GitProviderId) -> AppResult<Git
 		.await?
 		.ok_or(ServerError::GitProviderNotFound)
 }
+
+/// What the checks of `sha` in `repo` add up to, asked through the provider. No team check:
+/// autodeploy calls it for an application row that already passed one.
+pub async fn ci(
+	s: &AppState,
+	provider: GitProviderId,
+	repo: &str,
+	sha: &str,
+) -> AppResult<crate::autodeploy::rules::Ci> {
+	let p = super::find_by_id(&s.db, provider)
+		.await?
+		.ok_or(ServerError::GitProviderNotFound)?;
+	let (kind, credentials) = open(s, &p)?;
+	target(s, &p, kind, &credentials).ci(repo, sha).await
+}
+
+/// The files a push changed, asked through the provider. No team check, like [`ci`].
+pub async fn changed_files(
+	s: &AppState,
+	provider: GitProviderId,
+	repo: &str,
+	before: Option<&str>,
+	after: &str,
+	commits: &[String],
+) -> AppResult<Vec<String>> {
+	let p = super::find_by_id(&s.db, provider)
+		.await?
+		.ok_or(ServerError::GitProviderNotFound)?;
+	let (kind, credentials) = open(s, &p)?;
+	target(s, &p, kind, &credentials)
+		.changed_files(repo, before, after, commits)
+		.await
+}
+
+/// Posts the deploy's state on a commit through the provider. No team check, like [`ci`].
+pub async fn post_status(
+	s: &AppState,
+	provider: GitProviderId,
+	repo: &str,
+	sha: &str,
+	post: &super::api::StatusPost<'_>,
+) -> AppResult<()> {
+	let p = super::find_by_id(&s.db, provider)
+		.await?
+		.ok_or(ServerError::GitProviderNotFound)?;
+	let (kind, credentials) = open(s, &p)?;
+	target(s, &p, kind, &credentials)
+		.post_status(repo, sha, post)
+		.await
+}

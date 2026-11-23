@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
 
 use axum::Json;
 use axum::Router;
@@ -40,6 +40,73 @@ async fn serve<T: Send + Sync + 'static>(app: Router, state: Arc<T>) -> Running<
 	Running { url, state }
 }
 
+// ---- What the three say about commits ------------------------------------------------------
+
+/// What a stub answers about a commit's checks and changed files, and what was posted to it.
+/// Tests set the answers; the endpoints read them. Shared by the three stubs.
+#[derive(Default)]
+pub struct Commits {
+	/// GitHub's check-suites answer. Unset: no suites.
+	pub suites: Mutex<Option<Value>>,
+	/// GitHub's combined status, GitLab's pipelines, Gitea's combined status. Unset: none.
+	pub checks: Mutex<Option<Value>>,
+	/// The files every changed-files request answers with.
+	pub files: Mutex<Vec<String>>,
+	/// Non-zero: the HTTP status the checks requests answer with.
+	pub checks_http: AtomicU16,
+	/// Non-zero: the HTTP status the changed-files requests answer with.
+	pub files_http: AtomicU16,
+	/// How often the checks were asked for.
+	pub checks_asked: AtomicUsize,
+	/// What each changed-files request named (a sha, or `before...after`).
+	pub file_reads: Mutex<Vec<String>>,
+	/// `(repository@sha, body)` of every commit status posted.
+	pub posted: Mutex<Vec<(String, Value)>>,
+}
+
+impl Commits {
+	fn refuse(code: &AtomicU16) -> Option<Response> {
+		match code.load(Ordering::SeqCst) {
+			0 => None,
+			c => Some(StatusCode::from_u16(c).unwrap().into_response()),
+		}
+	}
+
+	fn checks_answer(&self, none: impl Fn() -> Value) -> Response {
+		self.checks_asked.fetch_add(1, Ordering::SeqCst);
+		if let Some(r) = Self::refuse(&self.checks_http) {
+			return r;
+		}
+		Json(self.checks.lock().unwrap().clone().unwrap_or_else(none)).into_response()
+	}
+
+	fn suites_answer(&self) -> Response {
+		if let Some(r) = Self::refuse(&self.checks_http) {
+			return r;
+		}
+		Json(
+			self.suites
+				.lock()
+				.unwrap()
+				.clone()
+				.unwrap_or_else(|| json!({ "total_count": 0, "check_suites": [] })),
+		)
+		.into_response()
+	}
+
+	fn files_answer(&self, shape: impl Fn(&[String]) -> Value) -> Response {
+		if let Some(r) = Self::refuse(&self.files_http) {
+			return r;
+		}
+		Json(shape(&self.files.lock().unwrap())).into_response()
+	}
+
+	fn record_post(&self, key: String, body: Value) -> Response {
+		self.posted.lock().unwrap().push((key, body));
+		(StatusCode::CREATED, Json(json!({ "id": 1 }))).into_response()
+	}
+}
+
 fn page_of(q: &HashMap<String, String>, key: &str, default: usize) -> usize {
 	q.get(key).and_then(|v| v.parse().ok()).unwrap_or(default)
 }
@@ -48,6 +115,7 @@ fn page_of(q: &HashMap<String, String>, key: &str, default: usize) -> usize {
 
 #[derive(Default)]
 pub struct Github {
+	pub commits: Commits,
 	/// Tokens handed out.
 	pub minted: AtomicUsize,
 	/// Requests whose JWT was a valid RS256 signature of the app's key.
@@ -250,6 +318,82 @@ pub async fn github() -> Running<Github> {
 			"/api/v3/repos/{owner}/{repo}/branches",
 			get(|| async { Json(json!([{ "name": "dev" }, { "name": "trunk" }])) }),
 		)
+		.route(
+			"/api/v3/repos/{owner}/{repo}/commits/{sha}/check-suites",
+			get(
+				|State(s): State<Arc<Github>>,
+				 h: HeaderMap,
+				 Path((_, _, _)): Path<(String, String, String)>| async move {
+					if installation_token(&h, "check-suites", &s).is_none() {
+						return unauthorized();
+					}
+					s.commits.suites_answer()
+				},
+			),
+		)
+		.route(
+			"/api/v3/repos/{owner}/{repo}/commits/{sha}/status",
+			get(
+				|State(s): State<Arc<Github>>,
+				 h: HeaderMap,
+				 Path((_, _, _)): Path<(String, String, String)>| async move {
+					if installation_token(&h, "status", &s).is_none() {
+						return unauthorized();
+					}
+					s.commits
+						.checks_answer(|| json!({ "state": "pending", "statuses": [] }))
+				},
+			),
+		)
+		.route(
+			"/api/v3/repos/{owner}/{repo}/compare/{basehead}",
+			get(
+				|State(s): State<Arc<Github>>,
+				 h: HeaderMap,
+				 Path((_, _, basehead)): Path<(String, String, String)>| async move {
+					if installation_token(&h, "compare", &s).is_none() {
+						return unauthorized();
+					}
+					s.commits.file_reads.lock().unwrap().push(basehead);
+					s.commits.files_answer(|files| {
+						json!({ "files": files.iter().map(|f| json!({ "filename": f })).collect::<Vec<_>>() })
+					})
+				},
+			),
+		)
+		.route(
+			"/api/v3/repos/{owner}/{repo}/commits/{sha}",
+			get(
+				|State(s): State<Arc<Github>>,
+				 h: HeaderMap,
+				 Path((_, _, sha)): Path<(String, String, String)>| async move {
+					if installation_token(&h, "commit", &s).is_none() {
+						return unauthorized();
+					}
+					s.commits.file_reads.lock().unwrap().push(sha);
+					s.commits.files_answer(|files| {
+						json!({ "files": files.iter().map(|f| json!({ "filename": f })).collect::<Vec<_>>() })
+					})
+				},
+			),
+		)
+		.route(
+			"/api/v3/repos/{owner}/{repo}/statuses/{sha}",
+			post(
+				|State(s): State<Arc<Github>>,
+				 h: HeaderMap,
+				 Path((o, r, sha)): Path<(String, String, String)>,
+				 body: String| async move {
+					if installation_token(&h, "statuses", &s).is_none() {
+						return unauthorized();
+					}
+					s.commits.record_post(
+						format!("{o}/{r}@{sha}"),
+						serde_json::from_str(&body).unwrap_or(Value::Null),
+					)
+				},
+			),
+		)
 		.with_state(state.clone());
 	serve(app, state).await
 }
@@ -258,6 +402,7 @@ pub async fn github() -> Running<Github> {
 
 #[derive(Default)]
 pub struct Gitlab {
+	pub commits: Commits,
 	/// `(project path, request body)` of each webhook made.
 	pub hooks_made: Mutex<Vec<(String, Value)>>,
 	pub hooks_deleted: Mutex<Vec<(String, String)>>,
@@ -269,6 +414,7 @@ fn gitlab_ok(h: &HeaderMap) -> bool {
 	h.get("private-token").and_then(|v| v.to_str().ok()) == Some(GITLAB_TOKEN)
 }
 
+#[allow(clippy::too_many_lines, reason = "one arm per stubbed endpoint")]
 pub async fn gitlab() -> Running<Gitlab> {
 	let state = Arc::new(Gitlab::default());
 	let app = Router::new()
@@ -351,6 +497,62 @@ pub async fn gitlab() -> Running<Gitlab> {
 				},
 			),
 		)
+		.route(
+			"/api/v4/projects/{id}/pipelines",
+			get(
+				|State(s): State<Arc<Gitlab>>, h: HeaderMap, Path(_): Path<String>| async move {
+					if !gitlab_ok(&h) {
+						return unauthorized();
+					}
+					s.commits.checks_answer(|| json!([]))
+				},
+			),
+		)
+		.route(
+			"/api/v4/projects/{id}/repository/compare",
+			get(
+				|State(s): State<Arc<Gitlab>>,
+				 h: HeaderMap,
+				 Path(_): Path<String>,
+				 Query(q): Query<HashMap<String, String>>| async move {
+					if !gitlab_ok(&h) {
+						return unauthorized();
+					}
+					s.commits.file_reads.lock().unwrap().push(format!("{}..{}", q["from"], q["to"]));
+					s.commits.files_answer(|files| {
+						json!({ "diffs": files.iter().map(|f| json!({ "old_path": f, "new_path": f })).collect::<Vec<_>>() })
+					})
+				},
+			),
+		)
+		.route(
+			"/api/v4/projects/{id}/repository/commits/{sha}/diff",
+			get(
+				|State(s): State<Arc<Gitlab>>, h: HeaderMap, Path((_, sha)): Path<(String, String)>| async move {
+					if !gitlab_ok(&h) {
+						return unauthorized();
+					}
+					s.commits.file_reads.lock().unwrap().push(sha);
+					s.commits.files_answer(|files| {
+						json!(files.iter().map(|f| json!({ "old_path": f, "new_path": f })).collect::<Vec<_>>())
+					})
+				},
+			),
+		)
+		.route(
+			"/api/v4/projects/{id}/statuses/{sha}",
+			post(
+				|State(s): State<Arc<Gitlab>>,
+				 h: HeaderMap,
+				 Path((id, sha)): Path<(String, String)>,
+				 Query(q): Query<HashMap<String, String>>| async move {
+					if !gitlab_ok(&h) {
+						return unauthorized();
+					}
+					s.commits.record_post(format!("{id}@{sha}"), json!(q))
+				},
+			),
+		)
 		.with_state(state.clone());
 	serve(app, state).await
 }
@@ -359,6 +561,7 @@ pub async fn gitlab() -> Running<Gitlab> {
 
 #[derive(Default)]
 pub struct Gitea {
+	pub commits: Commits,
 	pub hooks_made: Mutex<Vec<(String, Value)>>,
 	pub hooks_deleted: Mutex<Vec<(String, String)>>,
 }
@@ -368,6 +571,7 @@ fn gitea_ok(h: &HeaderMap) -> bool {
 		== Some(format!("token {GITEA_TOKEN}").as_str())
 }
 
+#[allow(clippy::too_many_lines, reason = "one arm per stubbed endpoint")]
 pub async fn gitea() -> Running<Gitea> {
 	let state = Arc::new(Gitea::default());
 	let app = Router::new()
@@ -441,6 +645,45 @@ pub async fn gitea() -> Running<Gitea> {
 						.unwrap()
 						.push((format!("{o}/{r}"), hook));
 					StatusCode::NO_CONTENT
+				},
+			),
+		)
+		.route(
+			"/api/v1/repos/{owner}/{repo}/commits/{sha}/status",
+			get(
+				|State(s): State<Arc<Gitea>>, h: HeaderMap, Path((_, _, _)): Path<(String, String, String)>| async move {
+					if !gitea_ok(&h) {
+						return unauthorized();
+					}
+					s.commits.checks_answer(|| json!({ "state": "", "total_count": 0, "statuses": [] }))
+				},
+			),
+		)
+		.route(
+			"/api/v1/repos/{owner}/{repo}/git/commits/{sha}",
+			get(
+				|State(s): State<Arc<Gitea>>, h: HeaderMap, Path((_, _, sha)): Path<(String, String, String)>| async move {
+					if !gitea_ok(&h) {
+						return unauthorized();
+					}
+					s.commits.file_reads.lock().unwrap().push(sha);
+					s.commits.files_answer(|files| {
+						json!({ "files": files.iter().map(|f| json!({ "filename": f, "status": "modified" })).collect::<Vec<_>>() })
+					})
+				},
+			),
+		)
+		.route(
+			"/api/v1/repos/{owner}/{repo}/statuses/{sha}",
+			post(
+				|State(s): State<Arc<Gitea>>,
+				 h: HeaderMap,
+				 Path((o, r, sha)): Path<(String, String, String)>,
+				 body: String| async move {
+					if !gitea_ok(&h) {
+						return unauthorized();
+					}
+					s.commits.record_post(format!("{o}/{r}@{sha}"), serde_json::from_str(&body).unwrap_or(Value::Null))
 				},
 			),
 		)

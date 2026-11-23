@@ -12,7 +12,11 @@ use super::api::{
 use super::github::default_first;
 use crate::error::ServerError;
 
-fn req(t: &Target<'_>, method: reqwest::Method, path: &str) -> Result<RequestBuilder, ServerError> {
+pub(super) fn req(
+	t: &Target<'_>,
+	method: reqwest::Method,
+	path: &str,
+) -> Result<RequestBuilder, ServerError> {
 	let Credentials::Token { token } = t.credentials else {
 		return Err(wrong_credentials());
 	};
@@ -22,7 +26,7 @@ fn req(t: &Target<'_>, method: reqwest::Method, path: &str) -> Result<RequestBui
 		.header("user-agent", "podkit"))
 }
 
-fn checked(repo: &str) -> Result<&str, ServerError> {
+pub(super) fn checked(repo: &str) -> Result<&str, ServerError> {
 	if valid_repo(repo) {
 		Ok(repo)
 	} else {

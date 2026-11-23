@@ -439,3 +439,261 @@ async fn gitea_live_deploys_from_a_provider_and_a_push_redeploys(db: PgPool) {
 		std::panic::resume_unwind(panic);
 	}
 }
+
+impl Gitea {
+	/// Sets a commit status the way a CI runner would, without any runner.
+	async fn set_status(&self, sha: &str, state: &str) {
+		let (s, body) = self
+			.send(
+				reqwest::Method::POST,
+				&format!("/repos/ops/demo/statuses/{sha}"),
+				Some(
+					json!({ "state": state, "context": "ci/live", "description": "set by the test" }),
+				),
+			)
+			.await;
+		assert_eq!(s, StatusCode::CREATED, "status {state}: {body}");
+	}
+
+	/// The contexts and states on a commit, as Gitea reports them.
+	async fn statuses(&self, sha: &str) -> Vec<(String, String)> {
+		let (_, body) = self
+			.send(
+				reqwest::Method::GET,
+				&format!("/repos/ops/demo/commits/{sha}/statuses"),
+				None,
+			)
+			.await;
+		body.as_array()
+			.cloned()
+			.unwrap_or_default()
+			.iter()
+			.map(|s| {
+				(
+					s["context"].as_str().unwrap_or_default().to_owned(),
+					s["status"].as_str().unwrap_or_default().to_owned(),
+				)
+			})
+			.collect()
+	}
+}
+
+/// A real Gitea, a push webhook and a commit status set by hand (no CI runner): a failing status
+/// keeps the push from deploying, a passing one releases it, and podkit posts its own status back.
+///
+/// `PODMAN=/run/current-system/sw/bin/podman cargo test -p server --all-features -- --ignored autodeploy_live`
+#[sqlx::test]
+#[ignore = "pulls gitea/gitea into a private Podman store; binds 23000"]
+async fn autodeploy_live_a_failing_status_holds_the_push_and_a_passing_one_deploys(db: PgPool) {
+	let private = Private::start();
+	wait_for("the private podman service", 30, || async {
+		private.socket().exists() && private.podman(&["info"]).status.success()
+	})
+	.await;
+
+	// podkit, listening where the Gitea container can reach it. No agent: nothing is built, the
+	// test looks at the deployments that get queued.
+	let listener = tokio::net::TcpListener::bind("0.0.0.0:0").await.unwrap();
+	let podkit_port = listener.local_addr().unwrap().port();
+	let mut st = state(db.clone());
+	Arc::make_mut(&mut st.config).public_url =
+		Some(format!("http://host.containers.internal:{podkit_port}"));
+	let app = crate::routes::routes(st.clone()).await.unwrap();
+	tokio::spawn({
+		let app = app.clone();
+		async move { axum::serve(listener, app).await.unwrap() }
+	});
+
+	let started = private.podman(&[
+		"run",
+		"-d",
+		"--name",
+		"gitea",
+		"-p",
+		&format!("127.0.0.1:{GITEA_PORT}:3000"),
+		"-e",
+		"GITEA__security__INSTALL_LOCK=true",
+		"-e",
+		"GITEA__database__DB_TYPE=sqlite3",
+		"-e",
+		&format!("GITEA__server__ROOT_URL=http://127.0.0.1:{GITEA_PORT}/"),
+		"-e",
+		"GITEA__server__DISABLE_SSH=true",
+		"-e",
+		"GITEA__service__DISABLE_REGISTRATION=true",
+		"-e",
+		"GITEA__webhook__ALLOWED_HOST_LIST=*",
+		GITEA_IMAGE,
+	]);
+	assert!(started.status.success(), "{}", text(&started));
+	let http = reqwest::Client::new();
+	wait_for("gitea", 180, || async {
+		http.get(format!("http://127.0.0.1:{GITEA_PORT}/api/healthz"))
+			.send()
+			.await
+			.is_ok_and(|r| r.status().is_success())
+	})
+	.await;
+	let created = private.podman(&[
+		"exec",
+		"gitea",
+		"gitea",
+		"admin",
+		"user",
+		"create",
+		"--username",
+		"ops",
+		"--password",
+		"correct-horse-battery",
+		"--email",
+		"ops@example.com",
+		"--admin",
+		"--must-change-password=false",
+	]);
+	assert!(created.status.success(), "{}", text(&created));
+	let minted = private.podman(&[
+		"exec",
+		"gitea",
+		"gitea",
+		"admin",
+		"user",
+		"generate-access-token",
+		"--username",
+		"ops",
+		"--token-name",
+		"podkit",
+		"--scopes",
+		"all",
+		"--raw",
+	]);
+	assert!(minted.status.success(), "{}", text(&minted));
+	let token = String::from_utf8_lossy(&minted.stdout)
+		.split_whitespace()
+		.last()
+		.unwrap()
+		.to_owned();
+	let gitea = Gitea {
+		http: http.clone(),
+		token: token.clone(),
+	};
+	let (s, repo) = gitea
+		.send(
+			reqwest::Method::POST,
+			"/user/repos",
+			Some(
+				json!({ "name": "demo", "private": true, "auto_init": true, "default_branch": "main" }),
+			),
+		)
+		.await;
+	assert_eq!(s, StatusCode::CREATED, "{repo}");
+
+	let (api_token, team) = user_with_team(&app, "alice").await;
+	let t = Some(api_token.as_str());
+	let (s, provider) = call(
+		&app,
+		"POST",
+		&format!("/api/v1/teams/{team}/git-providers"),
+		t,
+		Some(json!({
+			"kind": "gitea", "name": "live", "base_url": format!("http://127.0.0.1:{GITEA_PORT}"), "token": token,
+		})),
+	)
+	.await;
+	assert_eq!(s, StatusCode::CREATED, "{provider}");
+	let (_, project) = call(
+		&app,
+		"POST",
+		&format!("/api/v1/teams/{team}/projects"),
+		t,
+		Some(json!({ "name": "web", "slug": "web" })),
+	)
+	.await;
+	let (_, servers) = call(
+		&app,
+		"GET",
+		&format!("/api/v1/teams/{team}/servers"),
+		t,
+		None,
+	)
+	.await;
+	let (s, application) = call(
+		&app,
+		"POST",
+		&format!(
+			"/api/v1/teams/{team}/projects/{}/applications",
+			project["id"]
+		),
+		t,
+		Some(json!({
+			"name": "demo", "slug": "demo", "server_id": servers[0]["id"],
+			"git_provider_id": provider["id"], "git_repo": "ops/demo", "git_ref": "main",
+			"container_port": 80,
+		})),
+	)
+	.await;
+	assert_eq!(s, StatusCode::OK, "{application}");
+	let id = ApplicationId(application["id"].as_i64().unwrap());
+	crate::autodeploy::save_settings(
+		&db,
+		id,
+		&crate::autodeploy::Settings {
+			wait_for_ci: true,
+			post_status: true,
+			..Default::default()
+		},
+	)
+	.await
+	.unwrap();
+
+	let outcome = std::panic::AssertUnwindSafe(async {
+		let states = || async {
+			sqlx::query_scalar::<_, String>("SELECT state FROM autodeploy_pushes ORDER BY id")
+				.fetch_all(&db)
+				.await
+				.unwrap()
+		};
+		let deployments_made =
+			|| async { deployments::list(&db, id, None, 10).await.unwrap().len() };
+
+		// 1. A push whose commit has a failing status: nothing deploys.
+		gitea.add_file("one.txt", "one\n", "first change").await;
+		let bad = gitea.head().await;
+		wait_for("the push to reach autodeploy", 60, || async {
+			!states().await.is_empty()
+		})
+		.await;
+		gitea.set_status(&bad, "failure").await;
+		crate::autodeploy::engine::process(&st, time::OffsetDateTime::now_utc()).await;
+		assert_eq!(states().await, ["ci_failed"], "the failing status stops it");
+		assert_eq!(deployments_made().await, 0, "nothing deployed");
+
+		// 2. The next push passes: it deploys, and podkit posts its status on the commit.
+		gitea.add_file("two.txt", "two\n", "second change").await;
+		let good = gitea.head().await;
+		wait_for("the second push to reach autodeploy", 60, || async {
+			states().await.len() == 2
+		})
+		.await;
+		gitea.set_status(&good, "success").await;
+		crate::autodeploy::engine::process(&st, time::OffsetDateTime::now_utc()).await;
+		assert_eq!(states().await, ["ci_failed", "deployed"]);
+		assert_eq!(
+			deployments_made().await,
+			1,
+			"one deployment, for the passing commit"
+		);
+		wait_for("podkit's status on the commit", 30, || async {
+			gitea
+				.statuses(&good)
+				.await
+				.iter()
+				.any(|(context, state)| context.contains("podkit") && state == "pending")
+		})
+		.await;
+	});
+	let result = futures_util::FutureExt::catch_unwind(outcome).await;
+	drop(private);
+	if let Err(panic) = result {
+		std::panic::resume_unwind(panic);
+	}
+}

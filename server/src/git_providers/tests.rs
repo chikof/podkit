@@ -29,7 +29,7 @@ fn url(team: i64) -> String {
 
 /// The state and router of one test, sharing a database, with podkit "public" at a made-up
 /// address when `public` so webhook creation is attempted.
-async fn world(db: PgPool, public: bool) -> (AppState, axum::Router) {
+pub(crate) async fn world(db: PgPool, public: bool) -> (AppState, axum::Router) {
 	let mut st = state(db);
 	if public {
 		let mut config = (*st.config).clone();
@@ -41,7 +41,7 @@ async fn world(db: PgPool, public: bool) -> (AppState, axum::Router) {
 }
 
 /// Connects a GitHub App through the manifest flow against the stub, as `user` of `team`.
-async fn connect_github(
+pub(crate) async fn connect_github(
 	st: &AppState,
 	stub_url: &str,
 	user: UserId,
@@ -73,7 +73,7 @@ async fn connect_github(
 		.id
 }
 
-fn sign(secret: &str, body: &[u8]) -> String {
+pub(crate) fn sign(secret: &str, body: &[u8]) -> String {
 	let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes()).unwrap();
 	mac.update(body);
 	let mut tag = String::from("sha256=");
@@ -83,9 +83,9 @@ fn sign(secret: &str, body: &[u8]) -> String {
 	tag
 }
 
-type Headers = Vec<(&'static str, String)>;
+pub(crate) type Headers = Vec<(&'static str, String)>;
 
-async fn post_raw(
+pub(crate) async fn post_raw(
 	app: &axum::Router,
 	uri: &str,
 	headers: &Headers,
@@ -111,7 +111,7 @@ async fn post_raw(
 }
 
 /// A project and the id of the team's server, for creating applications.
-async fn project_and_server(app: &axum::Router, token: &str, team: i64) -> (i64, i64) {
+pub(crate) async fn project_and_server(app: &axum::Router, token: &str, team: i64) -> (i64, i64) {
 	let t = Some(token);
 	let (s, project) = call(
 		app,
@@ -137,7 +137,7 @@ async fn project_and_server(app: &axum::Router, token: &str, team: i64) -> (i64,
 }
 
 /// Creates an application through `provider`/`repo`; returns the response.
-async fn create_app(
+pub(crate) async fn create_app(
 	app: &axum::Router,
 	token: &str,
 	team: i64,
@@ -159,7 +159,7 @@ async fn create_app(
 	.await
 }
 
-async fn token_provider(
+pub(crate) async fn token_provider(
 	st: &AppState,
 	user: UserId,
 	team: i64,
@@ -833,13 +833,13 @@ async fn git_providers_without_a_public_address_say_so_instead_of_failing(db: Pg
 
 // ---- push webhooks ------------------------------------------------------------------------
 
-fn push(branch: &str, repo: &str) -> Vec<u8> {
+pub(crate) fn push(branch: &str, repo: &str) -> Vec<u8> {
 	json!({ "ref": format!("refs/heads/{branch}"), "repository": { "full_name": repo } })
 		.to_string()
 		.into_bytes()
 }
 
-fn github_headers(delivery: &str, sig: String) -> Headers {
+pub(crate) fn github_headers(delivery: &str, sig: String) -> Headers {
 	vec![
 		("x-github-event", "push".to_owned()),
 		("x-github-delivery", delivery.to_owned()),
