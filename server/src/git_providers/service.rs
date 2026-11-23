@@ -596,3 +596,100 @@ pub async fn post_status(
 		.post_status(repo, sha, post)
 		.await
 }
+
+/// Pull request `number` of `repo`, asked through the provider. No team check: previews call
+/// it for an application row that already passed one.
+pub async fn pull_request(
+	s: &AppState,
+	provider: GitProviderId,
+	repo: &str,
+	number: i64,
+) -> AppResult<super::PullRequest> {
+	let p = super::find_by_id(&s.db, provider)
+		.await?
+		.ok_or(ServerError::GitProviderNotFound)?;
+	let (kind, credentials) = open(s, &p)?;
+	target(s, &p, kind, &credentials)
+		.pull_request(repo, number)
+		.await
+}
+
+/// Whether `login` may write to `repo` at the provider. No team check, like [`pull_request`].
+pub async fn can_write(
+	s: &AppState,
+	provider: GitProviderId,
+	repo: &str,
+	login: &str,
+	user_id: Option<i64>,
+) -> AppResult<bool> {
+	let p = super::find_by_id(&s.db, provider)
+		.await?
+		.ok_or(ServerError::GitProviderNotFound)?;
+	let (kind, credentials) = open(s, &p)?;
+	target(s, &p, kind, &credentials)
+		.can_write(repo, login, user_id)
+		.await
+}
+
+/// Writes podkit's comment in a pull request, editing `existing` when it is still there.
+/// Returns the comment's id. No team check, like [`pull_request`].
+pub async fn upsert_comment(
+	s: &AppState,
+	provider: GitProviderId,
+	repo: &str,
+	number: i64,
+	existing: Option<&str>,
+	body: &str,
+) -> AppResult<String> {
+	let p = super::find_by_id(&s.db, provider)
+		.await?
+		.ok_or(ServerError::GitProviderNotFound)?;
+	let (kind, credentials) = open(s, &p)?;
+	target(s, &p, kind, &credentials)
+		.upsert_comment(repo, number, existing, body)
+		.await
+}
+
+/// Makes the application's webhook at the provider again, so that it also sends the pull
+/// request events previews follow. A webhook made before previews existed sends pushes only.
+/// Best effort, like [`after_app_created`]: the application keeps working either way.
+pub async fn refresh_hook(s: &AppState, app: &Application) {
+	let (Some(provider), Some(repo), Some(old), Some(sealed)) = (
+		app.git_provider_id,
+		app.git_repo.as_deref(),
+		app.git_hook_id.as_deref(),
+		app.webhook_secret.as_deref(),
+	) else {
+		return;
+	};
+	let result = async {
+		let p = super::find_by_id(&s.db, provider)
+			.await?
+			.ok_or(ServerError::GitProviderNotFound)?;
+		let (kind, credentials) = open(s, &p)?;
+		if kind == Kind::GithubApp {
+			return Ok(());
+		}
+		let Some(public) = s.config.public_url.as_deref() else {
+			return Ok(());
+		};
+		let secret = s
+			.secrets
+			.decrypt(sealed)
+			.map_err(|_| ServerError::Internal)?;
+		let target = target(s, &p, kind, &credentials);
+		let url = format!("{public}/webhooks/deploy/{}", app.id);
+		// The new one first: a failure leaves the old one working.
+		if let Some(id) = target.create_hook(repo, &url, &secret).await? {
+			applications::set_git_hook_id(&s.db, app.id, Some(&id)).await?;
+			if let Err(e) = target.delete_hook(repo, old).await {
+				tracing::warn!(application = app.id.0, error = %e, "the old push webhook was not removed");
+			}
+		}
+		Ok::<_, ServerError>(())
+	}
+	.await;
+	if let Err(e) = result {
+		tracing::warn!(application = app.id.0, error = %e, "the webhook was not refreshed for previews");
+	}
+}

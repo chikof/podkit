@@ -237,6 +237,7 @@ async fn post(
 		_ => None,
 	};
 	let post = StatusPost {
+		context: git_providers::api::STATUS_CONTEXT,
 		state,
 		description,
 		link: link.as_deref(),

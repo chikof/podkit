@@ -55,6 +55,7 @@ mod model_files;
 mod models;
 mod networks;
 mod notifications;
+mod previews;
 mod projects;
 mod registries;
 mod routes;

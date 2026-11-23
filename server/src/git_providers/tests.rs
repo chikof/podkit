@@ -782,7 +782,16 @@ async fn git_providers_gitlab_and_gitea_applications_get_a_webhook_and_lose_it_o
 		let made = ge.state.hooks_made.lock().unwrap();
 		assert_eq!(made[0].0, "ops/app-02");
 		assert_eq!(made[0].1["config"]["secret"], g["webhook_secret"]);
-		assert_eq!(made[0].1["events"], json!(["push"]));
+		assert_eq!(
+			made[0].1["events"],
+			json!([
+				"push",
+				"pull_request",
+				"pull_request_sync",
+				"pull_request_comment",
+				"issue_comment"
+			])
+		);
 	}
 
 	// The provider cannot be deleted while either application uses it.

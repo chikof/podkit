@@ -159,6 +159,8 @@ pub(super) async fn create_hook(
 			"url": url,
 			"token": secret,
 			"push_events": true,
+			"merge_requests_events": true,
+			"note_events": true,
 			"enable_ssl_verification": url.starts_with("https://"),
 		}),
 	);

@@ -141,7 +141,15 @@ pub async fn shared(
 	project: ProjectId,
 	environment: EnvironmentId,
 ) -> Result<Vec<Resolved>, ResolveError> {
-	merge(secrets, visible(db, team, project, environment).await?)
+	merge(
+		secrets,
+		crate::previews::policy::restrict_shared(
+			db,
+			environment,
+			visible(db, team, project, environment).await?,
+		)
+		.await?,
+	)
 }
 
 /// The names of the shared variables that apply to a resource (no decryption).

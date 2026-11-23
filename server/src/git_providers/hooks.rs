@@ -102,6 +102,20 @@ pub(super) async fn github(
 			)
 				.into_response())
 		}
+		Some(event @ ("pull_request" | "issue_comment")) => {
+			let handled = crate::previews::service::handle_for_repo(
+				&s,
+				id,
+				crate::git_providers::Kind::GithubApp,
+				event,
+				&body,
+			)
+			.await?;
+			if handled == 0 {
+				return Ok(Json(json!({ "ignored": "previews" })).into_response());
+			}
+			Ok((StatusCode::ACCEPTED, Json(json!({ "previews": handled }))).into_response())
+		}
 		_ => Ok(Json(json!({ "ignored": "event" })).into_response()),
 	}
 }

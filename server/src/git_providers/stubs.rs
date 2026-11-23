@@ -116,6 +116,7 @@ fn page_of(q: &HashMap<String, String>, key: &str, default: usize) -> usize {
 #[derive(Default)]
 pub struct Github {
 	pub commits: Commits,
+	pub pulls: Pulls,
 	/// Tokens handed out.
 	pub minted: AtomicUsize,
 	/// Requests whose JWT was a valid RS256 signature of the app's key.
@@ -394,6 +395,56 @@ pub async fn github() -> Running<Github> {
 				},
 			),
 		)
+		.route(
+			"/api/v3/repos/{owner}/{repo}/pulls/{n}",
+			get(|State(s): State<Arc<Github>>, h: HeaderMap| async move {
+				if installation_token(&h, "pulls", &s).is_none() {
+					return unauthorized();
+				}
+				s.pulls.hub_pr()
+			}),
+		)
+		.route(
+			"/api/v3/repos/{owner}/{repo}/issues/{n}/comments",
+			post(
+				|State(s): State<Arc<Github>>,
+				 h: HeaderMap,
+				 Path((o, r, n)): Path<(String, String, i64)>,
+				 body: String| async move {
+					if installation_token(&h, "comments", &s).is_none() {
+						return unauthorized();
+					}
+					s.pulls.create(format!("{o}/{r}"), n, &body)
+				},
+			),
+		)
+		.route(
+			"/api/v3/repos/{owner}/{repo}/issues/comments/{id}",
+			axum::routing::patch(
+				|State(s): State<Arc<Github>>,
+				 h: HeaderMap,
+				 Path((_, _, id)): Path<(String, String, i64)>,
+				 body: String| async move {
+					if installation_token(&h, "comments", &s).is_none() {
+						return unauthorized();
+					}
+					s.pulls.edit(id, &body)
+				},
+			),
+		)
+		.route(
+			"/api/v3/repos/{owner}/{repo}/collaborators/{user}/permission",
+			get(
+				|State(s): State<Arc<Github>>,
+				 h: HeaderMap,
+				 Path((_, _, user)): Path<(String, String, String)>| async move {
+					if installation_token(&h, "permission", &s).is_none() {
+						return unauthorized();
+					}
+					s.pulls.permission(&user)
+				},
+			),
+		)
 		.with_state(state.clone());
 	serve(app, state).await
 }
@@ -403,6 +454,7 @@ pub async fn github() -> Running<Github> {
 #[derive(Default)]
 pub struct Gitlab {
 	pub commits: Commits,
+	pub pulls: Pulls,
 	/// `(project path, request body)` of each webhook made.
 	pub hooks_made: Mutex<Vec<(String, Value)>>,
 	pub hooks_deleted: Mutex<Vec<(String, String)>>,
@@ -553,6 +605,64 @@ pub async fn gitlab() -> Running<Gitlab> {
 				},
 			),
 		)
+		.route(
+			"/api/v4/projects/{id}/merge_requests/{n}",
+			get(|State(s): State<Arc<Gitlab>>, h: HeaderMap| async move {
+				if !gitlab_ok(&h) {
+					return unauthorized();
+				}
+				s.pulls.gitlab_pr()
+			}),
+		)
+		.route(
+			"/api/v4/projects/77",
+			get(|State(s): State<Arc<Gitlab>>, h: HeaderMap| async move {
+				if !gitlab_ok(&h) {
+					return unauthorized();
+				}
+				let head = s.pulls.pr.lock().unwrap().clone().map(|p| p.head_repo);
+				Json(json!({ "path_with_namespace": head.unwrap_or_default() })).into_response()
+			}),
+		)
+		.route(
+			"/api/v4/projects/{id}/merge_requests/{n}/notes",
+			post(
+				|State(s): State<Arc<Gitlab>>,
+				 h: HeaderMap,
+				 Path((id, n)): Path<(String, i64)>,
+				 body: String| async move {
+					if !gitlab_ok(&h) {
+						return unauthorized();
+					}
+					s.pulls.create(id, n, &body)
+				},
+			),
+		)
+		.route(
+			"/api/v4/projects/{id}/merge_requests/{n}/notes/{note}",
+			axum::routing::put(
+				|State(s): State<Arc<Gitlab>>,
+				 h: HeaderMap,
+				 Path((_, _, note)): Path<(String, i64, i64)>,
+				 body: String| async move {
+					if !gitlab_ok(&h) {
+						return unauthorized();
+					}
+					s.pulls.edit(note, &body)
+				},
+			),
+		)
+		.route(
+			"/api/v4/projects/{id}/members/all/{user}",
+			get(
+				|State(s): State<Arc<Gitlab>>, h: HeaderMap, Path((_, user)): Path<(String, String)>| async move {
+					if !gitlab_ok(&h) {
+						return unauthorized();
+					}
+					s.pulls.level(&user)
+				},
+			),
+		)
 		.with_state(state.clone());
 	serve(app, state).await
 }
@@ -562,6 +672,7 @@ pub async fn gitlab() -> Running<Gitlab> {
 #[derive(Default)]
 pub struct Gitea {
 	pub commits: Commits,
+	pub pulls: Pulls,
 	pub hooks_made: Mutex<Vec<(String, Value)>>,
 	pub hooks_deleted: Mutex<Vec<(String, String)>>,
 }
@@ -687,6 +798,185 @@ pub async fn gitea() -> Running<Gitea> {
 				},
 			),
 		)
+		.route(
+			"/api/v1/repos/{owner}/{repo}/pulls/{n}",
+			get(|State(s): State<Arc<Gitea>>, h: HeaderMap| async move {
+				if !gitea_ok(&h) {
+					return unauthorized();
+				}
+				s.pulls.hub_pr()
+			}),
+		)
+		.route(
+			"/api/v1/repos/{owner}/{repo}/issues/{n}/comments",
+			post(
+				|State(s): State<Arc<Gitea>>,
+				 h: HeaderMap,
+				 Path((o, r, n)): Path<(String, String, i64)>,
+				 body: String| async move {
+					if !gitea_ok(&h) {
+						return unauthorized();
+					}
+					s.pulls.create(format!("{o}/{r}"), n, &body)
+				},
+			),
+		)
+		.route(
+			"/api/v1/repos/{owner}/{repo}/issues/comments/{id}",
+			axum::routing::patch(
+				|State(s): State<Arc<Gitea>>,
+				 h: HeaderMap,
+				 Path((_, _, id)): Path<(String, String, i64)>,
+				 body: String| async move {
+					if !gitea_ok(&h) {
+						return unauthorized();
+					}
+					s.pulls.edit(id, &body)
+				},
+			),
+		)
+		.route(
+			"/api/v1/repos/{owner}/{repo}/collaborators/{user}/permission",
+			get(
+				|State(s): State<Arc<Gitea>>, h: HeaderMap, Path((_, _, user)): Path<(String, String, String)>| async move {
+					if !gitea_ok(&h) {
+						return unauthorized();
+					}
+					s.pulls.permission(&user)
+				},
+			),
+		)
 		.with_state(state.clone());
 	serve(app, state).await
+}
+
+// ---- Pull requests --------------------------------------------------------------------------
+
+/// The pull request a stub answers about.
+#[derive(Clone)]
+pub struct PrStub {
+	pub number: i64,
+	pub open: bool,
+	pub merged: bool,
+	pub title: String,
+	pub sha: String,
+	pub head_ref: String,
+	pub head_repo: String,
+	pub base_ref: String,
+	pub base_repo: String,
+}
+
+/// A comment made in a stub.
+#[derive(Clone)]
+pub struct StubComment {
+	pub id: i64,
+	#[allow(dead_code, reason = "what a test may want to look at")]
+	pub repo: String,
+	pub number: i64,
+	pub body: String,
+	/// Someone deleted it: editing answers 404.
+	pub deleted: bool,
+}
+
+/// What the three stubs say about pull requests, comments and who may write.
+#[derive(Default)]
+pub struct Pulls {
+	pub pr: Mutex<Option<PrStub>>,
+	pub comments: Mutex<Vec<StubComment>>,
+	/// What the permission of a commenter reads: `admin`, `write`, `read`, `none`.
+	pub permission: Mutex<String>,
+	/// Who was asked about.
+	pub asked: Mutex<Vec<String>>,
+	next: std::sync::atomic::AtomicI64,
+}
+
+impl Pulls {
+	fn hub_pr(&self) -> Response {
+		match self.pr.lock().unwrap().clone() {
+			None => StatusCode::NOT_FOUND.into_response(),
+			Some(p) => Json(json!({
+				"number": p.number,
+				"title": p.title,
+				"state": if p.open { "open" } else { "closed" },
+				"merged": p.merged,
+				"head": { "ref": p.head_ref, "sha": p.sha, "repo": { "full_name": p.head_repo } },
+				"base": { "ref": p.base_ref, "repo": { "full_name": p.base_repo } },
+			}))
+			.into_response(),
+		}
+	}
+
+	fn gitlab_pr(&self) -> Response {
+		match self.pr.lock().unwrap().clone() {
+			None => StatusCode::NOT_FOUND.into_response(),
+			Some(p) => Json(json!({
+				"iid": p.number,
+				"title": p.title,
+				"state": if p.open { "opened" } else if p.merged { "merged" } else { "closed" },
+				"source_branch": p.head_ref,
+				"target_branch": p.base_ref,
+				"sha": p.sha,
+				"source_project_id": 77,
+			}))
+			.into_response(),
+		}
+	}
+
+	fn create(&self, repo: String, number: i64, body: &str) -> Response {
+		let id = self.next.fetch_add(1, Ordering::SeqCst) + 100;
+		let body: Value = serde_json::from_str(body).unwrap_or(Value::Null);
+		self.comments.lock().unwrap().push(StubComment {
+			id,
+			repo,
+			number,
+			body: body["body"].as_str().unwrap_or_default().to_owned(),
+			deleted: false,
+		});
+		(StatusCode::CREATED, Json(json!({ "id": id }))).into_response()
+	}
+
+	fn edit(&self, id: i64, body: &str) -> Response {
+		let body: Value = serde_json::from_str(body).unwrap_or(Value::Null);
+		let mut all = self.comments.lock().unwrap();
+		match all.iter_mut().find(|c| c.id == id && !c.deleted) {
+			None => StatusCode::NOT_FOUND.into_response(),
+			Some(c) => {
+				c.body = body["body"].as_str().unwrap_or_default().to_owned();
+				Json(json!({ "id": id })).into_response()
+			}
+		}
+	}
+
+	fn permission(&self, who: &str) -> Response {
+		self.asked.lock().unwrap().push(who.to_owned());
+		let level = self.permission.lock().unwrap().clone();
+		let level = if level.is_empty() {
+			"none".to_owned()
+		} else {
+			level
+		};
+		Json(json!({ "permission": level })).into_response()
+	}
+
+	fn level(&self, who: &str) -> Response {
+		self.asked.lock().unwrap().push(who.to_owned());
+		let level = match self.permission.lock().unwrap().as_str() {
+			"admin" => 50,
+			"write" => 30,
+			"read" => 20,
+			_ => return StatusCode::NOT_FOUND.into_response(),
+		};
+		Json(json!({ "access_level": level })).into_response()
+	}
+
+	/// The comments of pull request `number`, oldest first.
+	pub fn bodies(&self, number: i64) -> Vec<String> {
+		self.comments
+			.lock()
+			.unwrap()
+			.iter()
+			.filter(|c| c.number == number && !c.deleted)
+			.map(|c| c.body.clone())
+			.collect()
+	}
 }

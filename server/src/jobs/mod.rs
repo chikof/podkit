@@ -63,6 +63,9 @@ pub enum JobKind {
 	/// `target_id` is an environment clone id. Provisions the cloned databases, copies their
 	/// data and the volumes when asked, and deploys; the report says what each step did.
 	EnvironmentClone,
+	/// `target_id` is a preview id. Brings the pull request's preview up (or redeploys it) and
+	/// runs its post-deploy command, or takes it down when the preview is `removing`.
+	Preview,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -378,6 +381,7 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 		JobKind::EnvironmentClone => {
 			crate::environments::clone::fail_clone(state, target_id, failure).await
 		}
+		JobKind::Preview => crate::previews::run::fail(state, target_id, failure).await,
 	};
 	if let Err(e) = result {
 		tracing::warn!(

@@ -18,7 +18,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::api::{
-	STATUS_CONTEXT, StatusPost, StatusState, Target, checked_sha, dedup, is_zero_sha,
+	StatusPost, StatusState, Target, checked_sha, dedup, is_own_context, is_zero_sha,
 	json as read_json, send, short_description, with_json, with_query,
 };
 use super::{gitea, github, gitlab};
@@ -140,7 +140,7 @@ pub(super) async fn github_ci(t: &Target<'_>, repo: &str, sha: &str) -> Result<C
 		combined
 			.statuses
 			.into_iter()
-			.filter(|s| s.context != STATUS_CONTEXT)
+			.filter(|s| !is_own_context(&s.context))
 			.map(|s| (s.context, commit_status_check(&s.state))),
 	);
 	Ok(combine(&checks))
@@ -213,7 +213,7 @@ pub(super) async fn github_post_status(
 	let mut body = json!({
 		"state": state_word(post.state, "failure", "error"),
 		"description": short_description(post.description),
-		"context": STATUS_CONTEXT,
+		"context": post.context,
 	});
 	if let Some(link) = post.link {
 		body["target_url"] = link.into();
@@ -245,7 +245,7 @@ pub(super) async fn gitea_ci(t: &Target<'_>, repo: &str, sha: &str) -> Result<Ci
 	let checks: Vec<(String, Check)> = combined
 		.statuses
 		.into_iter()
-		.filter(|s| s.context != STATUS_CONTEXT)
+		.filter(|s| !is_own_context(&s.context))
 		.map(|s| (s.context, commit_status_check(&s.state)))
 		.collect();
 	Ok(combine(&checks))
@@ -314,7 +314,7 @@ pub(super) async fn gitea_post_status(
 	let mut body = json!({
 		"state": state_word(post.state, "failure", "error"),
 		"description": short_description(post.description),
-		"context": STATUS_CONTEXT,
+		"context": post.context,
 	});
 	if let Some(link) = post.link {
 		body["target_url"] = link.into();
@@ -436,7 +436,7 @@ pub(super) async fn gitlab_post_status(
 	let description = short_description(post.description);
 	let mut params = vec![
 		("state", state_word(post.state, "failed", "canceled")),
-		("name", STATUS_CONTEXT),
+		("name", post.context),
 		("description", description.as_str()),
 	];
 	if let Some(link) = post.link {

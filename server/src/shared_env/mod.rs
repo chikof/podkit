@@ -65,6 +65,8 @@ pub struct SharedVar {
 	/// age-encrypted value; never stored or returned as plaintext.
 	pub value: Vec<u8>,
 	pub is_secret: bool,
+	/// A secret that previews of pull requests may read.
+	pub preview: bool,
 }
 
 impl SharedVar {
@@ -79,8 +81,7 @@ impl SharedVar {
 	}
 }
 
-const COLUMNS: &str =
-	"id, team_id, project_id, environment_id, key, value, is_secret, created_by, updated_at";
+const COLUMNS: &str = "id, team_id, project_id, environment_id, key, value, is_secret, preview, created_by, updated_at";
 
 /// The variables set exactly at `scope`, ordered by key.
 pub async fn list_scope(
