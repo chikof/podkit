@@ -316,4 +316,96 @@ mod tests {
 		assert_eq!(giant.len(), 1);
 		assert!(pending.take_all(None).is_empty());
 	}
+
+	/// Needs rootless Podman (and the network for a small Alpine image): an application that
+	/// logs in two deployments, each container left stopped as a redeploy leaves it. Search
+	/// then finds the lines of both, in time order, tagged with their deployment.
+	/// Containers are named `podkit-app-27162-<n>` and removed by that name at the end.
+	#[tokio::test]
+	#[ignore = "needs Podman and the network"]
+	async fn logstore_live_an_app_logging_across_two_deploys_is_searchable_in_order() {
+		use std::process::Command;
+
+		const IMAGE: &str = "docker.io/library/alpine:3.20";
+		const SVC: &str = "app-27162";
+		let podman = Podman::connect(&crate::podman::local_socket_path()).unwrap();
+		let cli = |args: &[&str]| {
+			let out = Command::new("podman").args(args).output().unwrap();
+			assert!(
+				out.status.success(),
+				"{args:?}: {}",
+				String::from_utf8_lossy(&out.stderr)
+			);
+		};
+		let cleanup = || {
+			for dep in [1, 2] {
+				let _ = Command::new("podman")
+					.args(["rm", "-f", &format!("podkit-{SVC}-{dep}")])
+					.output();
+			}
+		};
+		cleanup();
+		cli(&["pull", "-q", IMAGE]);
+		let run = |dep: i64, script: &str| {
+			cli(&[
+				"run",
+				"-d",
+				"--name",
+				&format!("podkit-{SVC}-{dep}"),
+				"--label",
+				&format!("podkit.service={SVC}"),
+				IMAGE,
+				"sh",
+				"-c",
+				script,
+			]);
+		};
+		run(1, "echo one-start; echo 'ERROR one-crashed' >&2");
+		tokio::time::sleep(Duration::from_millis(1500)).await;
+		run(2, "echo two-start; echo 'warn: two-slow'");
+		tokio::time::sleep(Duration::from_secs(2)).await;
+
+		let dir = tempfile::tempdir().unwrap();
+		let store = Arc::new(LogStore::open(&dir.path().join("logs")));
+		let (active, drained) = (Ids::default(), Ids::default());
+		scan(&podman, &store, &active, &drained).await;
+		for _ in 0..50 {
+			if active.lock().unwrap().is_empty() {
+				break;
+			}
+			tokio::time::sleep(Duration::from_millis(200)).await;
+		}
+		cleanup();
+
+		let found = store
+			.search(proto::LogSearchRequest {
+				services: vec![SVC.to_owned()],
+				since: None,
+				until: None,
+				text: None,
+				regex: false,
+				levels: Vec::new(),
+				deployment: None,
+				limit: 100,
+				newest: true,
+			})
+			.await
+			.unwrap();
+		let seen: Vec<(Option<i64>, &str)> = found
+			.records
+			.iter()
+			.map(|r| (r.dep, r.line.as_str()))
+			.collect();
+		assert_eq!(
+			seen,
+			[
+				(Some(1), "one-start"),
+				(Some(1), "ERROR one-crashed"),
+				(Some(2), "two-start"),
+				(Some(2), "warn: two-slow"),
+			]
+		);
+		assert!(found.records.windows(2).all(|w| w[0].ts <= w[1].ts));
+		assert_eq!(found.records[1].level, Some(LogLevel::Error));
+	}
 }

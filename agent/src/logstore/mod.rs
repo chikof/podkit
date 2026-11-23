@@ -417,6 +417,63 @@ mod tests {
 		assert_eq!(store.status().export_dropped, 0);
 	}
 
+	/// Resident set size of this process in KB (`VmRSS`).
+	fn rss_kb() -> u64 {
+		std::fs::read_to_string("/proc/self/status")
+			.unwrap()
+			.lines()
+			.find_map(|l| l.strip_prefix("VmRSS:"))
+			.and_then(|v| v.trim().trim_end_matches("kB").trim().parse().ok())
+			.unwrap()
+	}
+
+	/// The A1 budget (`scripts/footprint.budget`): the agent stays under 25 MB idle. A burst of
+	/// 10k lines, stored and then searched, must cost a small part of that: writes are
+	/// per-batch and a search keeps `limit` lines, so nothing grows with the burst.
+	#[tokio::test]
+	async fn logstore_a_ten_thousand_line_burst_stays_inside_the_memory_budget() {
+		let dir = tempfile::tempdir().unwrap();
+		let store = Arc::new(LogStore::open(&dir.path().join("logs")));
+		let text = "x".repeat(160);
+		// Warm up the allocator and the files so the figure is the burst's own.
+		store.append("app-1", &[record(1, &text)]).unwrap();
+		let before = rss_kb();
+		for batch in 0..100_usize {
+			let records: Vec<LogRecord> = (0..100_i64)
+				.map(|i| {
+					record(
+						1_000 + i64::try_from(batch * 100).unwrap() + i,
+						&format!("{text} {batch}/{i}"),
+					)
+				})
+				.collect();
+			store
+				.append(["app-1", "app-2", "app-3"][batch % 3], &records)
+				.unwrap();
+		}
+		let result = store
+			.search(LogSearchRequest {
+				services: Vec::new(),
+				since: None,
+				until: None,
+				text: Some("x{150}".into()),
+				regex: true,
+				levels: Vec::new(),
+				deployment: None,
+				limit: 500,
+				newest: true,
+			})
+			.await
+			.unwrap();
+		assert_eq!(result.records.len(), 500);
+		assert!(result.truncated);
+		let grown = rss_kb().saturating_sub(before);
+		assert!(
+			grown < 10 * 1024,
+			"the burst grew the process by {grown} KB"
+		);
+	}
+
 	#[tokio::test]
 	async fn logstore_search_runs_through_the_store() {
 		let dir = tempfile::tempdir().unwrap();
