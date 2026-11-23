@@ -153,7 +153,7 @@ enum Tab {
 }
 
 impl Tab {
-	const ALL: [Self; 15] = [
+	const ALL: [Self; 16] = [
 		Self::Deployments,
 		Self::Logs,
 		Self::Terminal,
