@@ -7,7 +7,7 @@
 //! Dex configuration (static client, static password, in-memory storage, no approval screen):
 //! <https://dexidp.io/docs/configuration/> and the sample `examples/config-dev.yaml` in
 //! <https://github.com/dexidp/dex>, which is also where the bcrypt hash (password
-//! `password`) for `admin@example.com` comes from. The login form posts `login` and
+//! `password`) for `dex-user@example.com` comes from. The login form posts `login` and
 //! `password` to the page's own address (`/dex/auth/local/login`).
 
 use std::process::Command;
@@ -67,7 +67,7 @@ fn config(redirect: &str) -> String {
 		 staticClients:\n\
 		 \x20 - id: podkit\n    secret: podkit-live-secret\n    name: podkit\n    redirectURIs:\n      - {redirect}\n\
 		 staticPasswords:\n\
-		 \x20 - email: admin@example.com\n    hash: \"{HASH}\"\n    username: admin\n    userID: 08a8684b-db88-4b73-90a9-3cd1661f5466\n"
+		 \x20 - email: dex-user@example.com\n    hash: \"{HASH}\"\n    username: admin\n    userID: 08a8684b-db88-4b73-90a9-3cd1661f5466\n"
 	)
 }
 
@@ -99,7 +99,7 @@ async fn through_dex(start: &str) -> String {
 		let post = http
 			.post(url.join(&action).unwrap())
 			.header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-			.body("login=admin%40example.com&password=password")
+			.body("login=dex-user%40example.com&password=password")
 			.send()
 			.await
 			.unwrap();
@@ -113,13 +113,46 @@ async fn through_dex(start: &str) -> String {
 #[db_test]
 #[ignore = "needs Podman and the network (a Dex container)"]
 async fn oidc_live_dex_round_trip(db: PgPool) {
+	let _ = rustls::crypto::ring::default_provider().install_default();
 	let dir = std::env::temp_dir().join("pk-t_712cc5ef-dex");
 	let _clean = Cleanup(dir.clone());
 	let _ = podman(&["rm", "-f", NAME]);
 	std::fs::create_dir_all(&dir).unwrap();
 
-	// A fresh database: the first provider is number 1.
-	let redirect = format!("{PUBLIC}/sso/1/callback");
+	let issuer = format!("http://127.0.0.1:{PORT}/dex");
+	let mut st = state(db.clone());
+	st.config = std::sync::Arc::new(Config {
+		public_url: Some(PUBLIC.to_owned()),
+		registration: Registration::Open,
+		..(*st.config).clone()
+	});
+	let app = crate::routes::routes(st.clone()).await.unwrap();
+	let _ = ui_session(&app, "admin").await;
+	let admin = UserId(crate::tests::user_id(&db, "admin").await);
+	let p = providers::create(
+		&st,
+		admin,
+		Scope::Instance,
+		&Input {
+			kind: Kind::Oidc,
+			name: "Dex".into(),
+			slug: "dex".into(),
+			issuer: issuer.clone(),
+			client_id: "podkit".into(),
+			client_secret: "podkit-live-secret".into(),
+			scopes: "openid email profile".into(),
+			jit: true,
+			allow_unverified_email: false,
+			group_claim: String::new(),
+			group_roles: String::new(),
+			enabled: true,
+		},
+	)
+	.await
+	.unwrap();
+
+	// Dex needs the exact redirect address, so it starts once the provider's id is known.
+	let redirect = format!("{PUBLIC}/sso/{}/callback", p.id);
 	std::fs::write(dir.join("config.yaml"), config(&redirect)).unwrap();
 	podman(&[
 		"run",
@@ -140,7 +173,6 @@ async fn oidc_live_dex_round_trip(db: PgPool) {
 	])
 	.unwrap();
 
-	let issuer = format!("http://127.0.0.1:{PORT}/dex");
 	let http = reqwest::Client::new();
 	let mut up = false;
 	for _ in 0..60 {
@@ -156,49 +188,21 @@ async fn oidc_live_dex_round_trip(db: PgPool) {
 	}
 	assert!(up, "Dex did not come up: {:?}", podman(&["logs", NAME]));
 
-	let mut st = state(db.clone());
-	st.config = std::sync::Arc::new(Config {
-		public_url: Some(PUBLIC.to_owned()),
-		registration: Registration::Open,
-		..(*st.config).clone()
-	});
-	let app = crate::routes::routes(st.clone()).await.unwrap();
-	let _ = ui_session(&app, "admin").await;
-	let admin = UserId(crate::tests::user_id(&db, "admin").await);
-	let p = providers::create(
-		&st,
-		admin,
-		Scope::Instance,
-		&Input {
-			kind: Kind::Oidc,
-			name: "Dex".into(),
-			slug: "dex".into(),
-			issuer,
-			client_id: "podkit".into(),
-			client_secret: "podkit-live-secret".into(),
-			scopes: "openid email profile".into(),
-			jit: true,
-			allow_unverified_email: false,
-			group_claim: String::new(),
-			group_roles: String::new(),
-			enabled: true,
-		},
-	)
-	.await
-	.unwrap();
-	assert_eq!(p.id.to_string(), "1", "Dex was told to expect provider 1");
-
 	let mut b = Browser::default();
 	let (status, headers, body) = b.get(&app, &format!("/sso/{}/start", p.id)).await;
 	assert!(status.is_redirection(), "{status}\n{body}");
 	let back = through_dex(headers[header::LOCATION].to_str().unwrap()).await;
-	let (status, _, body) = b.get(&app, &back).await;
+	let (status, answer, body) = b.get(&app, &back).await;
 	assert!(status.is_success(), "{status}\n{body}");
-	assert!(b.has_session(), "signed in through Dex");
+	assert!(
+		b.has_session(),
+		"signed in through Dex: {answer:?}\n{}",
+		body.split("<main").nth(1).unwrap_or(&body)
+	);
 	let who: String = sqlx::query_scalar("SELECT email FROM users WHERE email = $1")
-		.bind("admin@example.com")
+		.bind("dex-user@example.com")
 		.fetch_one(&db)
 		.await
 		.unwrap();
-	assert_eq!(who, "admin@example.com");
+	assert_eq!(who, "dex-user@example.com");
 }
