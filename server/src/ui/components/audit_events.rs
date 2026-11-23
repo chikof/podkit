@@ -57,6 +57,7 @@ pub fn href(team: TeamId, e: &Event) -> Option<String> {
 		("team", _) => Some(format!("{base}/settings")),
 		("model_file", Some(id)) => Some(format!("{base}/models/downloads/{id}")),
 		("huggingface_token", _) => Some(format!("{base}/models/settings")),
+		("tailscale_settings", _) => Some(format!("{base}/settings/tailscale")),
 		("scan_ignore", _) => Some(format!("{base}/security")),
 		("audit", _) => Some(format!("{base}/settings/audit")),
 		_ => None,

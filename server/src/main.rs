@@ -73,6 +73,7 @@ mod ssh_keys;
 mod sso;
 mod stacks;
 mod state;
+mod tailscale;
 mod teams;
 mod templates;
 mod terminal;

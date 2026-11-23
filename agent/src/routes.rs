@@ -47,6 +47,7 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/containers/{id}/start", post(start_container))
 		.route("/v1/containers/{id}/stop", post(stop_container))
 		.route("/v1/containers/{id}/logs", get(container_logs))
+		.route("/v1/containers/{id}/exec", post(container_exec))
 		.route("/v1/containers/{id}/health", get(container_health))
 		.route("/v1/containers/{id}/terminal", get(container_terminal))
 		.route("/v1/networks", get(list_networks).post(create_network))
@@ -944,4 +945,71 @@ async fn gateway_mcp_tools(
 	}
 	let podman = ctx.podman();
 	ndjson(move |tx| crate::gateway::mcp::tools(podman, req, tx))
+}
+
+/// How long an exec may take when the request names no limit.
+const EXEC_DEFAULT_TIMEOUT_S: u32 = 20;
+/// The longest an exec may take.
+const EXEC_MAX_TIMEOUT_S: u32 = 60;
+
+/// Whether `service` (a `podkit.service` label) is a tailnet sidecar, the only containers
+/// the agent runs commands in on the server's behalf.
+fn is_exec_service(service: Option<&str>) -> bool {
+	service.is_some_and(|s| s.starts_with(proto::TAILSCALE_SERVICE_PREFIX))
+}
+
+/// Runs a command in a tailnet sidecar: `tailscale status` to learn the node's name, and
+/// `tailscale logout` before the sidecar is removed.
+async fn container_exec(
+	State(ctx): State<Arc<Ctx>>,
+	Path(id): Path<String>,
+	Json(req): Json<proto::ExecRequest>,
+) -> Result<Json<proto::ExecResult>, ApiError> {
+	check_ref(&id)?;
+	if req.cmd.is_empty() || req.cmd.iter().any(|a| a.len() > 1024 || a.contains('\0')) {
+		return Err(ApiError::new(StatusCode::BAD_REQUEST, "invalid command"));
+	}
+	let podman = ctx.podman();
+	let info = podman
+		.inspect(&id)
+		.await
+		.map_err(|e| ApiError::podman("inspect failed", &e))?
+		.ok_or_else(|| ApiError::new(StatusCode::NOT_FOUND, format!("container {id} not found")))?;
+	let service = info
+		.config
+		.as_ref()
+		.and_then(|c| c.labels.as_ref())
+		.and_then(|l| l.get("podkit.service"))
+		.map(String::as_str);
+	if !is_exec_service(service) {
+		return Err(ApiError::new(
+			StatusCode::FORBIDDEN,
+			"commands only run in tailnet sidecars",
+		));
+	}
+	let limit = req
+		.timeout_s
+		.unwrap_or(EXEC_DEFAULT_TIMEOUT_S)
+		.min(EXEC_MAX_TIMEOUT_S);
+	let cmd: Vec<&str> = req.cmd.iter().map(String::as_str).collect();
+	let run = podman.exec_output(&id, &cmd);
+	let (exit_code, output) =
+		tokio::time::timeout(std::time::Duration::from_secs(u64::from(limit)), run)
+			.await
+			.map_err(|_| ApiError::new(StatusCode::GATEWAY_TIMEOUT, "the command timed out"))?
+			.map_err(|e| ApiError::podman("exec failed", &e))?;
+	Ok(Json(proto::ExecResult { exit_code, output }))
+}
+
+#[cfg(test)]
+mod exec_tests {
+	use super::is_exec_service;
+
+	#[test]
+	fn exec_is_for_tailnet_sidecars_only() {
+		assert!(is_exec_service(Some("ts-app-7")));
+		assert!(!is_exec_service(Some("app-7")));
+		assert!(!is_exec_service(Some("db-3")));
+		assert!(!is_exec_service(None));
+	}
 }

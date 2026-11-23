@@ -11,6 +11,7 @@ mod builds;
 mod frame;
 mod members;
 mod registration;
+mod tailscale;
 mod team;
 mod tokens;
 
@@ -26,6 +27,7 @@ pub fn router() -> Router<AppState> {
 		.merge(authentication::router())
 		.merge(appearance::router())
 		.merge(tokens::router())
+		.merge(tailscale::router())
 		.merge(audit::router())
 		.merge(builds::router())
 }

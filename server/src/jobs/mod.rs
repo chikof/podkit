@@ -66,6 +66,10 @@ pub enum JobKind {
 	/// `target_id` is a preview id. Brings the pull request's preview up (or redeploys it) and
 	/// runs its post-deploy command, or takes it down when the preview is `removing`.
 	Preview,
+	/// `target_id` is an application id. Starts the Tailscale sidecar and waits for its node.
+	TailscaleStart,
+	/// `target_id` is an application id. Logs the node out and removes the sidecar.
+	TailscaleRemove,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -382,6 +386,22 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 			crate::environments::clone::fail_clone(state, target_id, failure).await
 		}
 		JobKind::Preview => crate::previews::run::fail(state, target_id, failure).await,
+		// A failed start leaves the row (the sidecar may be half there) so the page can show
+		// why; a failed removal leaves it so the removal can be tried again.
+		JobKind::TailscaleStart | JobKind::TailscaleRemove => {
+			let message = match failure {
+				JobFailure::Cancelled => "cancelled",
+				JobFailure::Failed(m) => m.as_str(),
+			};
+			sqlx::query(
+				"UPDATE tailscale_exposures SET status = 'failed', error = $2, updated_at = NOW()
+				WHERE application_id = $1",
+			)
+			.bind(target_id)
+			.bind(message)
+			.execute(&state.db)
+			.await
+		}
 	};
 	if let Err(e) = result {
 		tracing::warn!(

@@ -133,6 +133,11 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	if can(Resource::Server) {
 		items.push(item("Builds", format!("{base}/settings/builds"), "wrench"));
 	}
+	items.push(item(
+		"Tailscale",
+		format!("{base}/settings/tailscale"),
+		"network",
+	));
 	if can(Resource::Notification) {
 		items.push(item(
 			"Notifications",

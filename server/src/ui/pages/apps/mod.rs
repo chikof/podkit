@@ -55,6 +55,7 @@ mod provider_source;
 mod replica_list;
 mod replicas;
 mod security;
+mod tailnet;
 mod terminal_tab;
 mod volumes;
 mod webhooks;
@@ -74,6 +75,7 @@ pub fn router() -> Router<AppState> {
 		.merge(env::router())
 		.merge(domains::router())
 		.merge(access::router())
+		.merge(tailnet::router())
 		.merge(volumes::router())
 		.merge(models_tab::router())
 		.merge(mcp_tab::router())

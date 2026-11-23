@@ -156,6 +156,7 @@ fn failure_text(failure: &JobFailure) -> &str {
 /// Called once for every job that ends: a deploy or a stack deploy that succeeded or failed, a
 /// backup, a model that would not start. Cancelled jobs are the user's own doing and stay
 /// quiet.
+#[allow(clippy::too_many_lines)]
 pub async fn job_finished(state: &AppState, job: &Job, result: &Result<(), JobFailure>) {
 	if matches!(result, Err(JobFailure::Cancelled)) {
 		return;
@@ -252,6 +253,22 @@ pub async fn job_finished(state: &AppState, job: &Job, result: &Result<(), JobFa
 			// Retries, `cron.failed` and recovery are the cron slice's to decide.
 			crate::cron::run::finished(state, crate::ids::CronRunId(job.target_id), result).await;
 			return;
+		}
+		JobKind::TailscaleStart | JobKind::TailscaleRemove => {
+			let Err(e) = result else { return };
+			let Some(target) = application(db, job.target_id).await else {
+				return;
+			};
+			let what = if job.kind == JobKind::TailscaleStart {
+				"could not be put on the tailnet"
+			} else {
+				"could not be taken off the tailnet"
+			};
+			let link = format!("{}/domains", target.link);
+			target
+				.event(EventKind::TailnetFailed, format!("{} {what}", target.name))
+				.body(clip(failure_text(e), 500))
+				.link(link)
 		}
 		_ => return,
 	};

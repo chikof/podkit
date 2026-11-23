@@ -92,10 +92,12 @@ pub enum EventKind {
 	FirewallReverted,
 	/// Log forwarding to Loki or an OTLP collector is dropping lines.
 	LogExportFailing,
+	/// A tailnet sidecar could not start or join.
+	TailnetFailed,
 }
 
 impl EventKind {
-	pub const ALL: [Self; 22] = [
+	pub const ALL: [Self; 23] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
@@ -118,6 +120,7 @@ impl EventKind {
 		Self::PreviewFailed,
 		Self::FirewallReverted,
 		Self::LogExportFailing,
+		Self::TailnetFailed,
 	];
 
 	pub fn as_str(self) -> &'static str {
@@ -144,6 +147,7 @@ impl EventKind {
 			Self::PreviewFailed => "preview_failed",
 			Self::FirewallReverted => "firewall_reverted",
 			Self::LogExportFailing => "log_export_failing",
+			Self::TailnetFailed => "tailnet_failed",
 		}
 	}
 
@@ -175,6 +179,7 @@ impl EventKind {
 			Self::PreviewFailed => "Preview failed",
 			Self::FirewallReverted => "Firewall change reverted",
 			Self::LogExportFailing => "Log forwarding failing",
+			Self::TailnetFailed => "Private access failed",
 		}
 	}
 
@@ -192,7 +197,9 @@ impl EventKind {
 				"Backups and jobs"
 			}
 			Self::Vulnerability | Self::CertExpiring => "Security",
-			Self::ContainerOom | Self::CrashLoop | Self::ModelCrashed => "Containers and models",
+			Self::ContainerOom | Self::CrashLoop | Self::ModelCrashed | Self::TailnetFailed => {
+				"Containers and models"
+			}
 			Self::UptimeDown | Self::UptimeUp => "Uptime",
 			Self::MetricAlert | Self::MetricRecovered => "Metric alerts",
 			Self::LogExportFailing => "Logs",
@@ -218,7 +225,8 @@ impl EventKind {
 			| Self::MetricAlert
 			| Self::PreviewFailed
 			| Self::FirewallReverted
-			| Self::LogExportFailing => Severity::Warning,
+			| Self::LogExportFailing
+			| Self::TailnetFailed => Severity::Warning,
 			Self::ServerUnreachable | Self::Vulnerability | Self::CrashLoop | Self::UptimeDown => {
 				Severity::Critical
 			}

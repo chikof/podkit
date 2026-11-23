@@ -155,7 +155,9 @@ async fn domains_page(
 	let can_create = ctx.perms.can(Action::Create, Resource::Domain);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::Domain);
 	let https = s.config.acme_email.is_some();
-
+	let tailnet = crate::tailscale::service::view(&s, ctx.user.id, ctx.team.id, project.id, app.id)
+		.await
+		.map_err(|e| error::page(&ctx, &e))?;
 	let add = format!(
 		"evt.preventDefault(); @post({})",
 		js_string(&format!("{base}/domains"))
@@ -163,6 +165,9 @@ async fn domains_page(
 	let mut signals = access::signals(&rules);
 	signals.insert("domain_hostname".to_owned(), json!(""));
 	signals.insert("_error".to_owned(), json!(""));
+	if let Some(from) = super::tailnet::signals(&tailnet).as_object() {
+		signals.extend(from.clone());
+	}
 	let content = html! {
 		div class="flex flex-col gap-6" data-signals=(serde_json::Value::Object(signals).to_string()) {
 			@if !https { (https_banner()) }
@@ -192,6 +197,13 @@ async fn domains_page(
 				}))
 			}
 			(access::section(&ctx, &base, &rules, access::client_ip(&parts)))
+			(super::tailnet::tailnet_card(
+				&base,
+				&tailnet,
+				can_create,
+				ctx.perms.can(Action::Delete, Resource::Domain),
+				&super::tailnet::settings_url(ctx.team.id),
+			))
 			(card(&html! {
 				(card_section("DNS setup", None, None))
 				(card_content(&dns_help(&list.server_host)))
