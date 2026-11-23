@@ -115,6 +115,7 @@ pub fn router() -> Router<AppState> {
 		.merge(pages::templates::router())
 		.merge(pages::volume_backups::router())
 		.merge(pages::uptime::router())
+		.merge(pages::logs::router())
 		.merge(theme::router())
 		.merge(gallery::router())
 		.merge(test_routes())

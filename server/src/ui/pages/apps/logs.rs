@@ -13,15 +13,18 @@ use serde::Deserialize;
 
 use super::deployments_tab::stream_failure;
 use super::{Tab, app_url, load, page};
+use crate::auth::permission::{Action, Resource};
 use crate::deployments::service;
 use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::state::AppState;
 use crate::ui::components::{
-	SELECT, Size, Variant, button_class, card, card_content, card_section, empty_state, log_viewer,
+	SELECT, Size, Variant, button_class, card, card_content, card_section, chip, chip_group,
+	empty_state, log_viewer,
 };
 use crate::ui::error;
 use crate::ui::extract::TeamCtx;
 use crate::ui::live::container_log;
+use crate::ui::pages::logs::history::{self, Panel};
 
 /// The tail lengths the Logs tab offers.
 const TAILS: [u32; 3] = [200, 1000, 5000];
@@ -43,11 +46,17 @@ pub fn router() -> Router<AppState> {
 struct LogParams {
 	tail: Option<u32>,
 	follow: Option<String>,
+	/// `history` shows the stored lines of every deploy instead of the running container.
+	mode: Option<String>,
 }
 
 impl LogParams {
 	fn tail(&self) -> u32 {
 		self.tail.filter(|t| TAILS.contains(t)).unwrap_or(TAILS[0])
+	}
+
+	fn history(&self) -> bool {
+		self.mode.as_deref() == Some("history")
 	}
 
 	/// Following is the default; only `follow=0` turns it off.
@@ -61,6 +70,7 @@ async fn logs_page(
 	ctx: TeamCtx,
 	Path((_, project, app)): Path<(TeamId, ProjectId, ApplicationId)>,
 	Query(params): Query<LogParams>,
+	Query(search): Query<history::Params>,
 ) -> Result<Markup, Response> {
 	let (project, app) = load(&s, &ctx, project, app).await?;
 	let running = service::is_running(&s.db, ctx.user.id, ctx.team.id, project.id, app.id)
@@ -68,10 +78,39 @@ async fn logs_page(
 		.map_err(|e| error::page(&ctx, &e))?;
 	let base = app_url(ctx.team.id, project.id, app.id);
 	let (tail, follow) = (params.tail(), params.follow());
+	// The stored lines outlive the container, so history needs no running one.
+	let can_history = ctx.perms.can(Action::Read, Resource::Logs);
+	let history = can_history && params.history();
+	let service = format!("app-{}", app.id);
+	let mode = chip_group(
+		"Show",
+		&html! {
+			(chip("Running container", &format!("{base}/logs"), !history, None))
+			@if can_history {
+				(chip("History across deploys", &format!("{base}/logs?mode=history"), history, None))
+			}
+		},
+	);
 	let content = card(&html! {
-		(card_section("Logs", Some("Output of the running container."), None))
+		(card_section(
+			"Logs",
+			Some(if history { "What this application printed, kept after each container is gone." } else { "Output of the running container." }),
+			None,
+		))
 		(card_content(&html! {
-			@if running {
+			@if can_history { div class="mb-4" { (mode) } }
+			@if history {
+				(history::panel(
+					&Panel {
+						team: ctx.team.id,
+						action: format!("{base}/logs"),
+						keep: vec![("mode", "history")],
+						fixed: Some(&service),
+						sources: &[],
+					},
+					&search,
+				))
+			} @else if running {
 				div class="flex flex-col gap-4" {
 					form class="flex flex-wrap items-end gap-3" method="get" action={ (base) "/logs" } {
 						label class="flex flex-col gap-2 text-sm leading-none font-medium sm:w-44" {

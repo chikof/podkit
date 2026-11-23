@@ -44,8 +44,47 @@ enum Item {
 		/// which is stamped on arrival.
 		ts: Option<i64>,
 	},
+	/// A line read back from the agents' stored logs.
+	Stored(StoredLine),
 	/// Not part of the log itself: "N lines skipped", "log truncated".
 	Notice(String),
+}
+
+/// A line of the stored logs (see [`stored_log`]).
+pub(crate) struct StoredLine {
+	/// Unix milliseconds.
+	pub ts: i64,
+	pub stream: proto::Stream,
+	/// The level the line says it has, when it says one.
+	pub level: Option<proto::LogLevel>,
+	/// What the line came from: the resource's name.
+	pub source: String,
+	pub line: String,
+}
+
+/// One step of a stored-log view: lines to append, or a note about the view itself ("only the
+/// newest 500 lines are shown").
+pub(crate) enum Chunk {
+	Lines(Vec<StoredLine>),
+	Note(String),
+}
+
+/// Streams stored lines into `#target_id`, as they come out of `chunks`. The stream ends (and
+/// the viewer says "Ended") when `chunks` does.
+pub(crate) fn stored_log(
+	chunks: BoxStream<'static, Chunk>,
+	target_id: &str,
+	shutdown: CancellationToken,
+) -> Response {
+	let items = chunks
+		.flat_map(|chunk| {
+			stream::iter(match chunk {
+				Chunk::Lines(lines) => lines.into_iter().map(Item::Stored).collect(),
+				Chunk::Note(text) => vec![Item::Notice(text)],
+			})
+		})
+		.boxed();
+	respond(items, target_id, shutdown)
 }
 
 /// Streams a job's log: stored lines first, then live ones until the job
@@ -178,6 +217,7 @@ fn patches(
 				};
 				bytes += match &item {
 					Item::Line { line, .. } => line.len(),
+					Item::Stored(l) => l.line.len(),
 					Item::Notice(text) => text.len(),
 				};
 				batch.push(item);
@@ -205,6 +245,7 @@ fn append_event(selector: &str, batch: &[Item]) -> Event {
 		@for item in batch {
 			(match item {
 				Item::Line { stream, line, ts } => line_markup(*stream, line, *ts),
+				Item::Stored(l) => stored_markup(l),
 				Item::Notice(text) => notice_markup(text),
 			})
 		}
@@ -272,6 +313,43 @@ fn line_markup(stream: proto::Stream, line: &str, ts: Option<i64>) -> Markup {
 			span class="ui-log-ts" { (clock(ts)) }
 			span class="ui-log-lv" { (lv) }
 			span class="ui-log-tx" { (line) }
+		}
+	}
+}
+
+/// `11-22 14:03:01` in UTC: a stored line may be days old, so the day is part of it.
+fn stamp(ts: i64) -> String {
+	time::OffsetDateTime::from_unix_timestamp(ts.div_euclid(1000)).map_or_else(
+		|_| String::new(),
+		|at| {
+			format!(
+				"{:02}-{:02} {:02}:{:02}:{:02}",
+				u8::from(at.month()),
+				at.day(),
+				at.hour(),
+				at.minute(),
+				at.second()
+			)
+		},
+	)
+}
+
+/// A stored line: day and time, level, where it came from and the text. The level is the one the
+/// line said; a line that said nothing is read like a live one.
+fn stored_markup(l: &StoredLine) -> Markup {
+	let lv = match l.level {
+		Some(proto::LogLevel::Debug) => "DEBUG",
+		Some(proto::LogLevel::Info) => "INFO",
+		Some(proto::LogLevel::Warn) => "WARN",
+		Some(proto::LogLevel::Error) => "ERR",
+		None => level(l.stream, &l.line),
+	};
+	html! {
+		div class="ui-log-line ui-log-stored" data-lv=(lv) {
+			span class="ui-log-ts" { (stamp(l.ts)) }
+			span class="ui-log-lv" { (lv) }
+			span class="ui-log-src" title=(l.source) { (l.source) }
+			span class="ui-log-tx" { (l.line) }
 		}
 	}
 }

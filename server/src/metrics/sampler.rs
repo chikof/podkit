@@ -76,6 +76,7 @@ async fn sample(state: &AppState, memory: &Shared, server: &Server) {
 		tracing::warn!(server = %server.id, error = %e, "metrics: could not store a sample");
 	}
 	sample_extras(state, memory, server, &agent, now, &sample).await;
+	crate::log_search::sync::tick(state, server, &agent).await;
 }
 
 /// The figures beyond CPU and memory: HTTP rates, volumes and VRAM from the stats already

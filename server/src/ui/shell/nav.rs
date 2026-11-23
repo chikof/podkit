@@ -73,6 +73,9 @@ pub fn infra_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	if can(Resource::Uptime) {
 		items.push(item("Uptime", format!("{base}/uptime"), "globe"));
 	}
+	if can(Resource::Logs) {
+		items.push(item("Logs", format!("{base}/logs"), "scroll-text"));
+	}
 	if can(Resource::Backup) {
 		items.push(item(
 			"S3 destinations",
