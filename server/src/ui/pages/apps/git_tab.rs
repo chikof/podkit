@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 use time::OffsetDateTime;
 
 use super::chrome::dot;
+use super::previews_card;
 use super::{AppPath, Tab, app_url, forbid_unless_allowed, load, page, toast_ok};
 use crate::applications::SourceKind;
 use crate::applications::service::ApplicationView;
@@ -27,6 +28,9 @@ use crate::autodeploy::service::{self, FreezeInput, SettingsInput, View};
 use crate::autodeploy::{Freeze, PushRow, Settings, State as PushState};
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, ProjectId, TeamId};
+use crate::previews::service::{
+	self as previews, SettingsInput as PreviewInput, View as PreviewView,
+};
 use crate::state::AppState;
 use crate::ui::components::{
 	CHECKBOX, INPUT, LABEL, SELECT, Size, Status as Shape, TEXTAREA, Tone, Variant, badge,
@@ -56,6 +60,10 @@ const RULE_FIELDS: &[&str] = &[
 pub fn router() -> Router<AppState> {
 	Router::new()
 		.route(APP, get(git_page).post(save))
+		.route(
+			&format!("{APP}/previews/{{preview_id}}/remove"),
+			post(previews_card::remove),
+		)
 		.route(&format!("{APP}/freezes"), post(add_freeze))
 		.route(
 			&format!("{APP}/freezes/{{freeze_id}}/remove"),
@@ -90,9 +98,32 @@ struct RuleSignals {
 	ad_timeout: String,
 	ad_anyway: bool,
 	ad_status: bool,
+	pv_enabled: bool,
+	pv_command: String,
+	#[serde(deserialize_with = "text_or_number")]
+	pv_max: String,
+	#[serde(deserialize_with = "text_or_number")]
+	pv_ttl: String,
+	#[serde(deserialize_with = "text_or_number")]
+	pv_mem: String,
+	#[serde(deserialize_with = "text_or_number")]
+	pv_cpu: String,
+	pv_fork: bool,
 }
 
 impl RuleSignals {
+	fn previews(&self) -> PreviewInput {
+		PreviewInput {
+			enabled: self.pv_enabled,
+			command: self.pv_command.clone(),
+			max_concurrent: self.pv_max.clone(),
+			ttl_days: self.pv_ttl.clone(),
+			memory_limit_mb: self.pv_mem.clone(),
+			cpu_limit: self.pv_cpu.clone(),
+			fork_variables: self.pv_fork,
+		}
+	}
+
 	fn input(self) -> SettingsInput {
 		SettingsInput {
 			enabled: self.ad_enabled,
@@ -185,7 +216,7 @@ fn offset_label(minutes: i32) -> String {
 	format!("UTC{sign}{:02}:{:02}", m / 60, m % 60)
 }
 
-fn stamp(t: OffsetDateTime) -> String {
+pub(super) fn stamp(t: OffsetDateTime) -> String {
 	let t = t.to_offset(time::UtcOffset::UTC);
 	format!(
 		"{:04}-{:02}-{:02} {:02}:{:02} UTC",
@@ -206,7 +237,7 @@ fn fact(label: &str, value: &Markup) -> Markup {
 	}
 }
 
-fn check(id: &str, signal: &str, label: &str, help: Option<&str>) -> Markup {
+pub(super) fn check(id: &str, signal: &str, label: &str, help: Option<&str>) -> Markup {
 	html! {
 		div class="flex flex-col gap-1" {
 			div class="ui-check" {
@@ -487,9 +518,28 @@ fn pushes_card(base: &str, pushes: &[PushRow], can_deploy: bool) -> Markup {
 	}
 }
 
-fn rules_card(base: &str, view: &View, can_edit: bool, has_provider: bool) -> Markup {
-	let initial = rule_signals(view.settings.as_ref().unwrap_or(&Settings::form_default()));
+fn rules_card(
+	base: &str,
+	view: &View,
+	previews: &PreviewView,
+	can_edit: bool,
+	has_provider: bool,
+) -> Markup {
+	let mut initial = rule_signals(view.settings.as_ref().unwrap_or(&Settings::form_default()));
+	if let (Some(map), Some(extra)) = (
+		initial.as_object_mut(),
+		previews_card::signals(&previews.settings)
+			.as_object()
+			.cloned(),
+	) {
+		map.extend(extra);
+	}
 	let save = format!("evt.preventDefault(); @post({})", js_string(base));
+	let fields: Vec<&str> = RULE_FIELDS
+		.iter()
+		.chain(previews_card::FIELDS)
+		.copied()
+		.collect();
 	html! {
 		@if can_edit {
 			form class="flex flex-col gap-6" "data-signals"=(initial.to_string()) "data-on:submit"=(save) {
@@ -501,13 +551,15 @@ fn rules_card(base: &str, view: &View, can_edit: bool, has_provider: bool) -> Ma
 					))
 					(card_content(&html! { div class="flex flex-col gap-4" { (rules_fields(has_provider)) } }))
 				}))
-				(save_bar(RULE_FIELDS))
+				(previews_card::settings_card(previews, true))
+				(save_bar(&fields))
 			}
 		} @else {
 			(card(&html! {
 				(card_section("Autodeploy", None, None))
 				(card_content(&rules_summary(view.settings.as_ref())))
 			}))
+			(previews_card::settings_card(previews, false))
 		}
 	}
 }
@@ -516,14 +568,19 @@ fn tab_content(
 	base: &str,
 	app: &ApplicationView,
 	view: &View,
+	previews: &PreviewView,
 	can_edit: bool,
 	can_deploy: bool,
+	can_remove: bool,
 ) -> Markup {
 	html! {
 		div class="flex flex-col gap-6" data-signals=(page_signals().to_string()) {
-			(rules_card(base, view, can_edit, app.git_provider_id.is_some()))
+			(rules_card(base, view, previews, can_edit, app.git_provider_id.is_some()))
 			(freeze_card(base, &view.freezes, view.frozen_now, can_edit))
 			(pushes_card(base, &view.pushes, can_deploy))
+			@if previews.has_provider || !previews.previews.is_empty() {
+				(previews_card::list_card(base, &previews.previews, can_remove))
+			}
 		}
 	}
 }
@@ -543,13 +600,18 @@ async fn git_page(
 	let view = service::get(&s, ctx.user.id, ctx.team.id, project.id, app.id)
 		.await
 		.map_err(|e| error::page(&ctx, &e))?;
+	let previews = previews::get(&s, ctx.user.id, ctx.team.id, project.id, app.id)
+		.await
+		.map_err(|e| error::page(&ctx, &e))?;
 	let base = app_url(ctx.team.id, project.id, app.id) + "/git";
 	let content = tab_content(
 		&base,
 		&app,
 		&view,
+		&previews,
 		ctx.perms.can(Action::Update, Resource::Application),
 		ctx.perms.can(Action::Create, Resource::Deployment),
+		ctx.perms.can(Action::Delete, Resource::Application),
 	);
 	Ok(page(&s, &ctx, &project, &app, Tab::Git, &content)
 		.await
@@ -563,9 +625,15 @@ async fn save(
 	ReadSignals(sig): ReadSignals<RuleSignals>,
 ) -> Response {
 	let Path((_, project, app)) = path;
-	match service::save(&s, ctx.user.id, ctx.team.id, project, app, &sig.input()).await {
+	let preview_input = sig.previews();
+	let result = async {
+		service::save(&s, ctx.user.id, ctx.team.id, project, app, &sig.input()).await?;
+		previews::save(&s, ctx.user.id, ctx.team.id, project, app, &preview_input).await
+	}
+	.await;
+	match result {
 		Ok(_) => sse::signals(&json!({ "_error": "" }))
-			.and(toast_ok("Autodeploy saved"))
+			.and(toast_ok("Saved"))
 			.and(save_bar_saved())
 			.into_response(),
 		Err(e) => error::action(&e),

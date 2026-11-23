@@ -19,7 +19,7 @@ use crate::environments::clone::copy;
 use crate::environments::clone::plan::{AppSnap, DbSnap, Snapshot};
 use crate::environments::clone::{Options, Secrets};
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, DatabaseId, EnvironmentId, UserId};
+use crate::ids::{ApplicationId, DatabaseId, UserId};
 use crate::scope;
 use crate::servers::Server;
 use crate::state::AppState;
@@ -75,7 +75,6 @@ async fn load(
 			.decrypt(&row.value)
 			.map_err(|e| internal("variable", e))?;
 		vars.push(VarIn {
-			id: row.id,
 			marked: marked.contains(&row.key),
 			key: row.key,
 			value,
@@ -87,40 +86,6 @@ async fn load(
 		inputs.push(connection(s, d)?);
 	}
 	Ok((vars, dbs, inputs))
-}
-
-/// What a preview of `pr` would be made of, without making it.
-///
-/// # Errors
-/// The database fails or a stored value does not decrypt.
-pub async fn plan_for(
-	s: &AppState,
-	app: &Application,
-	settings: &Settings,
-	number: i64,
-	from_fork: bool,
-) -> AppResult<Plan> {
-	let (vars, _, inputs) = load(s, app).await?;
-	Ok(Plan::build(&Input {
-		number,
-		app_name: &app.name,
-		app_slug: &app.slug,
-		memory_limit_mb: app.memory_limit_mb,
-		cpu_limit: app.cpu_limit,
-		vars: &vars,
-		dbs: &inputs,
-		from_fork,
-		settings,
-	}))
-}
-
-/// What was made.
-#[derive(Debug, Clone)]
-pub struct Made {
-	pub plan: Plan,
-	pub environment: EnvironmentId,
-	pub application: ApplicationId,
-	pub url: String,
 }
 
 /// Makes the environment of `preview`, a pull request of `app`, and records it on the
@@ -138,7 +103,7 @@ pub async fn make(
 	preview: &Preview,
 	app: &Application,
 	settings: &Settings,
-) -> AppResult<Made> {
+) -> AppResult<()> {
 	if app.source_kind != SourceKind::Git {
 		return Err(ServerError::Validation(
 			"Only applications built from a repository have previews.".to_owned(),
@@ -318,12 +283,7 @@ pub async fn make(
 	.execute(&mut *tx)
 	.await?;
 	tx.commit().await?;
-	Ok(Made {
-		plan,
-		environment: env.id,
-		application: new_app,
-		url,
-	})
+	Ok(())
 }
 
 /// The application a preview runs, if it is still there.

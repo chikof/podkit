@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 
-use crate::ids::{DatabaseId, EnvVarId};
+use crate::ids::DatabaseId;
 
 /// The longest name or slug a resource may have.
 const MAX_LEN: usize = 60;
@@ -23,7 +23,6 @@ const MAX_LEN: usize = 60;
 /// A variable of the application, decrypted.
 #[derive(Debug, Clone)]
 pub struct VarIn {
-	pub id: EnvVarId,
 	pub key: String,
 	pub value: String,
 	/// Marked "available to previews".
@@ -51,17 +50,6 @@ pub enum Why {
 	ReachesProduction,
 	/// The pull request is from a fork and nobody has let forks read variables.
 	Fork,
-}
-
-impl Why {
-	#[must_use]
-	pub const fn label(self) -> &'static str {
-		match self {
-			Self::NotMarked => "not marked for previews",
-			Self::ReachesProduction => "points at a database of the application",
-			Self::Fork => "withheld from pull requests of forks",
-		}
-	}
 }
 
 /// What becomes of one variable.
@@ -231,18 +219,6 @@ impl Plan {
 		self.vars
 			.iter()
 			.filter(|(_, f)| !matches!(f, Fate::Drop(_)))
-	}
-
-	/// The names of the variables left out.
-	#[must_use]
-	pub fn dropped(&self) -> Vec<(&str, Why)> {
-		self.vars
-			.iter()
-			.filter_map(|(k, f)| match f {
-				Fate::Drop(w) => Some((k.as_str(), *w)),
-				_ => None,
-			})
-			.collect()
 	}
 }
 

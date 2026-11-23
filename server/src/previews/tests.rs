@@ -242,7 +242,6 @@ fn db_in() -> DbIn {
 
 fn var(key: &str, value: &str, marked: bool) -> VarIn {
 	VarIn {
-		id: EnvVarId(1),
 		key: key.to_owned(),
 		value: value.to_owned(),
 		marked,
@@ -2055,4 +2054,71 @@ async fn previews_a_role_without_the_permission_is_refused(db: PgPool) {
 			.state(),
 		State::Queued
 	);
+}
+
+#[sqlx::test]
+async fn previews_the_variable_toggles_follow_the_service_rules(db: PgPool) {
+	let r = rig(db).await;
+	let w = r.world(Prov::Gitea).await;
+	let (team, project) = (TeamId(r.team), r.project());
+
+	// The application's keys that previews may read.
+	let keys = service::available_keys(&r.st, r.alice, team, project, w.app.id)
+		.await
+		.unwrap();
+	assert!(
+		keys.contains("APP_MODE") && !keys.contains("SECRET_KEY"),
+		"{keys:?}"
+	);
+
+	// A shared secret is marked through the service, and only at its own scope.
+	let scope = Scope::Team(team);
+	let row = shared_env::upsert(&r.db, scope, "TOKEN", &r.enc("v"), true, r.alice)
+		.await
+		.unwrap();
+	shared_env::service::set_preview(&r.st, r.alice, scope, row.id, true)
+		.await
+		.unwrap();
+	let list = shared_env::service::list(&r.st, r.alice, scope)
+		.await
+		.unwrap();
+	assert!(list.iter().any(|v| v.key == "TOKEN" && v.preview));
+	let wrong_scope = Scope::Project(team, project);
+	assert!(matches!(
+		shared_env::service::set_preview(&r.st, r.alice, wrong_scope, row.id, false).await,
+		Err(ServerError::EnvVarNotFound)
+	));
+
+	// Another team sees none of it: the scope is not theirs.
+	let (_, bob_team) = user_with_team(&r.app, "bob").await;
+	let bob = UserId(user_id(&r.db, "bob").await);
+	assert!(
+		shared_env::service::set_preview(&r.st, bob, scope, row.id, false)
+			.await
+			.is_err()
+	);
+	assert!(
+		service::available_keys(&r.st, bob, TeamId(bob_team), project, w.app.id)
+			.await
+			.is_err()
+	);
+	assert!(
+		previews::environment_ids(&r.db, TeamId(bob_team), project)
+			.await
+			.unwrap()
+			.is_empty()
+	);
+}
+
+#[sqlx::test]
+async fn previews_a_preview_environment_is_listed_for_the_badge(db: PgPool) {
+	let r = rig(db).await;
+	let w = r.world(Prov::Gitea).await;
+	w.send(&r, Ev::Open, 7, &sha(1), None).await;
+	let p = r.preview(&w, 7).await.unwrap();
+	let ids = service::environment_ids(&r.st, TeamId(r.team), r.project())
+		.await
+		.unwrap();
+	assert_eq!(ids.len(), 1);
+	assert!(ids.contains(&p.environment_id.unwrap()));
 }

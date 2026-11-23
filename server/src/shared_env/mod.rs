@@ -192,3 +192,28 @@ pub async fn delete(
 	.fetch_optional(db)
 	.await
 }
+
+/// Marks a variable set at exactly `scope` as available (or not) to previews; false when it is
+/// not set there.
+pub async fn set_preview(
+	db: impl PgExecutor<'_>,
+	scope: Scope,
+	id: SharedVarId,
+	available: bool,
+) -> Result<bool, sqlx::Error> {
+	let (team, project, environment) = ids(scope);
+	let done = sqlx::query(
+		"UPDATE shared_env_vars SET preview = $5
+		 WHERE id = $1 AND team_id = $2
+		   AND project_id IS NOT DISTINCT FROM $3
+		   AND environment_id IS NOT DISTINCT FROM $4",
+	)
+	.bind(id)
+	.bind(team)
+	.bind(project)
+	.bind(environment)
+	.bind(available)
+	.execute(db)
+	.await?;
+	Ok(done.rows_affected() > 0)
+}

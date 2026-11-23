@@ -14,11 +14,6 @@
 //!   from a fork that nobody with write access approved (`/preview`);
 //! - no user network, no model link: a preview shares nothing with production but the host.
 
-#![allow(
-	dead_code,
-	reason = "the previews section of the Git tab and the variable toggle (still to build) read the settings, the view and the scoped lookups"
-)]
-
 pub mod build;
 pub mod comment;
 pub mod event;
@@ -27,6 +22,8 @@ pub mod policy;
 pub mod run;
 pub mod service;
 
+#[cfg(test)]
+mod live_tests;
 #[cfg(test)]
 mod tests;
 
@@ -133,6 +130,10 @@ impl Default for Settings {
 
 /// Row from `previews`.
 #[derive(Debug, Clone, sqlx::FromRow)]
+#[allow(
+	dead_code,
+	reason = "a row's columns; project_id and created_at are read by the queries, not by Rust"
+)]
 pub struct Preview {
 	pub id: PreviewId,
 	pub team_id: TeamId,
@@ -272,17 +273,21 @@ pub async fn list_for_app(
 	.await
 }
 
-/// The preview whose environment is `environment`, if it is one.
-pub async fn find_for_environment(
+/// The environments of a project that are previews.
+pub async fn environment_ids(
 	db: impl PgExecutor<'_>,
-	environment: EnvironmentId,
-) -> Result<Option<Preview>, sqlx::Error> {
-	sqlx::query_as(sqlx::AssertSqlSafe(format!(
-		"SELECT {COLUMNS} FROM previews WHERE environment_id = $1"
-	)))
-	.bind(environment)
-	.fetch_optional(db)
-	.await
+	team: TeamId,
+	project: ProjectId,
+) -> Result<std::collections::HashSet<EnvironmentId>, sqlx::Error> {
+	let ids: Vec<EnvironmentId> = sqlx::query_scalar(
+		"SELECT environment_id FROM previews
+		 WHERE team_id = $1 AND project_id = $2 AND environment_id IS NOT NULL",
+	)
+	.bind(team)
+	.bind(project)
+	.fetch_all(db)
+	.await?;
+	Ok(ids.into_iter().collect())
 }
 
 /// How many of `app`'s previews hold an environment, whatever state they are in.

@@ -115,7 +115,7 @@ async fn admit(
 		return Ok(Outcome::Limited(preview.id));
 	}
 	match build::make(s, preview, app, settings).await {
-		Ok(_) => {
+		Ok(()) => {
 			queue(s, app, preview.id).await?;
 			record(s, app, preview, "preview.create").await;
 			Ok(Outcome::Building(preview.id))
@@ -419,6 +419,35 @@ pub async fn get(
 		has_provider: app.git_provider_id.is_some() && app.git_repo.is_some(),
 		shared_variables: super::preview_keys(&s.db, app.id).await?.len(),
 	})
+}
+
+/// The keys of the application's variables that previews may read; needs `read env_var`.
+///
+/// # Errors
+/// `Forbidden`, or `ApplicationNotFound` for an application of another team or project.
+pub async fn available_keys(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	app: ApplicationId,
+) -> AppResult<std::collections::HashSet<String>> {
+	authorize(&s.db, user, team, Action::Read, Resource::EnvVar).await?;
+	let app = scope::application(&s.db, team, project, app).await?;
+	Ok(super::preview_keys(&s.db, app.id).await?)
+}
+
+/// The environments of a project that are previews (for the "preview" badge). The caller
+/// has already listed the project's environments, which is the check that it may.
+///
+/// # Errors
+/// A database error.
+pub async fn environment_ids(
+	s: &AppState,
+	team: TeamId,
+	project: ProjectId,
+) -> AppResult<std::collections::HashSet<crate::ids::EnvironmentId>> {
+	Ok(super::environment_ids(&s.db, team, project).await?)
 }
 
 /// What the form sends.

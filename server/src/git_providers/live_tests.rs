@@ -24,10 +24,10 @@ use crate::jobs::{self, JobKind};
 use crate::state::AppState;
 use crate::tests::{call, state, user_with_team};
 
-const GITEA_PORT: u16 = 23000;
-const INGRESS_PORT: u16 = 28080;
-const HTTPS_PORT: u16 = 28081;
-const GITEA_IMAGE: &str = "docker.io/gitea/gitea:1.24-rootless";
+pub(crate) const GITEA_PORT: u16 = 23000;
+pub(crate) const INGRESS_PORT: u16 = 28080;
+pub(crate) const HTTPS_PORT: u16 = 28081;
+pub(crate) const GITEA_IMAGE: &str = "docker.io/gitea/gitea:1.24-rootless";
 const DOCKERFILE: &str =
 	"FROM docker.io/library/alpine:3.21\nCMD [\"sh\", \"-c\", \"while true; do sleep 60; done\"]\n";
 
@@ -36,13 +36,13 @@ fn podman_bin() -> String {
 }
 
 /// A private Podman service and its store, removed when this is dropped.
-struct Private {
+pub(crate) struct Private {
 	root: PathBuf,
 	service: Child,
 }
 
 impl Private {
-	fn start() -> Self {
+	pub(crate) fn start() -> Self {
 		let root = PathBuf::from("/tmp/pk-k3").join(format!("live-{}", std::process::id()));
 		std::fs::create_dir_all(&root).unwrap();
 		let service = Command::new(podman_bin())
@@ -59,11 +59,11 @@ impl Private {
 		Self { root, service }
 	}
 
-	fn socket(&self) -> PathBuf {
+	pub(crate) fn socket(&self) -> PathBuf {
 		self.root.join("podman.sock")
 	}
 
-	fn podman(&self, args: &[&str]) -> Output {
+	pub(crate) fn podman(&self, args: &[&str]) -> Output {
 		Command::new(podman_bin())
 			.arg("--url")
 			.arg(format!("unix://{}", self.socket().display()))
@@ -87,7 +87,7 @@ impl Drop for Private {
 	}
 }
 
-fn text(out: &Output) -> String {
+pub(crate) fn text(out: &Output) -> String {
 	format!(
 		"{}{}",
 		String::from_utf8_lossy(&out.stdout),
@@ -96,7 +96,7 @@ fn text(out: &Output) -> String {
 }
 
 /// Waits for `check` to hold, up to `secs` seconds.
-async fn wait_for<F, Fut>(what: &str, secs: u64, mut check: F)
+pub(crate) async fn wait_for<F, Fut>(what: &str, secs: u64, mut check: F)
 where
 	F: FnMut() -> Fut,
 	Fut: std::future::Future<Output = bool>,
@@ -110,17 +110,17 @@ where
 	panic!("timed out waiting for {what}");
 }
 
-struct Gitea {
-	http: reqwest::Client,
-	token: String,
+pub(crate) struct Gitea {
+	pub(crate) http: reqwest::Client,
+	pub(crate) token: String,
 }
 
 impl Gitea {
-	fn url(path: &str) -> String {
+	pub(crate) fn url(path: &str) -> String {
 		format!("http://127.0.0.1:{GITEA_PORT}/api/v1{path}")
 	}
 
-	async fn send(
+	pub(crate) async fn send(
 		&self,
 		method: reqwest::Method,
 		path: &str,
@@ -158,7 +158,7 @@ impl Gitea {
 		assert_eq!(s, StatusCode::CREATED, "add {name}: {body}");
 	}
 
-	async fn head(&self) -> String {
+	pub(crate) async fn head(&self) -> String {
 		let (_, branch) = self
 			.send(reqwest::Method::GET, "/repos/ops/demo/branches/main", None)
 			.await;

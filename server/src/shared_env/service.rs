@@ -27,6 +27,8 @@ pub struct SharedVarView {
 	pub id: SharedVarId,
 	pub key: String,
 	pub is_secret: bool,
+	/// Whether previews of pull requests may read it (a secret is withheld otherwise).
+	pub preview: bool,
 	/// Only for a variable that is not a secret.
 	pub value: Option<String>,
 }
@@ -74,6 +76,7 @@ pub async fn list(s: &AppState, user: UserId, scope: Scope) -> AppResult<Vec<Sha
 				id: row.id,
 				key: row.key,
 				is_secret: row.is_secret,
+				preview: row.preview,
 				value,
 			})
 		})
@@ -125,6 +128,7 @@ pub async fn set(
 		id: row.id,
 		key: row.key,
 		is_secret: row.is_secret,
+		preview: row.preview,
 		value: None,
 	})
 }
@@ -151,6 +155,34 @@ pub async fn remove(
 	)
 	.await;
 	Ok(key)
+}
+
+/// Marks a variable set at `scope` as available (or not) to previews of pull requests; needs
+/// `update env_var`.
+pub async fn set_preview(
+	s: &AppState,
+	user: UserId,
+	scope: Scope,
+	id: SharedVarId,
+	available: bool,
+) -> AppResult<()> {
+	authorize(&s.db, user, scope.team(), Action::Update, Resource::EnvVar).await?;
+	check_scope(&s.db, scope).await?;
+	if !super::set_preview(&s.db, scope, id, available).await? {
+		return Err(ServerError::EnvVarNotFound);
+	}
+	audit::log(
+		&s.db,
+		user,
+		scope.team(),
+		"preview.variable",
+		target_of(scope, id, ""),
+		Diff::new()
+			.set("scope", scope_name(scope))
+			.set("available", available),
+	)
+	.await;
+	Ok(())
 }
 
 fn scope_name(scope: Scope) -> &'static str {

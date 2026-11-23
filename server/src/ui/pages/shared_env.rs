@@ -43,6 +43,7 @@ pub fn router() -> Router<AppState> {
 		r = r
 			.route(base, get(page).post(set))
 			.route(&format!("{base}/{{var_id}}/delete"), post(remove))
+			.route(&format!("{base}/{{var_id}}/preview/{{on}}"), post(preview))
 			.route(&format!("{base}/redeploy/{{key}}"), post(redeploy));
 	}
 	r
@@ -56,6 +57,7 @@ struct Params {
 	environment_id: Option<EnvironmentId>,
 	var_id: Option<SharedVarId>,
 	key: Option<String>,
+	on: Option<String>,
 }
 
 impl Params {
@@ -97,7 +99,7 @@ fn tab_links(team: TeamId, info: &ScopeInfo) -> Vec<(String, String, bool)> {
 	out
 }
 
-fn var_list(base: &str, vars: &[SharedVarView], can_delete: bool) -> Markup {
+fn var_list(base: &str, vars: &[SharedVarView], can_delete: bool, can_mark: bool) -> Markup {
 	html! {
 		div id="shared-list" {
 			@if vars.is_empty() {
@@ -121,6 +123,13 @@ fn var_list(base: &str, vars: &[SharedVarView], can_delete: bool) -> Markup {
 							}
 							div class="flex items-center gap-2" {
 								@if var.is_secret { (badge(Tone::Neutral, "Secret")) }
+								@if var.is_secret && var.preview { (badge(Tone::Neutral, "In previews")) }
+								@if var.is_secret && can_mark {
+									button type="button" class=(button_class(Variant::Outline, Size::Sm))
+										"data-on:click"={ "@post(" (js_string(&format!("{base}/{}/preview/{}", var.id, if var.preview { "off" } else { "on" }))) ")" } {
+										@if var.preview { "Withhold from previews" } @else { "Allow in previews" }
+									}
+								}
 								@if can_delete {
 									button type="button" class=(button_class(Variant::Ghost, Size::Icon)) aria-label={ "Delete " (var.key) }
 										"data-on:click"={ "@post(" (js_string(&format!("{base}/{}/delete", var.id))) ")" } {
@@ -202,6 +211,7 @@ async fn render(s: &AppState, ctx: &TeamCtx, scope: Scope) -> Result<Markup, Res
 	let base = base_url(scope);
 	let can_create = ctx.perms.can(Action::Create, Resource::EnvVar);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::EnvVar);
+	let can_mark = ctx.perms.can(Action::Update, Resource::EnvVar);
 	let can_redeploy = ctx.perms.can(Action::Create, Resource::Deployment);
 
 	let (what, inherits) = match scope {
@@ -232,7 +242,7 @@ async fn render(s: &AppState, ctx: &TeamCtx, scope: Scope) -> Result<Markup, Res
 				))
 				div class="ui-card-list" {
 					div class="ui-card-slot" { (form_error()) }
-					(var_list(&base, &vars, can_delete))
+					(var_list(&base, &vars, can_delete, can_mark))
 				}
 			}))
 			@if can_create {
@@ -367,12 +377,17 @@ async fn set(
 	match result {
 		Ok((vars, slot)) => {
 			let can_delete = ctx.perms.can(Action::Delete, Resource::EnvVar);
-			sse::patch(&var_list(&base_url(scope), &vars, can_delete))
-				.and(sse::patch(&slot))
-				.and(sse::signals(
-					&json!({ "sv_key": "", "sv_value": "", "_error": "" }),
-				))
-				.into_response()
+			sse::patch(&var_list(
+				&base_url(scope),
+				&vars,
+				can_delete,
+				ctx.perms.can(Action::Update, Resource::EnvVar),
+			))
+			.and(sse::patch(&slot))
+			.and(sse::signals(
+				&json!({ "sv_key": "", "sv_value": "", "_error": "" }),
+			))
+			.into_response()
 		}
 		Err(e) => error::action(&e),
 	}
@@ -393,10 +408,15 @@ async fn remove(State(s): State<AppState>, ctx: TeamCtx, Path(p): Path<Params>) 
 	match result {
 		Ok((vars, slot)) => {
 			let can_delete = ctx.perms.can(Action::Delete, Resource::EnvVar);
-			sse::patch(&var_list(&base_url(scope), &vars, can_delete))
-				.and(sse::patch(&slot))
-				.and(sse::signals(&json!({ "_error": "" })))
-				.into_response()
+			sse::patch(&var_list(
+				&base_url(scope),
+				&vars,
+				can_delete,
+				ctx.perms.can(Action::Update, Resource::EnvVar),
+			))
+			.and(sse::patch(&slot))
+			.and(sse::signals(&json!({ "_error": "" })))
+			.into_response()
 		}
 		Err(e) => error::action(&e),
 	}
@@ -418,6 +438,32 @@ async fn redeploy(State(s): State<AppState>, ctx: TeamCtx, Path(p): Path<Params>
 				.and(sse::toast(&message))
 				.and(sse::signals(&json!({ "_error": "" })))
 				.into_response()
+		}
+		Err(e) => error::action(&e),
+	}
+}
+
+/// Marks a secret as available to previews of pull requests, or withholds it.
+async fn preview(State(s): State<AppState>, ctx: TeamCtx, Path(p): Path<Params>) -> Response {
+	let scope = p.scope();
+	let (Some(id), Some(on)) = (p.var_id, p.on.as_deref()) else {
+		return error::action(&ServerError::NotFound);
+	};
+	let available = match on {
+		"on" => true,
+		"off" => false,
+		_ => return error::action(&ServerError::NotFound),
+	};
+	let result = async {
+		service::set_preview(&s, ctx.user.id, scope, id, available).await?;
+		service::list(&s, ctx.user.id, scope).await
+	}
+	.await;
+	match result {
+		Ok(vars) => {
+			let can_delete = ctx.perms.can(Action::Delete, Resource::EnvVar);
+			let can_mark = ctx.perms.can(Action::Update, Resource::EnvVar);
+			sse::patch(&var_list(&base_url(scope), &vars, can_delete, can_mark)).into_response()
 		}
 		Err(e) => error::action(&e),
 	}

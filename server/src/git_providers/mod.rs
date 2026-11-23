@@ -295,7 +295,7 @@ pub async fn first_delivery(
 }
 
 #[cfg(test)]
-mod live_tests;
+pub(crate) mod live_tests;
 #[cfg(test)]
 pub(crate) mod stubs;
 #[cfg(test)]

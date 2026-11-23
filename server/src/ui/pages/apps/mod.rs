@@ -48,6 +48,7 @@ mod mcp_tab;
 mod models_tab;
 mod monitoring;
 mod networks_tab;
+mod previews_card;
 mod provider_source;
 mod security;
 mod volumes;
