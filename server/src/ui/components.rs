@@ -14,9 +14,12 @@
 //!
 //! Later cards add NEW files under `components/` instead of editing these.
 
+mod audit_events;
 mod avatar;
+mod avatar_field;
 mod badge;
 mod banner;
+mod bell;
 mod breadcrumb;
 mod button;
 mod card;
@@ -31,18 +34,27 @@ mod log_viewer;
 mod logo;
 mod menu;
 mod metrics;
+mod metrics_extra;
 mod progress;
+mod registry_select;
+mod save_bar;
+mod security_badge;
 mod skeleton;
 mod stepper;
 mod table;
 mod tabs;
+mod team_mark;
 mod theme_toggle;
 mod toast;
 mod tooltip;
+mod uptime_strip;
 
-pub use avatar::avatar;
+pub use audit_events::{activity_card, audit_table};
+pub use avatar::{avatar, user_avatar, user_avatar_lg};
+pub use avatar_field::{AvatarField, avatar_field};
 pub use badge::{Status, Tone, badge, status_badge, status_dot};
 pub use banner::{BannerKind, banner};
+pub use bell::bell;
 pub use breadcrumb::breadcrumb;
 pub use button::{
 	BUTTON, BUTTON_DANGER, BUTTON_OUTLINE, Size, Variant, button, button_class, icon_button,
@@ -53,7 +65,7 @@ pub use card::{
 	card_title, link_card,
 };
 pub use chip::{chip, chip_group};
-pub use dialog::{Dismiss, dialog, dialog_cancel, dialog_open_button};
+pub use dialog::{dialog, dialog_cancel, dialog_open_button, discard_confirm};
 pub use empty_state::empty_state;
 pub use field::{
 	CHECKBOX, INPUT, LABEL, SELECT, SWITCH, TEXTAREA, checkbox_field, copy_field, error_text,
@@ -66,18 +78,21 @@ pub use kbd::{kbd, kbd_combo};
 pub use log_viewer::{log_viewer, log_viewer_titled};
 pub use logo::{LogoSize, logo};
 pub use menu::{MENU_ITEM, MENU_ITEM_DANGER, dropdown_menu, menu_label, menu_link, menu_separator};
-// `REFRESH_SECONDS` and `resource_charts` are for the application, database, model and stack
-// pages (cards F4, F5, F7, F8); until they embed the section only the tests call them.
 #[allow(unused_imports)]
 pub use metrics::{
 	MetricsSection, REFRESH_SECONDS, metrics_body, metrics_section, range_phrase, range_value,
-	resource_charts,
 };
+pub use metrics_extra::{Flavor, Ops, resource_monitoring};
 pub use progress::progress;
+pub use registry_select::{registry_choice, registry_select};
+pub use save_bar::{save_bar, saved as save_bar_saved};
+pub use security_badge::{act_now_marker, security_badge, severity_chip};
 pub use skeleton::{skeleton, skeleton_row};
 pub use stepper::{Current, stepper};
 pub use table::table;
 pub use tabs::{RadioTab, TabItem, radio_tabs, tabs};
+pub use team_mark::{MarkSize, team_mark};
 pub use theme_toggle::theme_toggle;
 pub use toast::{toast, toast_region, toast_region_with};
 pub use tooltip::tooltip;
+pub use uptime_strip::{percent_text, uptime_strip};

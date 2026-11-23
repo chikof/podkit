@@ -8,9 +8,10 @@ use tower_http::compression::predicate::{Predicate, SizeAbove};
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
-	applications, auth, backups, catalog, databases, deployments, domains, env_vars, environments,
-	links, logos, members, metrics, model_files, models, projects, servers, stacks, teams,
-	templates, ui, volumes, webhooks,
+	applications, audit, auth, avatars, backups, catalog, cron, databases, deployments, domains,
+	env_vars, environments, git_providers, iac, links, logos, mcp, mcp_servers, members, metrics,
+	model_files, models, networks, notifications, projects, registries, scanning, servers,
+	ssh_keys, stacks, teams, templates, ui, uptime, volume_backups, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -27,17 +28,40 @@ async fn health() -> &'static str {
 /// are already configured with that URL. The API and the UI share one origin,
 /// so there is no CORS layer: browsers can only call the API from podkit's
 /// own pages.
+#[allow(
+	clippy::too_many_lines,
+	reason = "one route table; each resource nests its router here"
+)]
 pub async fn routes(state: AppState) -> AppResult<Router> {
 	let api = Router::new()
 		.nest("/auth", auth::router())
+		.merge(avatars::api_router())
 		.nest("/teams", teams::router())
 		.nest("/teams/{team_id}", members::router())
+		.nest("/teams/{team_id}/audit", audit::router())
 		.nest("/teams/{team_id}/projects", projects::router())
 		.nest(
 			"/teams/{team_id}/projects/{project_id}/environments",
 			environments::router(),
 		)
+		.nest("/teams/{team_id}/projects/{project_id}", iac::router())
+		.nest(
+			"/teams/{team_id}/projects/{project_id}/cron",
+			cron::router(),
+		)
+		.nest("/teams/{team_id}/import", iac::import_router())
 		.nest("/teams/{team_id}/servers", servers::router())
+		.nest("/teams/{team_id}/ssh-keys", ssh_keys::router())
+		.nest("/teams/{team_id}/git-providers", git_providers::router())
+		.nest(
+			"/teams/{team_id}/servers/{server_id}/networks",
+			networks::router(),
+		)
+		.nest("/teams/{team_id}/networks", networks::network_router())
+		.nest("/teams/{team_id}/registries", registries::router())
+		.nest("/teams/{team_id}/api-tokens", auth::tokens::router())
+		.nest("/teams/{team_id}/notifications", notifications::router())
+		.nest("/teams/{team_id}/uptime", uptime::router())
 		.nest(
 			"/teams/{team_id}/servers/{server_id}/metrics",
 			metrics::router(),
@@ -63,7 +87,20 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest(&format!("{APP}/env-vars"), env_vars::router())
 		.nest(&format!("{APP}/domains"), domains::router())
 		.nest(&format!("{APP}/volumes"), volumes::router())
+		.nest(
+			&format!("{APP}/volumes/{{volume_id}}/backups"),
+			volume_backups::app_router(),
+		)
+		.nest(
+			&format!("{STACKS}/{{stack_id}}/volumes/{{volume_key}}/backups"),
+			volume_backups::stack_router(),
+		)
 		.nest(&format!("{APP}/models"), links::router())
+		.nest(&format!("{APP}/mcp"), mcp_servers::app_router())
+		.nest(
+			"/teams/{team_id}/projects/{project_id}/mcp-servers",
+			mcp_servers::router(),
+		)
 		.nest(
 			"/teams/{team_id}/backup-targets",
 			backups::targets::router(),
@@ -84,15 +121,28 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			model_files::token::router(),
 		)
 		.nest(&format!("{DB}/{{database_id}}/backups"), backups::router())
-		.nest("/webhooks", webhooks::router());
+		.nest("/teams/{team_id}/security", scanning::routes::router())
+		.nest("/webhooks", webhooks::router())
+		// Last, so it wraps every route above: a `pk_` token is resolved and limited here.
+		.layer(axum::middleware::from_fn_with_state(
+			state.clone(),
+			auth::tokens::gate,
+		));
+	// The MCP endpoint sends its tool calls through this same router, so the token gate
+	// and RBAC decide them.
+	let mcp = mcp::router(api.clone().with_state(state.clone()));
 	Ok(Router::new()
 		.merge(ui::router())
+		.merge(mcp)
 		.merge(logos::router())
+		.merge(git_providers::public_router())
+		.merge(avatars::public_router())
 		.route("/health", get(health))
 		.nest("/api/v1", api)
 		.nest("/webhooks", webhooks::router())
 		.fallback(ui::not_found)
 		.layer(CookieManagerLayer::new())
+		.layer(axum::middleware::from_fn(audit::layer))
 		.layer(compression())
 		.with_state(state))
 }

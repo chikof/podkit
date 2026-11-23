@@ -24,13 +24,15 @@ use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::metrics::service as metrics;
 use crate::metrics::{Range, ResourcePoint};
 use crate::projects::overview::application_mark;
+use crate::scanning::Subject;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, Dismiss, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, Size,
+	BUTTON, BUTTON_OUTLINE, INPUT, LABEL, LogoSize, MENU_ITEM, MENU_ITEM_DANGER, Size,
 	Status as Shape, Variant, button_class, dialog, dropdown_menu, icon, logo, menu_label,
 	menu_separator,
 };
 use crate::ui::extract::TeamCtx;
+use crate::ui::pages::security;
 use crate::ui::sse::js_string;
 use crate::ui::status::{Status, poll};
 use crate::ui::{error, sse};
@@ -177,6 +179,23 @@ fn uptime(rows: &[DeploymentView]) -> Option<String> {
 	Some(chrome::span(OffsetDateTime::now_utc() - since))
 }
 
+/// What the health gate says about the live release: that it passes its check, or that it is
+/// the previous image put back after a bad release. Nothing when the application has no gate
+/// or no release is live.
+fn live_health(rows: &[DeploymentView]) -> Markup {
+	use crate::health_gate::State;
+	let Some(live) = rows.iter().find(|d| d.status == DeploymentStatus::Running) else {
+		return html! {};
+	};
+	html! {
+		@if let Some(replaced) = live.rollback_of {
+			(chrome::dot(Shape::Stopped, &format!("Rolled back from #{replaced}")))
+		} @else if live.gate.as_ref().is_some_and(|g| g.state == State::Healthy) {
+			(chrome::dot(Shape::Running, "Healthy"))
+		}
+	}
+}
+
 /// `#app-header`: what polling and the actions re-render. `rows` are the newest deployments
 /// (newest first), for the Rollback entry and the uptime.
 pub async fn header(
@@ -187,10 +206,16 @@ pub async fn header(
 ) -> Markup {
 	let base = app_url(ctx.team.id, app.project_id, app.id);
 	let link = public_link(s, &app.url);
+	// An MCP server is never routed, so its header points at its MCP page instead.
+	let mcp_page = crate::mcp_servers::service::is_server(&s.db, app.id)
+		.await
+		.then(|| crate::ui::pages::mcp::mcp_url(ctx.team.id, app.project_id, app.id));
 	let busy = app.latest.is_some_and(Status::in_flight);
 	let mark = application_mark(app.repo_url.as_deref(), app.build_strategy);
 	let rollback_to = rows.iter().find(|d| d.can_rollback());
 	let point = usage(s, ctx, app).await;
+	let security =
+		security::header_badge(s, ctx, app.project_id, Subject::Application(app.id)).await;
 	let running = app.latest == Some(DeploymentStatus::Running);
 	let dash = || "\u{2014}".to_owned();
 	let figures = [
@@ -220,9 +245,16 @@ pub async fn header(
 		.find(|d| d.status == DeploymentStatus::Running)
 		.and_then(|d| d.commit_sha.as_deref())
 		.map(|sha| sha.get(..7).unwrap_or(sha).to_owned());
-	let (word, shape) = app.latest.map_or(("Not deployed", Shape::Pending), |d| {
-		(d.label(), chrome::deployment_shape(d))
-	});
+	let newest = rows.first().filter(|d| Some(d.status) == app.latest);
+	let (word, shape) = match (newest, app.latest) {
+		(Some(d), _) => {
+			let (shape, word) = chrome::deployment_state(d);
+			(word, shape)
+		}
+		(None, Some(d)) => (d.label().to_owned(), chrome::deployment_shape(d)),
+		(None, None) => ("Not deployed".to_owned(), Shape::Pending),
+	};
+	let health = live_health(rows);
 	html! {
 		div id="app-header" class="flex flex-col gap-5" {
 			(poll(&format!("{base}/header"), busy))
@@ -234,10 +266,19 @@ pub async fn header(
 				},
 				&app.name,
 				&html! {
-					(chrome::dot(shape, word))
-					a href=(link) class="ui-head-url" target="_blank" rel="noopener noreferrer" {
-						span class="truncate" { (link) }
-						(icon("external-link"))
+					(chrome::dot(shape, &word))
+					(health)
+					(security)
+					@if let Some(href) = &mcp_page {
+						a href=(href) class="ui-head-url" {
+							span class="truncate" { "MCP server page" }
+							(icon("arrow-up-right"))
+						}
+					} @else {
+						a href=(link) class="ui-head-url" target="_blank" rel="noopener noreferrer" {
+							span class="truncate" { (link) }
+							(icon("external-link"))
+						}
 					}
 					@match app.source_kind {
 						SourceKind::Git => {
@@ -281,7 +322,6 @@ pub fn dialogs(ctx: &TeamCtx, app: &ApplicationView) -> Markup {
 				"rollback-dialog",
 				"Roll back to an earlier build",
 				Some("Nothing is rebuilt: podkit starts the image of that deployment and replaces the running container."),
-				Dismiss::Esc,
 				&html! {
 					div class="flex flex-col gap-3" {
 						p { "Roll back to deployment " strong class="font-mono" { "#" span "data-text"="$_rb" {} } "?" }
@@ -300,7 +340,6 @@ pub fn dialogs(ctx: &TeamCtx, app: &ApplicationView) -> Markup {
 				"delete-dialog",
 				"Delete this application?",
 				Some("Deleting stops and removes the application's containers and volumes. This can't be undone."),
-				Dismiss::Esc,
 				&html! {
 					div class="flex flex-col gap-3" {
 						label class=(LABEL) {

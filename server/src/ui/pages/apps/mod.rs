@@ -33,15 +33,21 @@ use crate::ui::sse::js_string;
 mod advanced;
 pub mod chrome;
 mod create;
+mod cron_tab;
 mod deployments_tab;
 mod domains;
 mod env;
 mod form;
 mod general;
 mod header;
+mod health;
 mod logs;
+mod mcp_tab;
 mod models_tab;
 mod monitoring;
+mod networks_tab;
+mod provider_source;
+mod security;
 mod volumes;
 mod webhooks;
 
@@ -59,7 +65,11 @@ pub fn router() -> Router<AppState> {
 		.merge(domains::router())
 		.merge(volumes::router())
 		.merge(models_tab::router())
+		.merge(mcp_tab::router())
+		.merge(networks_tab::router())
+		.merge(cron_tab::router())
 		.merge(monitoring::router())
+		.merge(security::router())
 		.merge(webhooks::router())
 		.merge(advanced::router())
 }
@@ -122,22 +132,30 @@ enum Tab {
 	Domains,
 	Volumes,
 	Models,
+	Mcp,
+	Networks,
+	Cron,
 	Webhooks,
 	Monitoring,
+	Security,
 	Settings,
 	Advanced,
 }
 
 impl Tab {
-	const ALL: [Self; 10] = [
+	const ALL: [Self; 14] = [
 		Self::Deployments,
 		Self::Logs,
 		Self::Env,
 		Self::Domains,
 		Self::Volumes,
 		Self::Models,
+		Self::Mcp,
+		Self::Networks,
+		Self::Cron,
 		Self::Webhooks,
 		Self::Monitoring,
+		Self::Security,
 		Self::Settings,
 		Self::Advanced,
 	];
@@ -150,8 +168,12 @@ impl Tab {
 			Self::Domains => "Domains",
 			Self::Volumes => "Volumes",
 			Self::Models => "Models",
+			Self::Mcp => "MCP",
+			Self::Networks => "Networks",
+			Self::Cron => "Cron",
 			Self::Webhooks => "Webhooks",
 			Self::Monitoring => "Monitoring",
+			Self::Security => "Security",
 			Self::Settings => "Settings",
 			Self::Advanced => "Advanced",
 		}
@@ -167,8 +189,12 @@ impl Tab {
 			Self::Domains => "/domains",
 			Self::Volumes => "/volumes",
 			Self::Models => "/models",
+			Self::Mcp => "/mcp",
+			Self::Networks => "/networks",
+			Self::Cron => "/cron",
 			Self::Webhooks => "/webhooks",
 			Self::Monitoring => "/monitoring",
+			Self::Security => "/security",
 			Self::Settings => "/settings",
 			Self::Advanced => "/advanced",
 		}
@@ -184,7 +210,11 @@ impl Tab {
 			Self::Deployments => can(Action::Read, Resource::Deployment),
 			Self::Volumes => can(Action::Read, Resource::Volume),
 			Self::Models => can(Action::Read, Resource::Model),
-			Self::Monitoring => can(Action::Read, Resource::Application),
+			Self::Networks | Self::Monitoring | Self::Mcp => {
+				can(Action::Read, Resource::Application)
+			}
+			Self::Security => can(Action::Read, Resource::Scan),
+			Self::Cron => can(Action::Read, Resource::Cron),
 			Self::Webhooks => can(Action::Update, Resource::Application),
 			Self::Advanced => {
 				can(Action::Update, Resource::Application)
@@ -255,11 +285,20 @@ async fn page(
 	content: &Markup,
 ) -> Markup {
 	let rows = recent_deployments(s, ctx, app).await;
+	// The log of this application, on its landing tab, for people who may read it.
+	let activity = if active == Tab::Deployments {
+		crate::ui::pages::settings::activity(s, ctx, "application", app.id.0).await
+	} else {
+		None
+	};
 	let body = html! {
 		div class="flex flex-col gap-6" data-signals="{_action_error: '', _acting: false, _rb: '', _close: '', confirm: '', _delete_error: ''}" {
 			(header::header(s, ctx, app, &rows).await)
 			(tab_row(ctx, app, active))
 			(content)
+			@if let Some((events, all)) = &activity {
+				(crate::ui::components::activity_card(ctx.team.id, events, all))
+			}
 			(header::dialogs(ctx, app))
 		}
 	};

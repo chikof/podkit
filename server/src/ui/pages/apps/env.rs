@@ -18,10 +18,12 @@ use crate::auth::permission::{Action, Resource};
 use crate::env_vars::service::{self as env_vars, BulkReport, EnvVarKey};
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, EnvVarId, ProjectId, TeamId};
+use crate::shared_env;
+use crate::shared_env::service::Inherited;
 use crate::state::AppState;
 use crate::ui::components::{
-	Dismiss, INPUT, LABEL, Size, TEXTAREA, Variant, button_class, card, card_content, card_section,
-	dialog, dialog_cancel, dialog_open_button, empty_state, icon,
+	INPUT, LABEL, Size, TEXTAREA, Tone, Variant, badge, button_class, card, card_content,
+	card_section, dialog, dialog_cancel, dialog_open_button, empty_state, icon,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::form_error;
@@ -44,23 +46,20 @@ pub fn router() -> Router<AppState> {
 		)
 }
 
-const ROW: &str =
-	"flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-3";
+const ROW: &str = "ui-card-row";
 
 fn env_list(base: &str, keys: &[EnvVarKey], can_delete: bool) -> Markup {
 	html! {
 		div id="env-list" {
 			@if keys.is_empty() {
-				div class="border-t border-border px-6 pt-6" {
-					(empty_state(
-						"key-round",
-						"No environment variables yet.",
-						Some("Add the settings and secrets your application reads at start. Values are encrypted and never shown again."),
-						None,
-					))
-				}
+				(empty_state(
+					"key-round",
+					"No environment variables yet.",
+					Some("Add the settings and secrets your application reads at start. Values are encrypted and never shown again."),
+					None,
+				))
 			} @else {
-				ul aria-label="Environment variables" {
+				ul class="ui-card-rows" aria-label="Environment variables" {
 					@for var in keys {
 						li class=(ROW) {
 							div class="flex min-w-0 flex-col" {
@@ -78,6 +77,45 @@ fn env_list(base: &str, keys: &[EnvVarKey], can_delete: bool) -> Markup {
 				}
 			}
 		}
+	}
+}
+
+/// The variables this application inherits from its team, project and environment: name,
+/// where each comes from and whether the application's own variable replaces it. Never values.
+fn inherited_card(ctx: &TeamCtx, inherited: &[Inherited]) -> Markup {
+	let manage = format!("/teams/{}/settings/shared-variables", ctx.team.id);
+	html! {
+		(card(&html! {
+			(card_section(
+				"Inherited variables",
+				Some("Set once for the team, project or environment. A variable of the same name set here wins."),
+				Some(&html! {
+					a class=(button_class(Variant::Outline, Size::Sm)) href=(manage) { (icon("layers")) "Shared variables" }
+				}),
+			))
+			div class="ui-card-list" {
+				div id="inherited-list" {
+					@if inherited.is_empty() {
+						(empty_state("layers", "Nothing inherited.", Some("Shared variables set for the team, project or environment show up here."), None))
+					} @else {
+						ul class="ui-card-rows" aria-label="Inherited variables" {
+							@for var in inherited {
+								li class=(ROW) {
+									div class="flex min-w-0 flex-col" {
+										code class="font-mono text-sm font-medium break-all" { (var.key) }
+										span class="text-xs text-muted-foreground" { "Value hidden" }
+									}
+									div class="ui-inherited-end" {
+										(badge(Tone::Neutral, var.level.label()))
+										@if var.overridden { (badge(Tone::Warning, "Overridden here")) }
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}))
 	}
 }
 
@@ -111,7 +149,6 @@ fn bulk_dialog(base: &str) -> Markup {
 		Some(
 			"One KEY=VALUE per line. Blank lines and lines starting with # are ignored. Lines that don't parse are skipped and reported by number.",
 		),
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-4" {
 				(closer("env-bulk"))
@@ -138,6 +175,10 @@ async fn env_page(
 	let keys = env_vars::list(&s.db, ctx.user.id, ctx.team.id, project.id, app.id)
 		.await
 		.map_err(|e| error::page(&ctx, &e))?;
+	let inherited =
+		shared_env::service::inherited(&s, ctx.user.id, ctx.team.id, project.id, app.id)
+			.await
+			.map_err(|e| error::page(&ctx, &e))?;
 	let base = app_url(ctx.team.id, project.id, app.id);
 	let can_create = ctx.perms.can(Action::Create, Resource::EnvVar);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::EnvVar);
@@ -164,11 +205,12 @@ async fn env_page(
 					Some("Values are encrypted and never shown again. Setting a name that exists replaces its value."),
 					bulk_button.as_ref(),
 				))
-				div class="flex flex-col gap-2" {
-					div class="px-6" { (form_error()) }
+				div class="ui-card-list" {
+					div class="ui-card-slot" { (form_error()) }
 					(env_list(&base, &keys, can_delete))
 				}
 			}))
+			(inherited_card(&ctx, &inherited))
 			@if can_create {
 				(card(&html! {
 					(card_section("Add or update a variable", None, None))

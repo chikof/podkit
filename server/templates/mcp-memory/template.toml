@@ -1,0 +1,25 @@
+id = "mcp-memory"
+name = "MCP Memory"
+description = "Reference MCP server that gives an agent a persistent knowledge graph: entities, relations and observations that survive restarts, kept in a volume."
+category = "ai"
+tags = [
+    "ai",
+    "mcp",
+    "agents",
+    "memory",
+]
+version = "latest"
+logo = "logo.svg"
+website = "https://modelcontextprotocol.io"
+docs = "https://github.com/modelcontextprotocol/servers/tree/main/src/memory#readme"
+source = "https://github.com/modelcontextprotocol/servers"
+# Image: https://hub.docker.com/r/mcp/memory (no version tags exist; entrypoint node dist/index.js, stdio;
+# MEMORY_FILE_PATH is read by its dist, label org.opencontainers.image.licenses = MIT).
+# License: modelcontextprotocol/servers, MIT for older code and Apache-2.0 for new (see its LICENSE).
+
+[mcp]
+transport = "stdio"
+port = 8080
+
+[config.env]
+MEMORY_FILE_PATH = "/data/memory.json"

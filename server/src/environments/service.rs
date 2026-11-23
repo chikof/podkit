@@ -6,6 +6,7 @@
 use sqlx::PgPool;
 
 use super::Environment;
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::db;
 use crate::error::{AppResult, ServerError};
@@ -27,12 +28,14 @@ const RESERVED_SLUGS: &[&str] = &[
 	"environments",
 	"stacks",
 	"templates",
+	"iac",
+	"canvas",
 ];
 
 /// How many resources a refusal to delete names before saying "and N more".
 const LISTED: usize = 8;
 
-fn validate_fields(name: &str, slug: &str) -> AppResult<String> {
+pub(super) fn validate_fields(name: &str, slug: &str) -> AppResult<String> {
 	let name = name.trim();
 	if name.is_empty() || name.chars().count() > MAX_NAME_LEN {
 		return Err(ServerError::Validation(format!(
@@ -53,7 +56,7 @@ fn validate_fields(name: &str, slug: &str) -> AppResult<String> {
 	Ok(name.to_owned())
 }
 
-fn slug_conflict(e: sqlx::Error) -> ServerError {
+pub(super) fn slug_conflict(e: sqlx::Error) -> ServerError {
 	if db::is_unique_violation(&e, SLUG_UNIQUE) {
 		ServerError::Conflict(
 			"An environment with that slug already exists in this project.".to_owned(),
@@ -75,9 +78,21 @@ pub async fn create(
 	authorize(db, user, team, Action::Create, Resource::Project).await?;
 	scope::project(db, team, project).await?;
 	let name = validate_fields(name, slug)?;
-	super::insert(db, project, &name, slug)
+	let environment = super::insert(db, project, &name, slug)
 		.await
-		.map_err(slug_conflict)
+		.map_err(slug_conflict)?;
+	audit::log(
+		db,
+		user,
+		team,
+		"environment.create",
+		Target::new("environment", environment.id)
+			.named(slug)
+			.in_project(project),
+		Diff::new().set("name", name).set("slug", slug),
+	)
+	.await;
+	Ok(environment)
 }
 
 /// A project's environments in display order; needs `read project`.
@@ -120,9 +135,23 @@ pub async fn rename(
 	let current = scope::environment(db, team, project, id).await?;
 	let slug = slug.unwrap_or(&current.slug);
 	let name = validate_fields(name, slug)?;
-	super::update(db, current.id, &name, slug)
+	let updated = super::update(db, current.id, &name, slug)
 		.await
-		.map_err(slug_conflict)
+		.map_err(slug_conflict)?;
+	audit::log(
+		db,
+		user,
+		team,
+		"environment.update",
+		Target::new("environment", updated.id)
+			.named(&updated.slug)
+			.in_project(project),
+		Diff::new()
+			.changed("name", current.name.clone(), updated.name.clone())
+			.changed("slug", current.slug.clone(), updated.slug.clone()),
+	)
+	.await;
+	Ok(updated)
 }
 
 /// Puts the project's environments in the order given; needs `update project`.
@@ -155,6 +184,21 @@ pub async fn reorder(
 	}
 	let environments = super::list_by_project(&mut *tx, project).await?;
 	tx.commit().await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"environment.reorder",
+		Target::new("project", project).in_project(project),
+		Diff::new().set(
+			"order",
+			environments
+				.iter()
+				.map(|e| e.slug.clone())
+				.collect::<Vec<_>>(),
+		),
+	)
+	.await;
 	Ok(environments)
 }
 
@@ -189,6 +233,17 @@ pub async fn remove(
 			e.into()
 		}
 	})?;
+	audit::log(
+		db,
+		user,
+		team,
+		"environment.delete",
+		Target::new("environment", environment.id)
+			.named(&environment.slug)
+			.in_project(project),
+		Diff::new().set("name", environment.name.clone()),
+	)
+	.await;
 	Ok(environment)
 }
 

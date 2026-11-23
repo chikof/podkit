@@ -88,6 +88,138 @@ pub struct Stats {
 	pub host: HostStats,
 	/// Running containers that belong to a podkit resource.
 	pub containers: Vec<ContainerStats>,
+	/// Traefik's counters per routed service. Empty without ingress or metrics. Absent from
+	/// agents older than the HTTP charts.
+	#[serde(default)]
+	pub http: Vec<HttpStats>,
+	/// Disk used by the volumes of each resource.
+	#[serde(default)]
+	pub volumes: Vec<VolumeStats>,
+	/// GPU memory held by the containers of each resource (NVIDIA only).
+	#[serde(default)]
+	pub vram: Vec<VramStats>,
+}
+
+/// Cumulative request counters of one routed service, read from Traefik's Prometheus
+/// metrics. Counters only grow (until Traefik restarts), so the reader works with the
+/// difference of two samples.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HttpStats {
+	/// The resource behind the Traefik service (`app-7`, `stack-3-web`).
+	pub resource: Option<ResourceRef>,
+	/// Requests answered with a 2xx status.
+	pub r2xx: f64,
+	/// Requests answered with a 3xx status.
+	pub r3xx: f64,
+	/// Requests answered with a 4xx status.
+	pub r4xx: f64,
+	/// Requests answered with a 5xx status.
+	pub r5xx: f64,
+	/// Request body bytes received.
+	pub bytes_in: f64,
+	/// Response body bytes sent.
+	pub bytes_out: f64,
+	/// Cumulative latency histogram over all statuses, `le` ascending; `None` is `+Inf`.
+	pub buckets: Vec<HistogramBucket>,
+}
+
+/// One cumulative bucket of a latency histogram.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct HistogramBucket {
+	/// Upper bound in seconds; `None` is `+Inf`.
+	pub le: Option<f64>,
+	/// Observations at or under `le`.
+	pub count: f64,
+}
+
+/// Bytes on disk used by the volumes of one resource.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VolumeStats {
+	/// The owner of the volumes.
+	pub resource: ResourceRef,
+	/// Bytes used.
+	pub used: u64,
+}
+
+/// GPU memory in use by one resource.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VramStats {
+	/// The owner of the processes.
+	pub resource: ResourceRef,
+	/// Bytes of VRAM.
+	pub used: u64,
+}
+
+/// What a container did that the charts mark.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContainerEventKind {
+	/// The main process exited with a status other than 0.
+	Exit,
+	/// The kernel killed the container for using too much memory.
+	Oom,
+	/// Podman restarted the container.
+	Restart,
+}
+
+impl ContainerEventKind {
+	/// The word stored and shown.
+	#[must_use]
+	pub fn as_str(self) -> &'static str {
+		match self {
+			Self::Exit => "exit",
+			Self::Oom => "oom",
+			Self::Restart => "restart",
+		}
+	}
+}
+
+/// One entry of `GET /v1/events`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContainerEvent {
+	/// Unix seconds.
+	pub at: i64,
+	/// What happened.
+	pub kind: ContainerEventKind,
+	/// The resource the container belongs to.
+	pub resource: ResourceRef,
+	/// Container name.
+	pub container: String,
+	/// The exit status, for `exit`.
+	pub exit_code: Option<i64>,
+}
+
+/// `POST /v1/db-stats` body: which database containers to read.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbStatsRequest {
+	/// One entry per database.
+	pub targets: Vec<DbStatsTarget>,
+}
+
+/// One database to read.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbStatsTarget {
+	/// The database's id, echoed in the answer.
+	pub id: i64,
+	/// Container to exec in.
+	pub container: String,
+	/// Engine of the database.
+	pub engine: Engine,
+}
+
+/// One database's figures. A figure the engine cannot give cheaply is `None`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DbStat {
+	/// The id of the [`DbStatsTarget`].
+	pub id: i64,
+	/// Open client connections.
+	pub connections: Option<i64>,
+	/// Size of the data in bytes.
+	pub size: Option<i64>,
+	/// Cumulative transactions (`PostgreSQL`) or commands (the others) since the server started.
+	pub operations: Option<i64>,
+	/// Memory the engine reports using, in bytes.
+	pub memory: Option<i64>,
 }
 
 /// Host-wide figures. Sizes are bytes; `net_*` are counters since boot.
@@ -198,6 +330,126 @@ pub struct DeploySpec {
 	/// Container settings only compose stacks use. Absent in older payloads.
 	#[serde(default, skip_serializing_if = "ContainerOptions::is_default")]
 	pub options: ContainerOptions,
+	/// The environment and user networks the container joins, the first one
+	/// being where it lives and where Traefik reaches it. Empty (older
+	/// payloads) keeps the container on the shared `podkit` network.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub attach: Vec<NetworkAttach>,
+	/// Gates the swap on the new container being healthy. `None` keeps the plain
+	/// "stays running" check. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub health: Option<HealthGate>,
+}
+
+/// What makes a container healthy, and how long a deploy waits for it. The agent turns the
+/// check into a Podman healthcheck, so Traefik (which skips containers that are not
+/// `healthy`) sends no traffic to the new container before it passes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HealthGate {
+	/// The check itself.
+	pub check: HealthCheck,
+	/// Time between checks, in milliseconds.
+	pub interval_ms: u64,
+	/// Time one check may take, in milliseconds.
+	pub timeout_ms: u64,
+	/// Consecutive failures after the start period that make the container unhealthy.
+	pub retries: u32,
+	/// Time after start during which failures do not count, in milliseconds.
+	pub start_period_ms: u64,
+	/// Seconds a deploy waits for the container to become healthy before it fails.
+	pub gate_timeout_s: u32,
+	/// Seconds the old container keeps running once the new one is healthy.
+	pub drain_s: u32,
+}
+
+/// One health check.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum HealthCheck {
+	/// `GET path` on the container's own port, from inside the container, and the status
+	/// that counts as healthy. Needs nothing from the image: the agent binary does the request.
+	Http {
+		/// Path and query, starting with `/`.
+		path: String,
+		/// The status that means healthy.
+		status: u16,
+		/// The port the application listens on.
+		port: u16,
+	},
+	/// A shell command run in the container; exit 0 is healthy.
+	Command {
+		/// The command line, run with `sh -c`.
+		command: String,
+	},
+}
+
+/// A stdio MCP server run behind `podkit-agent --mcp-bridge`: the agent binary is
+/// mounted into the container and replaces its entrypoint, so the server answers
+/// streamable HTTP on `port` at `path`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct McpBridge {
+	/// Port the bridge listens on.
+	pub port: u16,
+	/// Path of the endpoint.
+	pub path: String,
+	/// The server's command line. Empty: the image's own entrypoint and command.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub command: Vec<String>,
+}
+
+/// A network a container joins, with the DNS aliases it has there.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkAttach {
+	/// Podman network name.
+	pub name: String,
+	/// DNS aliases on this network.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub aliases: Vec<String>,
+	/// Created without outbound access when missing.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub internal: bool,
+}
+
+/// Name prefix of the per-environment networks podkit creates.
+pub const ENV_NETWORK_PREFIX: &str = "podkit-env-";
+/// Name prefix of the user networks podkit creates.
+pub const USER_NETWORK_PREFIX: &str = "podkit-net-";
+/// Name prefix of the per-stack networks podkit creates.
+pub const STACK_NETWORK_PREFIX: &str = "podkit-stack-";
+/// The shared network of system containers (Traefik, the gateway).
+pub const SYSTEM_NETWORK: &str = "podkit";
+
+/// `POST /v1/networks` body.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkCreate {
+	/// A name with one of the podkit prefixes.
+	pub name: String,
+	/// No outbound access.
+	#[serde(default)]
+	pub internal: bool,
+}
+
+/// A Podman network as `GET /v1/networks` reports it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkInfo {
+	/// Network name.
+	pub name: String,
+	/// No outbound access.
+	pub internal: bool,
+	/// Network driver, e.g. `bridge`.
+	pub driver: String,
+	/// Names of the containers on it.
+	pub containers: Vec<String>,
+}
+
+/// `POST /v1/networks/{name}/connect` body; `disconnect` ignores `aliases`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct NetworkMember {
+	/// Container name.
+	pub container: String,
+	/// DNS aliases on the network.
+	#[serde(default)]
+	pub aliases: Vec<String>,
 }
 
 /// What the agent does when a supervised container exits.
@@ -282,6 +534,9 @@ pub struct FileMount {
 /// field is optional on the wire.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ContainerOptions {
+	/// Run the container's stdio MCP server behind the agent's own bridge.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub mcp_bridge: Option<McpBridge>,
 	/// Restart behaviour.
 	#[serde(default, skip_serializing_if = "is_default")]
 	pub restart: Restart,
@@ -433,6 +688,39 @@ impl std::fmt::Debug for RegistryAuth {
 	}
 }
 
+/// `POST /v1/registry-login` body: asks the agent to log in to a registry the
+/// way a pull would, so a wrong password is found before a deploy.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegistryLogin {
+	/// Registry user.
+	pub username: String,
+	/// Registry password or access token.
+	pub password: String,
+	/// Registry host, with the port when it is not the default (`ghcr.io`,
+	/// `127.0.0.1:5000`).
+	pub server: String,
+}
+
+impl std::fmt::Debug for RegistryLogin {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("RegistryLogin")
+			.field("username", &self.username)
+			.field("password", &"<redacted>")
+			.field("server", &self.server)
+			.finish()
+	}
+}
+
+/// `POST /v1/registry-login` response. A refused login is an answer, not an
+/// error: `ok` is false and `message` says why. The password is never in it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegistryLoginResult {
+	/// Whether the registry accepted the login.
+	pub ok: bool,
+	/// One line for the user.
+	pub message: String,
+}
+
 /// Git credentials.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -448,6 +736,10 @@ pub enum GitAuth {
 	HttpsToken {
 		/// The token.
 		token: String,
+		/// The user name sent with it; `x-access-token` when absent. Gitea only accepts a token
+		/// together with the login of the account it belongs to.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		username: Option<String>,
 	},
 }
 
@@ -573,8 +865,31 @@ pub enum Event {
 		/// Hex SHA-256 of the compressed file.
 		sha256: String,
 	},
+	/// Terminal: a volume was archived to a gzip file on the agent host.
+	VolumeDumped {
+		/// Path of the gzip file.
+		path: String,
+		/// Compressed size in bytes.
+		size: u64,
+		/// Hex SHA-256 of the compressed file.
+		sha256: String,
+		/// Entries (files, directories, links) in the tar stream.
+		entries: u64,
+		/// Bytes of the tar stream before compression.
+		raw_bytes: u64,
+	},
+	/// Terminal: every part of a multipart upload is stored.
+	PartsUploaded {
+		/// The `ETag` response header of each part, in part order.
+		etags: Vec<String>,
+	},
 	/// Terminal: success without payload.
 	Done,
+	/// Terminal: a scheduled task's command ran to its end; zero is success.
+	Exited {
+		/// The command's exit code.
+		code: i64,
+	},
 	/// Terminal: failure.
 	Failed {
 		/// Human-readable cause.
@@ -588,7 +903,12 @@ impl Event {
 	pub fn is_terminal(&self) -> bool {
 		matches!(
 			self,
-			Self::Deployed { .. } | Self::DumpWritten { .. } | Self::Done | Self::Failed { .. }
+			Self::Deployed { .. }
+				| Self::DumpWritten { .. }
+				| Self::Done | Self::Exited { .. }
+				| Self::VolumeDumped { .. }
+				| Self::PartsUploaded { .. }
+				| Self::Failed { .. }
 		)
 	}
 }
@@ -732,6 +1052,35 @@ impl Engine {
 		}
 	}
 
+	/// Shell command that prints `connections|size|operations|memory` on one line, an empty
+	/// field where the engine has no cheap answer. It runs inside the database container, so
+	/// it reads the credentials from the container's own environment and sends none over
+	/// the wire; every query only reads.
+	///
+	/// Sources: `PostgreSQL` `pg_stat_database`
+	/// (<https://www.postgresql.org/docs/current/monitoring-stats.html>), `MySQL` status
+	/// variables (<https://dev.mysql.com/doc/refman/9.0/en/server-status-variables.html>),
+	/// `MongoDB` `serverStatus` and `dbStats`
+	/// (<https://www.mongodb.com/docs/manual/reference/command/serverStatus/>), Redis `INFO`
+	/// (<https://redis.io/docs/latest/commands/info/>).
+	#[must_use]
+	pub fn stats_cmd(self) -> &'static str {
+		match self {
+			Self::Postgres => {
+				r#"PGOPTIONS='-c default_transaction_read_only=on' psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atq -c "SELECT numbackends || '|' || pg_database_size(datname) || '|' || (xact_commit + xact_rollback) || '|' FROM pg_stat_database WHERE datname = current_database()""#
+			}
+			Self::Mysql => {
+				r#"MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot -N -B -e "SET SESSION TRANSACTION READ ONLY; SELECT CONCAT_WS('|', (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Threads_connected'), (SELECT COALESCE(SUM(data_length + index_length), 0) FROM information_schema.tables WHERE table_schema = '$MYSQL_DATABASE'), (SELECT VARIABLE_VALUE FROM performance_schema.global_status WHERE VARIABLE_NAME = 'Questions'), '')""#
+			}
+			Self::Mongodb => {
+				r#"mongosh --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval 'const s = db.serverStatus(); const d = db.getSiblingDB(process.env.MONGO_INITDB_DATABASE || "admin").stats(); const ops = Object.values(s.opcounters).reduce((a, b) => a + Number(b), 0); print([s.connections.current, d.dataSize, ops, Number(s.mem.resident) * 1048576].join("|"))'"#
+			}
+			Self::Redis => {
+				r#"REDISCLI_AUTH="$REDIS_PASSWORD" redis-cli INFO | tr -d '\r' | awk -F: '/^connected_clients:/{c=$2} /^used_memory:/{m=$2} /^total_commands_processed:/{o=$2} END{print c "||" o "|" m}'"#
+			}
+		}
+	}
+
 	/// Object-key extension of a dump.
 	#[must_use]
 	pub fn dump_ext(self) -> Option<&'static str> {
@@ -774,6 +1123,43 @@ pub struct RestoreRequest {
 	pub url: String,
 }
 
+/// `POST /v1/volume-backups/dump` body. Streams [`Event::Log`], then
+/// [`Event::VolumeDumped`] or [`Event::Failed`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VolumeDumpRequest {
+	/// Names the archive file `<data_dir>/backups/{backup_id}.tar.gz`.
+	pub backup_id: i64,
+	/// Podman volume to archive; mounted read-only into a helper container.
+	pub volume: String,
+}
+
+/// `POST /v1/volume-backups/upload` body: the file is sent as the parts of an
+/// S3 multipart upload the control plane created, then deleted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UploadPartsRequest {
+	/// Archive path returned in [`Event::VolumeDumped`].
+	pub path: String,
+	/// Bytes of every part but the last, which takes the rest.
+	pub part_size: u64,
+	/// Presigned `UploadPart` urls, in part order.
+	pub urls: Vec<String>,
+}
+
+/// `POST /v1/volume-backups/restore` body. Streams [`Event::Log`], then
+/// [`Event::Done`] or [`Event::Failed`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VolumeRestoreRequest {
+	/// Podman volume to fill; created when missing.
+	pub volume: String,
+	/// Presigned GET url of the gzip archive.
+	pub url: String,
+	/// Hex SHA-256 the downloaded archive must have; checked before anything is
+	/// deleted from the volume.
+	pub sha256: String,
+	/// Empty the volume before extracting.
+	pub wipe: bool,
+}
+
 /// `POST /v1/model-downloads` body. Streams [`Event::Log`] and
 /// [`Event::Progress`], then [`Event::Done`] or [`Event::Failed`].
 ///
@@ -804,6 +1190,65 @@ impl std::fmt::Debug for ModelDownloadRequest {
 			.field("token", &self.token.as_ref().map(|_| "<redacted>"))
 			.finish()
 	}
+}
+
+/// `POST /v1/cron/run` body. Streams [`Event::Log`] lines of the command's output, then
+/// [`Event::Exited`] with its exit code, or [`Event::Failed`] when it could not be run.
+///
+/// Dropping the connection stops the command: an exec is killed, a container is removed.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct CronRunRequest {
+	/// Names the pid file of an exec and the container of a one-shot run.
+	pub run_id: i64,
+	/// What to run, and where.
+	pub target: CronTarget,
+}
+
+impl std::fmt::Debug for CronRunRequest {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		// The environment of a container task carries secrets.
+		f.debug_struct("CronRunRequest")
+			.field("run_id", &self.run_id)
+			.finish_non_exhaustive()
+	}
+}
+
+/// Where a scheduled command runs.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum CronTarget {
+	/// Inside a running container, as `sh -c <command>`.
+	Exec {
+		/// Container name or id.
+		container: String,
+		/// The shell command.
+		command: String,
+	},
+	/// In a new container of `image`, removed afterwards.
+	Container {
+		/// Image reference; pulled when the server does not have it.
+		image: String,
+		/// Registry credentials for the pull.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		auth: Option<RegistryAuth>,
+		/// The shell command; replaces the image's entrypoint and command.
+		command: String,
+		/// Container environment.
+		#[serde(default, skip_serializing_if = "Vec::is_empty")]
+		env: Vec<(String, String)>,
+		/// Networks to join, the first being where it lives. Without aliases.
+		#[serde(default, skip_serializing_if = "Vec::is_empty")]
+		attach: Vec<NetworkAttach>,
+		/// Memory limit in bytes.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		memory_bytes: Option<i64>,
+		/// CPU limit in cores.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		cpu_cores: Option<f64>,
+		/// Volumes to mount, as the application has them.
+		#[serde(default, skip_serializing_if = "Vec::is_empty")]
+		volumes: Vec<VolumeMount>,
+	},
 }
 
 /// `POST /v1/probes` body: one HTTP request to a container's port, made from
@@ -878,6 +1323,41 @@ pub struct GatewayConfig {
 	/// Only used to tell "not allowed" (403) from "unknown" (404).
 	#[serde(default)]
 	pub other_models: Vec<String>,
+	/// Networks the sidecar must be on: those of the apps that use a model
+	/// and of the models. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub networks: Vec<String>,
+	/// Keys of application-to-MCP-server links, one server each. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub mcp_keys: Vec<GatewayMcpKey>,
+	/// Names of the MCP servers on the server that belong to no key above.
+	/// Only used to tell "not allowed" (403) from "unknown" (404).
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub other_mcp: Vec<String>,
+}
+
+/// One MCP server the gateway forwards `/mcp/<name>` to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatewayMcp {
+	/// Server-side id of the MCP server's application; usage is reported against it.
+	pub server_id: i64,
+	/// The `<name>` in `/mcp/<name>`.
+	pub name: String,
+	/// DNS name of the MCP server's container on its environment network.
+	pub host: String,
+	/// Port it listens on.
+	pub port: u16,
+	/// Path of its streamable HTTP endpoint, e.g. `/mcp`.
+	pub path: String,
+}
+
+/// The key of one link, and the one MCP server it opens.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatewayMcpKey {
+	/// Hex SHA-256 of the key.
+	pub key_hash: String,
+	/// What the key reaches.
+	pub mcp: GatewayMcp,
 }
 
 /// Token counters of one key and model during one hour.
@@ -895,6 +1375,88 @@ pub struct GatewayUsage {
 	pub input_tokens: u64,
 	/// Generated tokens, as far as the engine reported them.
 	pub output_tokens: u64,
+	/// An MCP link's counter: `model_id` is then the MCP server's application id and
+	/// the token counts are zero. Absent in older payloads.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub mcp: bool,
+}
+
+/// `POST /v1/scan/resolve` body: which image a reference names right now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScanResolveRequest {
+	/// Image reference or id on the server.
+	pub image: String,
+}
+
+/// `POST /v1/scan/resolve` answer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ScanResolveResponse {
+	/// Content id of the image (`sha256:…`): the key scans are cached under.
+	pub image_id: String,
+}
+
+/// `POST /v1/scan` body. With `image` the agent exports the image, runs Syft on
+/// it and Grype on the SBOM; with `sbom` alone it only runs Grype (a rescan,
+/// which never reads the image again).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScanRequest {
+	/// Image to scan; it must exist on the server.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub image: Option<String>,
+	/// `CycloneDX` JSON of an earlier scan, for a rescan.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub sbom: Option<String>,
+	/// CPU cap of each scanner container.
+	pub cpus: f64,
+	/// Memory cap of each scanner container, in MiB.
+	pub memory_mb: u32,
+}
+
+/// One vulnerability found in one package, reduced from Grype's match.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScanFinding {
+	/// `CVE-…`, `GHSA-…` or `GO-…`.
+	pub vuln_id: String,
+	/// Package name.
+	pub package: String,
+	/// Installed version.
+	pub version: String,
+	/// First version that fixes it, when there is one.
+	#[serde(default)]
+	pub fixed_version: Option<String>,
+	/// `critical`, `high`, `medium`, `low` or `unknown`.
+	pub severity: String,
+	/// Highest CVSS base score reported.
+	#[serde(default)]
+	pub cvss: Option<f64>,
+	/// EPSS probability (0 to 1).
+	#[serde(default)]
+	pub epss: Option<f64>,
+	/// Listed in CISA's Known Exploited Vulnerabilities catalog.
+	#[serde(default)]
+	pub kev: bool,
+	/// Where to read about it.
+	#[serde(default)]
+	pub url: Option<String>,
+}
+
+/// `POST /v1/scan` answer.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ScanResult {
+	/// Content id of the scanned image; empty for a rescan.
+	#[serde(default)]
+	pub image_id: String,
+	/// `CycloneDX` JSON, set when the agent built it (not for a rescan).
+	#[serde(default)]
+	pub sbom: Option<String>,
+	/// What Grype found.
+	pub findings: Vec<ScanFinding>,
+	/// When the vulnerability database Grype used was built.
+	#[serde(default)]
+	pub db_built: Option<String>,
+	/// `syft@1.57.2 grype@0.122.1`-style versions of the tools that ran.
+	#[serde(default)]
+	pub tools: String,
 }
 
 /// Shown when Hugging Face answers a download or listing with 401 or 403.
@@ -961,6 +1523,52 @@ mod tests {
 		assert!(
 			!json.contains("networks") && !json.contains("options"),
 			"{json}"
+		);
+	}
+
+	#[test]
+	fn attach_is_absent_unless_set() {
+		let mut spec: DeploySpec = serde_json::from_str(OLD_DEPLOY).unwrap();
+		assert!(spec.attach.is_empty());
+		assert!(!serde_json::to_string(&spec).unwrap().contains("attach"));
+		spec.attach = vec![NetworkAttach {
+			name: "podkit-env-1".into(),
+			aliases: vec!["db".into()],
+			internal: false,
+		}];
+		let back: DeploySpec =
+			serde_json::from_str(&serde_json::to_string(&spec).unwrap()).unwrap();
+		assert_eq!(back.attach, spec.attach);
+	}
+
+	#[test]
+	fn health_gate_is_absent_unless_set_and_round_trips() {
+		let mut spec: DeploySpec = serde_json::from_str(OLD_DEPLOY).unwrap();
+		assert!(spec.health.is_none());
+		assert!(!serde_json::to_string(&spec).unwrap().contains("health"));
+		spec.health = Some(HealthGate {
+			check: HealthCheck::Http {
+				path: "/up".into(),
+				status: 200,
+				port: 8080,
+			},
+			interval_ms: 5000,
+			timeout_ms: 3000,
+			retries: 3,
+			start_period_ms: 10_000,
+			gate_timeout_s: 90,
+			drain_s: 5,
+		});
+		let json = serde_json::to_string(&spec).unwrap();
+		assert!(json.contains(r#""check":{"type":"http","path":"/up","status":200,"port":8080}"#));
+		let back: DeploySpec = serde_json::from_str(&json).unwrap();
+		assert_eq!(back.health, spec.health);
+		let command = HealthCheck::Command {
+			command: "true".into(),
+		};
+		assert_eq!(
+			serde_json::from_str::<HealthCheck>(&serde_json::to_string(&command).unwrap()).unwrap(),
+			command
 		);
 	}
 
@@ -1066,6 +1674,30 @@ impl std::fmt::Debug for GatewayChatRequest {
 		f.debug_struct("GatewayChatRequest")
 			.field("key", &"***")
 			.field("body_bytes", &self.body.len())
+			.field("timeout_s", &self.timeout_s)
+			.finish()
+	}
+}
+
+/// `POST /v1/gateway/mcp/tools` body: `initialize` and `tools/list` against one
+/// MCP server through the gateway, from a throwaway container on the `podkit`
+/// network. The answer is an NDJSON stream of [`Event::Log`] lines: one JSON
+/// object, `{"tools": [...]}` or `{"error": "<why>"}`; then a terminal event.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GatewayMcpToolsRequest {
+	/// Gateway key sent as the bearer token. Never logged.
+	pub key: String,
+	/// The `<name>` of `/mcp/<name>`.
+	pub name: String,
+	/// Seconds each request may take.
+	pub timeout_s: u32,
+}
+
+impl std::fmt::Debug for GatewayMcpToolsRequest {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("GatewayMcpToolsRequest")
+			.field("key", &"***")
+			.field("name", &self.name)
 			.field("timeout_s", &self.timeout_s)
 			.finish()
 	}

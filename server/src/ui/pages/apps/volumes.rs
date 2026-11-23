@@ -18,13 +18,15 @@ use crate::auth::permission::{Action, Resource};
 use crate::ids::{ApplicationId, ProjectId, TeamId, VolumeId};
 use crate::state::AppState;
 use crate::ui::components::{
-	Dismiss, INPUT, LABEL, Size, Variant, button_class, card, card_content, card_section, dialog,
+	INPUT, LABEL, Size, Variant, button_class, card, card_content, card_section, dialog,
 	dialog_open_button, empty_state, icon,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::form_error;
+use crate::ui::pages::volume_backups::{self as vb, Kind};
 use crate::ui::sse::js_string;
 use crate::ui::{error, sse};
+use crate::volume_backups::subject::Owner;
 use crate::volumes::Volume;
 use crate::volumes::service as volumes;
 
@@ -40,8 +42,7 @@ pub fn router() -> Router<AppState> {
 		)
 }
 
-const ROW: &str =
-	"flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-3";
+const ROW: &str = "ui-card-row";
 
 fn delete_dialog(base: &str, volume: &Volume) -> Markup {
 	let id = format!("volume-delete-{}", volume.id);
@@ -53,7 +54,6 @@ fn delete_dialog(base: &str, volume: &Volume) -> Markup {
 		&id,
 		"Delete this volume?",
 		None,
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				p {
@@ -76,16 +76,14 @@ fn volume_list(base: &str, volumes: &[Volume], can_delete: bool) -> Markup {
 	html! {
 		div id="volume-list" {
 			@if volumes.is_empty() {
-				div class="border-t border-border px-6 pt-6" {
-					(empty_state(
-						"hard-drive",
-						"No volumes yet.",
-						Some("Without one, files written by the application are lost on every deploy."),
-						None,
-					))
-				}
+				(empty_state(
+					"hard-drive",
+					"No volumes yet.",
+					Some("Without one, files written by the application are lost on every deploy."),
+					None,
+				))
 			} @else {
-				ul aria-label="Volumes" {
+				ul class="ui-card-rows" aria-label="Volumes" {
 					@for volume in volumes {
 						li class=(ROW) {
 							div class="flex min-w-0 flex-col" {
@@ -122,6 +120,20 @@ async fn volumes_page(
 	let base = app_url(ctx.team.id, project.id, app.id);
 	let can_create = ctx.perms.can(Action::Create, Resource::Volume);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::Volume);
+	let backups = if list.is_empty() || !ctx.perms.can(Action::Read, Resource::Backup) {
+		html! {}
+	} else {
+		let (views, destinations) = vb::views_for(&s, &ctx, project.id, Owner::App(app.id))
+			.await
+			.map_err(|e| error::page(&ctx, &e))?;
+		vb::panel(
+			&ctx,
+			Kind::App,
+			&format!("{base}/volumes"),
+			&views,
+			&destinations,
+		)
+	};
 
 	let add = format!(
 		"evt.preventDefault(); @post({})",
@@ -132,11 +144,12 @@ async fn volumes_page(
 			(saved_slot(&ctx, &base, false))
 			(card(&html! {
 				(card_section("Volumes", Some("Persistent storage mounted into the container. A volume keeps its files across deploys and is mounted from the next deploy on."), None))
-				div class="flex flex-col gap-2" {
-					div class="px-6" { (form_error()) }
+				div class="ui-card-list" {
+					div class="ui-card-slot" { (form_error()) }
 					(volume_list(&base, &list, can_delete))
 				}
 			}))
+			(backups)
 			@if can_create {
 				(card(&html! {
 					(card_section("Add a volume", None, None))

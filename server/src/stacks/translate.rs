@@ -271,7 +271,38 @@ fn translate(stack: i64, s: &Service, settings: &Settings<'_>) -> Result<DeployS
 		stop_timeout_s: s.stop_timeout_s,
 		networks: vec![network_name(stack)],
 		options,
+		attach: Vec::new(),
+		health: None,
 	})
+}
+
+/// Gives every service its place on the networks beyond the stack's own.
+/// A routed service lives on the stack network as its primary one, where
+/// Traefik reaches it; every service also joins the networks the stack is
+/// attached to (`linked`), under `podkit-<service>`. The specs' hashes change
+/// with them, so attaching a stack redeploys its services.
+pub fn link_networks(plan: &mut Plan, linked: &[crate::networks::attach::Linked]) {
+	for planned in &mut plan.services {
+		let spec = &mut planned.spec;
+		let alias = format!("podkit-{}", spec.service);
+		let mut attach = Vec::new();
+		if spec.routing.is_some() {
+			let mut aliases = vec![alias.clone()];
+			aliases.extend(spec.options.net_aliases.iter().cloned());
+			attach.push(proto::NetworkAttach {
+				name: plan.network.clone(),
+				aliases,
+				internal: false,
+			});
+		}
+		attach.extend(linked.iter().map(|l| proto::NetworkAttach {
+			name: l.name.clone(),
+			aliases: vec![alias.clone()],
+			internal: l.internal,
+		}));
+		spec.attach = attach;
+		planned.hash = hash(spec);
+	}
 }
 
 /// SHA-256 of the spec as JSON, without the per-deploy instance id.

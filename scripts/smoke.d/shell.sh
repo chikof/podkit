@@ -4,7 +4,7 @@ section_shell() {
 	# `/` redirects a signed-in user to their first team; follow it.
 	FOLLOW=-L expect_page / "New project"
 	expect_page "/teams/$TEAM/projects" "New project"
-	expect_page "/teams/$TEAM/projects" "S3 Destinations"
+	expect_page "/teams/$TEAM/projects" "S3 destinations"
 	expect_page "/teams/$TEAM/projects" 'class="ui-sidebar'
 	expect_page "/teams/$TEAM/projects" 'id="palette"'
 	expect_page "/teams/$TEAM/projects" 'aria-label="Breadcrumb"'

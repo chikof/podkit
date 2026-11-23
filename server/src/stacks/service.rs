@@ -15,13 +15,15 @@ use super::{
 	DOMAIN_INDEX, NAME_CONSTRAINT, NewStack, SLUG_CONSTRAINT, ServiceState, ServiceStatus, Stack,
 	StackService, StackStatus,
 };
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
+use crate::change::Change;
 use crate::db::is_unique_violation;
 use crate::error::{AppResult, ServerError};
-use crate::ids::{EnvironmentId, JobId, ProjectId, ServerId, StackId, TeamId, UserId};
+use crate::ids::{EnvironmentId, JobId, ProjectId, RegistryId, ServerId, StackId, TeamId, UserId};
 use crate::jobs::{self, JobKind, JobStatus};
 use crate::state::AppState;
-use crate::{environments, scope, servers, stacks, validate};
+use crate::{environments, registries, scope, servers, stacks, validate};
 
 const MAX_TAIL: u32 = 5000;
 const MAX_ENV_VARS: usize = 200;
@@ -43,6 +45,8 @@ pub struct CreateInput {
 	pub source: Option<String>,
 	/// Queue the first deploy right away.
 	pub deploy: bool,
+	/// A saved registry to pull the images with.
+	pub registry: Option<RegistryId>,
 }
 
 /// Changes to a stack; omitted fields stay as they are. Variables are
@@ -53,6 +57,8 @@ pub struct UpdateInput {
 	pub compose_yaml: Option<String>,
 	pub env_set: BTreeMap<String, String>,
 	pub env_unset: Vec<String>,
+	/// `None` leaves the saved registry as it is, `Some(None)` clears it.
+	pub registry: Change<RegistryId>,
 }
 
 /// A stack with what a page about it shows. Carries no variable values.
@@ -228,6 +234,24 @@ fn files_of(s: &AppState, stack: &Stack) -> AppResult<BTreeMap<String, String>> 
 	})
 }
 
+/// The variables the stack's compose file is interpolated with: the shared variables of its
+/// team, project and environment under the stack's own (which win), with `${{shared.KEY}}`
+/// in the stack's values replaced. Never stored: only the stack's own go back to the database.
+pub async fn effective_env(s: &AppState, stack: &Stack) -> AppResult<BTreeMap<String, String>> {
+	let own = env_of(s, stack)?;
+	crate::shared_env::resolve::stack_inputs(s, stack.project_id, stack.environment_id, own)
+		.await
+		.map_err(|e| match e {
+			crate::shared_env::resolve::ResolveError::Missing { .. } => {
+				ServerError::Validation(e.to_string())
+			}
+			e => {
+				tracing::error!(stack = stack.id.0, "shared variables: {e}");
+				ServerError::Internal
+			}
+		})
+}
+
 fn env_of(s: &AppState, stack: &Stack) -> AppResult<BTreeMap<String, String>> {
 	stacks::decrypt_env(&s.secrets, stack).map_err(|e| {
 		tracing::error!(stack = stack.id.0, "{e}");
@@ -276,6 +300,9 @@ pub async fn create(
 	let server = scope::server(&s.db, team, body.server_id).await?;
 	let slug = validate_name(&body.name)?;
 	validate_env(&body.env)?;
+	if let Some(registry) = body.registry {
+		registries::service::pick(&s.db, team, registry).await?;
+	}
 
 	let id = StackId::generate();
 	let (compose, _) = check(
@@ -308,6 +335,7 @@ pub async fn create(
 				stacks::encrypt_env(&s.secrets, &body.files)?
 			},
 			source,
+			registry_id: body.registry,
 		},
 	)
 	.await
@@ -319,6 +347,26 @@ pub async fn create(
 	} else {
 		None
 	};
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.create",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new()
+			.set("name", stack.name.clone())
+			.set("source", stack.source.clone())
+			.set("server_id", server.id.0)
+			.set(
+				"services",
+				compose.services.keys().cloned().collect::<Vec<_>>(),
+			)
+			.set("env_keys", body.env.keys().cloned().collect::<Vec<_>>())
+			.set("deployed", job.is_some()),
+	)
+	.await;
 	Ok((stack, job))
 }
 
@@ -369,11 +417,14 @@ pub async fn detail(
 		tracing::debug!(stack = stack.id.0, "stack status refresh timed out");
 	}
 	let env = env_of(s, &stack)?;
+	let inputs = effective_env(s, &stack)
+		.await
+		.unwrap_or_else(|_| env.clone());
 	let files = files_of(s, &stack)?;
 	let (warnings, missing_vars) = match compose::parse(
 		&stack.compose_yaml,
 		&Inputs {
-			env: &env,
+			env: &inputs,
 			files: &files,
 		},
 	) {
@@ -469,6 +520,9 @@ pub async fn update(
 	if stack.status == StackStatus::Deleting {
 		return Err(ServerError::Conflict("stack is being deleted".to_string()));
 	}
+	if let Change::Set(registry) = body.registry {
+		registries::service::pick(&s.db, team, registry).await?;
+	}
 
 	let name = match &body.name {
 		Some(name) => {
@@ -485,6 +539,7 @@ pub async fn update(
 		env.remove(key);
 	}
 	validate_env(&body.env_set)?;
+	let env_set_keys: Vec<String> = body.env_set.keys().cloned().collect();
 	env.extend(body.env_set);
 	validate_env(&env)?;
 
@@ -498,14 +553,33 @@ pub async fn update(
 		&name,
 		&yaml,
 		&stacks::encrypt_env(&s.secrets, &env)?,
+		body.registry,
 	)
 	.await
 	.map_err(unique_conflict)?;
 	stacks::sync_services(&s.db, stack.id, &images_of(&compose)).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.update",
+		Target::new("stack", updated.id)
+			.named(&updated.slug)
+			.in_project(project),
+		Diff::new()
+			.changed("name", stack.name.clone(), updated.name.clone())
+			.set(
+				"compose_changed",
+				stack.compose_yaml != updated.compose_yaml,
+			)
+			.set("env_keys_set", env_set_keys)
+			.set("env_keys_unset", body.env_unset.clone()),
+	)
+	.await;
 	Ok(updated)
 }
 
-async fn start_deploy(s: &AppState, stack: &Stack) -> AppResult<JobId> {
+pub(crate) async fn start_deploy(s: &AppState, stack: &Stack) -> AppResult<JobId> {
 	stacks::set_status(&s.db, stack.id, StackStatus::Deploying, None).await?;
 	queue_or_fail(
 		s,
@@ -531,7 +605,7 @@ pub async fn deploy(
 	if stack.status == StackStatus::Deleting {
 		return Err(ServerError::Conflict("stack is being deleted".to_string()));
 	}
-	let env = env_of(s, &stack)?;
+	let env = effective_env(s, &stack).await?;
 	let services = stacks::list_services(&s.db, stack.id).await?;
 	let files = files_of(s, &stack)?;
 	check(
@@ -546,6 +620,17 @@ pub async fn deploy(
 	let job = start_deploy(s, &stack).await?;
 	stack.status = StackStatus::Deploying;
 	stack.status_message = None;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.deploy",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new().set("job_id", job.0),
+	)
+	.await;
 	Ok((stack, job))
 }
 
@@ -564,6 +649,17 @@ pub async fn stop(
 		return Err(ServerError::Conflict("stack is being deleted".to_string()));
 	}
 	let job = stacks::enqueue(s, JobKind::StackStop, &stack, stack.id.0).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.stop",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new().set("job_id", job.0),
+	)
+	.await;
 	Ok((stack, job))
 }
 
@@ -584,6 +680,17 @@ pub async fn restart_service(
 		return Err(ServerError::Conflict("stack is being deleted".to_string()));
 	}
 	let job = stacks::enqueue(s, JobKind::StackRestartService, &stack, svc.id.0).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.restart",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new().set("service", svc.name.clone()),
+	)
+	.await;
 	Ok((svc, job))
 }
 
@@ -610,6 +717,19 @@ pub async fn remove(
 		JobKind::StackRemove
 	};
 	let job = queue_or_fail(s, kind, &stack, stack.id.0, "failed to queue remove job").await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.delete",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new()
+			.set("name", stack.name.clone())
+			.set("purge_volumes", purge_volumes),
+	)
+	.await;
 	Ok((stack, job))
 }
 
@@ -661,6 +781,20 @@ pub async fn set_domain(
 	stacks::set_domain(&s.db, svc.id, Some(&host), port.map(i32::from))
 		.await
 		.map_err(unique_conflict)?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.domain.set",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new()
+			.set("service", svc.name.clone())
+			.set("host", host.clone())
+			.set("port", port),
+	)
+	.await;
 	service_row(&s.db, &stack, service).await
 }
 
@@ -678,6 +812,17 @@ pub async fn clear_domain(
 	let stack = scope::stack(&s.db, team, project, id).await?;
 	let svc = service_row(&s.db, &stack, service).await?;
 	stacks::set_domain(&s.db, svc.id, None, None).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"stack.domain.clear",
+		Target::new("stack", stack.id)
+			.named(&stack.slug)
+			.in_project(project),
+		Diff::new().set("service", svc.name.clone()),
+	)
+	.await;
 	service_row(&s.db, &stack, service).await
 }
 

@@ -225,6 +225,165 @@ impl Podman {
 		}
 	}
 
+	/// Creates the network, without outbound access when `internal`, unless
+	/// it exists (it is then left as it is).
+	///
+	/// # Errors
+	/// Podman rejects the request.
+	pub async fn create_network(&self, name: &str, internal: bool) -> Result<(), PodmanError> {
+		match self
+			.docker
+			.create_network(NetworkCreateRequest {
+				name: name.to_string(),
+				internal: internal.then_some(true),
+				..Default::default()
+			})
+			.await
+		{
+			Ok(_)
+			| Err(bollard::errors::Error::DockerResponseServerError {
+				status_code: 409, ..
+			}) => Ok(()),
+			Err(e) => Err(e.into()),
+		}
+	}
+
+	/// Every network of the server, with the names of its containers.
+	///
+	/// # Errors
+	/// Podman is unreachable.
+	pub async fn list_networks(&self) -> Result<Vec<proto::NetworkInfo>, PodmanError> {
+		let all = self
+			.docker
+			.list_networks(None::<bollard::query_parameters::ListNetworksOptions>)
+			.await?;
+		let mut out = Vec::new();
+		for network in all {
+			let Some(name) = network.name else { continue };
+			// The list call does not carry the members; inspect for them.
+			let members = self.inspect_network(&name).await?;
+			out.push(proto::NetworkInfo {
+				internal: network.internal.unwrap_or(false),
+				driver: network.driver.unwrap_or_default(),
+				containers: members.map(|m| m.containers).unwrap_or_default(),
+				name,
+			});
+		}
+		out.sort_by(|a, b| a.name.cmp(&b.name));
+		Ok(out)
+	}
+
+	/// One network; `None` when it does not exist.
+	///
+	/// # Errors
+	/// Podman is unreachable.
+	pub async fn inspect_network(
+		&self,
+		name: &str,
+	) -> Result<Option<proto::NetworkInfo>, PodmanError> {
+		match self
+			.docker
+			.inspect_network(
+				name,
+				None::<bollard::query_parameters::InspectNetworkOptions>,
+			)
+			.await
+		{
+			Ok(n) => {
+				let mut containers: Vec<String> = n
+					.containers
+					.unwrap_or_default()
+					.into_values()
+					.filter_map(|c| c.name)
+					.collect();
+				containers.sort();
+				Ok(Some(proto::NetworkInfo {
+					name: n.name.unwrap_or_else(|| name.to_string()),
+					internal: n.internal.unwrap_or(false),
+					driver: n.driver.unwrap_or_default(),
+					containers,
+				}))
+			}
+			Err(bollard::errors::Error::DockerResponseServerError {
+				status_code: 404, ..
+			}) => Ok(None),
+			Err(e) => Err(e.into()),
+		}
+	}
+
+	/// Joins a running or stopped container to a network. Already being on it
+	/// is fine.
+	///
+	/// # Errors
+	/// Podman rejects the request.
+	pub async fn connect_network(
+		&self,
+		network: &str,
+		container: &str,
+		aliases: &[String],
+	) -> Result<(), PodmanError> {
+		match self
+			.docker
+			.connect_network(
+				network,
+				NetworkConnectRequest {
+					container: container.to_string(),
+					endpoint_config: Some(EndpointSettings {
+						aliases: (!aliases.is_empty()).then(|| aliases.to_vec()),
+						..Default::default()
+					}),
+				},
+			)
+			.await
+		{
+			Ok(())
+			| Err(bollard::errors::Error::DockerResponseServerError {
+				status_code: 409, ..
+			}) => Ok(()),
+			Err(bollard::errors::Error::DockerResponseServerError { message, .. })
+				if message.contains("already") =>
+			{
+				Ok(())
+			}
+			Err(e) => Err(e.into()),
+		}
+	}
+
+	/// Takes a container off a network. Not being on it is fine.
+	///
+	/// # Errors
+	/// Podman rejects the request.
+	pub async fn disconnect_network(
+		&self,
+		network: &str,
+		container: &str,
+	) -> Result<(), PodmanError> {
+		match self
+			.docker
+			.disconnect_network(
+				network,
+				bollard::models::NetworkDisconnectRequest {
+					container: container.to_string(),
+					force: Some(true),
+				},
+			)
+			.await
+		{
+			Ok(()) => Ok(()),
+			Err(bollard::errors::Error::DockerResponseServerError {
+				status_code: 404 | 409 | 500,
+				message,
+			}) if message.contains("not connected")
+				|| message.contains("no such")
+				|| message.contains("not found")
+				|| message.contains("No such") =>
+			{
+				Ok(())
+			}
+			Err(e) => Err(e.into()),
+		}
+	}
+
 	/// Removes a network. Podman answers 409 while containers are on it and
 	/// 404 when it does not exist; a missing one is fine here.
 	///
@@ -666,6 +825,25 @@ impl Podman {
 			.collect())
 	}
 
+	/// Running containers carrying the label `key=value`.
+	///
+	/// # Errors
+	/// Podman is unreachable.
+	pub async fn labeled_containers(
+		&self,
+		label: &str,
+	) -> Result<Vec<ContainerSummary>, PodmanError> {
+		let filters = HashMap::from([("label".to_string(), vec![label.to_string()])]);
+		Ok(self
+			.docker
+			.list_containers(Some(ListContainersOptions {
+				all: false,
+				filters: Some(filters),
+				..Default::default()
+			}))
+			.await?)
+	}
+
 	/// Containers named `podkit-{service}-{instance_id}`.
 	///
 	/// # Errors
@@ -707,6 +885,83 @@ impl Podman {
 				}),
 			)
 			.map(|item| item.map_err(PodmanError::from))
+	}
+
+	/// Runs `cmd` in a running container and returns its exit status and stdout. Stderr is
+	/// dropped. Nothing is written to the command's stdin.
+	///
+	/// # Errors
+	/// Podman is unreachable or refuses the exec (no such container, not running).
+	pub async fn exec_output(
+		&self,
+		container: &str,
+		cmd: &[&str],
+	) -> Result<(i64, String), PodmanError> {
+		let created = self
+			.docker
+			.create_exec(
+				container,
+				bollard::exec::CreateExecOptions::<String> {
+					attach_stdout: Some(true),
+					attach_stderr: Some(true),
+					cmd: Some(cmd.iter().map(|c| (*c).to_owned()).collect()),
+					..Default::default()
+				},
+			)
+			.await?;
+		let mut stdout = Vec::new();
+		if let bollard::exec::StartExecResults::Attached { mut output, .. } =
+			self.docker.start_exec(&created.id, None).await?
+		{
+			while let Some(item) = output.next().await {
+				if let LogOutput::StdOut { message } | LogOutput::Console { message } = item? {
+					stdout.extend_from_slice(&message);
+				}
+			}
+		}
+		// Podman can report the exec as still running for a moment after its output closed.
+		for _ in 0..20 {
+			let info = self.docker.inspect_exec(&created.id).await?;
+			if info.running != Some(true) {
+				return Ok((
+					info.exit_code.unwrap_or(-1),
+					String::from_utf8_lossy(&stdout).into_owned(),
+				));
+			}
+			tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+		}
+		Ok((-1, String::from_utf8_lossy(&stdout).into_owned()))
+	}
+
+	/// The container events `since`..`until` (unix seconds) that the charts mark: `die`,
+	/// `oom` and `restart`. Podman's compat API names a death either `die` or `died`, so
+	/// both are asked for. With `until` set the API answers with the past and closes, so
+	/// nothing stays subscribed.
+	///
+	/// # Errors
+	/// Podman is unreachable.
+	pub async fn events_between(
+		&self,
+		since: i64,
+		until: i64,
+	) -> Result<Vec<EventMessage>, PodmanError> {
+		let filters = HashMap::from([
+			("type".to_string(), vec!["container".to_string()]),
+			(
+				"event".to_string(),
+				["die", "died", "oom", "restart"].map(String::from).to_vec(),
+			),
+		]);
+		let mut stream = std::pin::pin!(self.docker.events(Some(EventsOptions {
+			since: Some(since.to_string()),
+			until: Some(until.to_string()),
+			filters: Some(filters),
+		})));
+		let mut out = Vec::new();
+		while let Some(item) = stream.next().await {
+			out.push(item?);
+		}
+		Ok(out)
 	}
 
 	/// Container `die`/`died` events. Podman's compat API may name the event

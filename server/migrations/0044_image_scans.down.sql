@@ -1,0 +1,10 @@
+DELETE FROM role_permissions WHERE permission_id IN (SELECT id FROM permissions WHERE resource = 'scan');
+DELETE FROM permissions WHERE resource = 'scan';
+ALTER TABLE servers DROP COLUMN IF EXISTS scan_rescanned_at;
+ALTER TABLE servers DROP COLUMN IF EXISTS scan_memory_mb;
+ALTER TABLE servers DROP COLUMN IF EXISTS scan_cpus;
+ALTER TABLE servers DROP COLUMN IF EXISTS scan_enabled;
+DROP TABLE IF EXISTS scan_links;
+DROP TABLE IF EXISTS scan_ignores;
+DROP TABLE IF EXISTS scan_findings;
+DROP TABLE IF EXISTS image_scans;

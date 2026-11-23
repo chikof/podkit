@@ -121,12 +121,26 @@ async fn phase(tx: &mpsc::Sender<Event>, phase: Phase) -> Result<(), String> {
 	emit(tx, Event::Phase { phase }).await
 }
 
+/// Keeps Traefik on the networks of the routed containers. A failure only
+/// delays routing until the next deploy, so it is logged and not fatal.
+pub(crate) async fn sync_ingress_networks(podman: &Podman) {
+	if let Err(e) = ingress::sync_networks(podman).await {
+		tracing::warn!(error = %e, "syncing Traefik's networks failed");
+	}
+}
+
 async fn ensure_networks(podman: &Podman, spec: &DeploySpec) -> Result<(), String> {
-	if !spec.options.isolated {
+	if !spec.options.isolated && spec.attach.is_empty() {
 		podman
 			.ensure_network(NETWORK)
 			.await
 			.map_err(|e| format!("network setup failed: {e}"))?;
+	}
+	for attach in &spec.attach {
+		podman
+			.create_network(&attach.name, attach.internal)
+			.await
+			.map_err(|e| format!("network {} setup failed: {e}", attach.name))?;
 	}
 	for network in &spec.networks {
 		podman
@@ -137,6 +151,10 @@ async fn ensure_networks(podman: &Podman, spec: &DeploySpec) -> Result<(), Strin
 	Ok(())
 }
 
+#[allow(
+	clippy::too_many_lines,
+	reason = "one deploy is one flow: create, start, wait, swap, clean up"
+)]
 async fn execute(
 	ctx: &Ctx,
 	spec: &DeploySpec,
@@ -164,6 +182,14 @@ async fn execute(
 
 	let service = &spec.service;
 	let new_name = format!("podkit-{service}-{}", spec.instance_id);
+	let resolved;
+	let spec = if let Some(with_command) = with_bridge_command(&podman, spec, &image).await? {
+		resolved = with_command;
+		&resolved
+	} else {
+		spec
+	};
+	let service = &spec.service;
 
 	phase(tx, Phase::Starting).await?;
 	ensure_networks(&podman, spec).await?;
@@ -184,7 +210,10 @@ async fn execute(
 			.await
 			.map_err(|e| format!("volume {} setup failed: {e}", volume.name))?;
 	}
-	let file_binds = write_files(&ctx.data_dir, spec).await?;
+	let mut file_binds = write_files(&ctx.data_dir, spec).await?;
+	if let Some(gate) = &spec.health {
+		file_binds.extend(crate::health::binds(gate, &crate::health::agent_exe()?));
+	}
 
 	let mut old = Vec::new();
 	let existing = podman
@@ -192,7 +221,7 @@ async fn execute(
 		.await
 		.map_err(|e| format!("listing containers failed: {e}"))?;
 	for name in existing.iter().filter_map(crate::podman::summary_name) {
-		if spec.strategy == Strategy::Recreate || name == new_name {
+		if retires_first(spec.strategy, name, &new_name) {
 			retire(&podman, &ctx.supervisor, name, true).await;
 		} else {
 			old.push(name.to_string());
@@ -213,16 +242,33 @@ async fn execute(
 	}
 
 	phase(tx, Phase::HealthCheck).await?;
-	if let Err(message) = health_check(&podman, &new_name).await {
+	let healthy = match &spec.health {
+		Some(gate) => crate::health::wait_healthy(&podman, &new_name, gate, tx)
+			.await
+			.map_err(|why| format!("the new container did not become healthy: {why}")),
+		None => health_check(&podman, &new_name).await,
+	};
+	if let Err(message) = healthy {
 		report_container_tail(&podman, &new_name, tx).await;
+		if !old.is_empty() {
+			log(
+				tx,
+				Stream::System,
+				"the previous container is still serving",
+			)
+			.await?;
+		}
 		return Err(message);
 	}
 
 	if spec.strategy == Strategy::Rolling {
 		phase(tx, Phase::Swapping).await?;
+		if spec.routing.is_some() {
+			sync_ingress_networks(&podman).await;
+		}
 		if !old.is_empty() {
 			if spec.routing.is_some() {
-				tokio::time::sleep(SWAP_DELAY).await;
+				tokio::time::sleep(drain_delay(spec)).await;
 			}
 			for name in &old {
 				retire(&podman, &ctx.supervisor, name, true).await;
@@ -230,6 +276,9 @@ async fn execute(
 		}
 	}
 	cleanup.disarm();
+	if spec.routing.is_some() {
+		sync_ingress_networks(&podman).await;
+	}
 
 	if matches!(spec.source, Source::Git { .. }) {
 		prune_images(&podman, service).await;
@@ -239,6 +288,20 @@ async fn execute(
 		container_id,
 		image,
 		commit_sha,
+	})
+}
+
+/// Whether an existing container of the service goes before the new one starts. Recreate
+/// frees what only one container can hold (a volume); a container with the new one's name
+/// is a leftover of a retried deploy. Everything else is retired after the new one is up.
+fn retires_first(strategy: Strategy, existing: &str, new_name: &str) -> bool {
+	strategy == Strategy::Recreate || existing == new_name
+}
+
+/// How long the old containers keep serving once the new one has taken over.
+fn drain_delay(spec: &DeploySpec) -> Duration {
+	spec.health.as_ref().map_or(SWAP_DELAY, |gate| {
+		Duration::from_secs(u64::from(gate.drain_s))
 	})
 }
 
@@ -267,6 +330,14 @@ fn validate_options(spec: &DeploySpec) -> Result<(), String> {
 	}
 	if o.isolated && (spec.networks.is_empty() || spec.routing.is_some()) {
 		return Err("an isolated container needs a stack network and no routing".to_string());
+	}
+	for attach in &spec.attach {
+		if !crate::networks::valid_member_network(&attach.name) {
+			return Err(format!("invalid network name {:?}", attach.name));
+		}
+		if let Some(alias) = attach.aliases.iter().find(|a| !valid_name(a, b"_.-")) {
+			return Err(format!("invalid network alias {alias:?}"));
+		}
 	}
 	for alias in spec.network_aliases.iter().chain(&o.net_aliases) {
 		if !valid_name(alias, b"_.-") {
@@ -297,7 +368,86 @@ fn validate_options(spec: &DeploySpec) -> Result<(), String> {
 			return Err(format!("file mount {:?} is too large", file.path));
 		}
 	}
+	if let Some(bridge) = &o.mcp_bridge {
+		if bridge.port == 0
+			|| !bridge.path.starts_with('/')
+			|| bridge.path.contains(char::is_whitespace)
+		{
+			return Err("invalid MCP bridge endpoint".to_string());
+		}
+		if bridge.command.iter().any(|a| a.contains('\0')) {
+			return Err("invalid MCP bridge command".to_string());
+		}
+		if spec.entrypoint.is_some() || spec.command.is_some() {
+			return Err("an MCP bridge replaces the entrypoint and the command".to_string());
+		}
+	}
 	Ok(())
+}
+
+/// Where the agent binary appears inside a container that runs a bridge.
+const BRIDGE_EXE: &str = "/podkit-agent";
+
+/// The spec with the bridge's command filled in from the image's own
+/// entrypoint and command when the spec names none. `None` when the container
+/// runs no bridge or already has its command.
+async fn with_bridge_command(
+	podman: &Podman,
+	spec: &DeploySpec,
+	image: &str,
+) -> Result<Option<DeploySpec>, String> {
+	let Some(bridge) = spec
+		.options
+		.mcp_bridge
+		.as_ref()
+		.filter(|b| b.command.is_empty())
+	else {
+		return Ok(None);
+	};
+	let config = podman
+		.inspect_image(image)
+		.await
+		.map_err(|e| format!("cannot read the image's command: {e}"))?
+		.and_then(|i| i.config);
+	let command: Vec<String> = config
+		.iter()
+		.flat_map(|c| c.entrypoint.iter().flatten().chain(c.cmd.iter().flatten()))
+		.cloned()
+		.collect();
+	if command.is_empty() {
+		return Err(
+			"the image has no entrypoint or command to run behind the bridge; \
+			give the MCP server a command"
+				.to_string(),
+		);
+	}
+	let mut spec = spec.clone();
+	spec.options.mcp_bridge = Some(proto::McpBridge {
+		command,
+		..bridge.clone()
+	});
+	Ok(Some(spec))
+}
+
+/// The container's entrypoint and the mounts for a bridge: the agent binary,
+/// and for a dev build linked against the Nix store, the store.
+fn bridge_parts(bridge: &proto::McpBridge) -> (Vec<String>, Vec<String>) {
+	let mut binds = Vec::new();
+	if let Ok((path, _)) = crate::gateway::sidecar::current_exe() {
+		binds.push(format!("{}:{BRIDGE_EXE}:ro", path.display()));
+		if crate::gateway::sidecar::needs_nix_store(&path) {
+			binds.push("/nix/store:/nix/store:ro".to_string());
+		}
+	}
+	let mut entrypoint = vec![
+		BRIDGE_EXE.to_string(),
+		"--mcp-bridge".to_string(),
+		format!("--listen=0.0.0.0:{}", bridge.port),
+		format!("--path={}", bridge.path),
+		"--".to_string(),
+	];
+	entrypoint.extend(bridge.command.iter().cloned());
+	(entrypoint, binds)
 }
 
 /// Writes the spec's file mounts below `<data_dir>/stack-files/<service>/` and
@@ -339,6 +489,9 @@ fn validate(spec: &DeploySpec) -> Result<(), String> {
 		return Err("routing requires container_port".to_string());
 	}
 	validate_options(spec)?;
+	if let Some(gate) = &spec.health {
+		crate::health::validate(gate)?;
+	}
 	for volume in &spec.volumes {
 		if !valid_name(&volume.name, b"_.-") {
 			return Err(format!("invalid volume name {:?}", volume.name));
@@ -377,6 +530,14 @@ fn container_spec(
 ) -> ContainerSpec {
 	let mut labels = vec![("podkit.service".to_string(), spec.service.clone())];
 	if let (Some(routing), Some(port)) = (&spec.routing, spec.container_port) {
+		// Traefik reaches the container on the network it lives on.
+		labels.push((
+			ingress::NETWORK_LABEL.to_string(),
+			spec.attach
+				.first()
+				.map_or(NETWORK, |a| a.name.as_str())
+				.to_string(),
+		));
 		labels.extend(ingress::routing_labels(
 			&spec.service,
 			&routing.http_hosts,
@@ -389,13 +550,33 @@ fn container_spec(
 	}
 	// Where the container lives: the stack network alone when isolated,
 	// otherwise `podkit` first and the stack networks after it.
+	let attached = |skip: usize| {
+		spec.attach
+			.iter()
+			.skip(skip)
+			.map(|a| (a.name.clone(), a.aliases.clone()))
+			.collect::<Vec<_>>()
+	};
+	let stack_networks = || {
+		spec.networks
+			.iter()
+			.filter(|n| !spec.attach.iter().any(|a| &a.name == *n))
+			.map(|n| (n.clone(), spec.options.net_aliases.clone()))
+			.collect::<Vec<_>>()
+	};
 	let (network, aliases, extra_networks) = if spec.options.isolated {
 		let mut networks = spec.networks.iter();
 		let first = networks.next().cloned().unwrap_or_default();
-		let rest = networks
+		let mut rest: Vec<_> = networks
 			.map(|n| (n.clone(), spec.options.net_aliases.clone()))
 			.collect();
+		// A stack service linked to other resources also sits on their network.
+		rest.extend(attached(0));
 		(first, spec.options.net_aliases.clone(), rest)
+	} else if let Some(first) = spec.attach.first() {
+		let mut rest = attached(1);
+		rest.extend(stack_networks());
+		(first.name.clone(), first.aliases.clone(), rest)
 	} else {
 		let rest = spec
 			.networks
@@ -404,6 +585,7 @@ fn container_spec(
 			.collect();
 		(NETWORK.to_string(), spec.network_aliases.clone(), rest)
 	};
+	let bridge = spec.options.mcp_bridge.as_ref().map(bridge_parts);
 	ContainerSpec {
 		name: name.to_string(),
 		image: image.to_string(),
@@ -422,14 +604,23 @@ fn container_spec(
 				format!("{}:{}{mode}", v.name, v.path)
 			})
 			.chain(file_binds.iter().cloned())
+			.chain(bridge.iter().flat_map(|(_, binds)| binds.iter().cloned()))
 			.collect(),
 		memory_bytes: spec.memory_bytes,
 		cpu_cores: spec.cpu_cores,
 		gpus: spec.gpus.clone(),
-		entrypoint: spec.entrypoint.clone(),
+		entrypoint: bridge
+			.map(|(entrypoint, _)| entrypoint)
+			.or_else(|| spec.entrypoint.clone()),
 		shm_bytes: spec.shm_bytes,
 		stop_timeout_s: spec.stop_timeout_s,
-		options: spec.options.clone(),
+		options: {
+			let mut options = spec.options.clone();
+			if let Some(gate) = &spec.health {
+				options.healthcheck = Some(crate::health::podman_check(gate));
+			}
+			options
+		},
 	}
 }
 
@@ -649,6 +840,8 @@ mod tests {
 			stop_timeout_s: None,
 			networks: Vec::new(),
 			options: proto::ContainerOptions::default(),
+			attach: Vec::new(),
+			health: None,
 		}
 	}
 
@@ -725,6 +918,130 @@ mod tests {
 		assert!(validate(&bad).is_err());
 	}
 
+	fn attach(name: &str, aliases: &[&str]) -> proto::NetworkAttach {
+		proto::NetworkAttach {
+			name: name.to_string(),
+			aliases: aliases.iter().map(|a| (*a).to_string()).collect(),
+			internal: false,
+		}
+	}
+
+	#[test]
+	fn a_container_lives_on_its_environment_network_not_podkit() {
+		let mut s = spec();
+		s.attach = vec![
+			attach("podkit-env-A", &["db"]),
+			attach("podkit-net-3", &["pg"]),
+		];
+		let c = container_spec(&s, "alpine:3", "podkit-app-1-9", &[]);
+		assert_eq!(c.network, "podkit-env-A");
+		assert_eq!(c.aliases, ["db"]);
+		assert_eq!(
+			c.extra_networks,
+			[("podkit-net-3".to_string(), vec!["pg".to_string()])]
+		);
+		let all: Vec<&str> = std::iter::once(c.network.as_str())
+			.chain(c.extra_networks.iter().map(|(n, _)| n.as_str()))
+			.collect();
+		assert!(!all.contains(&"podkit"));
+		assert!(!all.contains(&"podkit-env-B"));
+	}
+
+	#[test]
+	fn routed_containers_name_the_network_traefik_reaches_them_on() {
+		let mut s = spec();
+		s.attach = vec![attach("podkit-env-A", &[])];
+		let c = container_spec(&s, "alpine:3", "n", &[]);
+		assert!(c.labels.contains(&(
+			"traefik.docker.network".to_string(),
+			"podkit-env-A".to_string()
+		)));
+		// Without an environment network (older servers) it is the shared one.
+		let legacy = container_spec(&spec(), "alpine:3", "n", &[]);
+		assert!(
+			legacy
+				.labels
+				.contains(&("traefik.docker.network".to_string(), "podkit".to_string()))
+		);
+		// No routing, no label.
+		s.routing = None;
+		assert!(
+			container_spec(&s, "alpine:3", "n", &[])
+				.labels
+				.iter()
+				.all(|(k, _)| k != "traefik.docker.network")
+		);
+	}
+
+	#[test]
+	fn a_linked_stack_service_also_joins_the_environment_network() {
+		let mut s = stack_spec();
+		s.attach = vec![attach("podkit-env-A", &["stack-db"])];
+		let c = container_spec(&s, "postgres:17", "n", &[]);
+		assert_eq!(c.network, "podkit-stack-7");
+		assert_eq!(
+			c.extra_networks,
+			[("podkit-env-A".to_string(), vec!["stack-db".to_string()])]
+		);
+	}
+
+	#[test]
+	fn attached_networks_are_validated() {
+		let bad = |network: &str| {
+			let mut s = spec();
+			s.attach = vec![attach(network, &[])];
+			validate_options(&s).is_err()
+		};
+		for name in ["podkit", "host", "bridge", "a/b", ""] {
+			assert!(bad(name), "{name}");
+		}
+		assert!(!bad("podkit-env-1"));
+		assert!(!bad("imported_net"));
+		let mut s = spec();
+		s.attach = vec![attach("podkit-env-1", &["bad alias"])];
+		assert!(validate_options(&s).is_err());
+	}
+
+	#[test]
+	fn an_mcp_bridge_replaces_the_entrypoint_and_mounts_the_agent() {
+		let mut s = spec();
+		s.options.mcp_bridge = Some(proto::McpBridge {
+			port: 8080,
+			path: "/mcp".to_string(),
+			command: vec!["node".to_string(), "server.js".to_string()],
+		});
+		assert!(validate(&s).is_ok());
+		let c = container_spec(&s, "img", "n", &[]);
+		let entrypoint = c.entrypoint.unwrap();
+		assert_eq!(
+			entrypoint,
+			[
+				"/podkit-agent",
+				"--mcp-bridge",
+				"--listen=0.0.0.0:8080",
+				"--path=/mcp",
+				"--",
+				"node",
+				"server.js"
+			]
+		);
+		assert!(c.command.is_none());
+		assert!(c.binds.iter().any(|b| b.ends_with(":/podkit-agent:ro")));
+
+		let mut bad = s.clone();
+		bad.entrypoint = Some(vec!["x".to_string()]);
+		assert!(validate(&bad).is_err(), "the bridge owns the entrypoint");
+		for edit in [
+			(|b: &mut proto::McpBridge| b.port = 0) as fn(&mut proto::McpBridge),
+			|b| b.path = "mcp".to_string(),
+			|b| b.path = "/a b".to_string(),
+		] {
+			let mut bad = s.clone();
+			edit(bad.options.mcp_bridge.as_mut().unwrap());
+			assert!(validate(&bad).is_err());
+		}
+	}
+
 	#[test]
 	fn container_spec_carries_routing_and_volumes() {
 		let mut s = spec();
@@ -765,6 +1082,73 @@ mod tests {
 			prune_candidates(&images, &used, "app-1"),
 			["podkit-app-1:4", "podkit-app-1:6"]
 		);
+	}
+
+	fn gate() -> proto::HealthGate {
+		proto::HealthGate {
+			check: proto::HealthCheck::Http {
+				path: "/up".to_string(),
+				status: 200,
+				port: 8080,
+			},
+			interval_ms: 2000,
+			timeout_ms: 1000,
+			retries: 2,
+			start_period_ms: 0,
+			gate_timeout_s: 30,
+			drain_s: 7,
+		}
+	}
+
+	#[test]
+	fn health_gate_becomes_a_podman_healthcheck_on_the_container() {
+		let mut gated = spec();
+		gated.health = Some(gate());
+		assert!(validate(&gated).is_ok());
+		let container = container_spec(&gated, "img", "c", &[]);
+		let check = container.options.healthcheck.expect("healthcheck");
+		assert_eq!(check.test[1], crate::health::PROBE_PATH);
+		assert_eq!(check.interval_ms, Some(2000));
+		assert_eq!(check.retries, Some(2));
+		// Without a gate the container has no check of its own.
+		assert!(
+			container_spec(&spec(), "img", "c", &[])
+				.options
+				.healthcheck
+				.is_none()
+		);
+		// A gate that cannot run is refused before anything is started.
+		gated.health.as_mut().unwrap().gate_timeout_s = 0;
+		assert!(validate(&gated).is_err());
+	}
+
+	#[test]
+	fn health_gate_old_container_stays_until_the_new_one_took_over() {
+		// Rolling: the old container is kept, so a failed gate leaves it serving.
+		assert!(!retires_first(
+			Strategy::Rolling,
+			"podkit-app-1-8",
+			"podkit-app-1-9"
+		));
+		// Recreate frees the volume first; a leftover with the same name always goes.
+		assert!(retires_first(
+			Strategy::Recreate,
+			"podkit-app-1-8",
+			"podkit-app-1-9"
+		));
+		assert!(retires_first(
+			Strategy::Rolling,
+			"podkit-app-1-9",
+			"podkit-app-1-9"
+		));
+	}
+
+	#[test]
+	fn health_gate_drain_comes_from_the_spec() {
+		let mut gated = spec();
+		assert_eq!(drain_delay(&gated), SWAP_DELAY);
+		gated.health = Some(gate());
+		assert_eq!(drain_delay(&gated), Duration::from_secs(7));
 	}
 
 	fn stack_spec() -> DeploySpec {

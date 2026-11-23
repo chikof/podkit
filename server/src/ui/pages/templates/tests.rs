@@ -356,7 +356,7 @@ async fn the_deploy_dialog_asks_where_and_what_and_binds_every_answer(db: PgPool
 	assert_contains(main, "production");
 	// Opens itself when asked to, and closes on Esc, as any modal dialog.
 	assert_contains(main, "showModal()");
-	assert_contains(main, "closedby=\"closerequest\"");
+	assert_contains(main, "closedby=\"any\"");
 	assert_contains(main, "aria-labelledby=\"tpl-deploy-title\"");
 	assert_contains(main, &format!("/teams/{}/templates/{id}/deploy", f.team));
 	// Changing the project fetches that project's environments.

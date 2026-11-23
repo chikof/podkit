@@ -46,7 +46,7 @@ mod shell;
 mod sse;
 mod status;
 #[cfg(test)]
-mod testing;
+pub(crate) mod testing;
 mod theme;
 
 use components::{BUTTON, INPUT, LABEL, icon, reveal_button};
@@ -90,16 +90,31 @@ pub fn router() -> Router<AppState> {
 		.route("/static/app.css", get(app_css))
 		.merge(assets::router())
 		.merge(pages::accounts::router())
+		.merge(pages::profile::router())
 		.merge(pages::projects::router())
 		.merge(pages::apps::router())
+		.merge(pages::cron::router())
 		.merge(pages::databases::router())
 		.merge(pages::models::router())
+		.merge(pages::mcp::router())
 		.merge(pages::backups::router())
+		.merge(pages::registries::router())
+		.merge(pages::notifications::router())
 		.merge(pages::servers::router())
+		.merge(pages::networks::router())
+		.merge(pages::keys::router())
+		.merge(pages::infrastructure::router())
+		.merge(pages::git_providers::router())
+		.merge(pages::iac::router())
+		.merge(pages::canvas::router())
 		.merge(pages::settings::router())
+		.merge(pages::shared_env::router())
 		.merge(pages::search::router())
+		.merge(pages::security::router())
 		.merge(pages::stacks::router())
 		.merge(pages::templates::router())
+		.merge(pages::volume_backups::router())
+		.merge(pages::uptime::router())
 		.merge(theme::router())
 		.merge(gallery::router())
 		.merge(test_routes())

@@ -6,11 +6,12 @@
 
 use sqlx::PgPool;
 
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{ApplicationId, EnvVarId, ProjectId, TeamId, UserId};
 use crate::state::AppState;
-use crate::{scope, validate};
+use crate::{scope, shared_env, validate};
 
 /// More pasted lines than this is almost certainly a mistake.
 const MAX_BULK_LINES: usize = 500;
@@ -63,8 +64,24 @@ pub async fn upsert(
 	authorize(&s.db, user, team, Action::Create, Resource::EnvVar).await?;
 	let app = scope::application(&s.db, team, project, app).await?;
 	check_key(key)?;
+	shared_env::service::validate_refs(&s.db, team, app.project_id, app.environment_id, key, value)
+		.await?;
 	let encrypted = seal(s, value)?;
 	let env_var = super::upsert(&s.db, app.id, key, &encrypted).await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"env_var.set",
+		Target::new("env_var", env_var.id)
+			.named(key)
+			.in_project(project),
+		Diff::new()
+			.set("application_id", app.id.0)
+			.set("key", key)
+			.secret("value"),
+	)
+	.await;
 	Ok(EnvVarKey::from(&env_var))
 }
 
@@ -97,6 +114,15 @@ pub async fn remove(
 	if !super::delete(db, app.id, id).await? {
 		return Err(ServerError::EnvVarNotFound);
 	}
+	audit::log(
+		db,
+		user,
+		team,
+		"env_var.delete",
+		Target::new("env_var", id).in_project(project),
+		Diff::new().set("application_id", app.id.0),
+	)
+	.await;
 	Ok(id)
 }
 
@@ -190,12 +216,42 @@ pub async fn bulk_set(
 		)));
 	}
 	let (entries, errors) = parse_dotenv(text);
+	for (_, key, value) in &entries {
+		shared_env::service::validate_refs(
+			&s.db,
+			team,
+			app.project_id,
+			app.environment_id,
+			key,
+			value,
+		)
+		.await?;
+	}
 	let mut tx = s.db.begin().await?;
 	for (_, key, value) in &entries {
 		let encrypted = seal(s, value)?;
 		super::upsert(&mut *tx, app.id, key, &encrypted).await?;
 	}
 	tx.commit().await?;
+	audit::log(
+		&s.db,
+		user,
+		team,
+		"env_var.bulk_set",
+		Target::new("application", app.id)
+			.named(&app.slug)
+			.in_project(project),
+		Diff::new()
+			.set(
+				"keys",
+				entries
+					.iter()
+					.map(|(_, key, _)| key.clone())
+					.collect::<Vec<_>>(),
+			)
+			.secret("values"),
+	)
+	.await;
 	Ok(BulkReport {
 		saved: entries.len(),
 		errors,

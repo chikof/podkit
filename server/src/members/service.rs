@@ -5,6 +5,7 @@ use sqlx::PgPool;
 
 use super::TeamMember;
 pub use super::{MemberDetail, Role};
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::auth::{normalize_email_lenient, users};
 use crate::error::{AppResult, ServerError};
@@ -42,7 +43,17 @@ pub async fn add(
 		return Err(ServerError::AlreadyMember);
 	}
 
-	Ok(super::insert(db, team, invitee.id, role).await?)
+	let added = super::insert(db, team, invitee.id, role).await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"member.add",
+		Target::new("member", invitee.id),
+		Diff::new().set("role_id", role.0),
+	)
+	.await;
+	Ok(added)
 }
 
 /// Changes a member's role; needs `update membership`. The role must be
@@ -63,5 +74,14 @@ pub async fn update_role(
 	super::ensure_assignable(db, team, role).await?;
 
 	super::set_role(db, team, member.user_id, role).await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"member.update",
+		Target::new("member", member.user_id),
+		Diff::new().change("role_id", member.role_id.0, role.0),
+	)
+	.await;
 	Ok(())
 }

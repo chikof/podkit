@@ -11,6 +11,7 @@
 //! network can reach the engines. See `docs/gateway.md`.
 
 pub mod chat;
+pub mod mcp;
 mod meter;
 pub mod sidecar;
 
@@ -24,10 +25,10 @@ use axum::http::header::{AUTHORIZATION, CONTENT_TYPE};
 use axum::http::request::Parts;
 use axum::http::{HeaderMap, HeaderName, StatusCode};
 use axum::response::{IntoResponse, Response};
-use axum::routing::{get, post};
+use axum::routing::{any, get, post};
 use axum::{Json, Router};
 use futures_util::StreamExt;
-use proto::{GatewayConfig, GatewayModel, GatewayUsage};
+use proto::{GatewayConfig, GatewayMcp, GatewayModel, GatewayUsage};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -56,6 +57,10 @@ const NOT_FORWARDED: [&str; 11] = [
 struct Table {
 	keys: HashMap<String, Vec<GatewayModel>>,
 	other: HashSet<String>,
+	/// Link keys, by hash: the one MCP server each opens.
+	mcp: HashMap<String, GatewayMcp>,
+	/// Names of every MCP server the server knows, to tell 403 from 404.
+	mcp_names: HashSet<String>,
 }
 
 #[derive(Debug, Default)]
@@ -65,10 +70,13 @@ struct Counter {
 	output: u64,
 }
 
+/// Counter key: key hash, model (or MCP server) id, hour, and whether it is an MCP link's.
+type UsageKey = (String, i64, i64, bool);
+
 /// Gateway state: the routing table and the usage counters.
 pub struct Gateway {
 	table: RwLock<Arc<Table>>,
-	usage: Mutex<HashMap<(String, i64, i64), Counter>>,
+	usage: Mutex<HashMap<UsageKey, Counter>>,
 	http: reqwest::Client,
 }
 
@@ -109,6 +117,12 @@ impl Gateway {
 
 	/// Replaces the routing table.
 	pub fn set_config(&self, config: GatewayConfig) {
+		let mcp_names = config
+			.other_mcp
+			.iter()
+			.cloned()
+			.chain(config.mcp_keys.iter().map(|k| k.mcp.name.clone()))
+			.collect();
 		let table = Table {
 			keys: config
 				.keys
@@ -116,6 +130,12 @@ impl Gateway {
 				.map(|k| (k.key_hash, k.models))
 				.collect(),
 			other: config.other_models.into_iter().collect(),
+			mcp: config
+				.mcp_keys
+				.into_iter()
+				.map(|k| (k.key_hash, k.mcp))
+				.collect(),
+			mcp_names,
 		};
 		*self
 			.table
@@ -131,13 +151,17 @@ impl Gateway {
 	}
 
 	fn record(&self, key_hash: &str, model_id: i64, tokens: Tokens) {
+		self.count(key_hash, model_id, false, tokens);
+	}
+
+	fn count(&self, key_hash: &str, id: i64, mcp: bool, tokens: Tokens) {
 		let hour = hour_of(SystemTime::now());
 		let mut usage = self
 			.usage
 			.lock()
 			.unwrap_or_else(std::sync::PoisonError::into_inner);
 		let counter = usage
-			.entry((key_hash.to_owned(), model_id, hour))
+			.entry((key_hash.to_owned(), id, hour, mcp))
 			.or_default();
 		counter.requests += 1;
 		counter.input += tokens.input;
@@ -154,13 +178,14 @@ impl Gateway {
 		);
 		taken
 			.into_iter()
-			.map(|((key_hash, model_id, hour), c)| GatewayUsage {
+			.map(|((key_hash, model_id, hour, mcp), c)| GatewayUsage {
 				key_hash,
 				model_id,
 				hour,
 				requests: c.requests,
 				input_tokens: c.input,
 				output_tokens: c.output,
+				mcp,
 			})
 			.collect()
 	}
@@ -174,6 +199,7 @@ pub fn router(gateway: Arc<Gateway>) -> Router {
 		.route("/v1/completions", post(forward))
 		.route("/v1/embeddings", post(forward))
 		.route("/v1/messages", post(forward))
+		.route("/mcp/{*tail}", any(mcp::forward))
 		.route("/healthz", get(|| async { "ok" }))
 		.layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
 		.with_state(gateway)

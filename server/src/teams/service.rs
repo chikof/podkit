@@ -3,6 +3,7 @@
 use sqlx::PgPool;
 
 use super::Team;
+use crate::audit::{self, Diff, Target};
 use crate::auth::permission::{Action, Resource, authorize};
 use crate::db::is_unique_violation;
 use crate::error::{AppResult, ServerError};
@@ -33,7 +34,7 @@ pub async fn create(
 		));
 	}
 
-	super::create_with_owner(db, name, slug, logo, owner)
+	let team = super::create_with_owner(db, name, slug, logo, owner)
 		.await
 		.map_err(|e| {
 			if is_unique_violation(&e, SLUG_UNIQUE) {
@@ -41,7 +42,17 @@ pub async fn create(
 			} else {
 				e.into()
 			}
-		})
+		})?;
+	audit::log(
+		db,
+		owner,
+		team.id,
+		"team.create",
+		Target::new("team", team.id).named(&team.slug),
+		Diff::new().set("name", team.name.clone()),
+	)
+	.await;
+	Ok(team)
 }
 
 /// Renames a team; the slug stays. Needs `update team`.
@@ -57,17 +68,31 @@ pub async fn rename(db: &PgPool, user: UserId, team: TeamId, name: &str) -> AppR
 			"Name must be 1 to 60 characters.".to_owned(),
 		));
 	}
-	Ok(sqlx::query_as!(
+	let old = sqlx::query_scalar!("SELECT name FROM teams WHERE id = $1", team as TeamId)
+		.fetch_one(db)
+		.await?;
+	let renamed = sqlx::query_as!(
 		Team,
 		r#"
 			UPDATE teams SET name = $2 WHERE id = $1
-			RETURNING id AS "id: TeamId", name, slug, logo
+			RETURNING id AS "id: TeamId", name, slug, logo,
+				(SELECT hash FROM team_avatars WHERE team_id = teams.id) AS avatar
 		"#,
 		team as TeamId,
 		name
 	)
 	.fetch_one(db)
-	.await?)
+	.await?;
+	audit::log(
+		db,
+		user,
+		team,
+		"team.rename",
+		Target::new("team", team).named(&renamed.slug),
+		Diff::new().change("name", old, renamed.name.clone()),
+	)
+	.await;
+	Ok(renamed)
 }
 
 #[cfg(test)]

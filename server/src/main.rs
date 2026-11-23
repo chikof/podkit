@@ -21,10 +21,14 @@ use crate::state::{AppState, Config};
 
 mod agents;
 mod applications;
+mod audit;
 mod auth;
+mod avatars;
 mod backups;
 mod catalog;
+mod change;
 mod config;
+mod cron;
 mod databases;
 mod db;
 mod deployments;
@@ -32,35 +36,64 @@ mod domains;
 mod env_vars;
 mod environments;
 mod error;
+mod git_providers;
+mod health_gate;
+mod iac;
 mod ids;
+mod infrastructure;
 mod jobs;
 mod links;
 mod logos;
 mod logs;
 mod maintenance;
+mod mcp;
+mod mcp_servers;
 mod members;
 mod metrics;
 mod model_files;
 mod models;
+mod networks;
+mod notifications;
 mod projects;
+mod registries;
 mod routes;
+mod scanning;
 mod scope;
 mod search;
 mod servers;
+mod shared_env;
+mod ssh_keys;
 mod stacks;
 mod state;
 mod teams;
 mod templates;
 mod ui;
+mod uptime;
 mod validate;
+mod volume_backups;
 mod volumes;
 mod webhooks;
 
 #[cfg(test)]
 mod tests;
 
-#[tokio::main]
-async fn main() -> AppResult<()> {
+/// Worker threads of the async runtime: one per core up to four. The server is
+/// I/O-bound (Postgres, the agents' sockets, HTTP), so more only cost stacks and
+/// allocator arenas; `TOKIO_WORKER_THREADS` still overrides it.
+fn worker_threads() -> usize {
+	std::thread::available_parallelism().map_or(2, |n| n.get().min(4))
+}
+
+fn main() -> AppResult<()> {
+	let mut runtime = tokio::runtime::Builder::new_multi_thread();
+	runtime.enable_all();
+	if std::env::var_os("TOKIO_WORKER_THREADS").is_none() {
+		runtime.worker_threads(worker_threads());
+	}
+	runtime.build()?.block_on(run())
+}
+
+async fn run() -> AppResult<()> {
 	if let Some(code) = templates::import::cli() {
 		std::process::exit(code);
 	}
@@ -111,7 +144,23 @@ async fn main() -> AppResult<()> {
 		config: Arc::new(runtime_config),
 	};
 
+	// Keys the 0041 migration moved into the vault have no public key yet; only this process
+	// can decrypt them to derive it.
+	match ssh_keys::service::derive_missing(&state).await {
+		Ok(0) => {}
+		Ok(n) => info!("derived the public key of {n} vault key(s)"),
+		Err(e) => warn!("failed to derive vault public keys: {e}"),
+	}
+
 	worker::recover(&state).await?;
+	match registries::service::backfill(&state).await {
+		Ok(0) => {}
+		Ok(moved) => info!(
+			moved,
+			"moved applications' registry logins to saved registries"
+		),
+		Err(e) => warn!("failed to move registry logins to saved registries: {e}"),
+	}
 	if let Err(e) = servers::bootstrap::enqueue_outdated(&state).await {
 		warn!("failed to enqueue agent upgrades: {e}");
 	}
@@ -126,6 +175,10 @@ async fn main() -> AppResult<()> {
 		shutdown.clone(),
 	));
 	tokio::spawn(backups::schedule::run(state.clone(), shutdown.clone()));
+	tokio::spawn(volume_backups::schedule::run(
+		state.clone(),
+		shutdown.clone(),
+	));
 	maintenance::spawn(state.clone());
 	tokio::spawn(signal_shutdown(shutdown.clone()));
 
@@ -133,9 +186,12 @@ async fn main() -> AppResult<()> {
 	let listener = TcpListener::bind(&addr).await?;
 
 	info!("started http server on http://{addr}");
-	axum::serve(listener, app)
-		.with_graceful_shutdown(shutdown.clone().cancelled_owned())
-		.await?;
+	axum::serve(
+		listener,
+		app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+	)
+	.with_graceful_shutdown(shutdown.clone().cancelled_owned())
+	.await?;
 
 	if let Err(e) = dispatcher.await {
 		warn!("job dispatcher panicked: {e}");
@@ -191,6 +247,11 @@ fn resolve_config(config: &ServerConfig) -> AppResult<Config> {
 			.to_owned(),
 		model_ready_timeout: None,
 		model_ready_interval: Duration::from_secs(3),
+		public_url: config
+			.public_url
+			.as_deref()
+			.map(|u| u.trim().trim_end_matches('/').to_owned())
+			.filter(|u| !u.is_empty()),
 	})
 }
 

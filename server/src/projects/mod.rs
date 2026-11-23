@@ -1,5 +1,6 @@
 //! Projects: group a team's applications.
 
+pub mod graph;
 pub mod overview;
 mod routes;
 pub mod service;

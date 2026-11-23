@@ -9,7 +9,7 @@ use futures_util::StreamExt;
 use proto::{ContainerInfo, ContainerState};
 use tokio_util::sync::CancellationToken;
 
-use super::Server;
+use super::{Server, ServerStatus};
 use crate::agents::AgentClient;
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, DatabaseId, DeploymentId, ServerId};
@@ -67,10 +67,17 @@ async fn check(state: &AppState, server: &Server) {
 	if let Err(e) = super::mark_active(&state.db, server.id).await {
 		tracing::warn!(server = %server.id, error = %e, "status sync could not mark server active");
 	}
+	if server.status == ServerStatus::Unreachable {
+		crate::notifications::hooks::server_recovered(state, server.id.0).await;
+	}
 	// Best effort: a failure here says nothing about reachability.
 	super::hardware::refresh(&state.db, server.id, &client).await;
 
 	crate::links::sync(state, server.id, &client).await;
+
+	// Before the crash sweep: a release that died inside its rollback window is put back
+	// rather than only marked crashed.
+	crate::health_gate::watch::sweep(state, server.id, &client).await;
 
 	if let Err(e) = mark_crashed(state, server.id, &client).await {
 		tracing::warn!(server = %server.id, error = %e, "status sync could not check containers");
@@ -80,6 +87,9 @@ async fn check(state: &AppState, server: &Server) {
 async fn mark_unreachable(state: &AppState, server: &Server, message: &str) {
 	if let Err(e) = super::mark_unreachable(&state.db, server.id, message).await {
 		tracing::warn!(server = %server.id, error = %e, "status sync could not mark server unreachable");
+	}
+	if server.status == ServerStatus::Active {
+		crate::notifications::hooks::server_unreachable(state, server.id.0, message).await;
 	}
 }
 
@@ -136,13 +146,19 @@ async fn mark_crashed(
 			continue;
 		};
 		tracing::warn!(deployment = %deployment.id, "{message}");
-		sqlx::query!(
+		let done = sqlx::query!(
 			"UPDATE deployments SET status = 'crashed', error_message = $2, finished_at = NOW() WHERE id = $1 AND status = 'running'",
 			deployment.id as DeploymentId,
 			message
 		)
 		.execute(&state.db)
 		.await?;
+		if done.rows_affected() > 0 {
+			let target =
+				crate::notifications::hooks::application(&state.db, deployment.application_id.0)
+					.await;
+			crate::notifications::hooks::crashed(state, target, &message).await;
+		}
 	}
 
 	for database in &databases {
@@ -153,13 +169,17 @@ async fn mark_crashed(
 			continue;
 		};
 		tracing::warn!(database = %database.id, "{message}");
-		sqlx::query!(
+		let done = sqlx::query!(
 			"UPDATE databases SET status = 'failed', status_message = $2, updated_at = NOW() WHERE id = $1 AND status = 'running'",
 			database.id as DatabaseId,
 			message
 		)
 		.execute(&state.db)
 		.await?;
+		if done.rows_affected() > 0 {
+			let target = crate::notifications::hooks::database(&state.db, database.id.0).await;
+			crate::notifications::hooks::crashed(state, target, &message).await;
+		}
 	}
 	Ok(())
 }

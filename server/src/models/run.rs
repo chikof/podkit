@@ -23,7 +23,7 @@ use crate::jobs::{Job, JobFailure, JobKind};
 use crate::logs::JobLog;
 use crate::servers::{self, Server};
 use crate::state::AppState;
-use crate::{model_files, models};
+use crate::{model_files, models, networks};
 
 const LOST_CONNECTION: &str = "lost connection to server agent";
 /// Lines of the engine's output kept in the error of a model that never loaded.
@@ -116,7 +116,7 @@ async fn start(
 			.or_else(|| servers::gpu_vendors(server).first().copied())
 			.unwrap_or(GpuVendor::Nvidia)
 	});
-	let spec = build_spec(
+	let mut spec = build_spec(
 		model,
 		&file.volume_name,
 		vendor,
@@ -127,6 +127,18 @@ async fn start(
 		},
 		job.id.0,
 	);
+	spec.attach = networks::attach::for_resource(
+		&state.db,
+		networks::attach::Home {
+			kind: networks::ResourceKind::Model,
+			id: model.id.0,
+			environment: model.environment_id,
+			server: model.server_id,
+		},
+		&spec.network_aliases,
+	)
+	.await
+	.map_err(|e| db_failure(&e))?;
 
 	let container_id = deploy(state, cancel, log, model, client, &spec).await?;
 
@@ -161,7 +173,11 @@ async fn deploy(
 		};
 		match event {
 			Some(Ok(Event::Log { stream, line })) => log.push(stream, &line).await,
-			Some(Ok(Event::Deployed { container_id, .. })) => {
+			Some(Ok(Event::Deployed {
+				container_id,
+				image,
+				..
+			})) => {
 				sqlx::query(
 					"UPDATE models SET container_id = $2, updated_at = NOW() WHERE id = $1",
 				)
@@ -170,6 +186,17 @@ async fn deploy(
 				.execute(&state.db)
 				.await
 				.map_err(|e| db_failure(&e))?;
+				crate::scanning::queue(
+					state,
+					model.server_id,
+					crate::scanning::Target {
+						kind: crate::scanning::ResourceKind::Model,
+						resource_id: model.id.0,
+						image_ref: &image,
+						deployment: None,
+					},
+				)
+				.await;
 				return Ok(container_id);
 			}
 			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),
@@ -247,6 +274,8 @@ fn build_spec(
 		stop_timeout_s: Some(engine.stop_grace_s),
 		networks: Vec::new(),
 		options: proto::ContainerOptions::default(),
+		attach: Vec::new(),
+		health: None,
 	}
 }
 

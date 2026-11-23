@@ -50,6 +50,19 @@ pub enum JobKind {
 	StackPurge,
 	/// `target_id` is a stack service id.
 	StackRestartService,
+	/// `target_id` is an image scan id. Resolves the image, scans it and stores the findings.
+	ImageScan,
+	/// `target_id` is a server id. Runs Grype over the stored SBOMs of its running images.
+	ImageRescan,
+	/// `target_id` is a cron run id. Runs a scheduled task's command once.
+	CronRun,
+	/// `target_id` is a volume backup id.
+	VolumeBackup,
+	/// `target_id` is a volume restore id.
+	VolumeRestore,
+	/// `target_id` is an environment clone id. Provisions the cloned databases, copies their
+	/// data and the volumes when asked, and deploys; the report says what each step did.
+	EnvironmentClone,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -320,6 +333,50 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 			.bind(message)
 			.execute(&state.db)
 			.await
+		}
+		// A failed scan never touches the resource it was scanning.
+		JobKind::ImageScan => {
+			let message = match failure {
+				JobFailure::Cancelled => "cancelled",
+				JobFailure::Failed(m) => m.as_str(),
+			};
+			sqlx::query(
+				"UPDATE image_scans SET status = 'failed', error = $2, finished_at = NOW()
+				WHERE id = $1 AND status IN ('queued', 'scanning')",
+			)
+			.bind(target_id)
+			.bind(message)
+			.execute(&state.db)
+			.await
+		}
+		// The daily rescan keeps the findings it had when it fails.
+		JobKind::ImageRescan => {
+			tracing::warn!(target_id, ?failure, "daily rescan did not finish");
+			return;
+		}
+		// The run row says how it ended; a cancelled one is the user's doing.
+		JobKind::CronRun => {
+			let (status, message) = match failure {
+				JobFailure::Cancelled => (crate::cron::RunStatus::Cancelled, "cancelled"),
+				JobFailure::Failed(m) => (crate::cron::RunStatus::Failed, m.as_str()),
+			};
+			crate::cron::store::mark_finished(
+				&state.db,
+				crate::ids::CronRunId(target_id),
+				status,
+				None,
+				Some(message),
+			)
+			.await
+		}
+		JobKind::VolumeBackup => {
+			crate::volume_backups::fail_backup(state, target_id, failure).await
+		}
+		JobKind::VolumeRestore => {
+			crate::volume_backups::fail_restore(state, target_id, failure).await
+		}
+		JobKind::EnvironmentClone => {
+			crate::environments::clone::fail_clone(state, target_id, failure).await
 		}
 	};
 	if let Err(e) = result {

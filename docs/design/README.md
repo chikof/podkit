@@ -277,8 +277,10 @@ Code: `server/src/ui/shell/` (`nav`, `sidebar`, `header`, `palette`, `prefs`), e
 the palette's key handling is section 5 of `podkit.js`. Pages live in
 `server/src/ui/pages/<area>/` (one `router()` per area, merged in `ui/mod.rs`).
 
-- **Sidebar:** team switcher on top (a menu), the nav (Projects, Templates, Servers, Models,
-  S3 Destinations; Settings: Team, Members, Registration, Hugging Face token, Appearance), the
+- **Sidebar:** team switcher on top (a menu), the nav (Projects, Templates, Models; then an
+  **Infrastructure** section with Overview, Servers, Networks, Keys, Registries, Git providers,
+  Security and S3 destinations; then Settings: Team, Members, Registration, Hugging Face token,
+  API tokens, Appearance), the
   user menu at the bottom (theme, sign out). `shell::nav` is the one list; a link the role may not
   use is not rendered, and the palette uses the same list. It folds to icons (the panel button in
   the header; the choice is the `sidebar` cookie, so the server renders the folded state in the

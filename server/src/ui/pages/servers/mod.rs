@@ -16,6 +16,8 @@ use crate::ui::extract::TeamCtx;
 use crate::ui::layout::Crumb;
 
 mod detail;
+pub(in crate::ui) use detail::header;
+mod key_picker;
 mod list;
 mod monitoring;
 #[cfg(test)]
@@ -28,11 +30,11 @@ pub fn router() -> Router<AppState> {
 		.merge(monitoring::router())
 }
 
-fn list_url(team: TeamId) -> String {
+pub(in crate::ui) fn list_url(team: TeamId) -> String {
 	format!("/teams/{team}/servers")
 }
 
-fn detail_url(team: TeamId, server: ServerId) -> String {
+pub(in crate::ui) fn detail_url(team: TeamId, server: ServerId) -> String {
 	format!("/teams/{team}/servers/{server}")
 }
 
@@ -40,7 +42,7 @@ fn monitoring_url(team: TeamId, server: ServerId) -> String {
 	format!("/teams/{team}/servers/{server}/monitoring")
 }
 
-fn crumbs<'a>(ctx: &TeamCtx) -> Vec<Crumb<'a>> {
+pub(in crate::ui) fn crumbs<'a>(ctx: &TeamCtx) -> Vec<Crumb<'a>> {
 	vec![("Servers", Some(list_url(ctx.team.id)))]
 }
 
@@ -52,7 +54,7 @@ fn host_port(server: &Server) -> String {
 	}
 }
 
-fn local_badge() -> Markup {
+pub(in crate::ui) fn local_badge() -> Markup {
 	html! {
 		span class=(Tone::Neutral.badge_class()) { "Local" }
 	}
@@ -77,7 +79,7 @@ fn human_mb(mb: u64) -> String {
 
 /// The hardware the agent last reported, one short phrase each: threads, RAM, disk and
 /// GPUs. Empty until the agent has reported.
-fn hardware_parts(server: &Server) -> Vec<String> {
+pub(in crate::ui) fn hardware_parts(server: &Server) -> Vec<String> {
 	let Some(hw) = server.hardware.as_ref().map(|h| &h.0) else {
 		return Vec::new();
 	};
@@ -97,22 +99,35 @@ fn hardware_parts(server: &Server) -> Vec<String> {
 	parts
 }
 
-/// The two sections of a server's page.
-fn server_tabs(team: TeamId, server: ServerId, monitoring: bool) -> Markup {
+/// The sections of a server's page.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::ui) enum ServerTab {
+	Overview,
+	Monitoring,
+	Networks,
+}
+
+fn server_tabs(team: TeamId, server: ServerId, active: ServerTab) -> Markup {
 	let overview = detail_url(team, server);
 	let charts = monitoring_url(team, server);
+	let networks = format!("{overview}/networks");
 	tabs(
 		"Server sections",
 		&[
 			TabItem {
 				label: "Overview",
 				href: &overview,
-				current: !monitoring,
+				current: active == ServerTab::Overview,
 			},
 			TabItem {
 				label: "Monitoring",
 				href: &charts,
-				current: monitoring,
+				current: active == ServerTab::Monitoring,
+			},
+			TabItem {
+				label: "Networks",
+				href: &networks,
+				current: active == ServerTab::Networks,
 			},
 		],
 	)

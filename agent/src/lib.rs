@@ -1,18 +1,28 @@
 //! `podkit-agent`: the per-server daemon the control plane talks to over a unix socket.
 
 mod backup;
+pub mod cron;
+pub mod dbstats;
 pub mod deploy;
+pub mod events;
 pub mod gateway;
 pub mod hardware;
+pub mod health;
 pub mod ingress;
+pub mod mcp_bridge;
 pub mod model_download;
+pub mod networks;
 pub mod nixpacks;
 pub mod podman;
 pub mod probe;
+pub mod prometheus;
+pub mod registry;
 pub mod routes;
+pub mod scan;
 pub mod source;
 pub mod stats;
 pub mod supervisor;
+pub mod volume_backup;
 
 use std::path::PathBuf;
 

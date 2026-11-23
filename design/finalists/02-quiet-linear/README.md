@@ -313,3 +313,53 @@ States and parts the mockups did not draw, as built in podkit and kept because t
 - **Type scale for utility classes**: templates written with Tailwind names map onto Quiet's steps (`text-xs` 11.5, `text-sm` 13.5, `text-base` 15, `text-lg` 18, `text-2xl` 22 px) in one place (`components.css`, "design review"); no page has a size off the scale.
 - **Scrollbars**: thin, thumb at 65 % of the muted text colour on both themes, also in text areas and logs.
 - **On a phone**, the breadcrumb keeps the current page's name and gives the crumbs before it up first.
+
+## 11. Patterns from the infra batch (from the DR review)
+
+New parts and rules from the infrastructure batch, as built. `REVIEW-infra.md` has the punch list and `review-infra/` the screenshots.
+
+**Page head.** A page you reach from the sidebar (Projects, Servers, Networks, Keys, Registries, Git providers, Security, Overview) has no eyebrow: the sidebar group and the breadcrumb already say where you are, and the title must not move when you go down the sidebar. An eyebrow names the parent only on a page below one (project, server, application, the IaC page). The title takes the row first and the actions follow, so a long description wraps beside the buttons; below 760 px the buttons go under it.
+
+**Save bar** (`components/save_bar.rs`, `.ui-save-bar`). The one place a settings form is saved from. It is not rendered while the form is clean; once a field differs from the snapshot taken at load it slides up 24 px and fades in (160 ms, `--ease-out`) at the bottom of the page, sticks there while the form is taller than the window, and says "Unsaved changes" with Discard and Save. Surface is `--popover` with `--sh-3`, radius `--r-lg`, padding `--s-3` `--card-pad`. On a phone it sits above the tab bar. Reduced motion: no slide. Leaving a dirty page asks first (`guard.js`, one definition of "unsaved" for the bar and the guard). One bar per page.
+
+**Security badge** (`components/security_badge.rs`, `.ui-sev`). A pill with a shape and a word: Clean (check, success), Low (ring, muted), Medium (rounded square, warning), High (triangle) and Critical (diamond), both destructive. `Act now` is a separate outlined pill beside it. Text is `--fs-xs`, padding `--s-1` `--s-3`, gap `--s-2`, radius `--r-pill`. A resource that was never scanned has no badge; a list says "Not scanned yet" in plain text, not as a pill. Never colour alone.
+
+**Network chips** (`.ui-infra-chip`, `.ui-infra-count`). A network or a resource named on the overview: 28 px, 1 px `--border`, `--r-md`, `--fs-sm`, hover `--accent`, with the member count in `--muted-foreground` after it. The kind of a network is a badge in the cell: Environment in the progress tone (blue), User and Imported neutral; the outbound column says "Outbound" (neutral) or "No outbound" (warning). Every environment has a network, so Environment is the common case.
+
+**Rows inside a card.** Use `ul.ui-card-rows > li.ui-card-row`, never utilities: a row's text starts on the card's own inset (`--card-pad`, 16 px), the same line as the header and the body. An empty state inside a card is the card's content (`.ui-card .ui-empty`, flush, no box of its own), with no wrapper.
+
+**Tab panels.** The first card is 32 px under the tab row on every application tab. A status slot (`#saved`) that holds nothing takes no space (`display: none` until a message is patched in), so it adds no gap.
+
+**Stacked tables** (below 36 rem of their own width). A row whose last cell is only a row menu puts the menu in the card's top-right corner, not on a row of its own.
+
+**Sidebar rail.** The rail folds to 56 px by easing the grid column; the icons never change `justify-content`, so each stays on one vertical line through the fold and only its side padding eases to the centered value (use fixed numbers, not a percentage, which resolves against the column while it is still wide).
+
+**Canvas** (`design/canvas/README.md` is the spec; `server/src/ui/pages/canvas` the build). Differences from the mockup that stay: nodes with no links all sit in layer 0, so a project without links is one tall column; a frame narrower than 340 px gets a tighter two-line head (name, then the count) that ends above its first node; the Canvas / List switch is the boxed group (2 px inset, selected tab on `--muted-strong`), not underline tabs.
+
+**IaC plan.** Each change is a card: a kind tag (Create on success, Update on warning, Delete on destructive), the resource kind and name, the environment, and "Will redeploy" in the info tone; under it the changed fields as a diff, one line each with a sign (`+` or `-`), tinted `--success-soft` or `--destructive-soft`. Sign, word and tint together: never colour alone. The summary row counts each kind. Apply is a primary button below the last change; it opens a confirm dialog.
+
+## 12. Patterns from wave A (from the DR-A review)
+
+New parts and rules from wave A (notifications, audit log, shared variables, health gate, scheduled tasks, MCP servers, volume backups, uptime and the status page, environment clone, charts). `REVIEW-wave-A.md` has the punch list and `review-wave-A/` the screenshots.
+
+**Page rhythm.** A page's head and its cards sit in one grid with the page gap (`--page-gap`, 24 px): use `ui-page-body` (with `ui-wide` where the page needs the wide column). A bare `ui-wide` div, or a `ui-stack` (12 px), is not a grid with that gap, and the first card then sat 12 px under the lede and touched the head's buttons (scheduled tasks, notification history).
+
+**Groups on a long settings page** (Settings, Notifications). Inside a section the heading, the list and its add form are 12 px apart; between sections it is 32 px (`.ui-notif-sections`), so a section reads as a group. A stack of sections that are only 12 px apart reads as one long list.
+
+**Empty states.** Inside a card the icon and text start on the card's inset (`--card-pad`); alone on a page the box is dashed. The icon must be in the sprite (`server/static/icons.svg`, names in `scripts/vendor-ui-assets.py`): a missing one draws an empty box and nothing reports it. `plug` was added for the MCP tab.
+
+**A list of rows in a card body** (the uptime checks): the body takes no vertical padding (`.ui-card-b:has(> ul > .ui-probe-row)`), the rows keep their own 12 px, so the first row is 16 px under the header like every other list.
+
+**A lone chart takes the row.** The two-column chart grid lets a single chart (a check's response time) span both columns (`#metrics-body > div > :only-child`). Two or more charts keep the two columns.
+
+**Facts as a row** (volume backup settings): label over value, one column per fact, wrapping to two at 390 px (`.ui-vb-facts`, `repeat(auto-fit, minmax(8rem, 1fr))`). Facts as lines (`.ui-fact`, `.ui-dest-facts`) stay for a resource's detail card. `.ui-facts` is defined three times in `components.css`; a new use takes its own class instead of relying on which rule wins.
+
+**Public pages follow the reader's scheme.** The status page sets no `class` on `<html>` and `color-scheme: light dark`, so a dark system gets the dark tokens, with the same banner, strip and chip colours as the app. It still loads no script and no cookie.
+
+**Notification rows.** An unread row is tinted `--primary-soft` and carries a word (`New`), a severity chip and the time; the time and the repeat count are separated by a middle dot. At 390 px the Open / Mark read buttons go under the text instead of taking a column from it.
+
+**Choice cards.** Three options (the overlap policy of a task) share the row (`repeat(auto-fit, minmax(min(100%, 13rem), 1fr))`); at 390 px they stack.
+
+**Dialogs.** The first field has `autofocus`; a destructive confirmation focuses the safe button (Cancel, Keep it). Every wave A dialog was opened and checked; the volume backup settings dialog used to focus the close button.
+
+**Where a form is saved from (open).** The application Settings, a scheduled task's settings and the audit retention use the save bar. The uptime check's settings, the status page card, the email server and the noise control keep a `Save` in their card footer. Both work; pick one for edit forms (the save bar) and keep footer buttons for add forms.

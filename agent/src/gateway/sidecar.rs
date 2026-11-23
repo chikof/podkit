@@ -77,7 +77,7 @@ pub async fn drain_usage(dir: &Path) -> Vec<GatewayUsage> {
 	let Ok(mut entries) = tokio::fs::read_dir(&usage_dir).await else {
 		return Vec::new();
 	};
-	let mut merged: HashMap<(String, i64, i64), GatewayUsage> = HashMap::new();
+	let mut merged: HashMap<(String, i64, i64, bool), GatewayUsage> = HashMap::new();
 	while let Ok(Some(entry)) = entries.next_entry().await {
 		let path = entry.path();
 		if path.extension().is_none_or(|e| e != "json") {
@@ -97,7 +97,7 @@ pub async fn drain_usage(dir: &Path) -> Vec<GatewayUsage> {
 		}
 		for row in rows {
 			let slot = merged
-				.entry((row.key_hash.clone(), row.model_id, row.hour))
+				.entry((row.key_hash.clone(), row.model_id, row.hour, row.mcp))
 				.or_insert_with(|| GatewayUsage {
 					requests: 0,
 					input_tokens: 0,
@@ -114,7 +114,7 @@ pub async fn drain_usage(dir: &Path) -> Vec<GatewayUsage> {
 
 /// The agent binary as a path the host can bind-mount, and a label that
 /// changes when the binary does.
-fn current_exe() -> Result<(PathBuf, String), String> {
+pub(crate) fn current_exe() -> Result<(PathBuf, String), String> {
 	let exe = std::env::current_exe().map_err(|e| format!("cannot find the agent binary: {e}"))?;
 	// A replaced binary is reported as "<path> (deleted)".
 	let exe = PathBuf::from(exe.to_string_lossy().trim_end_matches(" (deleted)"));
@@ -128,7 +128,7 @@ fn current_exe() -> Result<(PathBuf, String), String> {
 }
 
 /// Whether the binary's ELF interpreter lives in the Nix store (it is among the first bytes).
-fn needs_nix_store(exe: &Path) -> bool {
+pub(crate) fn needs_nix_store(exe: &Path) -> bool {
 	use std::io::Read;
 	let mut head = [0u8; 2048];
 	let Ok(mut file) = std::fs::File::open(exe) else {
@@ -243,7 +243,7 @@ pub async fn ensure_running(
 }
 
 /// Applies a routing table: stores it and, when it has keys, makes sure the
-/// sidecar runs.
+/// sidecar runs. The sidecar is put on exactly the networks the table names.
 ///
 /// # Errors
 /// Writing the file or starting the sidecar failed.
@@ -261,8 +261,102 @@ pub async fn apply(
 		.await
 		.map_err(|e| format!("inspecting the gateway failed: {e}"))?
 		.is_some();
-	if !config.keys.is_empty() || exists {
-		ensure_running(podman, supervisor, data_dir).await?;
+	match lazy_action(
+		!config.keys.is_empty() || !config.mcp_keys.is_empty(),
+		exists,
+	) {
+		Lazy::Run => {
+			ensure_running(podman, supervisor, data_dir).await?;
+			sync_networks(podman, &config.networks).await?;
+		}
+		Lazy::Remove => {
+			supervisor.remove(CONTAINER).await;
+			podman
+				.remove(CONTAINER)
+				.await
+				.map_err(|e| format!("removing the idle gateway failed: {e}"))?;
+			info!("gateway sidecar removed: no model link needs it");
+		}
+		Lazy::Nothing => {}
+	}
+	Ok(())
+}
+
+/// What the routing table asks of the sidecar container.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Lazy {
+	/// A link exists: the sidecar must run.
+	Run,
+	/// The last link is gone: the sidecar is removed and its memory freed.
+	Remove,
+	/// No link and no sidecar: nothing is ever started.
+	Nothing,
+}
+
+/// The gateway is lazy: it exists only while some key can reach a model.
+#[must_use]
+pub fn lazy_action(has_keys: bool, exists: bool) -> Lazy {
+	match (has_keys, exists) {
+		(true, _) => Lazy::Run,
+		(false, true) => Lazy::Remove,
+		(false, false) => Lazy::Nothing,
+	}
+}
+
+/// The environment networks the sidecar should be on out of what the server
+/// asked for: only networks podkit made for environments, deduplicated.
+#[must_use]
+pub fn wanted_networks(requested: &[String]) -> Vec<String> {
+	let mut out: Vec<String> = requested
+		.iter()
+		.filter(|n| crate::networks::is_managed(n) && n.starts_with(proto::ENV_NETWORK_PREFIX))
+		.cloned()
+		.collect();
+	out.sort();
+	out.dedup();
+	out
+}
+
+/// Joins the sidecar to the environment networks in `requested`, under the
+/// gateway alias, and takes it off the environment networks that are not.
+///
+/// # Errors
+/// Podman refuses to create, connect or disconnect.
+pub async fn sync_networks(podman: &Podman, requested: &[String]) -> Result<(), String> {
+	let Some(info) = podman
+		.inspect(CONTAINER)
+		.await
+		.map_err(|e| format!("inspecting the gateway failed: {e}"))?
+	else {
+		return Ok(());
+	};
+	let on: Vec<String> = info
+		.network_settings
+		.and_then(|n| n.networks)
+		.map(|n| n.into_keys().collect())
+		.unwrap_or_default();
+	let want = wanted_networks(requested);
+	let alias = [GATEWAY_HOST.to_owned()];
+	for name in &want {
+		if !on.contains(name) {
+			podman
+				.create_network(name, false)
+				.await
+				.map_err(|e| format!("creating {name} failed: {e}"))?;
+			podman
+				.connect_network(name, CONTAINER, &alias)
+				.await
+				.map_err(|e| format!("joining {name} failed: {e}"))?;
+		}
+	}
+	for name in on
+		.iter()
+		.filter(|n| n.starts_with(proto::ENV_NETWORK_PREFIX) && !want.contains(n))
+	{
+		podman
+			.disconnect_network(name, CONTAINER)
+			.await
+			.map_err(|e| format!("leaving {name} failed: {e}"))?;
 	}
 	Ok(())
 }
@@ -358,6 +452,7 @@ mod tests {
 			requests,
 			input_tokens: 10 * requests,
 			output_tokens: 2 * requests,
+			mcp: false,
 		}
 	}
 
@@ -395,12 +490,42 @@ mod tests {
 				}],
 			}],
 			other_models: Vec::new(),
+			networks: Vec::new(),
+			..Default::default()
 		};
 		assert!(write_config(dir.path(), &config).await.unwrap());
 		assert!(!write_config(dir.path(), &config).await.unwrap());
 		assert_eq!(read_config(dir.path()).await, Some(config.clone()));
 		config.keys.clear();
 		assert!(write_config(dir.path(), &config).await.unwrap());
+	}
+
+	#[test]
+	fn gateway_lazy_runs_only_while_a_link_exists() {
+		assert_eq!(lazy_action(false, false), Lazy::Nothing);
+		assert_eq!(lazy_action(true, false), Lazy::Run);
+		assert_eq!(lazy_action(true, true), Lazy::Run);
+		assert_eq!(lazy_action(false, true), Lazy::Remove);
+	}
+
+	#[test]
+	fn the_sidecar_joins_only_environment_networks_the_server_names() {
+		let requested = [
+			"podkit-env-2",
+			"podkit-env-1",
+			"podkit-env-2",
+			"podkit-net-5",
+			"podkit-stack-1",
+			"podkit",
+			"host",
+			"podkit-env-../x",
+		]
+		.map(String::from);
+		assert_eq!(
+			wanted_networks(&requested),
+			["podkit-env-1", "podkit-env-2"]
+		);
+		assert!(wanted_networks(&[]).is_empty());
 	}
 
 	#[test]

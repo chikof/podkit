@@ -358,12 +358,41 @@ pub async fn build_config(db: &PgPool, server: ServerId) -> Result<GatewayConfig
 			stream_usage: row.engine != EngineKind::Custom,
 		});
 	}
+	// The gateway sits on the network of every app that uses a model and of
+	// every model it serves, so `llm.podkit.internal` resolves for the apps
+	// and the models answer the gateway.
+	let environments: Vec<i64> = sqlx::query_scalar(
+		"SELECT a.environment_id FROM gateway_keys k
+			JOIN applications a ON a.id = k.application_id WHERE a.server_id = $1
+		UNION
+		SELECT m.environment_id FROM models m
+			WHERE m.server_id = $1 AND (
+				m.id IN (SELECT am.model_id FROM application_models am
+					JOIN applications a ON a.id = am.application_id WHERE a.server_id = $1)
+				OR m.id IN (SELECT model_id FROM playground_keys)
+			)
+		ORDER BY 1",
+	)
+	.bind(server)
+	.fetch_all(db)
+	.await?;
+	let mcp = crate::mcp_servers::gateway_parts(db, server).await?;
+	let mut environments = environments;
+	environments.extend(mcp.environments);
+	environments.sort_unstable();
+	environments.dedup();
 	Ok(GatewayConfig {
 		keys: keys
 			.into_iter()
 			.map(|(key_hash, models)| GatewayKey { key_hash, models })
 			.collect(),
 		other_models,
+		networks: environments
+			.into_iter()
+			.map(|e| crate::networks::environment_podman_name(crate::ids::EnvironmentId(e)))
+			.collect(),
+		mcp_keys: mcp.keys,
+		other_mcp: mcp.names,
 	})
 }
 
@@ -390,7 +419,11 @@ pub async fn collect_usage(state: &AppState, client: &AgentClient) -> AppResult<
 		.json(Method::POST, "/v1/gateway/usage/drain", None::<&()>)
 		.await?;
 	for row in &rows {
-		record_usage(&state.db, row).await?;
+		if row.mcp {
+			crate::mcp_servers::record_usage(&state.db, row).await?;
+		} else {
+			record_usage(&state.db, row).await?;
+		}
 	}
 	Ok(rows.len())
 }
@@ -447,7 +480,14 @@ pub async fn sync(state: &AppState, server: ServerId, client: &AgentClient) {
 	.await;
 	match keyed {
 		Ok(true) => {}
-		Ok(false) => return,
+		Ok(false) => match crate::mcp_servers::has_keys(&state.db, server).await {
+			Ok(true) => {}
+			Ok(false) => return,
+			Err(e) => {
+				tracing::warn!(%server, error = %e, "gateway sync could not read the MCP keys");
+				return;
+			}
+		},
 		Err(e) => {
 			tracing::warn!(%server, error = %e, "gateway sync could not read the keys");
 			return;

@@ -10,7 +10,8 @@ use crate::databases::{Database, DatabaseStatus, EngineKind};
 use crate::environments::Environment;
 use crate::error::{AppResult, ServerError};
 use crate::ids::{
-	ApplicationId, BackupTargetId, DatabaseId, EnvironmentId, ProjectId, ServerId, TeamId,
+	ApplicationId, BackupTargetId, DatabaseId, EnvironmentId, GitProviderId, ProjectId, RegistryId,
+	ServerId, SshKeyId, TeamId,
 };
 use crate::projects::Project;
 use crate::servers::{Server, ServerStatus};
@@ -66,10 +67,10 @@ pub async fn application(
 		r#"
 			SELECT a.id AS "id: ApplicationId", a.project_id AS "project_id: ProjectId", a.environment_id AS "environment_id: EnvironmentId",
 				a.server_id AS "server_id: ServerId", a.name, a.slug, a.repo_url, a.git_ref,
-				a.source_kind AS "source_kind: SourceKind", a.image, a.registry_auth,
-				a.deploy_key, a.git_token, a.build_strategy AS "build_strategy: BuildStrategy",
+				a.source_kind AS "source_kind: SourceKind", a.image, a.registry_auth, a.registry_id AS "registry_id: RegistryId",
+				a.deploy_key_id AS "deploy_key_id: SshKeyId", a.git_token, a.build_strategy AS "build_strategy: BuildStrategy",
 				a.dockerfile_path, a.container_port, a.webhook_secret, a.memory_limit_mb,
-				a.cpu_limit
+				a.cpu_limit, a.git_provider_id AS "git_provider_id: GitProviderId", a.git_repo, a.git_hook_id
 			FROM applications a
 			JOIN projects p ON p.id = a.project_id
 			WHERE a.id = $3 AND a.project_id = $2 AND p.team_id = $1
@@ -83,12 +84,54 @@ pub async fn application(
 	.ok_or(ServerError::ApplicationNotFound)
 }
 
+/// A scheduled task of the team's project.
+pub async fn cron_task(
+	db: &PgPool,
+	team: TeamId,
+	project: ProjectId,
+	id: crate::ids::CronTaskId,
+) -> AppResult<crate::cron::CronTask> {
+	sqlx::query_as(concat!(
+		"SELECT ",
+		crate::cron::task_cols!(),
+		" FROM cron_tasks
+		WHERE id = $3 AND project_id = $2
+			AND EXISTS (SELECT 1 FROM projects WHERE id = $2 AND team_id = $1)"
+	))
+	.bind(team)
+	.bind(project)
+	.bind(id)
+	.fetch_optional(db)
+	.await?
+	.ok_or(ServerError::CronNotFound("task"))
+}
+
+pub async fn git_provider(
+	db: &PgPool,
+	team: TeamId,
+	id: GitProviderId,
+) -> AppResult<crate::git_providers::GitProvider> {
+	crate::git_providers::find(db, team, id)
+		.await?
+		.ok_or(ServerError::GitProviderNotFound)
+}
+
+pub async fn ssh_key(
+	db: &PgPool,
+	team: TeamId,
+	id: SshKeyId,
+) -> AppResult<crate::ssh_keys::SshKey> {
+	crate::ssh_keys::find(db, team, id)
+		.await?
+		.ok_or(ServerError::SshKeyNotFound)
+}
+
 pub async fn server(db: &PgPool, team: TeamId, id: ServerId) -> AppResult<Server> {
 	sqlx::query_as!(
 		Server,
 		r#"
 			SELECT id AS "id: ServerId", team_id AS "team_id: TeamId", name, hostname, ssh_port,
-				ssh_user, ssh_private_key, podman_socket_path, is_local,
+				ssh_user, ssh_key_id AS "ssh_key_id: SshKeyId", podman_socket_path, is_local,
 				status AS "status: ServerStatus", host_key, agent_socket_path, agent_version,
 				arch, status_message,
 				hardware AS "hardware?: sqlx::types::Json<proto::Hardware>", hardware_at
@@ -150,6 +193,27 @@ pub async fn backup_target(
 	.fetch_optional(db)
 	.await?
 	.ok_or(ServerError::BackupTargetNotFound)
+}
+
+pub async fn registry(
+	db: &PgPool,
+	team: TeamId,
+	id: RegistryId,
+) -> AppResult<crate::registries::Registry> {
+	sqlx::query_as!(
+		crate::registries::Registry,
+		r#"
+			SELECT id AS "id: RegistryId", name, url,
+				username, password, created_at
+			FROM registries
+			WHERE id = $2 AND team_id = $1
+		"#,
+		team as TeamId,
+		id as RegistryId
+	)
+	.fetch_optional(db)
+	.await?
+	.ok_or(ServerError::RegistryNotFound)
 }
 
 pub async fn model(

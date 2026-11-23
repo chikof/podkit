@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO infrastructure_setup (team_id, skipped)\n\t\t\tVALUES ($1, CASE WHEN $3 THEN ARRAY[$2::text] ELSE '{}'::text[] END)\n\t\t\tON CONFLICT (team_id) DO UPDATE\n\t\t\tSET skipped = CASE\n\t\t\t\t\tWHEN $3 THEN array_append(array_remove(infrastructure_setup.skipped, $2::text), $2::text)\n\t\t\t\t\tELSE array_remove(infrastructure_setup.skipped, $2::text)\n\t\t\t\tEND,\n\t\t\t\tupdated_at = NOW()\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1403ee9eda31ccf5c0fff19f65235b1916a649916f38506d4c6a1a97f7e60224"
+}

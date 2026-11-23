@@ -1,0 +1,13 @@
+services:
+  mcp-memory:
+    image: mcp/memory:latest
+    restart: unless-stopped
+    expose:
+      - 8080
+    environment:
+      - MEMORY_FILE_PATH=${MEMORY_FILE_PATH}
+    volumes:
+      - mcp-memory-data:/data
+
+volumes:
+  mcp-memory-data: {}

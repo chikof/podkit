@@ -56,6 +56,8 @@ fn to_login(parts: &Parts) -> Response {
 pub struct UiUser {
 	pub id: UserId,
 	pub name: String,
+	/// Hash of their picture, when they have one.
+	pub avatar: Option<String>,
 }
 
 impl FromRequestParts<AppState> for UiUser {
@@ -73,12 +75,16 @@ impl FromRequestParts<AppState> for UiUser {
 			Ok(None) => return Err(to_login(parts)),
 			Err(e) => return Err(error::respond(&parts.method, None, &e.into())),
 		};
-		let name = match users::name_of(&state.db, id).await {
-			Ok(Some(name)) => name,
+		let header = match users::header_of(&state.db, id).await {
+			Ok(Some(header)) => header,
 			Ok(None) => return Err(to_login(parts)),
 			Err(e) => return Err(error::respond(&parts.method, None, &e.into())),
 		};
-		Ok(Self { id, name })
+		Ok(Self {
+			id,
+			name: header.name,
+			avatar: header.avatar,
+		})
 	}
 }
 
@@ -96,6 +102,8 @@ pub struct TeamCtx {
 	/// The project (and environment) the page is about, when its path names one the
 	/// user may read; the header's switchers are built from it.
 	pub scope: Option<ProjectScope>,
+	/// Events the user has not read yet, for the bell. Counted on page loads only.
+	pub unread: i64,
 }
 
 /// A project page's place in the hierarchy: the project, its siblings, and the
@@ -280,6 +288,14 @@ impl FromRequestParts<AppState> for TeamCtx {
 		)
 		.await;
 
+		let unread = if is_navigation(&parts.method) {
+			crate::notifications::service::unread_count(&state.db, user.id, team_id)
+				.await
+				.unwrap_or(0)
+		} else {
+			0
+		};
+
 		Ok(Self {
 			user,
 			team,
@@ -287,6 +303,7 @@ impl FromRequestParts<AppState> for TeamCtx {
 			teams,
 			path,
 			scope,
+			unread,
 		})
 	}
 }

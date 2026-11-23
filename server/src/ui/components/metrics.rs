@@ -5,10 +5,10 @@
 //!
 //! ```ignore
 //! let section = MetricsSection { id: "app", page_url, refresh_url, range };
-//! metrics_section(&section, &resource_charts(&points, range, now))
+//! metrics_section(&section, &resource_monitoring(flavor, &points, &extras, range, now))
 //! ```
 //!
-//! and serves `refresh_url?range=…` with `sse::patch(&resource_charts(…))`, calling the
+//! and serves `refresh_url?range=…` with `sse::patch(&resource_monitoring(…))` (see `metrics_extra`), calling the
 //! `metrics::service` fn for its kind (never the database).
 //!
 //! The frame is stable and the charts inside `#metrics-body` are what gets patched:
@@ -23,7 +23,7 @@ use maud::{Markup, html};
 
 use super::button::{Size, Variant, button_class};
 use crate::metrics::{Range, ResourcePoint};
-use crate::ui::charts::{Chart, Series, Unit, line_chart};
+use crate::ui::charts::{Chart, Marker, Series, Unit, line_chart_with};
 use crate::ui::sse::js_string;
 
 /// How often a visible page refreshes its charts.
@@ -120,11 +120,16 @@ pub fn metrics_section(section: &MetricsSection<'_>, body: &Markup) -> Markup {
 	}
 }
 
-/// CPU and memory of one resource: what every resource kind has. `now` is the end of the
+/// The CPU and memory charts of one resource, with `markers` (deployments, restarts) drawn on
+/// both: the first two charts of every resource's Monitoring tab. `now` is the end of the
 /// window, in unix seconds.
-// For the application, database, model and stack pages (cards F4, F5, F7, F8).
 #[must_use]
-pub fn resource_charts(points: &[ResourcePoint], range: Range, now: i64) -> Markup {
+pub fn cpu_and_memory(
+	points: &[ResourcePoint],
+	range: Range,
+	now: i64,
+	markers: &[Marker],
+) -> Markup {
 	let from = now - range.duration().whole_seconds();
 	let xs: Vec<i64> = points.iter().map(|p| p.at).collect();
 	let cpu = Chart {
@@ -158,18 +163,20 @@ pub fn resource_charts(points: &[ResourcePoint], range: Range, now: i64) -> Mark
 			values: points.iter().map(|p| Some(p.mem as f64)).collect(),
 		}],
 	};
-	metrics_body(
-		&html! {
-			(line_chart(&cpu))
-			(line_chart(&memory))
-		},
-		now,
-	)
+	html! {
+		(line_chart_with(&cpu, markers))
+		(line_chart_with(&memory, markers))
+	}
 }
 
 #[cfg(test)]
 mod tests {
 	use super::*;
+
+	/// What the Monitoring tabs showed before the extra charts: CPU and memory, no markers.
+	fn resource_charts(points: &[ResourcePoint], range: Range, now: i64) -> Markup {
+		metrics_body(&cpu_and_memory(points, range, now, &[]), now)
+	}
 
 	const NOW: i64 = 1_700_000_000;
 

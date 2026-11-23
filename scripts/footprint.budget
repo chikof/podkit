@@ -1,0 +1,9 @@
+# Idle RSS budgets, in KB, read by scripts/footprint.sh --check.
+# A process fails when its idle RSS is over min(cap, baseline + 20 %).
+#   cap       the promise: server 60 MB, agent 25 MB
+#   baseline  the last measured idle RSS (docs/footprint.md), rounded up. Lower it
+#             when a change makes podkit lighter; raise it only with a reason.
+server_cap_kb=61440
+agent_cap_kb=25600
+server_baseline_kb=13312
+agent_baseline_kb=8192

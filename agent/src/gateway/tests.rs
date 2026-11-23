@@ -173,6 +173,8 @@ async fn harness() -> Harness {
 			models: vec![model(1, "qwen", port, true), model(2, "plain", port, false)],
 		}],
 		other_models: vec!["secret".to_owned()],
+		networks: Vec::new(),
+		..Default::default()
 	});
 	let url = format!("http://127.0.0.1:{}", serve(router(gateway.clone())).await);
 	Harness {
@@ -470,6 +472,8 @@ async fn gateway_an_engine_that_is_down_is_502() {
 			models: vec![model(1, "qwen", 1, true)],
 		}],
 		other_models: Vec::new(),
+		networks: Vec::new(),
+		..Default::default()
 	});
 	let response = h
 		.post("/v1/chat/completions", &chat("qwen", false))

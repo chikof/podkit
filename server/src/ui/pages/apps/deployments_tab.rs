@@ -25,6 +25,7 @@ use crate::auth::permission::{Action, Resource};
 use crate::deployments::service::{self, DeploymentView, Trigger};
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, DeploymentId, ProjectId, TeamId};
+use crate::scanning::service::ScanView;
 use crate::state::AppState;
 use crate::ui::components::{
 	BUTTON_OUTLINE, BannerKind, Size, Variant, banner, button_class, empty_state, icon,
@@ -33,8 +34,9 @@ use crate::ui::components::{
 use crate::ui::extract::TeamCtx;
 use crate::ui::live::{error_line, job_log};
 use crate::ui::pages::projects::cards::relative_time;
+use crate::ui::pages::security;
 use crate::ui::sse::js_string;
-use crate::ui::status::{Status, poll};
+use crate::ui::status::poll;
 use crate::ui::{error, sse};
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/apps/{app_id}";
@@ -91,6 +93,7 @@ fn trigger_label(t: &Trigger) -> &'static str {
 	match t {
 		Trigger::User => "Manual",
 		Trigger::Webhook => "Webhook",
+		Trigger::AutoRollback => "Automatic rollback",
 	}
 }
 
@@ -99,10 +102,33 @@ fn title_of(d: &DeploymentView) -> &'static str {
 	match d.trigger {
 		Trigger::User => "Deployed by hand",
 		Trigger::Webhook => "Deployed by webhook",
+		Trigger::AutoRollback => "Rolled back automatically",
 	}
 }
 
 // --- the timeline -----------------------------------------------------------------------------
+
+/// One line under a row when the health gate has something to say: why a release was put
+/// back, what a rollback replaced, or that the deploy kept the old container.
+fn health_note(d: &DeploymentView) -> Option<String> {
+	use crate::health_gate::State;
+	if let Some(replaced) = d.rollback_of {
+		return Some(format!("Replaced #{replaced}, which went bad"));
+	}
+	let gate = d.gate.as_ref()?;
+	match gate.state {
+		State::RolledBack => Some(format!(
+			"Rolled back: {}",
+			gate.detail
+				.as_deref()
+				.unwrap_or("it failed its health check")
+		)),
+		State::Unhealthy => {
+			Some("Never became healthy; the previous container kept serving".to_owned())
+		}
+		State::Waiting | State::Healthy => None,
+	}
+}
 
 /// The button that opens the rollback dialog for deployment `id`.
 fn rollback_button(id: DeploymentId) -> Markup {
@@ -124,12 +150,8 @@ fn timeline_row(
 	can_update: bool,
 ) -> Markup {
 	let url = deployment_url(base, d.id);
-	let shape = chrome::deployment_shape(d.status);
-	let state = if d.in_flight() {
-		format!("{}\u{2026}", d.status.label())
-	} else {
-		d.status.label().to_owned()
-	};
+	let (shape, state) = chrome::deployment_state(d);
+	let note = health_note(d);
 	html! {
 		li class="ui-timeline-item" data-status=(shape.key()) data-current=[selected.then_some("")] {
 			span class="ui-timeline-node" data-status=(shape.key()) aria-hidden="true" {
@@ -143,6 +165,9 @@ fn timeline_row(
 				}
 				@if let Some(sha) = &d.commit_sha {
 					p class="ui-tl-meta" { code { (short_sha(sha)) } }
+				}
+				@if let Some(note) = &note {
+					p class="ui-tl-meta" { (note) }
 				}
 				p class="ui-tl-meta2" {
 					span class="ui-tl-state" { (state) }
@@ -199,6 +224,17 @@ async fn history_rows(
 	service::list(&s.db, ctx.user.id, ctx.team.id, project, app).await
 }
 
+/// The scans of these deployments, for the line each deploy page shows. Informational: a
+/// failed lookup is an empty answer, never a failed page.
+async fn scans_of(
+	s: &AppState,
+	ctx: &TeamCtx,
+	rows: &[DeploymentView],
+) -> security::DeploymentScans {
+	let ids: Vec<DeploymentId> = rows.iter().map(|d| d.id).collect();
+	security::deployment_scans(s, ctx, &ids).await
+}
+
 /// What the page shows: the history, and the facts and log of `selected` (the newest when
 /// nothing was chosen).
 fn view(
@@ -206,6 +242,7 @@ fn view(
 	app: &ApplicationView,
 	rows: &[DeploymentView],
 	chosen: Option<DeploymentId>,
+	scans: &security::DeploymentScans,
 ) -> Markup {
 	let current = chosen
 		.and_then(|id| rows.iter().find(|d| d.id == id))
@@ -219,7 +256,7 @@ fn view(
 					(table(ctx, app, rows, Some(d.id)))
 				}
 				div class="ui-dep-main" {
-					(status_card(ctx, app, d))
+					(status_card(ctx, app, d, scans.get(&d.id)))
 					(log_viewer_titled(
 						"build-log",
 						"Build log",
@@ -249,7 +286,8 @@ async fn overview(
 	let rows = history_rows(&s, &ctx, project.id, app.id)
 		.await
 		.map_err(|e| error::page(&ctx, &e))?;
-	let content = view(&ctx, &app, &rows, None);
+	let scans = scans_of(&s, &ctx, &rows).await;
+	let content = view(&ctx, &app, &rows, None, &scans);
 	Ok(page(&s, &ctx, &project, &app, Tab::Deployments, &content).await)
 }
 
@@ -267,7 +305,8 @@ async fn detail(
 	let rows = history_rows(&s, &ctx, project.id, app.id)
 		.await
 		.map_err(|e| error::page(&ctx, &e))?;
-	let content = view(&ctx, &app, &rows, Some(id));
+	let scans = scans_of(&s, &ctx, &rows).await;
+	let content = view(&ctx, &app, &rows, Some(id), &scans);
 	Ok(page(&s, &ctx, &project, &app, Tab::Deployments, &content).await)
 }
 
@@ -364,7 +403,12 @@ fn fact(label: &str, value: &Markup) -> Markup {
 
 /// Status, times and the Cancel button of the deployment being read. `#deployment-status` is
 /// what polling re-renders while it is in flight.
-fn status_card(ctx: &TeamCtx, app: &ApplicationView, d: &DeploymentView) -> Markup {
+fn status_card(
+	ctx: &TeamCtx,
+	app: &ApplicationView,
+	d: &DeploymentView,
+	scan: Option<&ScanView>,
+) -> Markup {
 	let base = app_url(ctx.team.id, app.project_id, app.id);
 	let url = deployment_url(&base, d.id);
 	let can_update = ctx.perms.can(Action::Update, Resource::Deployment);
@@ -372,8 +416,14 @@ fn status_card(ctx: &TeamCtx, app: &ApplicationView, d: &DeploymentView) -> Mark
 		div id="deployment-status" class="flex flex-col gap-3" {
 			(poll(&format!("{url}/status"), d.in_flight()))
 			dl class="ui-facts" aria-label={ "Deployment #" (d.id) } {
-				(fact("Status", &chrome::dot(chrome::deployment_shape(d.status), d.status.label())))
+				(fact("Status", &{
+					let (shape, word) = chrome::deployment_state(d);
+					chrome::dot(shape, &word)
+				}))
 				(fact("Trigger", &html! { (trigger_label(&d.trigger)) }))
+				@if let Some(note) = health_note(d) {
+					(fact("Health", &html! { (note) }))
+				}
 				// An image application is never cloned: there is no commit to name.
 				@if app.source_kind == SourceKind::Git {
 					(fact("Commit", &html! {
@@ -397,6 +447,7 @@ fn status_card(ctx: &TeamCtx, app: &ApplicationView, d: &DeploymentView) -> Mark
 			@if let Some(message) = &d.error_message {
 				(banner(BannerKind::Error, Some("This deployment failed."), message, None))
 			}
+			(security::scan_line(ctx, d.id, scan))
 		}
 	}
 }
@@ -416,7 +467,8 @@ async fn status_fragment(
 		// The header's status and buttons depend on the latest status too.
 		Ok((view, d)) => {
 			let rows = recent_deployments(&s, &ctx, &view).await;
-			sse::patch(&status_card(&ctx, &view, &d))
+			let scans = security::deployment_scans(&s, &ctx, &[d.id]).await;
+			sse::patch(&status_card(&ctx, &view, &d, scans.get(&d.id)))
 				.and(sse::patch(&header(&s, &ctx, &view, &rows).await))
 				.into_response()
 		}

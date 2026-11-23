@@ -5,10 +5,12 @@
 //! A chart is a `<figure>` holding
 //!
 //! - a caption with the title and the latest value of each series,
-//! - an `<svg role="img">` with axis ticks, one path per run of readings (a missing
+//! - an `<svg role="img">` with axis ticks and one path per run of readings (a missing
 //!   reading, or a hole longer than three times the usual step, breaks the line instead
-//!   of being bridged), and one invisible column per reading whose `<title>` is the hover
-//!   value,
+//!   of being bridged); the plot around it is focusable and carries the readings in a
+//!   compact `data-points` attribute, from which `charts.js` (loaded by the chart) draws a crosshair, a dot per
+//!   series and a tooltip card at the pointer, or at the point the arrow keys have stepped
+//!   to (and says its values politely); there is no native `title` tooltip,
 //! - a visually hidden summary the SVG points at with `aria-describedby`,
 //! - a table of the readings, shown by the `_tables` signal that
 //!   `components::metrics_section` declares (the "data table" toggle).
@@ -19,6 +21,7 @@ use std::fmt::Write as _;
 
 use maud::{Markup, html};
 
+use super::assets::chart_script;
 use super::components::table;
 
 // The plot fills the whole viewBox and is stretched to its box (`preserveAspectRatio="none"`);
@@ -43,6 +46,12 @@ pub enum Unit {
 	Bytes,
 	/// `1.5 MB/s`.
 	BytesPerSec,
+	/// A rate with its own unit word: `Rate("req/s")` reads `3.33 req/s`.
+	Rate(&'static str),
+	/// `120 ms`, or `1.2 s` from a second up.
+	Millis,
+	/// A whole number: `12`.
+	Count,
 }
 
 /// One line. `values` has one entry per timestamp of the chart; `None` is a missing
@@ -72,6 +81,35 @@ pub struct Chart<'a> {
 	pub series: Vec<Series<'a>>,
 }
 
+/// What a marker stands for; it decides the line's look (dashed or solid, and its cap) so the
+/// two are told apart without colour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MarkerKind {
+	/// A deployment.
+	Deploy,
+	/// A crash, an OOM kill or a restart.
+	Event,
+}
+
+impl MarkerKind {
+	fn key(self) -> &'static str {
+		match self {
+			Self::Deploy => "deploy",
+			Self::Event => "event",
+		}
+	}
+}
+
+/// A vertical line at one moment of a chart, with the words the tooltip shows.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Marker {
+	/// Unix seconds.
+	pub at: i64,
+	pub kind: MarkerKind,
+	/// `Deploy #12 · running · abc1234`: plain text, escaped when drawn.
+	pub label: String,
+}
+
 // ---- Numbers -------------------------------------------------------------------------
 
 const SCALES: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
@@ -92,6 +130,18 @@ pub fn format_value(unit: Unit, value: f64) -> String {
 		Unit::Percent => format!("{}%", trim(value, 1)),
 		Unit::Bytes => format_bytes(value),
 		Unit::BytesPerSec => format!("{}/s", format_bytes(value)),
+		Unit::Rate(word) => {
+			let digits = if value.abs() >= 10.0 { 1 } else { 2 };
+			format!("{} {word}", trim(value, digits))
+		}
+		Unit::Millis => {
+			if value >= 1000.0 {
+				format!("{} s", trim(value / 1000.0, 2))
+			} else {
+				format!("{} ms", trim(value, usize::from(value < 100.0)))
+			}
+		}
+		Unit::Count => trim(value, 0),
 	}
 }
 
@@ -140,6 +190,10 @@ fn axis(unit: Unit, max: f64, fixed: Option<f64>) -> (f64, f64) {
 	};
 	let step = match unit {
 		Unit::Percent => round_step(max.max(10.0) / 4.0),
+		Unit::Millis => round_step(max.max(40.0) / 4.0),
+		Unit::Rate(_) => round_step(max / 4.0),
+		// Whole numbers tick at whole numbers.
+		Unit::Count => round_step(max / 4.0).max(1.0),
 		// Bytes tick at powers of two, so the labels are 256 MB, 512 MB, 768 MB, 1 GB.
 		Unit::Bytes | Unit::BytesPerSec => 2f64.powf((max / 4.0).max(1.0).log2().ceil()),
 	};
@@ -345,7 +399,7 @@ fn stats(values: &[Option<f64>]) -> Option<Stats> {
 }
 
 /// The sentence a screen reader gets in place of the picture.
-fn summary(chart: &Chart<'_>) -> String {
+fn summary(chart: &Chart<'_>, markers: &[Marker]) -> String {
 	let mut out = format!("{}, {}.", chart.title, chart.range);
 	for s in &chart.series {
 		let name = if chart.series.len() > 1 { s.label } else { "" };
@@ -369,7 +423,20 @@ fn summary(chart: &Chart<'_>) -> String {
 			}
 		}
 	}
+	let marked: Vec<String> = in_window(chart, markers)
+		.map(|m| format!("{} at {}", m.label, full_time(m.at)))
+		.collect();
+	if !marked.is_empty() {
+		let _ = write!(out, " Marked: {}.", marked.join("; "));
+	}
 	out
+}
+
+/// The markers that fall inside the chart's window.
+fn in_window<'a>(chart: &'a Chart<'_>, markers: &'a [Marker]) -> impl Iterator<Item = &'a Marker> {
+	markers
+		.iter()
+		.filter(|m| (chart.from..=chart.to).contains(&m.at))
 }
 
 // ---- Rendering -----------------------------------------------------------------------
@@ -433,7 +500,7 @@ fn data_table(chart: &Chart<'_>, figure_id: &str) -> Markup {
 	}
 }
 
-fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
+fn svg(chart: &Chart<'_>, figure_id: &str, markers: &[Marker]) -> Markup {
 	let (top, step) = axis(chart.unit, data_max(chart), chart.max);
 	let plot = Plot {
 		from: chart.from,
@@ -454,16 +521,16 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 	let span = chart.to - chart.from;
 	let x_ticks: Vec<i64> = (0..=4i64).map(|i| chart.from + span * i / 4).collect();
 	let base = HEIGHT - BOTTOM;
-	let plot_width = WIDTH - LEFT - RIGHT;
-	// A hover column is one usual step wide (or the plot split evenly when that is unknown).
-	let col = usual_step(chart.xs)
-		.map_or(plot_width / chart.xs.len().max(1) as f64, |s| {
-			s as f64 / span.max(1) as f64 * plot_width
-		})
-		.clamp(1.0, plot_width);
+	let figure_anchor = format!("--{figure_id}");
+	let label = format!(
+		"{} readings. Use the left and right arrow keys to move between them.",
+		chart.title
+	);
 	html! {
 		div class="ui-chart" {
-			div class="ui-chart-plot" {
+			(chart_script())
+			div class="ui-chart-plot" tabindex="0" role="group" aria-label=(label)
+				style={ "--an:" (figure_anchor) } "data-points"=(points_json(chart, &plot, markers)) {
 				svg viewBox={ "0 0 " (WIDTH) " " (HEIGHT) } preserveAspectRatio="none" role="img"
 					aria-labelledby={ (figure_id) "-title" } aria-describedby={ (figure_id) "-summary" } {
 					@for tick in &ticks {
@@ -480,18 +547,21 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 							}
 						}
 					}
-					@for (i, t) in chart.xs.iter().enumerate() {
-						@let left = (plot.x(*t) - col / 2.0).max(LEFT);
-						@let right = (plot.x(*t) + col / 2.0).min(WIDTH - RIGHT);
-						rect x=(num(left)) y=(TOP) width=(num((right - left).max(1.0))) height=(base - TOP)
-							class="fill-transparent hover:fill-foreground/10" {
-							title { (hover_text(chart, i)) }
-						}
-					}
+				}
+				@for m in in_window(chart, markers) {
+					span class="ui-chart-mark" data-m=(m.kind.key()) style={ "--x:" (num((plot.x(m.at) - LEFT) / (WIDTH - LEFT - RIGHT) * 100.0)) } aria-hidden="true" {}
 				}
 				@for tick in &ticks {
 					span class="ui-chart-yl" style={ "--p:" (num((1.0 - tick / top) * 100.0)) } aria-hidden="true" { (format_value(chart.unit, *tick)) }
 				}
+				// The hover layer: `charts.js` places the crosshair, the dots and the card, and
+				// says the values politely when a key moves the point.
+				span class="ui-chart-cross" hidden aria-hidden="true" {}
+				@for s in &chart.series {
+					i class="ui-chart-dot" data-c=(s.color) hidden aria-hidden="true" {}
+				}
+				div class="ui-chart-tip" hidden aria-hidden="true" {}
+				div class="ui-visually-hidden" aria-live="polite" {}
 			}
 			div class="ui-chart-xl" aria-hidden="true" {
 				@for t in &x_ticks {
@@ -502,23 +572,54 @@ fn svg(chart: &Chart<'_>, figure_id: &str) -> Markup {
 	}
 }
 
-fn hover_text(chart: &Chart<'_>, i: usize) -> String {
-	let mut out = full_time(chart.xs[i]);
-	for s in &chart.series {
-		let v = s
-			.values
-			.get(i)
-			.copied()
-			.flatten()
-			.map_or_else(|| "no reading".to_owned(), |v| format_value(chart.unit, v));
-		let _ = write!(out, " · {}: {v}", s.label);
-	}
-	out
+/// What `charts.js` needs to draw the hover layer, as compact JSON: the window (`f`, `t` in unix
+/// seconds), the series labels (`s`) and colors (`c`), and one entry per reading `[time,
+/// [[y, "text"] | null, ...]]` where `y` is the point's height as a fraction of the plot and
+/// `text` is the value with its unit. Nothing is computed from it but positions.
+fn points_json(chart: &Chart<'_>, plot: &Plot, markers: &[Marker]) -> String {
+	let readings: Vec<serde_json::Value> = chart
+		.xs
+		.iter()
+		.enumerate()
+		.map(|(i, t)| {
+			let per_series: Vec<serde_json::Value> = chart
+				.series
+				.iter()
+				.map(|s| match s.values.get(i).copied().flatten() {
+					Some(v) => serde_json::json!([
+						(plot.y(v) / HEIGHT * 1000.0).round() / 1000.0,
+						format_value(chart.unit, v)
+					]),
+					None => serde_json::Value::Null,
+				})
+				.collect();
+			serde_json::json!([t, per_series])
+		})
+		.collect();
+	serde_json::json!({
+		"f": chart.from,
+		"t": chart.to,
+		"s": chart.series.iter().map(|s| s.label).collect::<Vec<_>>(),
+		"c": chart.series.iter().map(|s| s.color).collect::<Vec<_>>(),
+		"p": readings,
+		"m": in_window(chart, markers)
+			.map(|m| serde_json::json!([m.at, m.label, m.kind.key()]))
+			.collect::<Vec<_>>(),
+	})
+	.to_string()
 }
 
 /// One chart as a `<figure id="chart-<id>">`. See the module docs.
 #[must_use]
 pub fn line_chart(chart: &Chart<'_>) -> Markup {
+	line_chart_with(chart, &[])
+}
+
+/// A chart with vertical markers (deployments, restarts): a line at each one inside the
+/// window, its words in the tooltip when the pointer or the arrow keys are near, and a
+/// sentence in the summary for assistive technology.
+#[must_use]
+pub fn line_chart_with(chart: &Chart<'_>, markers: &[Marker]) -> Markup {
 	let figure_id = format!("chart-{}", chart.id);
 	html! {
 		figure id=(figure_id) class="flex flex-col gap-2" {
@@ -537,13 +638,27 @@ pub fn line_chart(chart: &Chart<'_>) -> Markup {
 				}
 			}
 			@if has_data(chart) {
-				(svg(chart, &figure_id))
-				p id={ (figure_id) "-summary" } class="ui-visually-hidden" { (summary(chart)) }
+				(svg(chart, &figure_id, markers))
+				(legend(chart, markers))
+				p id={ (figure_id) "-summary" } class="ui-visually-hidden" { (summary(chart, markers)) }
 				(data_table(chart, &figure_id))
 			} @else {
 				p id={ (figure_id) "-summary" } class="flex h-32 items-center justify-center rounded-lg border border-dashed border-border px-4 text-center text-sm text-muted-foreground" {
 					"No readings in this range yet. podkit samples every 30 seconds."
 				}
+			}
+		}
+	}
+}
+
+/// What the marker lines mean, under the plot, for the kinds present.
+fn legend(chart: &Chart<'_>, markers: &[Marker]) -> Markup {
+	let has = |kind: MarkerKind| in_window(chart, markers).any(|m| m.kind == kind);
+	html! {
+		@if has(MarkerKind::Deploy) || has(MarkerKind::Event) {
+			p class="ui-chart-legend" aria-hidden="true" {
+				@if has(MarkerKind::Deploy) { span class="ui-chart-mark-key" data-m="deploy" { "Deploy" } }
+				@if has(MarkerKind::Event) { span class="ui-chart-mark-key" data-m="event" { "Crash, OOM or restart" } }
 			}
 		}
 	}
@@ -795,9 +910,10 @@ mod tests {
 			..one(&xs, vals, Unit::Percent, Some(100.0))
 		};
 		let html = render(&chart);
-		// One hover column per reading, each with its own value.
-		assert_eq!(html.matches("<rect").count(), 300);
-		assert_eq!(html.matches("<title>").count(), 300);
+		// Every reading is in `data-points`, which is all the hover layer needs.
+		assert_eq!(html.matches("<rect").count(), 0);
+		assert!(!html.contains("<title"), "no native tooltip: {html}");
+		assert_eq!(points(&html)["p"].as_array().unwrap().len(), 300);
 		// The table is thinned, and says so.
 		assert_eq!(html.matches("<tr>").count(), TABLE_ROWS + 1);
 		assert!(html.contains("Showing 30 of 300 readings."), "{html}");
@@ -832,11 +948,44 @@ mod tests {
 		assert!(html.contains("data-show=\"$_tables\""), "{html}");
 		assert!(html.contains("<th scope=\"col\">Time</th>"), "{html}");
 		assert!(html.contains("2023-11-14 22:13:20 UTC"), "{html}");
-		// Hover values.
-		assert!(
-			html.contains("<title>2023-11-14 22:13:20 UTC · CPU: 10%</title>"),
-			"{html}"
-		);
+		// Hover values come from `data-points`, not from a native tooltip.
+		assert!(!html.contains("<title"), "{html}");
+		let p = points(&html);
+		assert_eq!(p["s"][0], "CPU");
+		assert_eq!(p["p"][0][0], 1_700_000_000);
+		assert_eq!(p["p"][0][1][0][1], "10%");
+		assert_eq!(p["p"][3][1][0][1], "40%");
+	}
+
+	/// The JSON of the chart's `data-points` attribute.
+	fn points(html: &str) -> serde_json::Value {
+		let (_, rest) = html.split_once("data-points=\"").expect("data-points");
+		let raw = rest.split('"').next().unwrap();
+		serde_json::from_str(&raw.replace("&quot;", "\"").replace("&amp;", "&")).unwrap()
+	}
+
+	#[test]
+	fn charts_are_keyboard_reachable_with_a_polite_live_region() {
+		let xs = minutes(4);
+		let vals = vec![Some(10.0), None, Some(30.0), Some(40.0)];
+		let html = render(&one(&xs, vals, Unit::Percent, Some(100.0)));
+		// Only a page with a chart loads the hover script.
+		assert!(html.contains("/static/charts.js?v="), "{html}");
+		assert!(html.contains("tabindex=\"0\""), "{html}");
+		assert!(html.contains("role=\"group\""), "{html}");
+		assert!(html.contains("aria-live=\"polite\""), "{html}");
+		// A missing reading is null, so the card can say "no reading".
+		assert!(points(&html)["p"][1][1][0].is_null());
+		// The crosshair, one dot per series and the card are in the markup, hidden.
+		for part in [
+			"ui-chart-cross\" hidden",
+			"ui-chart-dot\" data-c=\"2\" hidden",
+			"ui-chart-tip\" hidden",
+		] {
+			assert!(html.contains(part), "{part}: {html}");
+		}
+		// The summary for screen readers stays.
+		assert!(html.contains("id=\"chart-cpu-summary\""), "{html}");
 	}
 
 	#[test]
@@ -861,7 +1010,7 @@ mod tests {
 			..one(&xs, vec![], Unit::BytesPerSec, None)
 		};
 		let html = render(&chart);
-		assert!(!html.contains("<script"), "{html}");
+		assert!(!html.contains("<script>"), "{html}");
 		assert!(!html.contains("<img"), "{html}");
 		assert!(!html.contains("<b "), "{html}");
 		assert!(!html.contains("<svg onload"), "{html}");
@@ -905,7 +1054,8 @@ mod tests {
 		let html = render(&chart);
 		assert!(html.contains("Received") && html.contains("Sent"), "{html}");
 		assert!(html.contains("4 KB/s"), "{html}");
-		assert!(html.contains("no reading"), "{html}");
+		// A missing reading is `null` in the hover data; the card says "no reading" for it.
+		assert!(points(&html)["p"][1][1][1].is_null(), "{html}");
 		assert!(html.contains("–"), "{html}");
 	}
 
@@ -930,5 +1080,63 @@ mod tests {
 		assert!(html.contains("aria-hidden=\"true\""), "{html}");
 		assert!(!html.contains("<text"), "{html}");
 		assert!(!html.contains("<title"), "{html}");
+	}
+
+	#[test]
+	fn charts_rates_durations_and_counts_read_naturally() {
+		assert_eq!(format_value(Unit::Rate("req/s"), 3.333), "3.33 req/s");
+		assert_eq!(format_value(Unit::Rate("req/s"), 12.34), "12.3 req/s");
+		assert_eq!(format_value(Unit::Rate("tokens/s"), 0.0), "0 tokens/s");
+		assert_eq!(format_value(Unit::Millis, 4.3), "4.3 ms");
+		assert_eq!(format_value(Unit::Millis, 250.4), "250 ms");
+		assert_eq!(format_value(Unit::Millis, 1500.0), "1.5 s");
+		assert_eq!(format_value(Unit::Count, 12.0), "12");
+		// Whole numbers tick at whole numbers, never 0.25.
+		assert!(axis(Unit::Count, 3.0, None).1 >= 1.0);
+		let (top, step) = axis(Unit::Rate("req/s"), 37.0, None);
+		assert!(top >= 37.0 && step > 0.0);
+		assert!(axis(Unit::Millis, 0.0, None).0 > 0.0);
+	}
+
+	#[test]
+	fn charts_markers_inside_the_window_are_drawn_and_spoken_and_others_are_not() {
+		let xs = minutes(30);
+		let c = one(&xs, vec![Some(10.0); 30], Unit::Percent, Some(100.0));
+		let markers = [
+			Marker {
+				at: FROM + 1800,
+				kind: MarkerKind::Deploy,
+				label: "Deploy abc1234 · running".to_owned(),
+			},
+			Marker {
+				at: FROM + 600,
+				kind: MarkerKind::Event,
+				label: "Crash: exit code 1".to_owned(),
+			},
+			Marker {
+				at: FROM - 60,
+				kind: MarkerKind::Event,
+				label: "Before the window".to_owned(),
+			},
+			Marker {
+				at: FROM + 5000,
+				kind: MarkerKind::Deploy,
+				label: "After the window".to_owned(),
+			},
+		];
+		let html = line_chart_with(&c, &markers).into_string();
+		assert_eq!(html.matches("class=\"ui-chart-mark\"").count(), 2, "{html}");
+		assert!(html.contains("style=\"--x:50\""), "{html}");
+		// The words are in the tooltip data and in the sentence a screen reader gets.
+		assert!(html.contains("Crash: exit code 1"), "{html}");
+		assert!(html.contains("Marked: "), "{html}");
+		assert!(!html.contains("Before the window") && !html.contains("After the window"));
+		// Without markers the chart is the same as ever: no lines, no legend.
+		let plain = render(&c);
+		assert!(
+			!plain.contains("ui-chart-mark") && !plain.contains("Marked:"),
+			"{plain}"
+		);
+		assert_eq!(plain, line_chart_with(&c, &[]).into_string());
 	}
 }

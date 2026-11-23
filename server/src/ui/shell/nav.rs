@@ -16,7 +16,7 @@ fn item(label: &'static str, href: String, icon: &'static str) -> NavItem {
 	NavItem { label, href, icon }
 }
 
-/// Projects, templates, servers, models and S3 destinations.
+/// Projects, templates and models: the places a team works in every day.
 pub fn main_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	let base = format!("/teams/{}", ctx.team.id);
 	let can = |resource| ctx.perms.can(Action::Read, resource);
@@ -25,19 +25,68 @@ pub fn main_items(ctx: &TeamCtx) -> Vec<NavItem> {
 		items.push(item("Projects", format!("{base}/projects"), "layout-grid"));
 		items.push(item("Templates", format!("{base}/templates"), "package"));
 	}
-	if can(Resource::Server) {
-		items.push(item("Servers", format!("{base}/servers"), "server"));
-	}
 	if can(Resource::Model) {
 		items.push(item("Models", format!("{base}/models"), "brain"));
 	}
+	items
+}
+
+/// The Infrastructure section: the overview, then what it is made of. One list, so the
+/// sidebar and the command palette never disagree.
+pub fn infra_items(ctx: &TeamCtx) -> Vec<NavItem> {
+	let base = format!("/teams/{}", ctx.team.id);
+	let can = |resource| ctx.perms.can(Action::Read, resource);
+	let mut items = Vec::new();
+	if can(Resource::Server) {
+		items.push(item(
+			"Overview",
+			format!("{base}/infrastructure"),
+			"activity",
+		));
+		items.push(item("Servers", format!("{base}/servers"), "server"));
+		items.push(item(
+			"Networks",
+			format!("{base}/infrastructure/networks"),
+			"network",
+		));
+	}
+	if can(Resource::SshKey) {
+		items.push(item("Keys", format!("{base}/keys"), "key-round"));
+	}
+	if can(Resource::Registry) {
+		items.push(item(
+			"Registries",
+			format!("{base}/registries"),
+			"container",
+		));
+	}
+	if can(Resource::GitProvider) {
+		items.push(item(
+			"Git providers",
+			format!("{base}/git-providers"),
+			"git-branch",
+		));
+	}
+	if can(Resource::Scan) {
+		items.push(item("Security", format!("{base}/security"), "shield"));
+	}
+	if can(Resource::Uptime) {
+		items.push(item("Uptime", format!("{base}/uptime"), "globe"));
+	}
 	if can(Resource::Backup) {
 		items.push(item(
-			"S3 Destinations",
+			"S3 destinations",
 			format!("{base}/backup-targets"),
 			"cloud",
 		));
 	}
+	items
+}
+
+/// Every place the palette offers: the daily ones, then the Infrastructure pages.
+pub fn places(ctx: &TeamCtx) -> Vec<NavItem> {
+	let mut items = main_items(ctx);
+	items.extend(infra_items(ctx));
 	items
 }
 
@@ -61,6 +110,32 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 			"key-round",
 		));
 	}
+	if can(Resource::EnvVar) {
+		items.push(item(
+			"Shared variables",
+			format!("{base}/settings/shared-variables"),
+			"layers",
+		));
+	}
+	items.push(item(
+		"API tokens",
+		format!("{base}/settings/api-tokens"),
+		"terminal",
+	));
+	if can(Resource::Notification) {
+		items.push(item(
+			"Notifications",
+			format!("{base}/settings/notifications"),
+			"bell",
+		));
+	}
+	if can(Resource::Audit) {
+		items.push(item(
+			"Audit log",
+			format!("{base}/settings/audit"),
+			"history",
+		));
+	}
 	items.push(item(
 		"Appearance",
 		format!("{base}/settings/appearance"),
@@ -69,36 +144,60 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	items
 }
 
-/// What the sidebar and the mobile tab bar list: the places above, then one "Settings"
-/// entry that stands for the settings pages (which the settings page lists in full).
-pub fn primary_items(ctx: &TeamCtx) -> Vec<NavItem> {
-	let mut items = main_items(ctx);
-	items.push(item(
+/// The one "Settings" entry that stands for the settings pages (which the settings page
+/// lists in full).
+pub fn settings_entry(ctx: &TeamCtx) -> NavItem {
+	item(
 		"Settings",
 		format!("/teams/{}/settings", ctx.team.id),
 		"settings",
-	));
+	)
+}
+
+/// The one "Infrastructure" entry that stands for the section in the tab bar, which has
+/// no room for its seven pages: it opens the overview, or the first page the person may
+/// read when they cannot read servers.
+pub fn infra_entry(ctx: &TeamCtx) -> Option<NavItem> {
+	let first = infra_items(ctx).into_iter().next()?;
+	Some(item("Infrastructure", first.href, "boxes"))
+}
+
+/// What the mobile tab bar lists: the daily places, Infrastructure, then "Settings".
+pub fn primary_items(ctx: &TeamCtx) -> Vec<NavItem> {
+	let mut items = main_items(ctx);
+	items.extend(infra_entry(ctx));
+	items.push(settings_entry(ctx));
 	items
 }
 
-/// The entry of [`primary_items`] the request is on. Every settings page marks "Settings".
-pub fn primary_current(ctx: &TeamCtx) -> Option<String> {
-	let main = main_items(ctx);
+/// The entry of the sidebar the request is on: the page itself, with every settings page
+/// marking "Settings".
+pub fn sidebar_current(ctx: &TeamCtx) -> Option<String> {
+	let places = places(ctx);
 	let settings = settings_items(ctx);
-	let best = current(main.iter().chain(&settings), &ctx.path)?;
+	let best = current(places.iter().chain(&settings), &ctx.path)?;
 	if settings.iter().any(|i| i.href == best) {
-		Some(format!("/teams/{}/settings", ctx.team.id))
+		Some(settings_entry(ctx).href)
 	} else {
 		Some(best.to_owned())
+	}
+}
+
+/// The entry of [`primary_items`] the request is on: every settings page marks "Settings"
+/// and every Infrastructure page marks "Infrastructure".
+pub fn primary_current(ctx: &TeamCtx) -> Option<String> {
+	let best = sidebar_current(ctx)?;
+	if infra_items(ctx).iter().any(|i| i.href == best) {
+		infra_entry(ctx).map(|i| i.href)
+	} else {
+		Some(best)
 	}
 }
 
 /// How many entries the tab bar shows.
 pub const TAB_SLOTS: usize = 5;
 
-/// The mobile tab bar: [`primary_items`] cut to [`TAB_SLOTS`], keeping "Settings" last. What
-/// does not fit (S3 destinations, for a user who sees everything) stays in the sidebar of a
-/// wider screen and in the command palette.
+/// The mobile tab bar: [`primary_items`] cut to [`TAB_SLOTS`], keeping "Settings" last.
 pub fn tab_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	let mut items = primary_items(ctx);
 	if items.len() > TAB_SLOTS

@@ -108,3 +108,11 @@ pub async fn seed_resource_sample(
 	.await
 	.unwrap();
 }
+
+/// The id of the only environment clone.
+pub async fn only_clone_id(db: &PgPool) -> i64 {
+	sqlx::query_scalar("SELECT id FROM environment_clones")
+		.fetch_one(db)
+		.await
+		.unwrap()
+}

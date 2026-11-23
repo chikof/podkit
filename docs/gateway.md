@@ -39,7 +39,8 @@ published on the host. This is what is built.
   against the Nix store gets `/nix/store` mounted read-only too.
 - **Lifecycle.** The sidecar is `podkit-gateway`, registered with the supervisor
   (restarted when it dies). The agent creates it when it first gets a routing table
-  with keys, and replaces it when its own binary changed (label
+  with keys, removes it again when a table arrives with no keys (the last model link
+  is gone; `lazy_action` in `sidecar.rs`, see `docs/footprint.md`), and replaces it when its own binary changed (label
   `podkit.gateway.exe` = path and mtime), checked at agent start and on every table push.
 - **Agent ↔ sidecar** share `<data-dir>/gateway` (mounted at `/gw`): the agent writes
   `config.json` atomically and the sidecar reloads it within a second; the sidecar

@@ -1,0 +1,292 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id: ApplicationId\", project_id AS \"project_id: ProjectId\", environment_id AS \"environment_id: EnvironmentId\",\n\t\t\t\tserver_id AS \"server_id: ServerId\", name, slug, repo_url, git_ref,\n\t\t\t\tsource_kind AS \"source_kind: SourceKind\", image, registry_auth, registry_id AS \"registry_id: RegistryId\",\n\t\t\t\tdeploy_key_id AS \"deploy_key_id: SshKeyId\", git_token, build_strategy AS \"build_strategy: BuildStrategy\",\n\t\t\t\tdockerfile_path, container_port, webhook_secret, memory_limit_mb, cpu_limit,\n\t\t\t\tgit_provider_id AS \"git_provider_id: GitProviderId\", git_repo, git_hook_id\n\t\t\tFROM applications WHERE id = $1\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: ApplicationId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id: ProjectId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "environment_id: EnvironmentId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "environment_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "server_id: ServerId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "server_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "slug",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "repo_url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "repo_url"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "git_ref",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "git_ref"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "source_kind: SourceKind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "source_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "image",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "image"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "registry_auth",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "registry_auth"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "registry_id: RegistryId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "registry_id"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "deploy_key_id: SshKeyId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "deploy_key_id"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "git_token",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "git_token"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "build_strategy: BuildStrategy",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "build_strategy"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "dockerfile_path",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "dockerfile_path"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "container_port",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "container_port"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "webhook_secret",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "webhook_secret"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "memory_limit_mb",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "memory_limit_mb"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "cpu_limit",
+        "type_info": "Float4",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "cpu_limit"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "git_provider_id: GitProviderId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "git_provider_id"
+          }
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "git_repo",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "git_repo"
+          }
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "git_hook_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "git_hook_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "b922b253e8c60a3d278943fee6d9287966db2bae52646337261aacaf0a8d6a1b"
+}

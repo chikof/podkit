@@ -2,6 +2,8 @@
 //!
 //! - `flash`: a message left by an action for the page it redirects to (“Team renamed”).
 //!   It is shown once as a toast, then the cookie is dropped.
+//! - `sidebar`: `collapsed` when the user folded the sidebar to its icon rail (written by the
+//!   toggle, `shell`, and read here so the page is rendered that way from the first byte).
 //!
 //! The same task-local pattern as `ui::theme`.
 
@@ -16,6 +18,7 @@ use tower_cookies::{Cookie, Cookies};
 use crate::ui::components::Tone;
 
 const FLASH: &str = "flash";
+const SIDEBAR: &str = "sidebar";
 /// A message longer than this is cut; flash is for one short sentence.
 const MAX_FLASH: usize = 200;
 
@@ -29,6 +32,7 @@ pub struct Flash {
 #[derive(Debug, Clone, Default)]
 struct Prefs {
 	flash: Option<Flash>,
+	sidebar_collapsed: bool,
 }
 
 tokio::task_local! {
@@ -38,6 +42,13 @@ tokio::task_local! {
 /// The message left for this page, if any.
 pub fn pending_flash() -> Option<Flash> {
 	CURRENT.try_with(|p| p.flash.clone()).ok().flatten()
+}
+
+/// Whether the browser asked for the icon rail. The toggle (`shell`) writes the `sidebar` cookie when
+/// the toggle is used; reading it here lets the first byte of the page already be the right
+/// width, so nothing jumps on load.
+pub fn sidebar_collapsed() -> bool {
+	CURRENT.try_with(|p| p.sidebar_collapsed).unwrap_or(false)
 }
 
 const fn tone_name(tone: Tone) -> &'static str {
@@ -116,6 +127,7 @@ fn cookie_value<'h>(headers: &'h HeaderMap, name: &str) -> Option<&'h str> {
 fn prefs_from(headers: &HeaderMap) -> Prefs {
 	Prefs {
 		flash: cookie_value(headers, FLASH).and_then(decode),
+		sidebar_collapsed: cookie_value(headers, SIDEBAR) == Some("collapsed"),
 	}
 }
 

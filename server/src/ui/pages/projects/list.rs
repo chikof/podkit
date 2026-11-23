@@ -22,12 +22,13 @@ use crate::projects::overview::{self, ProjectCard};
 use crate::projects::service;
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, Dismiss, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, Size, Tone, Variant,
-	button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu, empty_state, icon,
-	menu_label,
+	BUTTON_DANGER, BannerKind, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, Size, Tone, Variant,
+	banner, button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu, empty_state,
+	icon, link_button, menu_label,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page, form_error};
+use crate::ui::pages::infrastructure::setup_url;
 use crate::ui::{error, shell, sse};
 
 pub fn router() -> Router<AppState> {
@@ -173,7 +174,6 @@ fn create_dialog(team: TeamId) -> Markup {
 		"project-create",
 		"New project",
 		Some("A project groups the applications, databases and models that belong together."),
-		Dismiss::Esc,
 		&html! {
 			form id="project-create-form" class="flex flex-col gap-4" "data-on:submit"=(post) {
 				label class=(LABEL) {
@@ -204,7 +204,6 @@ fn rename_dialog(team: TeamId) -> Markup {
 		"project-rename",
 		"Rename project",
 		Some("The slug and the links to the project stay the same."),
-		Dismiss::Esc,
 		&html! {
 			form id="project-rename-form" class="flex flex-col gap-4" "data-on:submit"=(post) {
 				label class=(LABEL) {
@@ -228,7 +227,6 @@ fn delete_dialog(team: TeamId) -> Markup {
 		"project-delete",
 		"Delete project",
 		None,
-		Dismiss::Esc,
 		&html! {
 			form id="project-delete-form" class="flex flex-col gap-4" "data-on:submit"=(post) {
 				p {
@@ -267,6 +265,16 @@ async fn list_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Re
 		))
 	};
 	let resources: usize = cards.iter().map(|c| c.logos.len()).sum();
+	// A team with no project yet is on its first run: point it at the guided setup, until it
+	// is finished or dismissed.
+	let first_run = if cards.is_empty() {
+		crate::infrastructure::service::setup(&s, ctx.user.id, ctx.team.id)
+			.await
+			.ok()
+			.filter(crate::infrastructure::service::SetupView::shown)
+	} else {
+		None
+	};
 	let body = html! {
 		div class="ui-wide ui-proj-page" data-signals="{name: '', slug: '', target: '', targetName: '', targetSlug: '', confirm: '', _error: ''}" {
 			header class="ui-page-head" {
@@ -274,9 +282,24 @@ async fn list_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Re
 					h1 { "Projects" }
 					p class="ui-lede" { "Applications, databases and models, grouped by what they are for." }
 				}
-				@if can_create { div class="ui-page-actions" { (new_button) } }
+				@if can_create {
+					div class="ui-page-actions" {
+						a class=(button_class(Variant::Outline, Size::Md)) href=(format!("/teams/{}/import", ctx.team.id)) {
+							(icon("upload")) "Import"
+						}
+						(new_button)
+					}
+				}
 			}
 			@if cards.is_empty() {
+				@if let Some(setup) = &first_run {
+					(banner(
+						BannerKind::Info,
+						Some("First time here?"),
+						&format!("The guided setup takes you from a bare host to a first deploy. {} of {} steps are done.", setup.done_count(), setup.steps.len()),
+						Some(&link_button(Variant::Outline, Size::Sm, &setup_url(ctx.team.id), &html! { "Open the setup" })),
+					))
+				}
 				(empty_state(
 					"folder",
 					"No projects yet",

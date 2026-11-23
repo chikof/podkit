@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 160 160">
+  <title>MCP Memory</title>
+  <rect width="160" height="160" rx="36" fill="#2b3a55"/>
+  <circle cx="54" cy="58" r="14" fill="#9fc5ff"/>
+  <circle cx="108" cy="52" r="14" fill="#9fc5ff"/>
+  <circle cx="82" cy="108" r="14" fill="#9fc5ff"/>
+  <path d="M54 58 L108 52 L82 108 Z" fill="none" stroke="#c9deff" stroke-width="6" stroke-linejoin="round"/>
+</svg>

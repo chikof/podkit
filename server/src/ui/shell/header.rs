@@ -11,7 +11,8 @@ use maud::{Markup, html};
 
 use super::sidebar::team_items;
 use crate::ui::components::{
-	MENU_ITEM, dialog_open_button, dropdown_menu, icon, kbd, menu_label, menu_link, menu_separator,
+	MENU_ITEM, MarkSize, bell, dialog_open_button, dropdown_menu, icon, kbd, menu_label, menu_link,
+	menu_separator, team_mark,
 };
 use crate::ui::extract::{ProjectScope, TeamCtx};
 use crate::ui::layout::Crumb;
@@ -161,8 +162,11 @@ fn switcher_menu(sw: &Switcher, segment: &str) -> Markup {
 	)
 }
 
-fn crumb_inner(seg: &Segment, team_menu: Option<Markup>) -> Markup {
+fn crumb_inner(seg: &Segment, team_menu: Option<Markup>, mark: Option<Markup>) -> Markup {
 	html! {
+		@if let Some(mark) = mark {
+			span class="ui-crumb-mark" { (mark) }
+		}
 		@if let Some(href) = &seg.href {
 			a href=(href) class="ui-crumb-link" { (seg.label) }
 		} @else {
@@ -215,7 +219,11 @@ fn breadcrumbs(ctx: &TeamCtx, crumbs: &[Crumb<'_>]) -> Markup {
 					}
 				}
 				@for (i, seg) in segs.iter().enumerate() {
-					@let inner = crumb_inner(seg, (i == 0).then(|| team_switcher(ctx)));
+					@let inner = crumb_inner(
+						seg,
+						(i == 0).then(|| team_switcher(ctx)),
+						(i == 0).then(|| team_mark(&ctx.team, MarkSize::Small)),
+					);
 					@if folded(i) {
 						li class="ui-crumb ui-crumb-mid" { (inner) }
 					} @else {
@@ -238,6 +246,7 @@ pub fn bar(ctx: &TeamCtx, crumbs: &[Crumb<'_>]) -> Markup {
 					span class="ui-search-label" { "Search or jump to…" }
 					span class="ui-search-kbd" aria-hidden="true" { (kbd("Ctrl K")) }
 				}))
+				(bell(ctx.team.id.0, ctx.unread))
 				(theme_flip())
 			}
 		}
@@ -275,10 +284,10 @@ mod tests {
 
 	#[test]
 	fn a_segment_with_a_page_is_a_link_and_the_last_is_current() {
-		let html = crumb_inner(&seg("api <x>", Some("/p/1")), None).into_string();
+		let html = crumb_inner(&seg("api <x>", Some("/p/1")), None, None).into_string();
 		assert!(html.contains("<a href=\"/p/1\""), "{html}");
 		assert!(html.contains("api &lt;x&gt;"), "{html}");
-		let html = crumb_inner(&seg("Settings", None), None).into_string();
+		let html = crumb_inner(&seg("Settings", None), None, None).into_string();
 		assert!(html.contains("aria-current=\"page\""), "{html}");
 	}
 }

@@ -656,12 +656,19 @@ async fn environments_migration_backfills_and_round_trips(db: PgPool) {
 	let (_token, team) = user_with_team(&app, "alice").await;
 	let server = server_id(&db, team).await;
 
-	// Back to the shape before 0034 (undoing 0036, which depends on it, first),
-	// then seed it the way it used to be filled.
-	sqlx::raw_sql(include_str!("../../migrations/0036_stacks.down.sql"))
-		.execute(&db)
-		.await
-		.unwrap();
+	// Back to the shape before 0034 (undoing 0055, 0054, 0052, 0050, 0048, 0040 and 0036, which
+	// depend on it, first), then seed it the way it used to be filled.
+	for down in [
+		include_str!("../../migrations/0055_environment_clones.down.sql"),
+		include_str!("../../migrations/0054_volume_backups.down.sql"),
+		include_str!("../../migrations/0052_cron.down.sql"),
+		include_str!("../../migrations/0050_shared_env_vars.down.sql"),
+		include_str!("../../migrations/0048_notifications.down.sql"),
+		include_str!("../../migrations/0040_networks.down.sql"),
+		include_str!("../../migrations/0036_stacks.down.sql"),
+	] {
+		sqlx::raw_sql(down).execute(&db).await.unwrap();
+	}
 	sqlx::raw_sql(DOWN).execute(&db).await.unwrap();
 	for (id, slug) in [(7001_i64, "a"), (7002, "b")] {
 		sqlx::query("INSERT INTO projects (id, team_id, name, slug) VALUES ($1, $2, $3, $3)")

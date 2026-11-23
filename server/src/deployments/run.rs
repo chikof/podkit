@@ -15,12 +15,15 @@ use tracing::warn;
 use super::{Deployment, DeploymentStatus};
 use crate::applications::{self, Application, BuildStrategy, SourceKind, StoredRegistryAuth};
 use crate::error::ServerError;
+use crate::health_gate::machine::{Machine, Signal};
 use crate::ids::{DeploymentId, TeamId};
 use crate::jobs::{Job, JobFailure};
 use crate::logs::JobLog;
 use crate::servers::Server;
 use crate::state::AppState;
-use crate::{deployments, domains, env_vars, links, scope, volumes};
+use crate::{
+	deployments, domains, env_vars, links, networks, registries, scope, shared_env, volumes,
+};
 
 const LOST_CONNECTION: &str = "lost connection to server agent";
 
@@ -40,6 +43,10 @@ fn db_failure(e: &sqlx::Error) -> JobFailure {
 /// # Errors
 /// [`JobFailure::Cancelled`] when `cancel` fires, otherwise
 /// [`JobFailure::Failed`] with a message safe to show the deployment owner.
+#[allow(
+	clippy::too_many_lines,
+	reason = "the deploy stream is one loop over the agent's events"
+)]
 pub async fn run(
 	state: &AppState,
 	job: &Job,
@@ -76,14 +83,25 @@ pub async fn run(
 		})?;
 
 	let mut deploying = false;
+	// Only a deploy with a health gate has a health to follow.
+	let mut health = spec
+		.health
+		.is_some()
+		.then(|| Machine::new(0, std::time::Duration::ZERO, false, false));
 	loop {
 		let event = tokio::select! {
-			() = cancel.cancelled() => return Err(JobFailure::Cancelled),
+			() = cancel.cancelled() => {
+				settle_health(state, &deployment, None).await;
+				return Err(JobFailure::Cancelled);
+			}
 			event = events.next() => event,
 		};
 		match event {
 			Some(Ok(Event::Log { stream, line })) => log.push(stream, &line).await,
 			Some(Ok(Event::Phase { phase })) => {
+				if phase == Phase::HealthCheck {
+					follow_health(state, &deployment, &mut health, Signal::Started, None).await;
+				}
 				if !deploying
 					&& matches!(
 						phase,
@@ -98,6 +116,7 @@ pub async fn run(
 				image,
 				commit_sha,
 			})) => {
+				follow_health(state, &deployment, &mut health, Signal::Deployed, None).await;
 				if !deploying {
 					advance(state, &mut deployment, DeploymentStatus::Deploying).await?;
 				}
@@ -107,6 +126,20 @@ pub async fn run(
 					deployment.commit_sha = commit_sha;
 				}
 				advance(state, &mut deployment, DeploymentStatus::Running).await?;
+				// Queued, never awaited: the deploy is done whether or not the scan ever runs.
+				if let Some(image) = deployment.image_tag.as_deref() {
+					crate::scanning::queue(
+						state,
+						application.server_id,
+						crate::scanning::Target {
+							kind: crate::scanning::ResourceKind::Application,
+							resource_id: application.id.0,
+							image_ref: image,
+							deployment: Some(deployment.id),
+						},
+					)
+					.await;
+				}
 				if let Err(e) =
 					deployments::retire_others(&state.db, application.id, deployment.id).await
 				{
@@ -117,14 +150,74 @@ pub async fn run(
 				}
 				return Ok(());
 			}
-			Some(Ok(Event::Failed { message })) => return Err(JobFailure::Failed(message)),
-			Some(Ok(Event::DumpWritten { .. } | Event::Progress { .. } | Event::Done)) => {}
+			Some(Ok(Event::Failed { message })) => {
+				follow_health(
+					state,
+					&deployment,
+					&mut health,
+					Signal::DeployFailed,
+					Some(&message),
+				)
+				.await;
+				settle_health(state, &deployment, Some(&message)).await;
+				return Err(JobFailure::Failed(message));
+			}
+			Some(Ok(
+				Event::DumpWritten { .. }
+				| Event::Progress { .. }
+				| Event::Exited { .. }
+				| Event::VolumeDumped { .. }
+				| Event::PartsUploaded { .. }
+				| Event::Done,
+			)) => {}
 			Some(Err(e)) => {
 				warn!(deployment = deployment.id.0, "deploy stream failed: {e}");
+				settle_health(state, &deployment, None).await;
 				return Err(failed(LOST_CONNECTION));
 			}
-			None => return Err(failed(LOST_CONNECTION)),
+			None => {
+				settle_health(state, &deployment, None).await;
+				return Err(failed(LOST_CONNECTION));
+			}
 		}
+	}
+}
+
+/// Feeds the health machine and stores the state it reaches. Best effort: the deploy itself
+/// does not depend on this row.
+async fn follow_health(
+	state: &AppState,
+	deployment: &Deployment,
+	health: &mut Option<Machine>,
+	signal: Signal,
+	detail: Option<&str>,
+) {
+	let Some(machine) = health else {
+		return;
+	};
+	let before = machine.state;
+	machine.on(signal, std::time::Duration::ZERO);
+	let Some(now) = machine.state.filter(|s| Some(*s) != before) else {
+		return;
+	};
+	if let Err(e) = crate::health_gate::set_state(&state.db, deployment.id, now, detail).await {
+		warn!(
+			deployment = deployment.id.0,
+			"failed to store health state: {e}"
+		);
+	}
+}
+
+/// A deploy that ends without a verdict (cancelled, lost connection) must not stay "waiting
+/// for health". Without a detail the row goes; a rollback's row stays, as unhealthy, so the
+/// timeline keeps saying what it was.
+async fn settle_health(state: &AppState, deployment: &Deployment, detail: Option<&str>) {
+	let result = crate::health_gate::settle_waiting(&state.db, deployment.id, detail).await;
+	if let Err(e) = result {
+		warn!(
+			deployment = deployment.id.0,
+			"failed to settle health state: {e}"
+		);
 	}
 }
 
@@ -149,7 +242,11 @@ async fn load_server(state: &AppState, application: &Application) -> Result<Serv
 		})
 }
 
-async fn build_spec(
+#[allow(
+	clippy::too_many_lines,
+	reason = "the merged cards each added a step; one flow reads better unsplit"
+)]
+pub(crate) async fn build_spec(
 	state: &AppState,
 	application: &Application,
 	deployment: &Deployment,
@@ -158,7 +255,26 @@ async fn build_spec(
 	let container_port = u16::try_from(application.container_port)
 		.map_err(|_| failed("application container_port is out of range"))?;
 
-	let source = app_source(state, application, deployment)?;
+	let mut source = app_source(state, application, deployment).await?;
+	if let (
+		Some(id),
+		Source::Image {
+			auth, pull: true, ..
+		},
+	) = (application.registry_id, &mut source)
+	{
+		*auth = Some(
+			registries::service::auth_for(state, id)
+				.await
+				.map_err(|e| {
+					tracing::error!(
+						application = application.id.0,
+						"saved registry unusable: {e}"
+					);
+					failed("failed to load the saved registry login")
+				})?,
+		);
+	}
 
 	let custom_domains = domains::list(&state.db, application.id)
 		.await
@@ -199,6 +315,38 @@ async fn build_spec(
 	} else {
 		Strategy::Recreate
 	};
+	let health = crate::health_gate::config(&state.db, application.id)
+		.await
+		.map_err(|e| {
+			tracing::error!("failed to load health settings: {e}");
+			failed("failed to load the health settings")
+		})?
+		.map(|config| config.to_gate(container_port));
+
+	// An MCP server is reached through the gateway on its environment's network, by its
+	// alias: it is never routed publicly, and a stdio one runs behind the agent's bridge.
+	let mcp = crate::mcp_servers::find(&state.db, application.id)
+		.await
+		.map_err(|e| db_failure(&e))?;
+	let aliases: Vec<String> = mcp
+		.iter()
+		.map(|_| crate::mcp_servers::alias(&application.slug))
+		.collect();
+	let mut options = proto::ContainerOptions::default();
+	if let Some(mcp) = mcp
+		.as_ref()
+		.filter(|m| m.transport == crate::mcp_servers::Transport::Stdio)
+	{
+		options.mcp_bridge = Some(proto::McpBridge {
+			port: container_port,
+			path: mcp.path.clone(),
+			command: mcp.args(),
+		});
+	}
+	let routing = mcp.is_none().then(|| Routing {
+		http_hosts: vec![applications::public_hostname(&application.slug, server)],
+		https_hosts,
+	});
 
 	Ok(DeploySpec {
 		service: format!("app-{}", application.id),
@@ -207,10 +355,7 @@ async fn build_spec(
 		env: load_env(state, application).await?,
 		command: None,
 		container_port: Some(container_port),
-		routing: Some(Routing {
-			http_hosts: vec![applications::public_hostname(&application.slug, server)],
-			https_hosts,
-		}),
+		routing,
 		network_aliases: Vec::new(),
 		volumes,
 		published_ports: Vec::new(),
@@ -224,12 +369,28 @@ async fn build_spec(
 		shm_bytes: None,
 		stop_timeout_s: None,
 		networks: Vec::new(),
-		options: proto::ContainerOptions::default(),
+		options,
+		attach: networks::attach::for_resource(
+			&state.db,
+			networks::attach::Home {
+				kind: networks::ResourceKind::Application,
+				id: application.id.0,
+				environment: application.environment_id,
+				server: application.server_id,
+			},
+			&aliases,
+		)
+		.await
+		.map_err(|e| {
+			tracing::error!("failed to resolve networks: {e}");
+			failed("failed to resolve the application's networks")
+		})?,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,
 			acme_email: state.config.acme_email.clone(),
 		},
+		health,
 	})
 }
 
@@ -238,7 +399,7 @@ async fn build_spec(
 /// and built, and an image app pulls its reference again, so a redeploy or a
 /// registry webhook picks up a moved tag. After a pull the agent reports the
 /// digest reference, which is what a later rollback runs.
-pub(crate) fn app_source(
+pub(crate) async fn app_source(
 	state: &AppState,
 	application: &Application,
 	deployment: &Deployment,
@@ -265,7 +426,7 @@ pub(crate) fn app_source(
 				.clone()
 				.ok_or_else(|| failed("application has no repository"))?,
 			git_ref: application.git_ref.clone(),
-			auth: git_auth(state, application)?,
+			auth: git_auth(state, application).await?,
 			build: match application.build_strategy {
 				BuildStrategy::Dockerfile => Build::Dockerfile {
 					path: application.dockerfile_path.clone(),
@@ -276,7 +437,7 @@ pub(crate) fn app_source(
 	}
 }
 
-fn registry_auth(
+pub(crate) fn registry_auth(
 	state: &AppState,
 	application: &Application,
 ) -> Result<Option<RegistryAuth>, JobFailure> {
@@ -304,7 +465,7 @@ fn registry_auth(
 
 /// One credential per application: an ssh key for ssh repo urls, a token
 /// for https ones. `create`/`update` only ever store the matching one.
-fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth, JobFailure> {
+async fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth, JobFailure> {
 	let decrypt = |sealed: &[u8]| {
 		state.secrets.decrypt(sealed).map_err(|e| {
 			tracing::error!(
@@ -314,20 +475,48 @@ fn git_auth(state: &AppState, application: &Application) -> Result<GitAuth, JobF
 			failed("failed to decrypt repository credential")
 		})
 	};
-	if let Some(sealed) = application.deploy_key.as_deref() {
+	// A provider application clones with what the provider gives now: a token minted for this
+	// clone for a GitHub App, the stored access token for GitLab and Gitea.
+	if let (Some(provider), Some(repo)) =
+		(application.git_provider_id, application.git_repo.as_deref())
+	{
+		let access = crate::git_providers::service::clone_access(state, provider, repo)
+			.await
+			.map_err(|e| {
+				tracing::warn!(application = application.id.0, error = %e, "clone access failed");
+				failed(format!("could not get access to the repository: {e}"))
+			})?;
+		return Ok(GitAuth::HttpsToken {
+			token: access.token,
+			username: access.username,
+		});
+	}
+	if let Some(key) = application.deploy_key_id {
+		let sealed = crate::ssh_keys::sealed_private_key(&state.db, key)
+			.await
+			.map_err(|e| {
+				tracing::error!(
+					application = application.id.0,
+					"deploy key lookup failed: {e}"
+				);
+				failed("failed to load the deploy key")
+			})?
+			.ok_or_else(|| failed("the application's deploy key no longer exists"))?;
+		let _ = crate::ssh_keys::touch(&state.db, key).await;
 		return Ok(GitAuth::SshKey {
-			private_key: decrypt(sealed)?,
+			private_key: decrypt(&sealed)?,
 		});
 	}
 	if let Some(sealed) = application.git_token.as_deref() {
 		return Ok(GitAuth::HttpsToken {
 			token: decrypt(sealed)?,
+			username: None,
 		});
 	}
 	Ok(GitAuth::None)
 }
 
-async fn load_env(
+pub(crate) async fn load_env(
 	state: &AppState,
 	application: &Application,
 ) -> Result<Vec<(String, String)>, JobFailure> {
@@ -350,6 +539,18 @@ async fn load_env(
 		})?;
 		env.push((row.key, value));
 	}
+	// Inherit the shared variables (team < project < environment); the application's own win.
+	let mut env = shared_env::resolve::app_env(
+		state,
+		application.project_id,
+		application.environment_id,
+		env,
+	)
+	.await
+	.map_err(|e| {
+		tracing::error!(application = application.id.0, "shared variables: {e}");
+		failed(e.to_string())
+	})?;
 	// The gateway's variables are podkit's to set: they win over a user's of the same name.
 	let gateway = links::env(state, application.id).await.map_err(|e| {
 		tracing::error!(
@@ -360,6 +561,17 @@ async fn load_env(
 	})?;
 	env.retain(|(key, _)| !gateway.iter().any(|(g, _)| g == key));
 	env.extend(gateway);
+	let mcp = crate::mcp_servers::env(state, application.id)
+		.await
+		.map_err(|e| {
+			tracing::error!(
+				application = application.id.0,
+				"failed to load MCP env: {e}"
+			);
+			failed("failed to load the application's MCP links")
+		})?;
+	env.retain(|(key, _)| !mcp.iter().any(|(g, _)| g == key));
+	env.extend(mcp);
 	Ok(env)
 }
 

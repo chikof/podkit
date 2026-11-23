@@ -20,8 +20,8 @@ use crate::backups::targets::service::{self as targets, CreateInput};
 use crate::ids::{BackupTargetId, TeamId};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, CHECKBOX, Dismiss, INPUT, LABEL, LogoSize, Size, Variant, button_class,
-	card, card_content, card_footer, card_section, dialog, empty_state, icon, logo,
+	BUTTON, BUTTON_OUTLINE, CHECKBOX, INPUT, LABEL, LogoSize, Size, Variant, button_class, card,
+	card_content, card_footer, card_section, dialog, empty_state, icon, logo,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -201,7 +201,6 @@ fn delete_dialog(team: TeamId) -> Markup {
 		Some(
 			"Databases using it stop backing up, and backups already made to it can no longer be restored.",
 		),
-		Dismiss::Esc,
 		&html! {
 			div class="flex flex-col gap-3" {
 				p { "Delete " strong class="break-all" "data-text"="$_del_name" {} "?" }
@@ -304,10 +303,9 @@ async fn targets_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<maud::M
 		div class="ui-dests" "data-signals"=(signals) {
 			header class="ui-page-head" {
 				div class="ui-page-title" {
-					p class="ui-eyebrow" { "Backups" }
 					h1 { "S3 destinations" }
 					p class="ui-lede" {
-						"S3-compatible buckets (for example Garage, Cloudflare R2 or Amazon S3) that your team's databases are backed up to."
+						"S3-compatible buckets (for example Garage, Cloudflare R2 or Amazon S3) that your team's databases and volumes are backed up to."
 					}
 				}
 			}
@@ -315,7 +313,7 @@ async fn targets_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<maud::M
 				(empty_state(
 					"cloud",
 					"No destinations yet.",
-					Some(if can_create { "Add a bucket below, test it, and pick it on a database's Backups tab." } else { "Ask someone who can manage backups to set one up." }),
+					Some(if can_create { "Add a bucket below, test it, and pick it on a database's or a volume's backup settings." } else { "Ask someone who can manage backups to set one up." }),
 					None,
 				))
 			} @else {

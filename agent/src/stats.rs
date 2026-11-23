@@ -10,9 +10,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::Duration;
 
-use bollard::models::{ContainerStatsResponse, ContainerSummaryStateEnum};
+use bollard::models::{ContainerStatsResponse, ContainerSummary, ContainerSummaryStateEnum};
 use futures_util::StreamExt;
-use proto::{ContainerStats, DiskStats, HostStats, ResourceRef, Stats};
+use proto::{ContainerStats, DiskStats, HostStats, ResourceRef, Stats, VolumeStats, VramStats};
 
 use crate::hardware::{NVIDIA_SMI, run};
 use crate::podman::{Podman, summary_name};
@@ -51,8 +51,19 @@ static PREV_CONTAINER_CPU: Mutex<Vec<(String, CgroupCpu)>> = Mutex::new(Vec::new
 /// Gathers a sample. `graph_root` is Podman's storage dir when known;
 /// `data_dir` is the agent's.
 pub async fn collect(graph_root: Option<&str>, data_dir: &Path, podman: &Podman) -> Stats {
-	let (host, containers) = tokio::join!(host(graph_root, data_dir), containers(podman));
-	Stats { host, containers }
+	let (host, (containers, summaries), http) = tokio::join!(
+		host(graph_root, data_dir),
+		containers(podman),
+		crate::prometheus::scrape(podman)
+	);
+	let (volumes, vram) = tokio::join!(volumes(&summaries), vram(&summaries));
+	Stats {
+		host,
+		containers,
+		http,
+		volumes,
+		vram,
+	}
 }
 
 async fn host(graph_root: Option<&str>, data_dir: &Path) -> HostStats {
@@ -129,9 +140,9 @@ async fn nvidia_usage() -> Option<(f64, u64)> {
 	None
 }
 
-async fn containers(podman: &Podman) -> Vec<ContainerStats> {
+async fn containers(podman: &Podman) -> (Vec<ContainerStats>, Vec<ContainerSummary>) {
 	let Ok(summaries) = podman.list(CONTAINER_PREFIX).await else {
-		return Vec::new();
+		return (Vec::new(), Vec::new());
 	};
 	let targets: Vec<(String, String, ResourceRef)> = summaries
 		.iter()
@@ -189,6 +200,159 @@ async fn containers(podman: &Podman) -> Vec<ContainerStats> {
 		*p = current;
 	}
 	out.sort_by(|a, b| a.name.cmp(&b.name));
+	(out, summaries)
+}
+
+/// How long a measured volume size is reused. `du` walks every file, so it runs rarely.
+const VOLUME_TTL: Duration = Duration::from_secs(300);
+
+static VOLUME_SIZES: Mutex<Vec<(String, std::time::Instant, u64)>> = Mutex::new(Vec::new());
+
+/// The named volumes mounted in the running podkit containers: `(owner, volume name, host
+/// path)`, each volume once per owner.
+#[must_use]
+pub fn volume_mounts(summaries: &[ContainerSummary]) -> Vec<(ResourceRef, String, String)> {
+	let mut out: Vec<(ResourceRef, String, String)> = Vec::new();
+	for summary in summaries
+		.iter()
+		.filter(|s| s.state == Some(ContainerSummaryStateEnum::RUNNING))
+	{
+		let Some(resource) = summary
+			.labels
+			.as_ref()
+			.and_then(|l| l.get(SERVICE_LABEL))
+			.and_then(|service| resource_of(service))
+		else {
+			continue;
+		};
+		for mount in summary.mounts.iter().flatten() {
+			let (Some("volume"), Some(name), Some(path)) = (
+				mount.typ.as_deref(),
+				mount.name.as_deref(),
+				mount.source.as_deref(),
+			) else {
+				continue;
+			};
+			if !out.iter().any(|(r, n, _)| *r == resource && n == name) {
+				out.push((resource.clone(), name.to_owned(), path.to_owned()));
+			}
+		}
+	}
+	out
+}
+
+/// Bytes from `du -sk <path>` (`<kilobytes>\t<path>`).
+#[must_use]
+pub fn parse_du_kb(text: &str) -> Option<u64> {
+	text.split_whitespace()
+		.next()?
+		.parse::<u64>()
+		.ok()
+		.map(|kb| kb * 1024)
+}
+
+/// Sums the volumes of each resource. A volume whose size cannot be read is left out, and a
+/// size is reused for [`VOLUME_TTL`].
+async fn volumes(summaries: &[ContainerSummary]) -> Vec<VolumeStats> {
+	let mounts = volume_mounts(summaries);
+	let mut per_resource: Vec<(ResourceRef, u64)> = Vec::new();
+	for (resource, name, path) in mounts {
+		let cached = VOLUME_SIZES.lock().ok().and_then(|c| {
+			c.iter()
+				.find(|(n, at, _)| *n == name && at.elapsed() < VOLUME_TTL)
+				.map(|(_, _, size)| *size)
+		});
+		let size = if let Some(size) = cached {
+			size
+		} else {
+			let Some(size) = run("du", &["-sk", &path])
+				.await
+				.as_deref()
+				.and_then(parse_du_kb)
+			else {
+				continue;
+			};
+			if let Ok(mut cache) = VOLUME_SIZES.lock() {
+				cache.retain(|(n, at, _)| *n != name && at.elapsed() < VOLUME_TTL);
+				cache.push((name, std::time::Instant::now(), size));
+			}
+			size
+		};
+		match per_resource.iter_mut().find(|(r, _)| *r == resource) {
+			Some((_, total)) => *total = total.saturating_add(size),
+			None => per_resource.push((resource, size)),
+		}
+	}
+	per_resource
+		.into_iter()
+		.map(|(resource, used)| VolumeStats { resource, used })
+		.collect()
+}
+
+/// `(pid, MiB)` per line of `nvidia-smi --query-compute-apps=pid,used_memory
+/// --format=csv,noheader,nounits`. Lines that do not parse (`[N/A]`, messages) are skipped.
+#[must_use]
+pub fn parse_compute_apps(text: &str) -> Vec<(u32, u64)> {
+	text.lines()
+		.filter_map(|line| {
+			let (pid, mib) = line.split_once(',')?;
+			Some((pid.trim().parse().ok()?, mib.trim().parse().ok()?))
+		})
+		.collect()
+}
+
+/// The 64-hex container id inside a `/proc/<pid>/cgroup` file (`libpod-<id>.scope`,
+/// `docker-<id>.scope`, `/libpod_parent/libpod-<id>`).
+#[must_use]
+pub fn container_id_of_cgroup(text: &str) -> Option<String> {
+	text.split(|c: char| !c.is_ascii_hexdigit())
+		.find(|part| part.len() == 64)
+		.map(str::to_owned)
+}
+
+/// GPU memory per resource: the compute processes `nvidia-smi` lists, matched to containers
+/// by the cgroup of each process.
+async fn vram(summaries: &[ContainerSummary]) -> Vec<VramStats> {
+	let mut apps = Vec::new();
+	for program in NVIDIA_SMI {
+		if let Some(out) = run(
+			program,
+			&[
+				"--query-compute-apps=pid,used_memory",
+				"--format=csv,noheader,nounits",
+			],
+		)
+		.await
+		{
+			apps = parse_compute_apps(&out);
+			break;
+		}
+	}
+	let mut out: Vec<VramStats> = Vec::new();
+	for (pid, mib) in apps {
+		let Some(id) = std::fs::read_to_string(format!("/proc/{pid}/cgroup"))
+			.ok()
+			.and_then(|c| container_id_of_cgroup(&c))
+		else {
+			continue;
+		};
+		let Some(resource) = summaries
+			.iter()
+			.find(|s| s.id.as_deref() == Some(id.as_str()))
+			.and_then(|s| s.labels.as_ref()?.get(SERVICE_LABEL))
+			.and_then(|service| resource_of(service))
+		else {
+			continue;
+		};
+		let bytes = mib * 1024 * 1024;
+		match out.iter_mut().find(|v| v.resource == resource) {
+			Some(v) => v.used += bytes,
+			None => out.push(VramStats {
+				resource,
+				used: bytes,
+			}),
+		}
+	}
 	out
 }
 
@@ -550,5 +714,74 @@ mod tests {
 		assert_eq!(container_mem(&v1), 700);
 		let bare: ContainerStatsResponse = serde_json::from_str("{}").unwrap();
 		assert_eq!(container_mem(&bare), 0);
+	}
+
+	fn summary(
+		service: &str,
+		state: ContainerSummaryStateEnum,
+		mounts: &serde_json::Value,
+	) -> ContainerSummary {
+		serde_json::from_value(serde_json::json!({
+			"Id": "a".repeat(64),
+			"Names": ["/podkit-x-1"],
+			"State": state,
+			"Labels": { "podkit.service": service },
+			"Mounts": mounts,
+		}))
+		.unwrap()
+	}
+
+	#[test]
+	fn stats_volume_mounts_keep_named_volumes_of_running_podkit_containers_once() {
+		let volume = |name: &str| serde_json::json!({ "Type": "volume", "Name": name, "Source": format!("/v/{name}/_data") });
+		let running = summary(
+			"app-7",
+			ContainerSummaryStateEnum::RUNNING,
+			&serde_json::json!([
+				volume("data"),
+				volume("data"),
+				{ "Type": "bind", "Source": "/etc/x", "Destination": "/x" },
+				volume("cache"),
+			]),
+		);
+		let stopped = summary(
+			"app-8",
+			ContainerSummaryStateEnum::EXITED,
+			&serde_json::json!([volume("old")]),
+		);
+		let foreign = summary(
+			"not-a-service",
+			ContainerSummaryStateEnum::RUNNING,
+			&serde_json::json!([volume("x")]),
+		);
+		let mounts = volume_mounts(&[running, stopped, foreign]);
+		let names: Vec<&str> = mounts.iter().map(|(_, n, _)| n.as_str()).collect();
+		assert_eq!(names, ["data", "cache"]);
+		assert_eq!(mounts[0].0.kind, "application");
+		assert_eq!(mounts[0].2, "/v/data/_data");
+	}
+
+	#[test]
+	fn stats_du_and_gpu_process_output_parse() {
+		assert_eq!(parse_du_kb("2048\t/v/data/_data\n"), Some(2_097_152));
+		assert_eq!(parse_du_kb(""), None);
+		assert_eq!(parse_du_kb("du: cannot read"), None);
+		let apps = parse_compute_apps("1234, 2048\n5678, 512\nNo devices were found\n99, [N/A]\n");
+		assert_eq!(apps, [(1234, 2048), (5678, 512)]);
+	}
+
+	#[test]
+	fn stats_container_id_comes_out_of_a_cgroup_path() {
+		let id = "0123456789abcdef".repeat(4);
+		let v2 = format!(
+			"0::/user.slice/user-1000.slice/user@1000.service/user.slice/libpod-{id}.scope/container\n"
+		);
+		assert_eq!(container_id_of_cgroup(&v2).as_deref(), Some(id.as_str()));
+		let v1 = format!("12:cpu:/libpod_parent/libpod-{id}\n");
+		assert_eq!(container_id_of_cgroup(&v1).as_deref(), Some(id.as_str()));
+		assert_eq!(
+			container_id_of_cgroup("0::/user.slice/session-3.scope\n"),
+			None
+		);
 	}
 }

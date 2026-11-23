@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tDELETE FROM audit_events e USING teams t\n\t\t\tWHERE t.id = e.team_id\n\t\t\t\tAND e.created_at < NOW() - make_interval(days => t.audit_retention_days)\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "e81b19acac9cc458ee2618c6fd3c960950709be3a49ea524a95aace2c269c31b"
+}

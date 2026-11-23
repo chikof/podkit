@@ -13,7 +13,7 @@ use agent::{Ctx, routes};
 use tracing::{info, warn};
 
 const BACKUP_MAX_AGE: Duration = Duration::from_hours(24);
-const USAGE: &str = "usage: podkit-agent [--data-dir <dir>] [--podman-socket <path>] [--socket <path>] [--version]\n       podkit-agent --gateway [--gateway-dir <dir>] [--listen <addr>]";
+const USAGE: &str = "usage: podkit-agent [--data-dir <dir>] [--podman-socket <path>] [--socket <path>] [--version]\n       podkit-agent --gateway [--gateway-dir <dir>] [--listen <addr>]\n       podkit-agent --mcp-bridge [--listen <addr>] [--path <path>] -- <command...>";
 
 struct Args {
 	data_dir: PathBuf,
@@ -142,7 +142,59 @@ fn gateway_args() -> Option<Result<(PathBuf, String), String>> {
 	)))
 }
 
+/// `--mcp-bridge [--listen <addr>] [--path <path>] -- <command...>`: a stdio MCP
+/// server behind streamable HTTP, run in the server's own container. It is
+/// recognised by being the first argument, so a command that itself contains
+/// `--gateway` is not mistaken for the sidecar.
+#[allow(clippy::type_complexity)]
+fn mcp_bridge_args() -> Option<Result<(String, String, Vec<String>), String>> {
+	let mut args = std::env::args().skip(1);
+	if args.next()? != "--mcp-bridge" {
+		return None;
+	}
+	let (mut listen, mut path) = (None, None);
+	while let Some(arg) = args.next() {
+		if arg == "--" {
+			let command: Vec<String> = args.collect();
+			if command.is_empty() {
+				return Some(Err(format!(
+					"--mcp-bridge needs a command after --\n{USAGE}"
+				)));
+			}
+			return Some(Ok((
+				listen.unwrap_or_else(|| "0.0.0.0:8080".to_owned()),
+				path.unwrap_or_else(|| "/mcp".to_owned()),
+				command,
+			)));
+		}
+		let (flag, inline) = match arg.split_once('=') {
+			Some((flag, value)) => (flag.to_owned(), Some(value.to_owned())),
+			None => (arg, None),
+		};
+		let slot = match flag.as_str() {
+			"--listen" => &mut listen,
+			"--path" => &mut path,
+			_ => return Some(Err(format!("unknown argument {flag}\n{USAGE}"))),
+		};
+		match inline.or_else(|| args.next()) {
+			Some(value) => *slot = Some(value),
+			None => return Some(Err(format!("{flag} needs a value\n{USAGE}"))),
+		}
+	}
+	Some(Err(format!("--mcp-bridge needs -- and a command\n{USAGE}")))
+}
+
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
+	// A container's health check is this binary: one request, then exit.
+	let args: Vec<String> = std::env::args().skip(1).collect();
+	if let Some(code) = agent::health::probe_cli(&args) {
+		std::process::exit(code);
+	}
+	if let Some(bridge) = mcp_bridge_args() {
+		let (listen, path, command) = bridge?;
+		better_tracing::fmt().init();
+		return Ok(agent::mcp_bridge::serve(&listen, &path, &command).await?);
+	}
 	if let Some(gateway) = gateway_args() {
 		let (dir, listen) = gateway?;
 		better_tracing::fmt().init();
@@ -169,6 +221,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	sweep_backups(&args.data_dir.join("backups"));
 
 	let podman = Podman::connect(&args.podman_socket)?;
+	agent::scan::sweep(&podman, &args.data_dir).await;
 	let supervisor = Supervisor::start(podman.clone(), &args.data_dir).await;
 	let gateway_dir = agent::gateway::sidecar::dir(&args.data_dir);
 	let ctx = Arc::new(Ctx {
@@ -182,14 +235,20 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	});
 
 	// A sidecar from before a restart or an upgrade is replaced by one of this binary.
-	if agent::gateway::sidecar::read_config(&gateway_dir)
+	if let Some(config) = agent::gateway::sidecar::read_config(&gateway_dir)
 		.await
-		.is_some_and(|c| !c.keys.is_empty())
-		&& let Err(e) =
-			agent::gateway::sidecar::ensure_running(&ctx.podman(), &ctx.supervisor, &ctx.data_dir)
-				.await
+		.filter(|c| !c.keys.is_empty() || !c.mcp_keys.is_empty())
 	{
-		warn!(error = %e, "starting the gateway sidecar failed");
+		let podman = ctx.podman();
+		if let Err(e) =
+			agent::gateway::sidecar::ensure_running(&podman, &ctx.supervisor, &ctx.data_dir).await
+		{
+			warn!(error = %e, "starting the gateway sidecar failed");
+		} else if let Err(e) =
+			agent::gateway::sidecar::sync_networks(&podman, &config.networks).await
+		{
+			warn!(error = %e, "joining the gateway sidecar to its networks failed");
+		}
 	}
 
 	match std::fs::remove_file(&args.socket) {
@@ -211,9 +270,22 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 	Ok(())
 }
 
-#[tokio::main]
-async fn main() -> ExitCode {
-	match run().await {
+/// The agent waits on Podman and the network almost all of the time: two
+/// workers are plenty and keep its idle footprint small.
+fn main() -> ExitCode {
+	let mut builder = tokio::runtime::Builder::new_multi_thread();
+	builder.enable_all();
+	if std::env::var_os("TOKIO_WORKER_THREADS").is_none() {
+		builder.worker_threads(2);
+	}
+	let runtime = match builder.build() {
+		Ok(runtime) => runtime,
+		Err(e) => {
+			eprintln!("podkit-agent: {e}");
+			return ExitCode::FAILURE;
+		}
+	};
+	match runtime.block_on(run()) {
 		Ok(()) => ExitCode::SUCCESS,
 		Err(e) => {
 			eprintln!("podkit-agent: {e}");

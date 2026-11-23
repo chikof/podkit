@@ -12,6 +12,7 @@ use super::sse::js_string;
 use crate::backups::BackupStatus;
 use crate::databases::DatabaseStatus;
 use crate::deployments::DeploymentStatus;
+use crate::environments::clone::CloneStatus;
 use crate::model_files::ModelFileStatus;
 use crate::models::ModelStatus;
 use crate::servers::ServerStatus;
@@ -53,6 +54,26 @@ impl Status for DeploymentStatus {
 			Self::Queued | Self::Building | Self::Deploying => true,
 			Self::Running | Self::Failed | Self::Stopped | Self::Crashed | Self::Cancelled => false,
 		}
+	}
+}
+
+impl Status for CloneStatus {
+	fn label(self) -> &'static str {
+		self.label()
+	}
+
+	fn tone(self) -> Tone {
+		match self {
+			Self::Queued => Tone::Neutral,
+			Self::Running => Tone::Progress,
+			Self::Succeeded => Tone::Success,
+			Self::Partial => Tone::Warning,
+			Self::Failed => Tone::Danger,
+		}
+	}
+
+	fn in_flight(self) -> bool {
+		!self.is_final()
 	}
 }
 

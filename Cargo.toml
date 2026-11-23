@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
 	"agent",
+	"cli",
 	"crates/crypto",
 	"crates/proto",
 	"server",
@@ -42,7 +43,8 @@ sqlx = { version = "=0.9.0", features = [
 	"time",
 	"json",
 ] }
-axum = "=0.8.9"
+axum = { version = "=0.8.9", features = ["multipart"] }
+image = { version = "=0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 axum-extra = { version = "=0.12.6", features = ["typed-header"] }
 age = "=0.12.1"
 argon2 = "=0.6.0"
@@ -70,9 +72,15 @@ base64 = "=0.23.1"
 flate2 = "=1.1.11"
 tar = "=0.4.46"
 url = "=2.5.8"
-croner = "=4.0.3"
-rusty-s3 = { version = "=0.11.0", default-features = false, features = ["rustcrypto"] }
+croner = { version = "=4.0.3", default-features = false, features = ["jiff"] }
+# The zone database is bundled: a minimal container has no /usr/share/zoneinfo.
+jiff = { version = "=0.2.46", default-features = false, features = ["std", "tzdb-bundle-always"] }
+ssh-key = { version = "=0.6.7", default-features = false, features = ["alloc", "std", "ed25519", "rsa", "ecdsa", "getrandom"] }
+rsa = { version = "=0.9.10", default-features = false, features = ["std", "pem"] }
+rusty-s3 = { version = "=0.11.0", default-features = false, features = ["rustcrypto", "xml"] }
 reqwest = { version = "=0.13.5", default-features = false, features = ["rustls-no-provider", "stream"] }
+lettre = { version = "=0.11.24", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls", "ring", "webpki-roots"] }
+tokio-rustls = { version = "=0.26.6", default-features = false, features = ["ring", "tls12"] }
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 tower = { version = "=0.5.3", features = ["util"] }
 tower-http = { version = "=0.6.11", default-features = false, features = ["compression-gzip"] }
@@ -93,3 +101,9 @@ assert_is_empty = "allow"
 
 [workspace.lints.rust]
 missing_docs = "warn"
+
+# Generating an RSA-4096 key is a prime search: far too slow unoptimized.
+[profile.dev.package.num-bigint-dig]
+opt-level = 3
+[profile.dev.package.rsa]
+opt-level = 3

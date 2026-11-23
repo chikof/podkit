@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT r.kind AS \"kind!\", r.id AS \"id!\", r.name AS \"name!\", r.slug AS \"slug!\",\n\t\t\t\tr.project_id AS \"project_id!\", p.name AS \"project_name!\",\n\t\t\t\te.name AS \"environment_name!\",\n\t\t\t\tr.server_id AS \"server_id!: ServerId\", r.status AS \"status!\"\n\t\t\tFROM (\n\t\t\t\tSELECT 'application' AS kind, a.id, a.name, a.slug, a.project_id, a.environment_id, a.server_id,\n\t\t\t\t\tCOALESCE((\n\t\t\t\t\t\tSELECT d.status FROM deployments d WHERE d.application_id = a.id\n\t\t\t\t\t\tORDER BY d.created_at DESC, d.id DESC LIMIT 1\n\t\t\t\t\t), 'not deployed') AS status\n\t\t\t\tFROM applications a\n\t\t\t\tUNION ALL\n\t\t\t\tSELECT 'database', d.id, d.name, '', d.project_id, d.environment_id, d.server_id, d.status\n\t\t\t\tFROM databases d\n\t\t\t\tUNION ALL\n\t\t\t\tSELECT 'model', m.id, m.name, m.slug, m.project_id, m.environment_id, m.server_id, m.status\n\t\t\t\tFROM models m\n\t\t\t\tUNION ALL\n\t\t\t\tSELECT 'stack', s.id, s.name, s.slug, s.project_id, s.environment_id, s.server_id, s.status\n\t\t\t\tFROM stacks s\n\t\t\t) r\n\t\t\tJOIN projects p ON p.id = r.project_id\n\t\t\tJOIN environments e ON e.id = r.environment_id\n\t\t\tWHERE p.team_id = $1\n\t\t\tORDER BY p.name, p.id, e.position, e.id, r.kind, r.name, r.id\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "id!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "name!",
+        "type_info": "Varchar",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "slug!",
+        "type_info": "Varchar",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "project_id!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "project_name!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "projects",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "environment_name!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "environments",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "server_id!: ServerId",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "status!",
+        "type_info": "Varchar",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "39885f6b8c13d1b6ffc49de13bc3fe3843b1b4b0585a611339a88ff7984737d1"
+}
