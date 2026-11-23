@@ -34,9 +34,9 @@ section_previews() {
 	grep -qF 'Saved' "$BODY" || fail "settings save: $(head -c 300 "$BODY")"
 	echo "ok   POST $base (settings saved)"
 
-	api POST "/api/v1/teams/$TEAM/projects/$project/applications/$app/env" \
+	api POST "/api/v1/teams/$TEAM/projects/$project/applications/$app/env-vars" \
 		'{"key":"APP_MODE","value":"preview"}' >/dev/null
-	var="$(api GET "/api/v1/teams/$TEAM/projects/$project/applications/$app/env" | jq -er '.[0].id')"
+	var="$(api GET "/api/v1/teams/$TEAM/projects/$project/applications/$app/env-vars" | jq -er '.[0].id')"
 	expect_page "$env" "Allow in previews"
 	ui_post "$env/$var/preview/on" '{}'
 	expect_page "$env" "In previews"

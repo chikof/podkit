@@ -216,12 +216,12 @@ fn fields(scope: Scope, editing: bool) -> Markup {
 			input class=(INPUT) type="text" autocomplete="off" placeholder="openid email profile" "data-bind:p_scopes";
 		}
 		div class="ui-check" {
-			input id="p-jit" type="checkbox" class=(CHECKBOX) "data-bind:p_jit";
-			label for="p-jit" class="cursor-pointer" { "Create an account on first sign-in, when the instance's registration policy allows new accounts" }
+			input id={ "p-jit-" (segment(scope)) } type="checkbox" class=(CHECKBOX) "data-bind:p_jit";
+			label for={ "p-jit-" (segment(scope)) } class="cursor-pointer" { "Create an account on first sign-in, when the instance's registration policy allows new accounts" }
 		}
 		div class="ui-check" {
-			input id="p-unverified" type="checkbox" class=(CHECKBOX) "data-bind:p_unverified";
-			label for="p-unverified" class="cursor-pointer" { "Trust the provider's email even when it does not say it was verified (Microsoft)" }
+			input id={ "p-unverified-" (segment(scope)) } type="checkbox" class=(CHECKBOX) "data-bind:p_unverified";
+			label for={ "p-unverified-" (segment(scope)) } class="cursor-pointer" { "Trust the provider's email even when it does not say it was verified (Microsoft)" }
 		}
 		@if matches!(scope, Scope::Team(_)) {
 			div class="ui-pair" {
@@ -236,8 +236,8 @@ fn fields(scope: Scope, editing: bool) -> Markup {
 			}
 		}
 		div class="ui-check" {
-			input id="p-enabled" type="checkbox" class=(CHECKBOX) "data-bind:p_enabled";
-			label for="p-enabled" class="cursor-pointer" { "Show it on the sign-in page" }
+			input id={ "p-enabled-" (segment(scope)) } type="checkbox" class=(CHECKBOX) "data-bind:p_enabled";
+			label for={ "p-enabled-" (segment(scope)) } class="cursor-pointer" { "Show it on the sign-in page" }
 		}
 	}
 }
