@@ -217,9 +217,10 @@ mod tests {
 	}
 
 	fn side() -> Side {
-		let (feed, fed) = mpsc::unbounded_channel();
+		let (feed, inbox) = mpsc::unbounded_channel();
 		let (out, seen) = mpsc::unbounded_channel();
-		let rx = stream::unfold(fed, |mut r| async move { r.recv().await.map(|f| (f, r)) }).boxed();
+		let rx =
+			stream::unfold(inbox, |mut r| async move { r.recv().await.map(|f| (f, r)) }).boxed();
 		let tx = Box::pin(sink::unfold(out, |out, f: Frame| async move {
 			let _ = out.send(f);
 			Ok::<_, ()>(out)

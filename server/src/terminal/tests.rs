@@ -146,6 +146,8 @@ impl World {
 
 /// Listens on `socket` and plays the agent: every binary frame comes back as `out:<bytes>`,
 /// text frames are recorded.
+/// The handshake callback's `Err` type is fixed by tungstenite's `Callback` trait.
+#[allow(clippy::result_large_err)]
 fn fake_agent(socket: &std::path::Path, log: Arc<Mutex<AgentLog>>) {
 	let listener = UnixListener::bind(socket).unwrap();
 	tokio::spawn(async move {
