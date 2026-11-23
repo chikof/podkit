@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tINSERT INTO app_build_settings (application_id, build_server_id, cache_enabled)\n\t\t\tVALUES ($1, $2, $3)\n\t\t\tON CONFLICT (application_id) DO UPDATE SET\n\t\t\t\tbuild_server_id = EXCLUDED.build_server_id,\n\t\t\t\tcache_enabled = EXCLUDED.cache_enabled\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4574ca02aca09ec3211957671dc1d9714b5df76ec9c1484f770572d7229e593f"
+}

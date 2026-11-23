@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT build_server_id AS \"build_server_id: ServerId\", cpu_limit, memory_limit_mb\n\t\t\tFROM build_settings WHERE team_id = $1\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "build_server_id: ServerId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "build_settings",
+            "name": "build_server_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "cpu_limit",
+        "type_info": "Float4",
+        "origin": {
+          "Table": {
+            "table": "build_settings",
+            "name": "cpu_limit"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "memory_limit_mb",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "build_settings",
+            "name": "memory_limit_mb"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "75682c9fe7c670289dee94bde4bb61f283c52c3dae633aeee0552f5e0df11345"
+}

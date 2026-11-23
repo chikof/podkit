@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT max_concurrent, cache_max_mb FROM server_build_settings WHERE server_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "max_concurrent",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "server_build_settings",
+            "name": "max_concurrent"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "cache_max_mb",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "server_build_settings",
+            "name": "cache_max_mb"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "c9b8347fdce406def2760895288e4eebc571ab3c52e79487b57daa53cfec05c4"
+}

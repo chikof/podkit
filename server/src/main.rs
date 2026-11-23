@@ -27,6 +27,7 @@ mod auth;
 mod autodeploy;
 mod avatars;
 mod backups;
+mod builds;
 mod catalog;
 mod change;
 mod config;

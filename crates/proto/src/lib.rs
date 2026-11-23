@@ -823,6 +823,9 @@ pub enum Source {
 		auth: GitAuth,
 		/// How to build the image.
 		build: Build,
+		/// Cache, limits and the cache budget of the build. Absent in older payloads.
+		#[serde(default)]
+		options: BuildOptions,
 	},
 	/// Use an existing image.
 	Image {
@@ -926,6 +929,92 @@ pub enum Build {
 	/// Generate a Dockerfile with nixpacks.
 	Nixpacks,
 }
+
+/// How one image build runs: whether it may reuse layers, what it may use, and how big the
+/// layer cache may stay afterwards.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BuildOptions {
+	/// Reuse the layers of earlier builds. `false` builds every step again.
+	#[serde(default = "yes")]
+	pub cache: bool,
+	/// CPU cap of the build containers, in cores. `None`: no cap.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub cpu_cores: Option<f64>,
+	/// Memory cap of the build containers, in bytes. `None`: no cap.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub memory_bytes: Option<i64>,
+	/// After the build the agent prunes the layer cache down to this many bytes. `None`:
+	/// leave it alone.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub cache_max_bytes: Option<u64>,
+}
+
+impl Default for BuildOptions {
+	fn default() -> Self {
+		Self {
+			cache: true,
+			cpu_cores: None,
+			memory_bytes: None,
+			cache_max_bytes: None,
+		}
+	}
+}
+
+/// `POST /v1/build` body: clone and build an image, and keep it on this server (a build
+/// server). The stream ends with [`Event::Built`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuildRequest {
+	/// Service the image is for; the tag is `podkit-<service>:<short sha>`.
+	pub service: String,
+	/// `https://`, `ssh://` or scp-form url.
+	pub repo_url: String,
+	/// Branch or tag.
+	pub git_ref: String,
+	/// Credentials for the clone.
+	pub auth: GitAuth,
+	/// How to build the image.
+	pub build: Build,
+	/// Cache and limits.
+	#[serde(default)]
+	pub options: BuildOptions,
+}
+
+/// `GET /v1/build-cache` response.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BuildCacheInfo {
+	/// Bytes the cached layers take (layers that no tag and no container uses).
+	pub bytes: u64,
+	/// How many layers that is.
+	pub layers: u32,
+}
+
+/// `POST /v1/build-cache/prune` body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BuildCachePrune {
+	/// Keep at most this many bytes; the oldest layers go first. 0 empties the cache.
+	pub max_bytes: u64,
+}
+
+/// `POST /v1/build-cache/prune` response.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BuildCachePruned {
+	/// Layers removed.
+	pub removed: u32,
+	/// Bytes they took.
+	pub freed_bytes: u64,
+	/// What the cache takes now.
+	pub remaining_bytes: u64,
+}
+
+/// `POST /v1/images/import` response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageImported {
+	/// Content id of the image, `sha256:…`.
+	pub image_id: String,
+}
+
+/// The header `GET /v1/images/export` answers with: the content id of the image sent.
+pub const IMAGE_ID_HEADER: &str = "x-podkit-image-id";
 
 /// Traefik hosts for a service.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1072,6 +1161,13 @@ pub enum Event {
 		/// Built commit, for git sources.
 		commit_sha: Option<String>,
 	},
+	/// Terminal: an image was built and is on this server (`POST /v1/build`).
+	Built {
+		/// The image reference.
+		image: String,
+		/// The commit that was built.
+		commit_sha: String,
+	},
 	/// Terminal: dump file written on the agent host.
 	DumpWritten {
 		/// Path of the gzip file.
@@ -1120,6 +1216,7 @@ impl Event {
 		matches!(
 			self,
 			Self::Deployed { .. }
+				| Self::Built { .. }
 				| Self::DumpWritten { .. }
 				| Self::Done | Self::Exited { .. }
 				| Self::VolumeDumped { .. }

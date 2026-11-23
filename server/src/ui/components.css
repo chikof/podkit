@@ -2455,3 +2455,8 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-codes { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--s-2) var(--s-5); margin: 0 0 var(--s-5); padding: 0; list-style: none; }
 .ui-codes code { font-size: var(--fs-md); user-select: all; }
 .ui-dialog-sub { margin: 0; font-size: var(--fs-md); font-weight: var(--fw-bold); }
+/* == builds ==
+   A server on Settings → Builds: its name and standing, then the fields that tune it, with a rule between one
+   server and the next. */
+.ui-build-server { display: grid; gap: var(--s-4); min-width: 0; padding-block-end: var(--s-6); border-block-end: var(--bw) solid var(--border); }
+.ui-build-server:last-child { padding-block-end: 0; border-block-end: 0; }

@@ -331,6 +331,7 @@ impl Ctx<'_> {
 					| Event::Exited { .. }
 					| Event::VolumeDumped { .. }
 					| Event::PartsUploaded { .. }
+					| Event::Built { .. }
 					| Event::Done,
 				)) => {}
 				Some(Err(e)) => {

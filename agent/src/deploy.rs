@@ -682,11 +682,33 @@ async fn build_from_git(
 		git_ref,
 		auth,
 		build,
+		options,
 	} = &spec.source
 	else {
 		return Err("not a git source".to_string());
 	};
+	let (tag, commit_sha) = build_git_image(
+		ctx,
+		podman,
+		&spec.service,
+		(repo_url, git_ref, auth, build),
+		options,
+		tx,
+	)
+	.await?;
+	Ok((tag, Some(commit_sha)))
+}
 
+/// Clones `repo_url` at `git_ref` and builds it into `podkit-<service>:<short sha>`; returns
+/// the tag and the commit. Shared by a deploy and by a build on a build server.
+pub(crate) async fn build_git_image(
+	ctx: &Ctx,
+	podman: &Podman,
+	service: &str,
+	(repo_url, git_ref, auth, build): (&str, &str, &proto::GitAuth, &proto::Build),
+	options: &proto::BuildOptions,
+	tx: &mpsc::Sender<Event>,
+) -> Result<(String, String), String> {
 	let work_root = ctx.data_dir.join("work");
 	let work = tempfile::Builder::new()
 		.prefix("deploy-")
@@ -702,9 +724,28 @@ async fn build_from_git(
 	log(tx, Stream::System, format!("checked out {short}")).await?;
 
 	phase(tx, Phase::Building).await?;
-	let tag = format!("podkit-{}:{short}", spec.service);
+	let tag = format!("podkit-{service}:{short}");
+	if !options.cache {
+		log(tx, Stream::System, "build cache is off for this app").await?;
+	}
+	if options.cpu_cores.is_some() || options.memory_bytes.is_some() {
+		log(
+			tx,
+			Stream::System,
+			format!(
+				"build limits: {} CPU, {} memory",
+				options
+					.cpu_cores
+					.map_or_else(|| "no".to_string(), |c| format!("{c}")),
+				options
+					.memory_bytes
+					.map_or_else(|| "no".to_string(), |b| format!("{} MB", b / 1024 / 1024)),
+			),
+		)
+		.await?;
+	}
 	let build_output = podman
-		.build_image(&tag, &prepared.dockerfile, &prepared.context_tar)
+		.build_image(&tag, &prepared.dockerfile, &prepared.context_tar, options)
 		.await
 		.map_err(|e| format!("image build failed: {e}"))?;
 	let mut build_output = std::pin::pin!(build_output);
@@ -714,7 +755,25 @@ async fn build_from_git(
 			log(tx, Stream::Stdout, line).await?;
 		}
 	}
-	Ok((tag, Some(prepared.commit_sha.clone())))
+	if let Some(max) = options.cache_max_bytes {
+		match crate::build_cache::prune(podman, max).await {
+			Ok(pruned) if pruned.removed > 0 => {
+				log(
+					tx,
+					Stream::System,
+					format!(
+						"build cache pruned: {} layers, {} MB freed",
+						pruned.removed,
+						pruned.freed_bytes / 1_000_000
+					),
+				)
+				.await?;
+			}
+			Ok(_) => {}
+			Err(e) => warn!(error = %e, "pruning the build cache failed"),
+		}
+	}
+	Ok((tag, prepared.commit_sha.clone()))
 }
 
 /// Makes `reference` available locally and returns the reference to run and

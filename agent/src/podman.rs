@@ -18,12 +18,51 @@ use bollard::query_parameters::{
 	InspectContainerOptions, ListContainersOptions, ListImagesOptions, LogsOptions,
 	RemoveContainerOptions, RemoveImageOptions, StartContainerOptions, StopContainerOptions,
 };
-use futures_util::{Stream, StreamExt};
+use futures_util::{Stream, StreamExt, stream};
 use proto::{GpuDevices, GpuRequest, GpuVendor, RegistryAuth};
 
 /// Per-request timeout of the Podman client. It bounds the wait for response
 /// headers only; streamed bodies (builds, logs, events) run untimed.
 const REQUEST_TIMEOUT_SECS: u64 = 900;
+
+/// The CPU period the build's quota is measured against, in microseconds (the cgroup default).
+const BUILD_CPU_PERIOD: i32 = 100_000;
+
+/// The query of `POST /build` for one build: tag, Dockerfile and what `build` allows.
+///
+/// A cap goes to Podman's Docker-compatible build endpoint as `memory`, `memswap`,
+/// `cpuperiod` and `cpuquota` (the query parameters of `ImageBuild` in
+/// <https://docs.podman.io/en/latest/_static/api.html#tag/images/operation/ImageBuildLibpod>).
+/// The memory parameter is a 32-bit number in the client library, so a cap above 2 GiB is
+/// sent as 2 GiB. Swap is the same size as memory, i.e. none on top of it.
+#[must_use]
+#[allow(
+	clippy::cast_possible_truncation,
+	reason = "the quota is clamped into an i32 first"
+)]
+pub fn build_query(tag: &str, dockerfile: &str, build: &proto::BuildOptions) -> BuildImageOptions {
+	let memory = build
+		.memory_bytes
+		.filter(|b| *b > 0)
+		.map(|b| i32::try_from(b).unwrap_or(i32::MAX));
+	let cpuquota = build.cpu_cores.filter(|c| *c > 0.0).map(|c| {
+		(c * f64::from(BUILD_CPU_PERIOD))
+			.round()
+			.clamp(1000.0, f64::from(i32::MAX)) as i32
+	});
+	BuildImageOptions {
+		dockerfile: dockerfile.to_string(),
+		t: Some(tag.to_string()),
+		rm: true,
+		forcerm: true,
+		nocache: !build.cache,
+		memory,
+		memswap: memory,
+		cpuperiod: cpuquota.map(|_| BUILD_CPU_PERIOD),
+		cpuquota,
+		..Default::default()
+	}
+}
 
 /// Failure of a Podman operation.
 #[derive(Debug, thiserror::Error)]
@@ -443,16 +482,11 @@ impl Podman {
 		tag: &str,
 		dockerfile: &str,
 		context_tar: &Path,
+		build: &proto::BuildOptions,
 	) -> Result<impl Stream<Item = Result<String, PodmanError>> + '_, PodmanError> {
 		let file = tokio::fs::File::open(context_tar).await?;
 		let body = bollard::body_try_stream(tokio_util::io::ReaderStream::new(file));
-		let options = BuildImageOptions {
-			dockerfile: dockerfile.to_string(),
-			t: Some(tag.to_string()),
-			rm: true,
-			forcerm: true,
-			..Default::default()
-		};
+		let options = build_query(tag, dockerfile, build);
 		Ok(self
 			.docker
 			.build_image(options, None, Some(body))
@@ -468,6 +502,61 @@ impl Podman {
 					Err(e) => Some(Err(e.into())),
 				}
 			}))
+	}
+
+	/// The image as a tar archive (`podman save`), streamed as Podman produces it. The stream
+	/// owns its connection, so it can outlive the caller; dropping it stops the export.
+	pub fn export_image_owned(
+		&self,
+		reference: String,
+	) -> impl Stream<Item = Result<bytes::Bytes, PodmanError>> + Send + 'static {
+		let docker = self.docker.clone();
+		let (tx, rx) = tokio::sync::mpsc::channel(4);
+		tokio::spawn(async move {
+			let mut chunks = std::pin::pin!(docker.export_image(&reference));
+			while let Some(chunk) = chunks.next().await {
+				if tx.send(chunk.map_err(PodmanError::from)).await.is_err() {
+					break;
+				}
+			}
+		});
+		stream::unfold(rx, |mut rx| async move {
+			rx.recv().await.map(|item| (item, rx))
+		})
+	}
+
+	/// Loads an image archive (`podman load`) from a stream of its bytes.
+	///
+	/// # Errors
+	/// The archive is not an image, or the stream fails halfway.
+	pub async fn import_image<S, E>(&self, archive: S) -> Result<(), PodmanError>
+	where
+		S: Stream<Item = Result<bytes::Bytes, E>> + Send + 'static,
+		E: Into<Box<dyn std::error::Error + Send + Sync>> + 'static,
+	{
+		let mut loaded = std::pin::pin!(self.docker.import_image_stream(
+			bollard::query_parameters::ImportImageOptions::default(),
+			archive,
+			None,
+		));
+		while let Some(item) = loaded.next().await {
+			item?;
+		}
+		Ok(())
+	}
+
+	/// Every image, intermediate layers included.
+	///
+	/// # Errors
+	/// Podman is unreachable.
+	pub async fn all_images(&self) -> Result<Vec<ImageSummary>, PodmanError> {
+		Ok(self
+			.docker
+			.list_images(Some(ListImagesOptions {
+				all: true,
+				..Default::default()
+			}))
+			.await?)
 	}
 
 	/// Pulls an image, streaming Podman's progress records.

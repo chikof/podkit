@@ -27,6 +27,8 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const FIREWALL_TIMEOUT: Duration = Duration::from_secs(25);
 /// A scan exports the image and runs two containers; the biggest images take minutes.
 const SCAN_TIMEOUT: Duration = Duration::from_mins(25);
+/// Removing layers one by one on a big cache takes a while.
+const PRUNE_TIMEOUT: Duration = Duration::from_mins(5);
 const MAX_LINE_BYTES: usize = 1024 * 1024;
 const MAX_ERROR_BODY_BYTES: usize = 64 * 1024;
 
@@ -49,6 +51,138 @@ pub struct AgentClient {
 impl AgentClient {
 	pub(super) fn new(socket: PathBuf, tunnel: Option<Arc<SshTunnel>>) -> Self {
 		Self { socket, tunnel }
+	}
+
+	/// A client for an agent on a unix socket of this machine, with no tunnel: the other
+	/// agent of a test, or a second agent run by hand next to the first.
+	#[must_use]
+	#[cfg(test)]
+	pub fn at(socket: PathBuf) -> Self {
+		Self::new(socket, None)
+	}
+
+	/// What the layer cache of builds on this server takes.
+	///
+	/// # Errors
+	/// See [`AgentClient::health`].
+	pub async fn build_cache(&self) -> Result<proto::BuildCacheInfo, ServerError> {
+		self.json_within(
+			HARDWARE_TIMEOUT,
+			Method::GET,
+			"/v1/build-cache",
+			None::<&()>,
+		)
+		.await
+	}
+
+	/// Prunes the layer cache down to `max_bytes` (0 empties it).
+	///
+	/// # Errors
+	/// See [`AgentClient::health`].
+	pub async fn prune_build_cache(
+		&self,
+		max_bytes: u64,
+	) -> Result<proto::BuildCachePruned, ServerError> {
+		self.json_within(
+			PRUNE_TIMEOUT,
+			Method::POST,
+			"/v1/build-cache/prune",
+			Some(&proto::BuildCachePrune { max_bytes }),
+		)
+		.await
+	}
+
+	/// The image `reference` as a tar archive, and its content id. The body is streamed:
+	/// nothing is held in memory.
+	///
+	/// # Errors
+	/// `Validation` with the agent's message when the server has no such image; see
+	/// [`AgentClient::health`] otherwise. A failure halfway shows as an `Err` item.
+	pub async fn export_image(
+		&self,
+		reference: &str,
+	) -> Result<(String, BoxStream<'static, Result<Bytes, ServerError>>), ServerError> {
+		let path = format!("/v1/images/export?reference={}", urlencode(reference));
+		let resp = ok_or_error(self.request(Method::GET, &path, None)?.await?).await?;
+		let id = resp
+			.headers()
+			.get(proto::IMAGE_ID_HEADER)
+			.and_then(|v| v.to_str().ok())
+			.map(str::to_owned)
+			.ok_or_else(|| {
+				tracing::warn!("agent sent an image without its id");
+				ServerError::AgentUnavailable
+			})?;
+		let tunnel = self.tunnel.clone();
+		let body = http_body_util::BodyStream::new(resp.into_body())
+			.filter_map(move |frame| {
+				let _keep = &tunnel;
+				std::future::ready(match frame {
+					Ok(frame) => frame.into_data().ok().map(Ok),
+					Err(e) => Some(Err(unavailable("read the image")(e))),
+				})
+			})
+			.boxed();
+		Ok((id, body))
+	}
+
+	/// Loads the archive `body` on this server as `reference` and returns the content id of
+	/// the image it now has. There is no overall timeout: a big image takes as long as the
+	/// wire does, and dropping the future closes the connection, which stops the load.
+	///
+	/// # Errors
+	/// See [`AgentClient::health`]; the source stream failing is an error too.
+	pub async fn import_image(
+		&self,
+		reference: &str,
+		body: BoxStream<'static, Result<Bytes, ServerError>>,
+	) -> Result<proto::ImageImported, ServerError> {
+		use http_body_util::StreamBody;
+		let body = StreamBody::new(body.map(|chunk| {
+			chunk
+				.map(hyper::body::Frame::data)
+				.map_err(|e| std::io::Error::other(e.to_string()))
+		}))
+		.boxed_unsync();
+		let request = Request::builder()
+			.method(Method::POST)
+			.uri(format!(
+				"/v1/images/import?reference={}",
+				urlencode(reference)
+			))
+			.header(HOST, "agent")
+			.header(CONTENT_TYPE, "application/x-tar")
+			.body(body)
+			.map_err(|e| {
+				tracing::error!(error = %e, "invalid agent request");
+				ServerError::Internal
+			})?;
+		let stream = UnixStream::connect(&self.socket)
+			.await
+			.map_err(unavailable("connect to agent"))?;
+		let (mut sender, conn) = http1::handshake::<
+			_,
+			http_body_util::combinators::UnsyncBoxBody<Bytes, std::io::Error>,
+		>(TokioIo::new(stream))
+		.await
+		.map_err(unavailable("agent handshake"))?;
+		tokio::spawn(async move {
+			if let Err(e) = conn.await {
+				tracing::debug!(error = %e, "agent connection closed with error");
+			}
+		});
+		let resp = sender
+			.send_request(request)
+			.await
+			.map_err(unavailable("agent request"))?;
+		let resp = ok_or_error(resp).await?;
+		let bytes = resp
+			.into_body()
+			.collect()
+			.await
+			.map_err(unavailable("read agent response"))?
+			.to_bytes();
+		serde_json::from_slice(&bytes).map_err(unavailable("decode agent response"))
 	}
 
 	/// # Errors
@@ -579,6 +713,19 @@ impl LineSplitter {
 		let rest = trim_cr(self.buf.split().freeze());
 		(!rest.is_empty()).then_some(rest)
 	}
+}
+
+/// Percent-encodes a query value: everything but unreserved characters.
+fn urlencode(value: &str) -> String {
+	use std::fmt::Write;
+	value.bytes().fold(String::new(), |mut out, b| {
+		if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
+			out.push(char::from(b));
+		} else {
+			let _ = write!(out, "%{b:02X}");
+		}
+		out
+	})
 }
 
 #[cfg(test)]

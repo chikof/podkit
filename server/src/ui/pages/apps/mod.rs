@@ -33,6 +33,7 @@ use crate::ui::sse::js_string;
 
 mod access;
 mod advanced;
+mod build_tab;
 pub mod chrome;
 mod create;
 mod cron_tab;
@@ -63,6 +64,7 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.merge(create::router())
 		.merge(general::router())
+		.merge(build_tab::router())
 		.merge(header::router())
 		.merge(deployments_tab::router())
 		.merge(logs::router())
@@ -148,12 +150,13 @@ enum Tab {
 	Webhooks,
 	Monitoring,
 	Security,
+	Build,
 	Settings,
 	Advanced,
 }
 
 impl Tab {
-	const ALL: [Self; 16] = [
+	const ALL: [Self; 17] = [
 		Self::Deployments,
 		Self::Logs,
 		Self::Terminal,
@@ -168,6 +171,7 @@ impl Tab {
 		Self::Webhooks,
 		Self::Monitoring,
 		Self::Security,
+		Self::Build,
 		Self::Settings,
 		Self::Advanced,
 	];
@@ -188,6 +192,7 @@ impl Tab {
 			Self::Webhooks => "Webhooks",
 			Self::Monitoring => "Monitoring",
 			Self::Security => "Security",
+			Self::Build => "Build",
 			Self::Settings => "Settings",
 			Self::Advanced => "Advanced",
 		}
@@ -211,6 +216,7 @@ impl Tab {
 			Self::Webhooks => "/webhooks",
 			Self::Monitoring => "/monitoring",
 			Self::Security => "/security",
+			Self::Build => "/build",
 			Self::Settings => "/settings",
 			Self::Advanced => "/advanced",
 		}
@@ -227,7 +233,7 @@ impl Tab {
 			Self::Deployments => can(Action::Read, Resource::Deployment),
 			Self::Volumes => can(Action::Read, Resource::Volume),
 			Self::Models => can(Action::Read, Resource::Model),
-			Self::Networks | Self::Monitoring | Self::Mcp | Self::Git => {
+			Self::Networks | Self::Monitoring | Self::Mcp | Self::Git | Self::Build => {
 				can(Action::Read, Resource::Application)
 			}
 			Self::Security => can(Action::Read, Resource::Scan),
@@ -246,7 +252,7 @@ fn tab_row(ctx: &TeamCtx, app: &ApplicationView, active: Tab) -> Markup {
 	let links: Vec<(Tab, String)> = Tab::ALL
 		.into_iter()
 		.filter(|t| t.allowed(ctx))
-		.filter(|t| *t != Tab::Git || app.source_kind == SourceKind::Git)
+		.filter(|t| !matches!(t, Tab::Git | Tab::Build) || app.source_kind == SourceKind::Git)
 		.map(|t| (t, format!("{base}{}", t.path())))
 		.collect();
 	let items: Vec<TabItem<'_>> = links
