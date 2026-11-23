@@ -6,7 +6,7 @@ podkit has a JSON API under `/api/v1`. Anything the web UI does, the API does.
 
 Two kinds of bearer token are accepted:
 
-- a **session token** from `POST /api/v1/auth/login` (email and password). It has every right you have.
+- a **session token** from `POST /api/v1/auth/login` (email and password). It has every right you have. When the account has two-step verification on, add `"code"` to the body: a 6-digit app code or a recovery code. Without it (or with a wrong one) the answer is 401. Passkeys sign in through the web page only.
 - an **API token** (`pk_…`), made in **Settings → API tokens** or with the API. It acts as you, narrowed to the scopes, projects and expiry you gave it. Use these for scripts and CI.
 
 ```sh

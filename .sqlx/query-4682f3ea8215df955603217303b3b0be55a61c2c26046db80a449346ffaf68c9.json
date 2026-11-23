@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM user_identities i USING auth_providers p\n\t\tWHERE i.id = $1 AND i.user_id = $2 AND p.id = i.provider_id RETURNING p.name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4682f3ea8215df955603217303b3b0be55a61c2c26046db80a449346ffaf68c9"
+}

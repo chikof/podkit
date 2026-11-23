@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.id, p.name, p.kind FROM auth_providers p\n\t\tLEFT JOIN teams t ON t.id = p.team_id\n\t\tWHERE p.enabled AND (p.team_id IS NULL OR t.slug = $1)\n\t\tORDER BY p.team_id IS NOT NULL, p.name, p.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "kind"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5af6c6756fb6ac9b3f755c0eb924e4de57955735d598fa22a4f86e66a660d680"
+}

@@ -1,0 +1,15 @@
+ALTER TABLE teams DROP COLUMN require_2fa_grace_days;
+ALTER TABLE teams DROP COLUMN require_2fa_deadline;
+ALTER TABLE teams DROP COLUMN require_2fa;
+DROP TABLE passkeys;
+DROP TABLE recovery_codes;
+DROP TABLE totp_credentials;
+DROP TABLE auth_flows;
+DROP TABLE user_identities;
+DROP TABLE auth_providers;
+ALTER TABLE sessions DROP COLUMN user_agent;
+ALTER TABLE sessions DROP COLUMN ip;
+ALTER TABLE sessions DROP COLUMN method;
+ALTER TABLE sessions DROP CONSTRAINT sessions_id_key;
+ALTER TABLE sessions DROP COLUMN id;
+ALTER TABLE users DROP COLUMN has_password;

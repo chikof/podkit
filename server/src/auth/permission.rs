@@ -113,11 +113,15 @@ pub async fn authorize(
 	.fetch_one(db)
 	.await?;
 
-	if allowed {
-		Ok(())
-	} else {
-		Err(ServerError::Forbidden)
+	if !allowed {
+		return Err(ServerError::Forbidden);
 	}
+	// A team that requires two-step verification shuts out a member who has none, once
+	// the grace period is over (they can still reach their own Account pages).
+	if crate::two_factor::policy::blocks(db, user, team).await? {
+		return Err(ServerError::TwoFactorRequired);
+	}
+	Ok(())
 }
 
 /// Everything a user may do in one team, loaded once so a page can hide the

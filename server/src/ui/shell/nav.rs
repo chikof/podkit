@@ -106,6 +106,11 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 		format!("{base}/settings/registration"),
 		"shield",
 	));
+	items.push(item(
+		"Authentication",
+		format!("{base}/settings/authentication"),
+		"lock",
+	));
 	if can(Resource::Model) {
 		items.push(item(
 			"Hugging Face token",

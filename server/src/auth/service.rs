@@ -87,6 +87,52 @@ pub async fn email_of(db: &PgPool, id: crate::ids::UserId) -> AppResult<Option<S
 	Ok(users::email_of(db, id).await?)
 }
 
+/// `user`'s open sessions, newest first, with the one making the request marked.
+pub async fn sessions(
+	db: &PgPool,
+	user: crate::ids::UserId,
+	current_token: &str,
+) -> AppResult<Vec<super::session::Entry>> {
+	Ok(super::session::list(db, user, current_token).await?)
+}
+
+/// Signs one of `user`'s other sessions out. A session of someone else answers as if it did
+/// not exist.
+pub async fn revoke_session(db: &PgPool, user: crate::ids::UserId, id: i64) -> AppResult<()> {
+	if !super::session::revoke_id(db, user, id).await? {
+		return Err(ServerError::NotFound);
+	}
+	super::record_everywhere(
+		db,
+		user,
+		"session.revoke",
+		crate::audit::Target::new("session", id),
+		crate::audit::Diff::new(),
+	)
+	.await;
+	Ok(())
+}
+
+/// Signs every session of `user` out except the one making the request; returns how many.
+pub async fn revoke_other_sessions(
+	db: &PgPool,
+	user: crate::ids::UserId,
+	current_token: &str,
+) -> AppResult<u64> {
+	let n = super::session::revoke_others(db, user, current_token).await?;
+	if n > 0 {
+		super::record_everywhere(
+			db,
+			user,
+			"session.revoke",
+			crate::audit::Target::none("session").named("all other sessions"),
+			crate::audit::Diff::new().set("count", n),
+		)
+		.await;
+	}
+	Ok(n)
+}
+
 #[cfg(test)]
 mod tests {
 	use super::register;

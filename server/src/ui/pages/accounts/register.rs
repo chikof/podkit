@@ -129,6 +129,7 @@ async fn register(
 	let credentials = Credentials {
 		email: auth::normalize_email_lenient(&sig.email),
 		password: sig.password,
+		code: None,
 	};
 	match auth::log_in(&s, &cookies, &headers, credentials).await {
 		Ok(_) => sse::redirect("/teams/new").into_response(),

@@ -14,7 +14,8 @@ use crate::avatars::{self, MAX_UPLOAD};
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::ui::components::{
-	AvatarField, Tone, avatar_field, card, card_content, card_heading, user_avatar_lg,
+	AvatarField, BUTTON_OUTLINE, Tone, avatar_field, card, card_content, card_heading, icon,
+	user_avatar_lg,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::app_page;
@@ -67,6 +68,15 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Response {
 					dl class="ui-facts-col" {
 						div { dt class="ui-hint" { "Name" } dd class="text-sm" { (ctx.user.name) } }
 						div { dt class="ui-hint" { "Email" } dd class="text-sm" { (email.unwrap_or_default()) } }
+					}
+				}))
+			}))
+			(card(&html! {
+				(card_heading("Security", Some("Two-step verification, passkeys, recovery codes and where you are signed in.")))
+				(card_content(&html! {
+					a class=(BUTTON_OUTLINE) href={ (base) "/security" } {
+						(icon("shield"))
+						span { "Open security settings" }
 					}
 				}))
 			}))

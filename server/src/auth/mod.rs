@@ -12,13 +12,19 @@ use crate::error::ServerError;
 use crate::ids::UserId;
 use crate::state::AppState;
 
+mod events;
+pub mod flow;
+pub mod origin;
 pub mod permission;
 mod routes;
 pub mod service;
 pub mod session;
 pub mod tokens;
 
-pub use routes::{Credentials, log_in, log_out, router};
+pub use events::record_everywhere;
+pub use routes::{
+	Credentials, log_in, log_out, open_session, reached_over_https, router, verify_password,
+};
 
 /// The authenticated caller: a live session, or an API token acting as the user who made
 /// it. Either way `id` is the user, and RBAC is asked about them as usual.
@@ -678,7 +684,7 @@ mod email {
 	}
 }
 
-use email::validate_email;
+pub use email::validate_email;
 
 /// An email as stored by registration (domain lowercased) when it is valid,
 /// else the input unchanged, so a lookup finds what sign-up stored.

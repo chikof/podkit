@@ -5,6 +5,8 @@
     lazysql
     nixpacks
     python3
+    # webauthn-rs links OpenSSL.
+    openssl
   ];
 
   dotenv.enable = true;

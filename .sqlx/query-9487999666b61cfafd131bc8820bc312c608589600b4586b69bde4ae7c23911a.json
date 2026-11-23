@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT (\n\t\t\t\tEXISTS (SELECT 1 FROM totp_credentials WHERE user_id = $1 AND confirmed_at IS NOT NULL)\n\t\t\t\tOR EXISTS (SELECT 1 FROM passkeys WHERE user_id = $1)\n\t\t\t) AS \"e!\"\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "e!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9487999666b61cfafd131bc8820bc312c608589600b4586b69bde4ae7c23911a"
+}

@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE teams SET require_2fa = $2, require_2fa_grace_days = $3, require_2fa_deadline = $4\n\t\tWHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bool",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4587fb751692a9e23f50e7398a6292ac89450e34efbb8fbea910646bd9801b06"
+}

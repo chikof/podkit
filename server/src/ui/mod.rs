@@ -90,6 +90,8 @@ pub fn router() -> Router<AppState> {
 		.route("/static/app.css", get(app_css))
 		.merge(assets::router())
 		.merge(pages::accounts::router())
+		.merge(pages::sign_in::router())
+		.merge(pages::account_security::router())
 		.merge(pages::profile::router())
 		.merge(pages::projects::router())
 		.merge(pages::apps::router())
@@ -174,7 +176,7 @@ pub(crate) fn same_origin(headers: &HeaderMap) -> bool {
 
 /// Where sign-in may send the browser afterwards: a path on this site, never
 /// another origin (`//host`, `/\host`, `https://host`).
-fn safe_next(next: &str) -> &str {
+pub(crate) fn safe_next(next: &str) -> &str {
 	let ok = next.starts_with('/')
 		&& !next.starts_with("//")
 		&& !next.contains('\\')
@@ -221,6 +223,30 @@ async fn index(State(s): State<AppState>, user: UiUser) -> Response {
 #[derive(Deserialize)]
 struct LoginQuery {
 	next: Option<String>,
+	/// A team's slug: its identity providers are offered next to the instance's.
+	team: Option<String>,
+}
+
+/// "Sign in with ...": one button per enabled provider, then a passkey button (shown by
+/// `passkey.js` when the browser can use one).
+fn provider_buttons(buttons: &[crate::sso::providers::Button], next: &str) -> Markup {
+	let query: String = url::form_urlencoded::byte_serialize(next.as_bytes()).collect();
+	html! {
+		div class="ui-auth-alt-actions" {
+			@for b in buttons {
+				a class="ui-button ui-button-outline ui-button-lg ui-button-block" href={ "/sso/" (b.id) "/start?next=" (query) } {
+					@if b.kind == crate::sso::Kind::Github { (components::logo("github", components::LogoSize::Sm)) } @else { (icon("key-round")) }
+					span { "Sign in with " (b.name) }
+				}
+			}
+			button type="button" class="ui-button ui-button-outline ui-button-lg ui-button-block" data-passkey="login" hidden {
+				(icon("key-round"))
+				span { "Sign in with a passkey" }
+			}
+			p class="ui-hint" data-passkey-status role="status" {}
+			p class="ui-hint" data-passkey-note hidden { "Passkeys need a secure connection (HTTPS)." }
+		}
+	}
 }
 
 async fn login_page(State(s): State<AppState>, Query(query): Query<LoginQuery>) -> Markup {
@@ -229,6 +255,9 @@ async fn login_page(State(s): State<AppState>, Query(query): Query<LoginQuery>) 
 		.await
 		.unwrap_or(false);
 	let next = safe_next(query.next.as_deref().unwrap_or("/"));
+	let buttons = crate::sso::providers::buttons(&s.db, query.team.as_deref())
+		.await
+		.unwrap_or_default();
 	let signals = format!(
 		"{{email: '', password: '', next: {}, _error: ''}}",
 		sse::js_string(next)
@@ -259,6 +288,9 @@ async fn login_page(State(s): State<AppState>, Query(query): Query<LoginQuery>) 
 				(icon("arrow-right"))
 			}
 		}
+		div class="ui-auth-or" role="separator" { span { "or" } }
+		(provider_buttons(&buttons, next))
+		(assets::passkey_script())
 		@if can_register {
 			p class="ui-auth-foot" { "No account yet? " a href="/register" { "Create one" } }
 		} @else {
@@ -282,8 +314,31 @@ async fn login(
 	headers: HeaderMap,
 	ReadSignals(signals): ReadSignals<LoginSignals>,
 ) -> Response {
-	let message = match auth::log_in(&s, &cookies, &headers, signals.credentials).await {
-		Ok(_) => return sse::redirect(safe_next(&signals.next)).into_response(),
+	let next = safe_next(&signals.next).to_owned();
+	let Credentials {
+		email, password, ..
+	} = signals.credentials;
+	// Password first. An account with two-step verification is parked until it gives the
+	// second factor; any other gets its session now.
+	let outcome = async {
+		let user = auth::verify_password(&s.db, &email, password).await?;
+		if crate::two_factor::service::enrolled(&s.db, user).await? {
+			crate::two_factor::challenge::begin(&s, &cookies, &headers, user, &next).await?;
+			return Ok("/login/two-step".to_owned());
+		}
+		auth::open_session(
+			&s,
+			&cookies,
+			&headers,
+			user,
+			auth::session::Method::Password,
+		)
+		.await?;
+		Ok::<_, ServerError>(next.clone())
+	}
+	.await;
+	let message = match outcome {
+		Ok(to) => return sse::redirect(&to).into_response(),
 		Err(ServerError::InvalidCredentials) => "Wrong email or password.",
 		Err(e) => {
 			tracing::error!(error = %e, "ui login failed");

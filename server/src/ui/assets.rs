@@ -28,6 +28,7 @@ static TERMINAL_JS: &str = include_str!("../../static/terminal.js");
 static XTERM_JS: &str = include_str!("../../static/xterm.js");
 static XTERM_FIT_JS: &str = include_str!("../../static/xterm-fit.js");
 static XTERM_CSS: &str = include_str!("../../static/xterm.css");
+static PASSKEY_JS: &str = include_str!("../../static/passkey.js");
 static HANKEN_GROTESK: &[u8] = include_bytes!("../../static/fonts/hanken-grotesk-var.woff2");
 static SPLINE_SANS_MONO: &[u8] = include_bytes!("../../static/fonts/spline-sans-mono-var.woff2");
 
@@ -53,6 +54,14 @@ pub static CHARTS_JS_HREF: LazyLock<String> =
 	LazyLock::new(|| hashed("/static/charts.js", CHARTS_JS));
 /// Loaded only by pages with a dialog or a save bar (see [`guard_script`]).
 pub static GUARD_JS_HREF: LazyLock<String> = LazyLock::new(|| hashed("/static/guard.js", GUARD_JS));
+/// Loaded only by the pages that use passkeys (see [`passkey_script`]).
+pub static PASSKEY_JS_HREF: LazyLock<String> =
+	LazyLock::new(|| hashed("/static/passkey.js", PASSKEY_JS));
+
+/// The tag a page with a passkey button emits; once per page, and no other page loads it.
+pub fn passkey_script() -> maud::Markup {
+	maud::html! { script type="module" src=(*PASSKEY_JS_HREF) {} }
+}
 
 /// The web terminal's script and the vendored xterm.js it loads on demand. Only a page with a
 /// terminal asks for them (see [`terminal_assets`]).
@@ -98,6 +107,7 @@ pub fn router() -> Router<AppState> {
 		.route("/static/xterm.js", get(xterm_js))
 		.route("/static/xterm-fit.js", get(xterm_fit_js))
 		.route("/static/xterm.css", get(xterm_css))
+		.route("/static/passkey.js", get(passkey_js))
 		.route("/static/fonts/hanken-grotesk-var.woff2", get(sans))
 		.route("/static/fonts/spline-sans-mono-var.woff2", get(mono))
 }
@@ -192,6 +202,10 @@ async fn xterm_css() -> impl IntoResponse {
 		],
 		XTERM_CSS,
 	)
+}
+
+async fn passkey_js() -> impl IntoResponse {
+	script(PASSKEY_JS)
 }
 
 fn script(body: &'static str) -> impl IntoResponse {

@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT i.id AS \"id: IdentityId\", p.name AS provider, i.email\n\t\t\tFROM user_identities i JOIN auth_providers p ON p.id = i.provider_id\n\t\t\tWHERE i.user_id = $1 ORDER BY i.created_at, i.id\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: IdentityId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "user_identities",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "provider",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "auth_providers",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "user_identities",
+            "name": "email"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "b10efd25a7924d4e30446280e97810fdd6e9443032c3ea9ead090adef2fa86c7"
+}

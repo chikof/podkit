@@ -71,4 +71,8 @@ id!(
 	UptimeIncidentId,
 	FirewallRuleId,
 	TerminalSessionId,
+	AuthProviderId,
+	IdentityId,
+	PasskeyId,
+	RecoveryCodeId,
 );

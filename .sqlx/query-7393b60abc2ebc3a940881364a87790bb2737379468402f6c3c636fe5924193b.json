@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT u.name AS \"name!\" FROM team_members m\n\t\t\tJOIN users u ON u.id = m.user_id\n\t\t\tWHERE m.team_id = $1\n\t\t\t\tAND NOT EXISTS (SELECT 1 FROM totp_credentials t WHERE t.user_id = u.id AND t.confirmed_at IS NOT NULL)\n\t\t\t\tAND NOT EXISTS (SELECT 1 FROM passkeys p WHERE p.user_id = u.id)\n\t\t\tORDER BY u.name\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7393b60abc2ebc3a940881364a87790bb2737379468402f6c3c636fe5924193b"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT credential FROM passkeys WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "credential",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "passkeys",
+            "name": "credential"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "256796c35a57268eebc4a54e06909cbc38b52ad241d48015d2d528de350be43a"
+}

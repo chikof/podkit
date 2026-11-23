@@ -5,7 +5,9 @@ ARG RUST_VERSION=1.100.0-alpine3.24
 FROM rust:${RUST_VERSION} AS build
 WORKDIR /app
 
-RUN apk add --no-cache clang lld musl-dev git
+# openssl-*: webauthn-rs (passkeys) links OpenSSL; built statically for the musl image.
+RUN apk add --no-cache clang lld musl-dev git pkgconf openssl-dev openssl-libs-static
+ENV OPENSSL_STATIC=1
 
 RUN --mount=type=bind,source=crates,target=crates \
     --mount=type=bind,source=agent,target=agent \

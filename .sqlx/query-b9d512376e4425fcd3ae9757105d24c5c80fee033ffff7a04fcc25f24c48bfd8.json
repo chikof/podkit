@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO auth_providers (id, team_id, kind, slug, name, issuer, client_id, client_secret,\n\t\t\tscopes, jit, allow_unverified_email, group_claim, group_roles, enabled)\n\t\tVALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Text",
+        "Varchar",
+        "Varchar",
+        "Text",
+        "Text",
+        "Bytea",
+        "Text",
+        "Bool",
+        "Bool",
+        "Text",
+        "Jsonb",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b9d512376e4425fcd3ae9757105d24c5c80fee033ffff7a04fcc25f24c48bfd8"
+}

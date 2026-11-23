@@ -2431,3 +2431,27 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 	.ui-log-stored > .ui-log-src { grid-column: 1 / -1; grid-row: 2; }
 	.ui-log-stored > .ui-log-tx { grid-column: 1 / -1; }
 }
+/* == sso and two-factor (B7) ==
+   Sign-in: provider buttons, the "or" rule, the recovery-code fold. Account > Security: lists, the QR code, recovery codes. */
+.ui-button[hidden] { display: none; }
+.ui-auth-or { display: flex; align-items: center; gap: var(--s-3); color: var(--muted-foreground); font-size: var(--fs-sm); }
+.ui-auth-or::before, .ui-auth-or::after { content: ""; flex: 1; border-block-start: var(--bw) solid var(--border); }
+.ui-auth-alt-actions { display: grid; gap: var(--s-3); }
+.ui-auth-alt-actions > .ui-hint:empty { display: none; }
+.ui-auth-alt { display: grid; gap: var(--s-3); font-size: var(--fs-sm); }
+.ui-auth-alt > summary { cursor: pointer; color: var(--primary-text); text-underline-offset: 3px; }
+.ui-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.ui-sec-list { display: grid; margin: 0 0 var(--s-5); padding: 0; list-style: none; }
+.ui-sec-item { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); padding-block: var(--s-3); border-block-end: var(--bw) solid var(--border); }
+.ui-sec-item:first-child { border-block-start: var(--bw) solid var(--border); }
+.ui-sec-main { display: grid; gap: var(--s-1); min-width: 0; overflow-wrap: anywhere; }
+.ui-sec-main small { font-size: var(--fs-xs); color: var(--muted-foreground); }
+.ui-totp-setup { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-5); }
+/* A QR code is dark on light in both themes, or a phone cannot read it. */
+.ui-qr { flex: none; width: 12.5rem; height: 12.5rem; border-radius: var(--r-md); background-color: #fff; fill: #000; }
+.ui-totp-key { display: grid; gap: var(--s-2); min-width: 0; }
+.ui-totp-secret { overflow-wrap: anywhere; font-size: var(--fs-md); letter-spacing: 0.06em; user-select: all; }
+.ui-totp-confirm { display: grid; gap: var(--s-4); max-width: 22rem; margin-block-start: var(--s-5); }
+.ui-codes { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: var(--s-2) var(--s-5); margin: 0 0 var(--s-5); padding: 0; list-style: none; }
+.ui-codes code { font-size: var(--fs-md); user-select: all; }
+.ui-dialog-sub { margin: 0; font-size: var(--fs-md); font-weight: var(--fw-bold); }

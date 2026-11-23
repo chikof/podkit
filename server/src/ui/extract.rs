@@ -269,6 +269,23 @@ impl FromRequestParts<AppState> for TeamCtx {
 		if !perms.is_member() {
 			return Err(fail(parts, &user, ServerError::NotFound));
 		}
+		// A team that requires two-step verification, past its grace period, lets a member
+		// without one reach nothing but their own Account pages, where they can set it up.
+		let account = format!("/teams/{team_id}/account");
+		let path = parts.uri.path();
+		if path != account
+			&& !path.starts_with(&format!("{account}/"))
+			&& crate::two_factor::policy::blocks(&state.db, user.id, team_id)
+				.await
+				.unwrap_or(false)
+		{
+			let to = format!("{account}/security");
+			return Err(if is_navigation(&parts.method) {
+				Redirect::to(&to).into_response()
+			} else {
+				sse::redirect(&to).into_response()
+			});
+		}
 		let teams = teams::list_for_user(&state.db, user.id)
 			.await
 			.map_err(|e| fail(parts, &user, e.into()))?;
