@@ -49,6 +49,7 @@ mod theme_toggle;
 mod toast;
 mod tooltip;
 mod uptime_strip;
+mod usage_meter;
 
 pub use audit_events::{activity_card, audit_table};
 pub use avatar::{avatar, user_avatar, user_avatar_lg};
@@ -98,3 +99,4 @@ pub use theme_toggle::theme_toggle;
 pub use toast::{toast, toast_region, toast_region_with};
 pub use tooltip::tooltip;
 pub use uptime_strip::{percent_text, uptime_strip};
+pub use usage_meter::{MeterLevel, usage_meter};

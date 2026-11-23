@@ -34,6 +34,7 @@ pub fn spawn(state: AppState) {
 			crate::cron::scheduler::purge(&state).await;
 			crate::uptime::maintain(&state.db).await;
 			crate::previews::service::sweep(&state).await;
+			crate::quotas::metering::run(&state).await;
 		}
 	});
 }

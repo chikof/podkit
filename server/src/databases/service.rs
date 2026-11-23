@@ -247,6 +247,18 @@ pub async fn create(
 	}
 	let version = engines::spec(body.engine.into()).resolve_version(body.version.as_deref())?;
 	validate_public_port(s, body.public_port)?;
+	crate::quotas::service::check_create(
+		s,
+		team,
+		"database",
+		&crate::quotas::service::reserved(
+			crate::quotas::QuotaKind::Databases,
+			body.memory_limit_mb,
+			body.cpu_limit,
+			false,
+		),
+	)
+	.await?;
 
 	let credentials = serde_json::to_string(&Credentials::generate()).map_err(|e| {
 		tracing::error!("failed to encode database credentials: {e}");
@@ -582,6 +594,9 @@ async fn lifecycle(
 ) -> AppResult<Database> {
 	authorize(&s.db, user, team, Action::Update, Resource::Database).await?;
 	let database = scope::database(&s.db, team, project, id).await?;
+	if matches!(kind, JobKind::DatabaseStart) {
+		crate::quotas::service::check_deploy(s, team, "database").await?;
+	}
 	queue(s, kind, &database).await?;
 	audit::log(
 		&s.db,

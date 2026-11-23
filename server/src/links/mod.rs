@@ -344,6 +344,16 @@ pub async fn build_config(db: &PgPool, server: ServerId) -> Result<GatewayConfig
 	for hash in empty {
 		keys.entry(hash).or_default();
 	}
+	// A team that used up its monthly model tokens keeps its keys (an unknown key would be a
+	// 401) but they reach no model, so the gateway refuses what they ask for.
+	for hash in
+		crate::quotas::service::keys_out_of_tokens(db, server, time::OffsetDateTime::now_utc())
+			.await?
+	{
+		if let Some(models) = keys.get_mut(&hash) {
+			models.clear();
+		}
+	}
 	let other_models =
 		sqlx::query_scalar("SELECT DISTINCT served_name FROM models WHERE server_id = $1")
 			.bind(server)

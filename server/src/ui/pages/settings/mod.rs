@@ -14,6 +14,7 @@ mod registration;
 mod tailscale;
 mod team;
 mod tokens;
+mod usage;
 
 /// The settings frame, for pages of other areas that sit among them (the Hugging Face token).
 pub use audit::activity;
@@ -30,4 +31,5 @@ pub fn router() -> Router<AppState> {
 		.merge(tailscale::router())
 		.merge(audit::router())
 		.merge(builds::router())
+		.merge(usage::router())
 }

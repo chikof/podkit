@@ -77,4 +77,7 @@ pub struct AppState {
 	pub http: reqwest::Client,
 	/// Cancelled on SIGINT/SIGTERM; long-lived streams end on it so graceful shutdown can drain.
 	pub shutdown: tokio_util::sync::CancellationToken,
+	/// The billing provider of this build (`cloud` feature; see `docs/cloud-extension.md`).
+	#[cfg(feature = "cloud")]
+	pub billing: crate::billing::Billing,
 }

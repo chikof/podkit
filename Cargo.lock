@@ -3507,6 +3507,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "podkit-billing"
+version = "0.1.0"
+dependencies = [
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
+name = "podkit-cloud"
+version = "0.1.0"
+dependencies = [
+ "podkit-billing",
+]
+
+[[package]]
 name = "podkit-firewall"
 version = "0.1.0"
 dependencies = [
@@ -4476,6 +4491,8 @@ dependencies = [
  "jsonwebtoken",
  "lettre",
  "maud",
+ "podkit-billing",
+ "podkit-cloud",
  "podkit-firewall",
  "proto",
  "qrcode",

@@ -223,6 +223,10 @@ async fn authorize_resources(
 /// `Forbidden` without the permissions above; `EnvironmentNotFound` for a source of
 /// another team or project; `Conflict` naming what is taken already; `Validation` for a
 /// bad name or a data copy without a backup destination.
+#[allow(
+	clippy::too_many_lines,
+	reason = "one sequence of checks, then the copy"
+)]
 pub async fn clone(
 	s: &AppState,
 	user: UserId,
@@ -256,6 +260,24 @@ pub async fn clone(
 	if !plan.conflicts.is_empty() {
 		return Err(ServerError::Conflict(plan.conflicts.join(" ")));
 	}
+	// A clone is a preview and makes a copy of every resource of the source.
+	let mut needs = vec![crate::quotas::service::Need::one(
+		crate::quotas::QuotaKind::Previews,
+	)];
+	for (kind, n) in [
+		(crate::quotas::QuotaKind::Applications, snap.apps.len()),
+		(crate::quotas::QuotaKind::Databases, snap.databases.len()),
+		(crate::quotas::QuotaKind::Stacks, snap.stacks.len()),
+		(crate::quotas::QuotaKind::Models, snap.models.len()),
+	] {
+		if n > 0 {
+			needs.push(crate::quotas::service::Need::of(
+				kind,
+				i64::try_from(n).unwrap_or(i64::MAX),
+			));
+		}
+	}
+	crate::quotas::service::check_create(s, team, "preview", &needs).await?;
 
 	let id = CloneId::generate();
 	let mut tx = s.db.begin().await?;

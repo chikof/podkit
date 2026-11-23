@@ -300,6 +300,15 @@ pub async fn create(
 	let server = scope::server(&s.db, team, body.server_id).await?;
 	let slug = validate_name(&body.name)?;
 	validate_env(&body.env)?;
+	crate::quotas::service::check_create(
+		s,
+		team,
+		"stack",
+		&[crate::quotas::service::Need::one(
+			crate::quotas::QuotaKind::Stacks,
+		)],
+	)
+	.await?;
 	if let Some(registry) = body.registry {
 		registries::service::pick(&s.db, team, registry).await?;
 	}
@@ -616,6 +625,7 @@ pub async fn deploy(
 		&files,
 		&domains_of(&services),
 	)?;
+	crate::quotas::service::check_deploy(s, team, "stack").await?;
 
 	let job = start_deploy(s, &stack).await?;
 	stack.status = StackStatus::Deploying;

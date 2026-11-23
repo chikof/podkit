@@ -5,12 +5,14 @@ use tower_cookies::CookieManagerLayer;
 use tower_http::compression::CompressionLayer;
 use tower_http::compression::predicate::{Predicate, SizeAbove};
 
+#[cfg(feature = "cloud")]
+use crate::billing;
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
 	applications, audit, auth, avatars, backups, catalog, cron, databases, deployments, domains,
 	env_vars, environments, git_providers, iac, importers, links, log_search, logos, mcp,
-	mcp_servers, members, metrics, model_files, models, networks, notifications, projects,
+	mcp_servers, members, metrics, model_files, models, networks, notifications, projects, quotas,
 	registries, scanning, servers, ssh_keys, stacks, tailscale, teams, templates, terminal, ui,
 	uptime, volume_backups, volumes, webhooks,
 };
@@ -68,6 +70,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest("/teams/{team_id}/logs", log_search::router())
 		.nest("/teams/{team_id}/tailscale", tailscale::router())
 		.nest(&format!("{APP}/tailscale"), tailscale::application_router())
+		.nest("/teams/{team_id}/usage", quotas::router())
 		.nest(
 			"/teams/{team_id}/servers/{server_id}/metrics",
 			metrics::router(),
@@ -137,7 +140,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 	// The MCP endpoint sends its tool calls through this same router, so the token gate
 	// and RBAC decide them.
 	let mcp = mcp::router(api.clone().with_state(state.clone()));
-	Ok(Router::new()
+	let public = Router::new()
 		.merge(ui::router())
 		.merge(mcp)
 		.merge(terminal::ws_router())
@@ -146,7 +149,11 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.merge(avatars::public_router())
 		.route("/health", get(health))
 		.nest("/api/v1", api)
-		.nest("/webhooks", webhooks::router())
+		.nest("/webhooks", webhooks::router());
+	// The billing provider's callback: public, the provider checks its own signature.
+	#[cfg(feature = "cloud")]
+	let public = public.merge(billing::router());
+	Ok(public
 		.fallback(ui::not_found)
 		.layer(CookieManagerLayer::new())
 		.layer(axum::middleware::from_fn(audit::layer))

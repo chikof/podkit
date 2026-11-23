@@ -287,6 +287,10 @@ fn unique_conflict(e: sqlx::Error) -> ServerError {
 /// # Errors
 /// `Forbidden` without `create model`; `NotFound` for another team's project
 /// or files; `Validation` or `Conflict` for a request that cannot work.
+#[allow(
+	clippy::too_many_lines,
+	reason = "one sequence of checks, then the insert"
+)]
 pub async fn create(
 	s: &AppState,
 	user: UserId,
@@ -325,6 +329,18 @@ pub async fn create(
 		.map_err(ServerError::Validation)?;
 	let context = checked_context(&req)?;
 	let vendor = place(engine, &server, req.gpu)?;
+	crate::quotas::service::check_create(
+		s,
+		team,
+		"model",
+		&crate::quotas::service::reserved(
+			crate::quotas::QuotaKind::Models,
+			req.memory_limit_mb,
+			None,
+			vendor.is_some(),
+		),
+	)
+	.await?;
 	let weights = u64::try_from(file.total_bytes).unwrap_or(0);
 	check_fit(
 		engine,
@@ -502,6 +518,7 @@ pub async fn start(
 			status_text(model.status)
 		)));
 	}
+	crate::quotas::service::check_deploy(s, team, "model").await?;
 	begin_start(s, &mut model).await?;
 	log(s, user, team, &model, "model.start", Diff::new()).await;
 	Ok(model)

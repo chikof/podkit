@@ -78,6 +78,7 @@ async fn create(
 ) -> Response {
 	match service::create(&s.db, user.id, &sig.name, &sig.slug, "").await {
 		Ok(team) => {
+			crate::billing::team_created(&s, &team).await;
 			shell::flash(
 				&cookies,
 				crate::ui::components::Tone::Success,

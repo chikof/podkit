@@ -96,10 +96,14 @@ pub enum EventKind {
 	TailnetFailed,
 	/// An import from Coolify, Dokploy or CapRover stopped on a change that failed.
 	ImportFailed,
+	/// A team passed 80% of one of its limits.
+	QuotaWarning,
+	/// A team reached a limit and something was refused.
+	QuotaExceeded,
 }
 
 impl EventKind {
-	pub const ALL: [Self; 24] = [
+	pub const ALL: [Self; 26] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
@@ -124,6 +128,8 @@ impl EventKind {
 		Self::LogExportFailing,
 		Self::TailnetFailed,
 		Self::ImportFailed,
+		Self::QuotaWarning,
+		Self::QuotaExceeded,
 	];
 
 	pub fn as_str(self) -> &'static str {
@@ -152,6 +158,8 @@ impl EventKind {
 			Self::LogExportFailing => "log_export_failing",
 			Self::TailnetFailed => "tailnet_failed",
 			Self::ImportFailed => "import_failed",
+			Self::QuotaWarning => "quota_warning",
+			Self::QuotaExceeded => "quota_exceeded",
 		}
 	}
 
@@ -185,6 +193,8 @@ impl EventKind {
 			Self::LogExportFailing => "Log forwarding failing",
 			Self::TailnetFailed => "Private access failed",
 			Self::ImportFailed => "Import failed",
+			Self::QuotaWarning => "Quota almost used",
+			Self::QuotaExceeded => "Quota reached",
 		}
 	}
 
@@ -209,6 +219,7 @@ impl EventKind {
 			Self::MetricAlert | Self::MetricRecovered => "Metric alerts",
 			Self::LogExportFailing => "Logs",
 			Self::ImportFailed => "Imports",
+			Self::QuotaWarning | Self::QuotaExceeded => "Quotas",
 		}
 	}
 
@@ -233,7 +244,9 @@ impl EventKind {
 			| Self::FirewallReverted
 			| Self::LogExportFailing
 			| Self::TailnetFailed
-			| Self::ImportFailed => Severity::Warning,
+			| Self::ImportFailed
+			| Self::QuotaWarning
+			| Self::QuotaExceeded => Severity::Warning,
 			Self::ServerUnreachable | Self::Vulnerability | Self::CrashLoop | Self::UptimeDown => {
 				Severity::Critical
 			}

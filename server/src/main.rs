@@ -27,6 +27,7 @@ mod auth;
 mod autodeploy;
 mod avatars;
 mod backups;
+mod billing;
 mod builds;
 mod catalog;
 mod change;
@@ -62,6 +63,7 @@ mod networks;
 mod notifications;
 mod previews;
 mod projects;
+mod quotas;
 mod registries;
 mod replicas;
 mod routes;
@@ -154,6 +156,8 @@ async fn run() -> AppResult<()> {
 		http: reqwest::Client::new(),
 		shutdown: shutdown.clone(),
 		config: Arc::new(runtime_config),
+		#[cfg(feature = "cloud")]
+		billing: billing::Billing::cloud(),
 	};
 
 	// Keys the 0041 migration moved into the vault have no public key yet; only this process

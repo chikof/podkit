@@ -1,0 +1,14 @@
+[package]
+name = "podkit-cloud"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Placeholder for the private cloud overlay: the server's `cloud` feature builds against this API."
+
+[dependencies]
+podkit-billing = { path = "../billing" }
+
+[lints]
+workspace = true

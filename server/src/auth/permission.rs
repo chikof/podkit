@@ -51,6 +51,7 @@ pub enum Resource {
 	Uptime,
 	Terminal,
 	Logs,
+	Quota,
 }
 
 impl Resource {
@@ -81,6 +82,7 @@ impl Resource {
 			Self::Uptime => "uptime",
 			Self::Terminal => "terminal",
 			Self::Logs => "logs",
+			Self::Quota => "quota",
 		}
 	}
 }
@@ -145,7 +147,7 @@ impl Permissions {
 
 const ACTIONS: [Action; 4] = [Action::Create, Action::Read, Action::Update, Action::Delete];
 
-const RESOURCES: [Resource; 25] = [
+const RESOURCES: [Resource; 26] = [
 	Resource::Team,
 	Resource::Project,
 	Resource::Membership,
@@ -171,6 +173,7 @@ const RESOURCES: [Resource; 25] = [
 	Resource::Uptime,
 	Resource::Terminal,
 	Resource::Logs,
+	Resource::Quota,
 ];
 
 /// Loads `user`'s permission set in `team` with one query. A non-member gets an

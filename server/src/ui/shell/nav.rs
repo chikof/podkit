@@ -155,6 +155,13 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 			"history",
 		));
 	}
+	if can(Resource::Quota) {
+		items.push(item(
+			"Usage & limits",
+			format!("{base}/settings/usage"),
+			"activity",
+		));
+	}
 	items.push(item(
 		"Appearance",
 		format!("{base}/settings/appearance"),
