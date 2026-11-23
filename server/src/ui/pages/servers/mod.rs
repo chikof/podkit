@@ -105,12 +105,14 @@ pub(in crate::ui) enum ServerTab {
 	Overview,
 	Monitoring,
 	Networks,
+	Firewall,
 }
 
 fn server_tabs(team: TeamId, server: ServerId, active: ServerTab) -> Markup {
 	let overview = detail_url(team, server);
 	let charts = monitoring_url(team, server);
 	let networks = format!("{overview}/networks");
+	let firewall = format!("{overview}/firewall");
 	tabs(
 		"Server sections",
 		&[
@@ -128,6 +130,11 @@ fn server_tabs(team: TeamId, server: ServerId, active: ServerTab) -> Markup {
 				label: "Networks",
 				href: &networks,
 				current: active == ServerTab::Networks,
+			},
+			TabItem {
+				label: "Firewall",
+				href: &firewall,
+				current: active == ServerTab::Firewall,
 			},
 		],
 	)

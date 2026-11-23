@@ -17,9 +17,10 @@ RUN --mount=type=bind,source=crates,target=crates \
     --mount=type=cache,target=/app/target/ \
     --mount=type=cache,target=/usr/local/cargo/git/db \
     --mount=type=cache,target=/usr/local/cargo/registry/ \
-SQLX_OFFLINE=true cargo build --locked --release --bin server --bin podkit-agent && \
+SQLX_OFFLINE=true cargo build --locked --release --bin server --bin podkit-agent --bin podkit-firewall && \
 cp ./target/release/server /bin/podkit && \
-cp ./target/release/podkit-agent /bin/podkit-agent-$(uname -m)
+cp ./target/release/podkit-agent /bin/podkit-agent-$(uname -m) && \
+cp ./target/release/podkit-firewall /bin/podkit-firewall-$(uname -m)
 
 FROM alpine:3.24 AS final
 
@@ -38,6 +39,7 @@ USER appuser
 
 COPY --from=build /bin/podkit /bin/
 COPY --from=build /bin/podkit-agent-* /usr/lib/podkit/agents/
+COPY --from=build /bin/podkit-firewall-* /usr/lib/podkit/agents/
 ENV AGENT_BINARIES_DIR=/usr/lib/podkit/agents DATA_DIR=/var/lib/podkit
 EXPOSE 8080
 CMD ["/bin/podkit"]

@@ -467,6 +467,9 @@ fn past_tense(verb: &str) -> Option<&'static str> {
 		"revoke" => "Revoked",
 		"add" => "Added",
 		"upload" => "Uploaded",
+		"disable" => "Disabled",
+		"revert" => "Reverted",
+		"install" => "Installed",
 		_ => return None,
 	})
 }

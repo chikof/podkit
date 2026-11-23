@@ -128,22 +128,26 @@ fn is_path_byte(c: u8) -> bool {
 	c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'/' | b':' | b'+' | b'-')
 }
 
-fn binary_candidates(dir: &Path, arch: &str) -> Vec<PathBuf> {
-	let mut candidates = vec![dir.join(format!("podkit-agent-{arch}"))];
+fn binary_candidates_for(dir: &Path, name: &str, arch: &str) -> Vec<PathBuf> {
+	let mut candidates = vec![dir.join(format!("{name}-{arch}"))];
 	if arch == std::env::consts::ARCH {
-		candidates.push(dir.join("podkit-agent"));
+		candidates.push(dir.join(name));
 	}
 	candidates
 }
 
 async fn pick_binary(dir: &Path, arch: &str) -> Result<PathBuf, JobFailure> {
-	for candidate in binary_candidates(dir, arch) {
+	pick_named(dir, "podkit-agent", arch).await
+}
+
+async fn pick_named(dir: &Path, name: &str, arch: &str) -> Result<PathBuf, JobFailure> {
+	for candidate in binary_candidates_for(dir, name, arch) {
 		if tokio::fs::try_exists(&candidate).await.unwrap_or(false) {
 			return Ok(candidate);
 		}
 	}
 	Err(failed(format!(
-		"no podkit-agent binary for {arch} in AGENT_BINARIES_DIR"
+		"no {name} binary for {arch} in AGENT_BINARIES_DIR"
 	)))
 }
 
@@ -179,6 +183,118 @@ fn stdin_from_bytes(bytes: &[u8]) -> std::io::Result<Stdio> {
 
 async fn note(log: &mut JobLog, line: &str) {
 	log.push(Stream::System, line).await;
+}
+
+// --- the firewall helper (opt-in, root) ----------------------------------------------------
+
+/// Where the helper's binary lives: root-owned, so no one who owns the agent can swap it.
+const HELPER_DIR: &str = "/usr/local/lib/podkit";
+
+/// The agent's uid and where `nft` is.
+const HELPER_PROBE_CMD: &str =
+	"id -u; PATH=\"$PATH:/usr/sbin:/sbin\" command -v nft || echo missing";
+
+/// Runs `body` as root: directly for `root`, else through `sudo -n` (never asks for a password).
+fn as_root(root: bool, body: &str) -> String {
+	if root {
+		format!("sh -c '{body}'")
+	} else {
+		format!("sudo -n sh -c '{body}'")
+	}
+}
+
+fn helper_upload_cmd(root: bool) -> String {
+	as_root(
+		root,
+		&format!(
+			"umask 022 && mkdir -p {HELPER_DIR} && cat > {HELPER_DIR}/podkit-firewall.new && chmod 755 {HELPER_DIR}/podkit-firewall.new && chown root:root {HELPER_DIR}/podkit-firewall.new && mv -f {HELPER_DIR}/podkit-firewall.new {HELPER_DIR}/podkit-firewall"
+		),
+	)
+}
+
+fn helper_install_cmd(root: bool) -> String {
+	as_root(
+		root,
+		"cat > /etc/systemd/system/podkit-firewall.service && systemctl daemon-reload && systemctl enable podkit-firewall.service && systemctl restart podkit-firewall.service",
+	)
+}
+
+/// The agent's uid and the absolute path of `nft`, from [`HELPER_PROBE_CMD`].
+fn parse_helper_probe(stdout: &str) -> Result<(u32, String), String> {
+	let mut lines = stdout.lines().map(str::trim);
+	let uid: u32 = lines
+		.next()
+		.and_then(|l| l.parse().ok())
+		.ok_or("cannot read the agent's user id")?;
+	let nft = lines.next().unwrap_or_default();
+	if nft.is_empty() || nft == "missing" {
+		return Err("nft (nftables) is not installed on the server".to_owned());
+	}
+	if !validate::abs_path(nft) || !nft.bytes().all(is_path_byte) {
+		return Err(format!("unsupported nft path {nft:?}"));
+	}
+	Ok((uid, nft.to_owned()))
+}
+
+/// The helper's unit: runs as root, owns one table, and gives its socket to `uid` only.
+fn helper_unit(uid: u32, nft: &str) -> String {
+	format!(
+		"[Unit]\n\
+		Description=podkit firewall helper (owns the nftables table inet podkit)\n\
+		After=network-pre.target\n\
+		\n\
+		[Service]\n\
+		ExecStart={HELPER_DIR}/podkit-firewall --uid {uid} --nft {nft}\n\
+		Restart=always\n\
+		RestartSec=2\n\
+		RuntimeDirectory=podkit-firewall\n\
+		RuntimeDirectoryMode=0755\n\
+		StateDirectory=podkit-firewall\n\
+		NoNewPrivileges=yes\n\
+		ProtectHome=yes\n\
+		ProtectSystem=strict\n\
+		PrivateTmp=yes\n\
+		\n\
+		[Install]\n\
+		WantedBy=multi-user.target\n"
+	)
+}
+
+/// Installs `podkit-firewall` as a root service, for a team that opted in.
+async fn install_helper(
+	state: &AppState,
+	cancel: &CancellationToken,
+	log: &mut JobLog,
+	target: &SshTarget,
+	arch: &str,
+	root: bool,
+) -> Result<(), JobFailure> {
+	note(log, "installing the firewall helper").await;
+	let probe = exec(target, cancel, "helper probe", HELPER_PROBE_CMD, None).await?;
+	let (uid, nft) = parse_helper_probe(&String::from_utf8_lossy(&probe.stdout)).map_err(failed)?;
+	let binary = pick_named(&state.config.agent_binaries_dir, "podkit-firewall", arch).await?;
+	let file = std::fs::File::open(&binary)
+		.map_err(|e| failed(format!("cannot read {}: {e}", binary.display())))?;
+	exec(
+		target,
+		cancel,
+		"helper upload (needs passwordless sudo)",
+		&helper_upload_cmd(root),
+		Some(Stdio::from(file)),
+	)
+	.await?;
+	let unit = stdin_from_bytes(helper_unit(uid, &nft).as_bytes())
+		.map_err(|e| failed(format!("io error: {e}")))?;
+	exec(
+		target,
+		cancel,
+		"helper unit install",
+		&helper_install_cmd(root),
+		Some(unit),
+	)
+	.await?;
+	note(log, "the firewall helper is running").await;
+	Ok(())
 }
 
 pub async fn run(
@@ -257,6 +373,23 @@ pub async fn run(
 		.await
 		.map_err(|e| db_failed(&e))?;
 	note(log, &format!("agent {version} is running")).await;
+	// Opt-in: the root helper of the server firewall. Its failure leaves the agent running.
+	if crate::firewall::settings(&state.db, server.id)
+		.await
+		.is_ok_and(|s| s.install_helper)
+	{
+		match install_helper(state, cancel, log, &target, &probe.arch, root).await {
+			Ok(()) => {}
+			Err(JobFailure::Cancelled) => return Err(JobFailure::Cancelled),
+			Err(JobFailure::Failed(why)) => {
+				note(
+					log,
+					&format!("the firewall helper was not installed: {why}"),
+				)
+				.await;
+			}
+		}
+	}
 	// Best effort; the sync loop retries.
 	if let Ok(client) = state.agents.client(state, &server).await {
 		super::hardware::refresh(&state.db, server.id, &client).await;
@@ -397,14 +530,14 @@ mod tests {
 		let dir = Path::new("/opt/podkit");
 		let host = std::env::consts::ARCH;
 		assert_eq!(
-			binary_candidates(dir, host),
+			binary_candidates_for(dir, "podkit-agent", host),
 			vec![
 				dir.join(format!("podkit-agent-{host}")),
 				dir.join("podkit-agent")
 			]
 		);
 		assert_eq!(
-			binary_candidates(dir, "riscv64gc"),
+			binary_candidates_for(dir, "podkit-agent", "riscv64gc"),
 			vec![dir.join("podkit-agent-riscv64gc")]
 		);
 	}
@@ -433,6 +566,53 @@ mod tests {
 			.unwrap();
 		assert!(unit.find("[Service]\n").unwrap() < env);
 		assert!(env < unit.find("ExecStart=").unwrap());
+	}
+
+	#[test]
+	fn the_helper_probe_needs_a_uid_and_an_absolute_nft() {
+		assert_eq!(
+			parse_helper_probe("1000\n/usr/sbin/nft\n").unwrap(),
+			(1000, "/usr/sbin/nft".to_owned())
+		);
+		assert!(parse_helper_probe("1000\nmissing\n").is_err());
+		assert!(parse_helper_probe("abc\n/usr/sbin/nft\n").is_err());
+		assert!(parse_helper_probe("1000\nnft\n").is_err());
+		assert!(parse_helper_probe("1000\n/usr/sbin/n ft\n").is_err());
+	}
+
+	#[test]
+	fn the_helper_unit_runs_one_binary_for_one_user() {
+		let unit = helper_unit(1001, "/usr/sbin/nft");
+		assert!(unit.contains(
+			"ExecStart=/usr/local/lib/podkit/podkit-firewall --uid 1001 --nft /usr/sbin/nft\n"
+		));
+		assert!(unit.contains("WantedBy=multi-user.target\n"));
+		assert!(unit.contains("ProtectSystem=strict\n"));
+	}
+
+	#[test]
+	fn the_helper_goes_in_through_sudo_unless_the_login_is_root() {
+		assert!(helper_upload_cmd(false).starts_with("sudo -n sh -c '"));
+		assert!(helper_install_cmd(false).starts_with("sudo -n sh -c '"));
+		assert!(helper_upload_cmd(true).starts_with("sh -c '"));
+		// The binary is made root's before it is moved to its name.
+		let up = helper_upload_cmd(false);
+		assert!(up.find("chown root:root").unwrap() < up.find("mv -f").unwrap());
+		// Single quotes inside would end the sh -c argument.
+		assert!(!up["sudo -n sh -c '".len()..up.len() - 1].contains('\''));
+	}
+
+	#[test]
+	fn the_firewall_binary_is_found_beside_the_agent() {
+		let dir = Path::new("/opt/podkit");
+		let host = std::env::consts::ARCH;
+		assert_eq!(
+			binary_candidates_for(dir, "podkit-firewall", host),
+			vec![
+				dir.join(format!("podkit-firewall-{host}")),
+				dir.join("podkit-firewall")
+			]
+		);
 	}
 
 	#[test]

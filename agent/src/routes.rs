@@ -38,6 +38,7 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/stats", get(stats))
 		.route("/v1/events", get(events))
 		.route("/v1/db-stats", post(db_stats))
+		.route("/v1/firewall", post(firewall_route))
 		.route("/v1/deploy", post(deploy_route))
 		.route("/v1/containers", get(list_containers))
 		.route("/v1/containers/{id}/start", post(start_container))
@@ -207,6 +208,15 @@ async fn db_stats(
 	Json(req): Json<proto::DbStatsRequest>,
 ) -> Json<Vec<proto::DbStat>> {
 	Json(crate::dbstats::collect(&ctx.podman(), &req.targets).await)
+}
+
+/// One request line for the firewall helper and its answer line, carried unread. A server
+/// without the helper is answered as `not_installed`.
+async fn firewall_route(body: Bytes) -> Result<Response, ApiError> {
+	let answer = crate::firewall::relay(&body)
+		.await
+		.map_err(|e| ApiError::new(StatusCode::BAD_GATEWAY, e))?;
+	Ok(([(header::CONTENT_TYPE, "application/json")], answer).into_response())
 }
 
 async fn deploy_route(State(ctx): State<Arc<Ctx>>, Json(spec): Json<DeploySpec>) -> Response {

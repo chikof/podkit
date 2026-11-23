@@ -88,6 +88,8 @@ pub enum EventKind {
 	MetricRecovered,
 	/// A pull request's preview could not be made.
 	PreviewFailed,
+	/// A firewall change was not confirmed and the helper took it back.
+	FirewallReverted,
 }
 
 impl EventKind {
@@ -112,6 +114,7 @@ impl EventKind {
 		Self::MetricAlert,
 		Self::MetricRecovered,
 		Self::PreviewFailed,
+		Self::FirewallReverted,
 	];
 
 	pub fn as_str(self) -> &'static str {
@@ -136,6 +139,7 @@ impl EventKind {
 			Self::MetricAlert => "metric_alert",
 			Self::MetricRecovered => "metric_recovered",
 			Self::PreviewFailed => "preview_failed",
+			Self::FirewallReverted => "firewall_reverted",
 		}
 	}
 
@@ -165,6 +169,7 @@ impl EventKind {
 			Self::MetricAlert => "Metric alert",
 			Self::MetricRecovered => "Metric alert recovered",
 			Self::PreviewFailed => "Preview failed",
+			Self::FirewallReverted => "Firewall change reverted",
 		}
 	}
 
@@ -174,7 +179,10 @@ impl EventKind {
 			Self::DeploySucceeded | Self::DeployFailed | Self::Rollback | Self::PreviewFailed => {
 				"Deploys"
 			}
-			Self::ServerUnreachable | Self::ServerRecovered | Self::DiskHigh => "Servers",
+			Self::ServerUnreachable
+			| Self::ServerRecovered
+			| Self::DiskHigh
+			| Self::FirewallReverted => "Servers",
 			Self::BackupFailed | Self::BackupSucceeded | Self::CronFailed | Self::CronRecovered => {
 				"Backups and jobs"
 			}
@@ -202,7 +210,8 @@ impl EventKind {
 			| Self::ContainerOom
 			| Self::ModelCrashed
 			| Self::MetricAlert
-			| Self::PreviewFailed => Severity::Warning,
+			| Self::PreviewFailed
+			| Self::FirewallReverted => Severity::Warning,
 			Self::ServerUnreachable | Self::Vulnerability | Self::CrashLoop | Self::UptimeDown => {
 				Severity::Critical
 			}

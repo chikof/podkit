@@ -5,6 +5,7 @@ pub mod cron;
 pub mod dbstats;
 pub mod deploy;
 pub mod events;
+pub mod firewall;
 pub mod gateway;
 pub mod hardware;
 pub mod health;

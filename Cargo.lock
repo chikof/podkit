@@ -3080,6 +3080,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "podkit-firewall"
+version = "0.1.0"
+dependencies = [
+ "better-tracing",
+ "proto",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "poly1305"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3917,6 +3931,7 @@ dependencies = [
  "jsonschema",
  "lettre",
  "maud",
+ "podkit-firewall",
  "proto",
  "reqwest",
  "rsa",

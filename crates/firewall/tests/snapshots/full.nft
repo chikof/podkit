@@ -1,0 +1,31 @@
+add table inet podkit
+delete table inet podkit
+table inet podkit {
+	chain input {
+		type filter hook input priority filter; policy drop;
+		ct state established,related accept
+		ct state invalid drop
+		iifname "lo" accept
+		iifname "podman*" accept
+		ip protocol icmp accept
+		meta l4proto ipv6-icmp accept
+		ip saddr 203.0.113.0/24 tcp dport 2222 accept
+		ip6 saddr 2001:db8::/32 tcp dport 2222 accept
+		ip saddr 198.51.100.7/32 tcp dport 2222 accept
+		tcp dport { 80, 443 } accept
+		ip saddr 10.0.0.0/8 tcp dport 5432 accept
+		udp dport 51820 accept
+		ip6 saddr 2001:db8:1::/48 tcp dport 6379 accept
+	}
+	chain forward {
+		type filter hook forward priority filter; policy accept;
+		ct state established,related accept
+		iifname "lo" accept
+		iifname "podman*" accept
+		ct status dnat meta l4proto tcp ct original proto-dst { 80, 443 } accept
+		ct status dnat ip saddr 10.0.0.0/8 meta l4proto tcp ct original proto-dst 5432 accept
+		ct status dnat meta l4proto udp ct original proto-dst 51820 accept
+		ct status dnat ip6 saddr 2001:db8:1::/48 meta l4proto tcp ct original proto-dst 6379 accept
+		ct status dnat drop
+	}
+}

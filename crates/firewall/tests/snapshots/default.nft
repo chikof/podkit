@@ -1,0 +1,23 @@
+add table inet podkit
+delete table inet podkit
+table inet podkit {
+	chain input {
+		type filter hook input priority filter; policy drop;
+		ct state established,related accept
+		ct state invalid drop
+		iifname "lo" accept
+		iifname "podman*" accept
+		ip protocol icmp accept
+		meta l4proto ipv6-icmp accept
+		tcp dport 22 accept
+		tcp dport { 80, 443 } accept
+	}
+	chain forward {
+		type filter hook forward priority filter; policy accept;
+		ct state established,related accept
+		iifname "lo" accept
+		iifname "podman*" accept
+		ct status dnat meta l4proto tcp ct original proto-dst { 80, 443 } accept
+		ct status dnat drop
+	}
+}

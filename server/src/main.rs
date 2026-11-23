@@ -38,6 +38,7 @@ mod domains;
 mod env_vars;
 mod environments;
 mod error;
+mod firewall;
 mod git_providers;
 mod health_gate;
 mod iac;

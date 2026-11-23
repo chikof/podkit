@@ -69,4 +69,5 @@ id!(
 	PreviewId,
 	UptimeCheckId,
 	UptimeIncidentId,
+	FirewallRuleId,
 );
