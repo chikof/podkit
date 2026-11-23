@@ -15,6 +15,7 @@ pub mod databases;
 pub mod firewall;
 pub mod git_providers;
 pub mod iac;
+pub mod importers;
 pub mod infrastructure;
 pub mod keys;
 pub mod logs;

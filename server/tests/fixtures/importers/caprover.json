@@ -1,0 +1,89 @@
+{
+  "_provenance": "Hand-recorded to the shapes of CapRover's own source (github.com/caprover/caprover): the BaseApi envelope of src/api/BaseApi.ts, IAppDef of src/models/AppDefinition.ts as listed by getAllAppDefinitions in src/handlers/users/apps/appdefinition/AppDefinitionHandler.ts, ProjectDefinition of src/models/ProjectDefinition.ts. Names, hosts and secrets are invented; the keys are the request paths the importer sends.",
+  "/api/v2/user/apps/appDefinitions": {
+    "status": 100,
+    "description": "App definitions are retrieved.",
+    "data": {
+      "rootDomain": "cap.example.com",
+      "appDefinitions": [
+        {
+          "appName": "web",
+          "projectId": "proj-1",
+          "description": "",
+          "deployedVersion": 4,
+          "notExposeAsWebApp": false,
+          "hasPersistentData": true,
+          "hasDefaultSubDomainSsl": true,
+          "containerHttpPort": 3000,
+          "captainDefinitionRelativeFilePath": "./captain-definition",
+          "forceSsl": true,
+          "websocketSupport": true,
+          "instanceCount": 2,
+          "customNginxConfig": "client_max_body_size 50m;",
+          "networks": ["captain-overlay-network", "backend"],
+          "customDomain": [{ "publicDomain": "app.example.com", "hasSsl": true }],
+          "ports": [{ "containerPort": 22, "hostPort": 2222 }],
+          "volumes": [
+            { "containerPath": "/data", "volumeName": "web-data" },
+            { "containerPath": "/host", "hostPath": "/srv/web" }
+          ],
+          "envVars": [
+            { "key": "DATABASE_URL", "value": "postgres://web:caprover-secret-DB-6d2e@srv-captain--db:5432/web" },
+            { "key": "SECRET", "value": "caprover-secret-KEY-91" }
+          ],
+          "versions": [{ "version": 4, "deployedImageName": "img-captain-web:4", "timeStamp": "2025-01-01T00:00:00Z" }],
+          "appPushWebhook": {
+            "tokenVersion": "v2",
+            "pushWebhookToken": "caprover-secret-HOOK-ab",
+            "repoInfo": { "repo": "github.com/acme/web", "branch": "main", "user": "robot", "password": "caprover-secret-GIT-00ee", "sshKey": "" }
+          },
+          "httpAuth": { "user": "admin", "passwordHashed": "x" },
+          "appDeployTokenConfig": { "enabled": true },
+          "isAppBuilding": false
+        },
+        {
+          "appName": "redis",
+          "projectId": "proj-1",
+          "deployedVersion": 1,
+          "notExposeAsWebApp": true,
+          "containerHttpPort": 6379,
+          "instanceCount": 1,
+          "customDomain": [],
+          "ports": [],
+          "volumes": [{ "containerPath": "/data", "volumeName": "redis-data" }],
+          "envVars": [],
+          "networks": ["captain-overlay-network"],
+          "versions": [{ "version": 1, "deployedImageName": "redis:7-alpine", "timeStamp": "2025-01-01T00:00:00Z" }]
+        },
+        {
+          "appName": "uploaded",
+          "deployedVersion": 2,
+          "containerHttpPort": 80,
+          "instanceCount": 1,
+          "customDomain": [{ "publicDomain": "up.example.com", "hasSsl": false }],
+          "ports": [],
+          "volumes": [],
+          "envVars": [{ "key": "A", "value": "caprover-secret-UP-1" }],
+          "networks": [],
+          "versions": [{ "version": 2, "deployedImageName": "registry.local:996/captain/img-captain-uploaded:2", "timeStamp": "2025-01-01T00:00:00Z" }]
+        },
+        {
+          "appName": "blank",
+          "instanceCount": 1,
+          "customDomain": [],
+          "ports": [],
+          "volumes": [],
+          "envVars": [],
+          "networks": [],
+          "versions": []
+        }
+      ],
+      "defaultNginxConfig": ""
+    }
+  },
+  "/api/v2/user/projects": {
+    "status": 100,
+    "description": "Projects are retrieved.",
+    "data": { "projects": [{ "id": "proj-1", "name": "Main Site", "description": "", "parentProjectId": null }] }
+  }
+}

@@ -1,0 +1,160 @@
+{
+  "_provenance": "Hand-recorded to the shapes of Dokploy's own source (github.com/Dokploy/dokploy, canary): apps/dokploy/server/api/routers/project.ts (all), packages/server/src/services/{application,compose,postgres,...}.ts (the relations of *.one) and the column names of packages/server/src/db/schema/{application,compose,domain,mount,port,postgres,redis,mariadb}.ts. Names, hosts and secrets are invented; the keys are the request paths the importer sends.",
+  "/api/project.all": [
+    {
+      "projectId": "prj1",
+      "name": "Blog Stack",
+      "description": null,
+      "environments": [
+        {
+          "environmentId": "env1",
+          "name": "production",
+          "isDefault": true,
+          "applications": [
+            { "applicationId": "a-gh", "name": "blog", "applicationStatus": "done" },
+            { "applicationId": "a-img", "name": "umami", "applicationStatus": "done" },
+            { "applicationId": "a-git", "name": "docs", "applicationStatus": "done" },
+            { "applicationId": "a-drop", "name": "static zip", "applicationStatus": "done" }
+          ],
+          "compose": [{ "composeId": "c-raw", "name": "grafana", "composeStatus": "done" }],
+          "postgres": [{ "postgresId": "pg1", "name": "blog-db" }],
+          "mysql": [],
+          "mariadb": [{ "mariadbId": "mdb1", "name": "old-db" }],
+          "mongo": [],
+          "redis": [{ "redisId": "rd1", "name": "sessions" }],
+          "libsql": []
+        },
+        {
+          "environmentId": "env2",
+          "name": "preview",
+          "isDefault": false,
+          "applications": [],
+          "compose": [],
+          "postgres": [],
+          "mysql": [],
+          "mariadb": [],
+          "mongo": [],
+          "redis": [],
+          "libsql": []
+        }
+      ]
+    }
+  ],
+  "/api/application.one?applicationId=a-gh": {
+    "applicationId": "a-gh",
+    "name": "blog",
+    "sourceType": "github",
+    "owner": "acme",
+    "repository": "blog",
+    "branch": "main",
+    "buildPath": "/web",
+    "buildType": "railpack",
+    "env": "DATABASE_URL=postgres://blog:dokploy-secret-DB-1e7c@blog-db:5432/blog\nSECRET_KEY=\"dokploy-secret-KEY-42ab\"\n# a comment\nnot valid line\n",
+    "buildArgs": "NODE_ENV=production",
+    "memoryLimit": "536870912",
+    "cpuLimit": "2000000000",
+    "replicas": 2,
+    "autoDeploy": true,
+    "isPreviewDeploymentsActive": true,
+    "command": "node server.js",
+    "serverId": "srv-remote",
+    "server": { "serverId": "srv-remote", "name": "edge-1" },
+    "domains": [
+      { "host": "blog.example.com", "https": true, "port": 3000, "path": "/", "enabled": true },
+      { "host": "old.example.com", "https": false, "port": 3000, "path": "/", "enabled": false },
+      { "host": "blog.example.org", "https": true, "port": 4000, "path": "/blog", "enabled": true, "middlewares": ["auth@file"] }
+    ],
+    "mounts": [
+      { "type": "volume", "mountPath": "/app/data", "volumeName": "blog-data" },
+      { "type": "bind", "mountPath": "/app/host", "hostPath": "/srv/blog" },
+      { "type": "file", "mountPath": "/app/config.yml", "filePath": "config.yml", "content": "key: value" }
+    ],
+    "ports": [{ "publishedPort": 2222, "targetPort": 22, "protocol": "tcp", "publishMode": "host" }],
+    "redirects": [{ "regex": "^/a", "replacement": "/b", "permanent": true }],
+    "security": [{ "username": "admin", "password": "dokploy-secret-BASIC-9" }]
+  },
+  "/api/application.one?applicationId=a-img": {
+    "applicationId": "a-img",
+    "name": "umami",
+    "sourceType": "docker",
+    "dockerImage": "ghcr.io/umami-software/umami:postgresql-latest",
+    "username": "robot",
+    "password": "dokploy-secret-REG-77ff",
+    "registryUrl": "ghcr.io",
+    "env": "APP_SECRET=dokploy-secret-UMAMI-5d\n",
+    "domains": [{ "host": "stats.example.com", "https": true, "port": 3000, "path": "/", "enabled": true }],
+    "mounts": [],
+    "ports": [],
+    "redirects": [],
+    "security": []
+  },
+  "/api/application.one?applicationId=a-git": {
+    "applicationId": "a-git",
+    "name": "docs",
+    "sourceType": "git",
+    "customGitUrl": "git@git.example.com:acme/docs.git",
+    "customGitBranch": "stable",
+    "customGitSSHKeyId": "key-1",
+    "customGitBuildPath": "/",
+    "buildType": "dockerfile",
+    "dockerfile": "./Dockerfile.prod",
+    "dockerContextPath": "docs",
+    "env": null,
+    "domains": [],
+    "mounts": [],
+    "ports": [],
+    "redirects": [],
+    "security": []
+  },
+  "/api/application.one?applicationId=a-drop": {
+    "applicationId": "a-drop",
+    "name": "static zip",
+    "sourceType": "drop",
+    "buildType": "static",
+    "domains": [],
+    "mounts": [],
+    "ports": [],
+    "redirects": [],
+    "security": []
+  },
+  "/api/compose.one?composeId=c-raw": {
+    "composeId": "c-raw",
+    "name": "grafana",
+    "sourceType": "raw",
+    "composeType": "stack",
+    "composeFile": "services:\n  grafana:\n    image: grafana/grafana:11\n    ports:\n      - 3000\n",
+    "env": "GF_SECURITY_ADMIN_PASSWORD=dokploy-secret-GRAFANA-3b\n",
+    "randomize": true,
+    "domains": [{ "host": "grafana.example.com", "serviceName": "grafana", "port": 3000, "path": "/", "enabled": true }],
+    "mounts": [{ "type": "file", "mountPath": "/etc/grafana/extra.ini", "filePath": "extra.ini", "content": "[a]" }]
+  },
+  "/api/postgres.one?postgresId=pg1": {
+    "postgresId": "pg1",
+    "name": "blog-db",
+    "databaseName": "blog",
+    "databaseUser": "blog",
+    "databasePassword": "dokploy-secret-PGPASS-8a",
+    "dockerImage": "postgres:17",
+    "externalPort": 5434,
+    "memoryLimit": "1073741824",
+    "cpuLimit": null,
+    "env": null,
+    "command": null
+  },
+  "/api/mariadb.one?mariadbId=mdb1": {
+    "mariadbId": "mdb1",
+    "name": "old-db",
+    "dockerImage": "mariadb:11",
+    "databasePassword": "dokploy-secret-MARIA-1",
+    "rootPassword": "dokploy-secret-MARIAROOT-2"
+  },
+  "/api/redis.one?redisId=rd1": {
+    "redisId": "rd1",
+    "name": "sessions",
+    "dockerImage": "redis:8",
+    "password": "dokploy-secret-REDIS-6",
+    "externalPort": null,
+    "env": "EXTRA=1",
+    "command": null
+  }
+}

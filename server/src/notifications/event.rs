@@ -94,10 +94,12 @@ pub enum EventKind {
 	LogExportFailing,
 	/// A tailnet sidecar could not start or join.
 	TailnetFailed,
+	/// An import from Coolify, Dokploy or CapRover stopped on a change that failed.
+	ImportFailed,
 }
 
 impl EventKind {
-	pub const ALL: [Self; 23] = [
+	pub const ALL: [Self; 24] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
@@ -121,6 +123,7 @@ impl EventKind {
 		Self::FirewallReverted,
 		Self::LogExportFailing,
 		Self::TailnetFailed,
+		Self::ImportFailed,
 	];
 
 	pub fn as_str(self) -> &'static str {
@@ -148,6 +151,7 @@ impl EventKind {
 			Self::FirewallReverted => "firewall_reverted",
 			Self::LogExportFailing => "log_export_failing",
 			Self::TailnetFailed => "tailnet_failed",
+			Self::ImportFailed => "import_failed",
 		}
 	}
 
@@ -180,6 +184,7 @@ impl EventKind {
 			Self::FirewallReverted => "Firewall change reverted",
 			Self::LogExportFailing => "Log forwarding failing",
 			Self::TailnetFailed => "Private access failed",
+			Self::ImportFailed => "Import failed",
 		}
 	}
 
@@ -203,6 +208,7 @@ impl EventKind {
 			Self::UptimeDown | Self::UptimeUp => "Uptime",
 			Self::MetricAlert | Self::MetricRecovered => "Metric alerts",
 			Self::LogExportFailing => "Logs",
+			Self::ImportFailed => "Imports",
 		}
 	}
 
@@ -226,7 +232,8 @@ impl EventKind {
 			| Self::PreviewFailed
 			| Self::FirewallReverted
 			| Self::LogExportFailing
-			| Self::TailnetFailed => Severity::Warning,
+			| Self::TailnetFailed
+			| Self::ImportFailed => Severity::Warning,
 			Self::ServerUnreachable | Self::Vulnerability | Self::CrashLoop | Self::UptimeDown => {
 				Severity::Critical
 			}

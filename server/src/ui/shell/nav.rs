@@ -125,6 +125,9 @@ pub fn settings_items(ctx: &TeamCtx) -> Vec<NavItem> {
 			"layers",
 		));
 	}
+	if ctx.perms.can(Action::Create, Resource::Project) {
+		items.push(item("Import", format!("{base}/settings/import"), "upload"));
+	}
 	items.push(item(
 		"API tokens",
 		format!("{base}/settings/api-tokens"),
