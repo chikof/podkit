@@ -93,7 +93,7 @@ pub enum EventKind {
 }
 
 impl EventKind {
-	pub const ALL: [Self; 20] = [
+	pub const ALL: [Self; 21] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
