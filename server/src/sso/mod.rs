@@ -11,6 +11,8 @@ pub mod providers;
 pub mod signin;
 
 #[cfg(test)]
+mod live;
+#[cfg(test)]
 mod stub;
 #[cfg(test)]
 mod tests;

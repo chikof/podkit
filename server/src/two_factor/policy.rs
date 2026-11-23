@@ -104,6 +104,14 @@ pub async fn set(
 		)));
 	}
 	let before = row(db, user, team).await?.ok_or(ServerError::NotFound)?;
+	// Switching it on with no grace period would shut the person who does it out of their
+	// own team's settings, with no way back in but another Owner.
+	if required && grace_days == 0 && !before.enrolled {
+		return Err(ServerError::Validation(
+			"Set up your own authenticator app or passkey first, or give members a grace period."
+				.to_owned(),
+		));
+	}
 	let deadline =
 		required.then(|| OffsetDateTime::now_utc() + Duration::days(i64::from(grace_days)));
 	// Saving the form again without a change must not push the deadline back.

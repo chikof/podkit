@@ -10,3 +10,6 @@ pub mod passkeys;
 pub mod policy;
 pub mod service;
 pub mod totp;
+
+#[cfg(test)]
+mod tests;

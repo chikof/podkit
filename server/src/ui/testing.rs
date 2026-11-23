@@ -117,3 +117,60 @@ pub fn assert_not_contains(body: &str, needle: &str) {
 		"did not expect {needle:?} in:\n{body}"
 	);
 }
+
+/// A browser: the cookies it holds, as the server set them. A cookie the server removes
+/// (an empty value, or `Max-Age=0`) leaves the jar.
+#[derive(Default)]
+pub struct Browser {
+	pub jar: std::collections::BTreeMap<String, String>,
+}
+
+impl Browser {
+	pub fn absorb(&mut self, headers: &HeaderMap) {
+		for value in headers.get_all(header::SET_COOKIE) {
+			let raw = value.to_str().unwrap();
+			let first = raw.split(';').next().unwrap();
+			let (name, val) = first.split_once('=').unwrap();
+			let gone = val.is_empty() || raw.to_ascii_lowercase().contains("max-age=0");
+			if gone {
+				self.jar.remove(name);
+			} else {
+				self.jar.insert(name.to_owned(), val.to_owned());
+			}
+		}
+	}
+
+	pub fn cookie(&self) -> Option<String> {
+		(!self.jar.is_empty()).then(|| {
+			self.jar
+				.iter()
+				.map(|(k, v)| format!("{k}={v}"))
+				.collect::<Vec<_>>()
+				.join("; ")
+		})
+	}
+
+	pub async fn get(&mut self, app: &Router, uri: &str) -> (StatusCode, HeaderMap, String) {
+		let cookie = self.cookie();
+		let out = get_html(app, uri, cookie.as_deref()).await;
+		self.absorb(&out.1);
+		out
+	}
+
+	pub async fn post(
+		&mut self,
+		app: &Router,
+		uri: &str,
+		signals: &Value,
+	) -> (StatusCode, HeaderMap, String) {
+		let cookie = self.cookie();
+		let out = post_signals(app, uri, cookie.as_deref(), signals).await;
+		self.absorb(&out.1);
+		out
+	}
+
+	/// Whether the browser holds a session cookie.
+	pub fn has_session(&self) -> bool {
+		self.jar.contains_key("session")
+	}
+}
