@@ -6,6 +6,7 @@ pub mod grid;
 pub mod health;
 pub mod infrastructure_ui;
 pub mod log_search;
+pub mod log_ui;
 pub mod models_env;
 pub mod notifications_ui;
 pub mod registries_ui;

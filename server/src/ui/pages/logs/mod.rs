@@ -8,8 +8,6 @@
 //! is saved and never shows it.
 
 pub mod history;
-#[cfg(test)]
-mod tests;
 
 use axum::Router;
 use axum::extract::{Query, State};
