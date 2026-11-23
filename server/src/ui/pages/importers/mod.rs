@@ -241,7 +241,7 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 				))
 				(card_content(&html! {
 					@if servers.is_empty() {
-						p class="text-sm" { "Add a server first: the imported applications need one to run on." }
+						p class="text-sm" { "No server is ready yet. Add one under Servers, or wait until it answers." }
 					} @else {
 						form id="import-form" class="flex flex-col gap-4" "data-on:submit"=(plan_post) "data-indicator:_busy" {
 							(form(&servers))

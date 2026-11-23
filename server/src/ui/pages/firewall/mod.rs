@@ -75,13 +75,30 @@ fn status(view: &View) -> Markup {
 	}
 }
 
+/// The reason a helper gave, as a sentence of its own: the banner puts it after a full stop.
+fn sentence(why: &str) -> String {
+	if why.is_empty() {
+		return String::new();
+	}
+	let mut chars = why.chars();
+	let mut out: String = chars
+		.next()
+		.map(|c| c.to_uppercase().collect())
+		.unwrap_or_default();
+	out.push_str(chars.as_str());
+	if !out.ends_with(['.', '!', '?']) {
+		out.push('.');
+	}
+	out
+}
+
 fn helper_banner(view: &View, base: &str, can_update: bool) -> Markup {
 	match &view.helper {
 		Helper::Ready(_) => html! {},
 		Helper::Unreachable(why) => banner(
 			BannerKind::Warning,
 			Some("podkit cannot talk to the firewall helper."),
-			why,
+			&sentence(why),
 			None,
 		),
 		Helper::NotInstalled => {
@@ -527,5 +544,20 @@ async fn install(
 				.into_response()
 		}
 		Err(e) => error::action(&e),
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::sentence;
+
+	#[test]
+	fn a_reason_is_shown_as_a_sentence() {
+		assert_eq!(
+			sentence("the agent did not answer"),
+			"The agent did not answer."
+		);
+		assert_eq!(sentence("Already a sentence."), "Already a sentence.");
+		assert_eq!(sentence(""), "");
 	}
 }

@@ -2491,3 +2491,63 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-quota-grid label { min-width: 0; }
 .ui-quota-unit { color: var(--muted-foreground); font-weight: var(--fw-regular); }
 .ui-usage-actions { display: flex; flex-wrap: wrap; gap: var(--s-3); }
+
+/* == wave B design review (DR-B) ==
+   Fixes found when the wave B pages were walked in both themes at 1440 and 390 px, in Chromium and Firefox. */
+/* A row of page tabs wider than the page (a Git application has 17) scrolls with its scrollbar hidden, so the last tab was
+   cut off with nothing to say there is more. Each end fades while there are more tabs beyond it, and not at all when
+   the row fits (the scroll timeline is then inactive). Scroll-driven animations are Baseline since Oct 2026; where they
+   are missing the row is simply cut, as before. */
+@property --fade-start { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --fade-end { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@keyframes ui-fade-start { to { --fade-start: var(--fade-size); } }
+@keyframes ui-fade-end { from { --fade-end: var(--fade-size); } }
+.ui-tabs {
+	--fade-size: 2.5rem;
+	scroll-padding-inline: var(--fade-size);
+	mask:
+		linear-gradient(black, black) no-clip subtract,
+		linear-gradient(to right, black, transparent) 0 0 / var(--fade-start) 100% no-repeat no-clip,
+		linear-gradient(to right, transparent, black) 100% 0 / var(--fade-end) 100% no-repeat no-clip;
+	animation: ui-fade-start linear both, ui-fade-end linear both;
+	animation-timeline: scroll(self inline);
+	animation-range: 0 var(--fade-size), calc(100% - var(--fade-size)) 100%;
+}
+.ui-tabs:dir(rtl) {
+	mask:
+		linear-gradient(black, black) no-clip subtract,
+		linear-gradient(to left, black, transparent) 100% 0 / var(--fade-start) 100% no-repeat no-clip,
+		linear-gradient(to left, transparent, black) 0 0 / var(--fade-end) 100% no-repeat no-clip;
+}
+/* The canvas switch is a pill, not a scroller. */
+.ui-cv-bar .ui-tabs { mask: none; animation: none; }
+/* An empty state that shares its card body with something else (the log chooser, the passkey form) took the body's padding
+   and its own: its text sat 16 px right of the card's heading. Alone in a body it already sits on the inset. */
+.ui-card-b > .ui-empty:not(:only-child) { padding-inline: 0; padding-block: var(--s-6); border: 0; }
+/* A list that is the card's own child (the identity providers) sits on the card inset, under the heading's rule, with
+   no second rule of its own. */
+.ui-card > .ui-sec-list { margin: 0; }
+.ui-card > .ui-sec-list > .ui-sec-item { padding-inline: var(--card-pad); }
+.ui-card > .ui-sec-list > .ui-sec-item:first-child { border-block-start: 0; }
+.ui-card > .ui-sec-list > .ui-sec-item:last-child { border-block-end: 0; }
+/* The passkey form: the name field and its button were touching. */
+[data-passkey-register-form] { display: grid; gap: var(--s-4); }
+/* A lone button in a card body is as wide as its content, not the card (Account, Sessions). */
+.ui-card-b > :is(a, button).ui-button { justify-self: start; }
+/* Quota fields: the unit sits on the label's line, not under it. */
+.ui-quota-grid > label { display: block; }
+.ui-quota-grid > label > input { display: block; margin-block-start: var(--s-2); }
+/* A provider's mark inside a button is the size of the line icons beside it and has no plate: it is drawn in the text colour. */
+.ui-button > .ui-logo { flex: none; width: 1.25rem; height: 1.25rem; background-color: transparent; }
+.ui-button > .ui-logo > svg { width: 100%; height: 100%; }
+/* The facts under the sign-in card start where the form does. */
+.ui-auth-meta { padding-inline: 0; }
+/* The firewall's always-open lines: the name has a column, so the lines read as a list and not as one run of words. */
+.ui-fw-always > li { padding-inline-start: 11rem; text-indent: -11rem; }
+.ui-fw-always b { display: inline-block; width: 11rem; margin-inline-end: 0; text-indent: 0; }
+@media (max-width: 40rem) {
+	.ui-fw-always > li { padding-inline-start: 0; text-indent: 0; }
+	.ui-fw-always b { width: auto; margin-inline-end: var(--s-2); }
+}
+/* A row of 16 tabs or more (a Git application's) closes its gaps from 16 to 12 px, which is enough for all of them at 1440. */
+.ui-tabs:has(> .ui-tab:nth-child(n + 16)) { gap: var(--s-4); }
