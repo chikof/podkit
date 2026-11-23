@@ -2,7 +2,7 @@
 //! team policy that requires them, and the second step of a sign-in.
 //!
 //! `totp` is the pure RFC 6238 part; `service` holds the authenticator app and recovery
-//! codes, `passkeys` the WebAuthn ceremonies, `policy` the team setting and `challenge`
+//! codes, `passkeys` the `WebAuthn` ceremonies, `policy` the team setting and `challenge`
 //! the sign-in step between a right password and a session.
 
 pub mod challenge;

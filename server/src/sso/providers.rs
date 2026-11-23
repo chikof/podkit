@@ -25,7 +25,7 @@ const SLUG_UNIQUE: &str = "auth_providers_slug_key";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
-	/// Any OpenID Connect provider with a discovery document.
+	/// Any `OpenID` Connect provider with a discovery document.
 	Oidc,
 	/// GitHub, or a GitHub Enterprise Server.
 	Github,

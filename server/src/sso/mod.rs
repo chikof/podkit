@@ -1,4 +1,4 @@
-//! Single sign-on: sign in with an identity provider (generic OpenID Connect, or GitHub).
+//! Single sign-on: sign in with an identity provider (generic `OpenID` Connect, or GitHub).
 //!
 //! `providers` is the administration of providers (the instance's, set by the instance
 //! administrator, or one team's), `signin` is the round trip and what comes of it: a

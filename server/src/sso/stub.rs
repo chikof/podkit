@@ -1,4 +1,4 @@
-//! A stand-in OpenID Connect provider: a real axum server on a loopback port, so podkit's
+//! A stand-in `OpenID` Connect provider: a real axum server on a loopback port, so podkit's
 //! client runs its real HTTP against it.
 //!
 //! It speaks what the specs ask of a provider and checks what they ask of a client:
@@ -68,6 +68,7 @@ pub struct Behaviour {
 	pub aud: Option<Value>,
 	pub azp: Option<String>,
 	/// `Some(None)` leaves the nonce out; `Some(Some(x))` says `x`.
+	#[allow(clippy::option_option)]
 	pub nonce: Option<Option<String>>,
 	/// Seconds from now; negative is in the past.
 	pub exp_in: i64,

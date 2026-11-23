@@ -288,7 +288,7 @@ pub async fn drop_recovery_if_unneeded(db: &PgPool, user: UserId) -> Result<(), 
 
 fn normalize_recovery(code: &str) -> String {
 	code.chars()
-		.filter(|c| c.is_ascii_alphanumeric())
+		.filter(char::is_ascii_alphanumeric)
 		.map(|c| c.to_ascii_lowercase())
 		.collect()
 }
@@ -410,7 +410,7 @@ pub async fn check_code(s: &AppState, user: UserId, code: &str) -> AppResult<boo
 		.rows_affected();
 		return Ok(won == 1);
 	}
-	let used = sqlx::query!(
+	let consumed = sqlx::query!(
 		"UPDATE recovery_codes SET used_at = NOW()
 		WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL",
 		user.0,
@@ -419,7 +419,7 @@ pub async fn check_code(s: &AppState, user: UserId, code: &str) -> AppResult<boo
 	.execute(&s.db)
 	.await?
 	.rows_affected();
-	Ok(used == 1)
+	Ok(consumed == 1)
 }
 
 #[cfg(test)]

@@ -124,6 +124,7 @@ struct User {
 }
 
 #[derive(Deserialize)]
+#[allow(clippy::struct_field_names)]
 struct Email {
 	email: String,
 	primary: bool,

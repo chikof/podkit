@@ -1,5 +1,5 @@
 //! The address people reach podkit at, as the browser sees it. Redirect addresses for
-//! identity providers and the WebAuthn origin are built from it.
+//! identity providers and the `WebAuthn` origin are built from it.
 
 use axum::http::{HeaderMap, header};
 

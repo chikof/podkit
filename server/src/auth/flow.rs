@@ -1,5 +1,5 @@
 //! Short-lived state between two requests of one sign-in: the OIDC round trip, the wait for
-//! a second factor, the wait for a password that links an account, a WebAuthn ceremony.
+//! a second factor, the wait for a password that links an account, a `WebAuthn` ceremony.
 //!
 //! The browser holds a random token (in a cookie); only its SHA-256 digest is stored, like a
 //! session's. A flow is single use: [`take`] deletes it as it reads it.

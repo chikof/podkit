@@ -219,13 +219,14 @@ fn oidc_pkce_challenge_matches_the_rfc_7636_example() {
 
 // --- ID token validation ---------------------------------------------------------------
 
+type Tweak = fn(&mut super::stub::Behaviour);
+
 #[db_test]
 async fn oidc_refuses_every_bad_id_token(db: PgPool) {
 	let (w, app) = world(db.clone()).await;
 	let p = instance_provider(&w).await;
 	let users_before = count(&db, "users").await;
 
-	type Tweak = fn(&mut super::stub::Behaviour);
 	let cases: Vec<(&str, Tweak)> = vec![
 		("a signature by a key nobody published", |b| {
 			b.signer = Signer::Unpublished;

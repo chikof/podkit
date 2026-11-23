@@ -1,4 +1,4 @@
-//! The real thing: an OpenID Connect sign-in round trip against a throwaway Dex container
+//! The real thing: an `OpenID` Connect sign-in round trip against a throwaway Dex container
 //! (`pk-t_712cc5ef-dex`), the in-process app being the relying party.
 //!
 //! NOT RUN in CI. Needs a rootless Podman, the network (pulls the Dex image) and a free port:
@@ -98,7 +98,8 @@ async fn through_dex(start: &str) -> String {
 			.replace("&amp;", "&");
 		let post = http
 			.post(url.join(&action).unwrap())
-			.form(&[("login", "admin@example.com"), ("password", "password")])
+			.header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+			.body("login=admin%40example.com&password=password")
 			.send()
 			.await
 			.unwrap();

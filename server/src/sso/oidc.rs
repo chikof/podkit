@@ -1,4 +1,4 @@
-//! The OpenID Connect side of a sign-in: discovery, the code exchange and the validation
+//! The `OpenID` Connect side of a sign-in: discovery, the code exchange and the validation
 //! of the ID token.
 //!
 //! Specs followed: OIDC Core 1.0 (<https://openid.net/specs/openid-connect-core-1_0.html>)
@@ -69,7 +69,7 @@ async fn get_json(http: &reqwest::Client, url: &str) -> Result<Value, Failure> {
 	if !response.status().is_success() {
 		return Err(format!("{url} answered {}", response.status()));
 	}
-	read_json(response, &url).await
+	read_json(response, url).await
 }
 
 /// Reads a JSON body, up to a megabyte: an identity provider's answers are small.

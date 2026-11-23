@@ -593,14 +593,13 @@ pub async fn finish_link(
 			ServerError::Internal
 		})?;
 	if !ok {
-		return match flow::miss(&s.db, &token).await? {
-			true => Err(ServerError::InvalidCredentials),
-			false => {
-				clear(cookies, LINK_COOKIE);
-				Err(ServerError::Validation(format!(
-					"Too many wrong passwords ({MAX_ATTEMPTS}). Start again from the sign-in page."
-				)))
-			}
+		return if flow::miss(&s.db, &token).await? {
+			Err(ServerError::InvalidCredentials)
+		} else {
+			clear(cookies, LINK_COOKIE);
+			Err(ServerError::Validation(format!(
+				"Too many wrong passwords ({MAX_ATTEMPTS}). Start again from the sign-in page."
+			)))
 		};
 	}
 

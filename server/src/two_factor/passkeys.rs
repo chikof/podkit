@@ -1,4 +1,4 @@
-//! Passkeys (WebAuthn) through the `webauthn-rs` crate: a second factor, or a sign-in with
+//! Passkeys (`WebAuthn`) through the `webauthn-rs` crate: a second factor, or a sign-in with
 //! no password. Docs: <https://docs.rs/webauthn-rs/0.5.4/webauthn_rs/>; the browser side is
 //! <https://www.w3.org/TR/webauthn-3/>.
 //!
@@ -55,7 +55,7 @@ fn webauthn(origin: &str) -> AppResult<Webauthn> {
 		.map_err(|e| failed("setup", &e))
 }
 
-/// A stable WebAuthn user handle: random-looking, never the email.
+/// A stable `WebAuthn` user handle: random-looking, never the email.
 fn handle(user: UserId) -> Uuid {
 	let mut bytes = [0u8; 16];
 	bytes[8..].copy_from_slice(&user.0.to_be_bytes());

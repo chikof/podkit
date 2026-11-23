@@ -2,7 +2,7 @@
 //! two-step verification for members" (with a grace period), the team's own identity providers,
 //! and, for the instance administrator, the providers of the whole instance.
 //!
-//! A provider is OpenID Connect (Authentik, Keycloak, Authelia, Google, Microsoft, Dex ...) or
+//! A provider is `OpenID` Connect (Authentik, Keycloak, Authelia, Google, Microsoft, Dex ...) or
 //! GitHub. The client secret is write-only: it is encrypted on its way in and the page never
 //! shows it (an edit that leaves the field empty keeps it). Signing in through a provider may
 //! create the account (just in time) only when the registration policy lets accounts be created;
@@ -400,6 +400,7 @@ async fn save_policy(
 
 #[derive(Deserialize, Default)]
 #[serde(default)]
+#[allow(clippy::struct_field_names)]
 struct ProviderSignals {
 	p_kind: String,
 	p_name: String,
