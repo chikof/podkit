@@ -111,7 +111,8 @@ impl AgentClient {
 		&self,
 		req: &proto::LogSearchRequest,
 	) -> Result<proto::LogSearchResult, ServerError> {
-		self.json(Method::POST, "/v1/logs/search", Some(req)).await
+		self.json_within_messages(REQUEST_TIMEOUT, Method::POST, "/v1/logs/search", Some(req))
+			.await
 	}
 
 	/// Tells the agent how long and how much to keep, and where to forward.

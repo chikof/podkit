@@ -135,6 +135,7 @@ pub fn merge(parts: Vec<(ServerId, LogSearchResult)>, limit: usize, newest: bool
 	let mut all: Vec<Line> = Vec::new();
 	for (server, result) in parts {
 		out.partial |= result.partial;
+		out.truncated |= result.truncated;
 		all.extend(
 			result
 				.records

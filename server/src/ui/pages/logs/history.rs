@@ -296,10 +296,10 @@ fn failure(e: &ServerError) -> Response {
 	.into_response()
 }
 
-fn lines_of(
-	answer: &Answer,
-	only_after: Option<(i64, &HashSet<(i64, String, String)>)>,
-) -> Vec<StoredLine> {
+/// A line already shown: its time, resource and text.
+type Shown = (i64, String, String);
+
+fn lines_of(answer: &Answer, only_after: Option<(i64, &HashSet<Shown>)>) -> Vec<StoredLine> {
 	answer
 		.merged
 		.lines

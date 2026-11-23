@@ -167,8 +167,7 @@ pub fn validate(input: &SettingsInput) -> AppResult<Valid> {
 		))
 	};
 	let authorization = input.export_authorization.trim();
-	if authorization.len() > MAX_AUTHORIZATION_LEN || authorization.chars().any(|c| c.is_control())
-	{
+	if authorization.len() > MAX_AUTHORIZATION_LEN || authorization.chars().any(char::is_control) {
 		return Err(invalid("authorization header"));
 	}
 	Ok(Valid {
@@ -199,7 +198,7 @@ pub async fn update_settings(
 		None => None,
 	};
 	let (kind, url, tenant) = match &v.export {
-		Some((k, u, t)) => (Some(k.as_str()), Some(u.as_str()), t.as_deref()),
+		Some((kind, url, tenant)) => (Some(kind.as_str()), Some(url.as_str()), tenant.as_deref()),
 		None => (None, None, None),
 	};
 	// A new header replaces the old one; "forget" or no forwarding at all drops it; otherwise
@@ -241,16 +240,8 @@ pub async fn update_settings(
 		.changed("max_mb", i64::from(before.max_mb), i64::from(after.max_mb))
 		.changed(
 			"export_kind",
-			before
-				.export
-				.as_ref()
-				.map(|e| e.kind.as_str())
-				.unwrap_or("none"),
-			after
-				.export
-				.as_ref()
-				.map(|e| e.kind.as_str())
-				.unwrap_or("none"),
+			before.export.as_ref().map_or("none", |e| e.kind.as_str()),
+			after.export.as_ref().map_or("none", |e| e.kind.as_str()),
 		);
 	if let Some(export) = &after.export {
 		diff = diff.set("export_url", audit::scrub_url(&export.url));

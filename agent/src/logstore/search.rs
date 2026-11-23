@@ -117,6 +117,7 @@ pub fn run_within(
 	let mut heap: BinaryHeap<Reverse<Entry>> = BinaryHeap::new();
 	let mut order: u64 = 0;
 	let mut partial = false;
+	let mut truncated = false;
 	let mut buf = String::new();
 
 	'scan: for svc in &services {
@@ -168,6 +169,7 @@ pub fn run_within(
 				};
 				heap.push(Reverse(Entry { key, record }));
 				if heap.len() > limit {
+					truncated = true;
 					heap.pop();
 				}
 			}
@@ -189,6 +191,7 @@ pub fn run_within(
 	Ok(LogSearchResult {
 		records: records.into_iter().map(|(_, r)| r).collect(),
 		partial,
+		truncated,
 	})
 }
 

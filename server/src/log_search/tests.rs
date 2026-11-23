@@ -33,6 +33,7 @@ fn answer(records: Vec<LogRecord>) -> LogSearchResult {
 	LogSearchResult {
 		records,
 		partial: false,
+		truncated: false,
 	}
 }
 
@@ -90,6 +91,7 @@ fn log_search_merge_says_when_an_agent_stopped_early() {
 	let partial = LogSearchResult {
 		records: vec![rec(1, "app-1", "x")],
 		partial: true,
+		truncated: false,
 	};
 	let merged = merge(
 		vec![(ServerId(1), partial), (ServerId(2), answer(vec![]))],

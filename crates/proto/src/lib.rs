@@ -296,6 +296,9 @@ pub struct LogSearchResult {
 	/// or newer lines may be missing.
 	#[serde(default)]
 	pub partial: bool,
+	/// More lines matched than `limit`: the ones at the far end are not in `records`.
+	#[serde(default)]
+	pub truncated: bool,
 }
 
 /// Where the agent forwards logs to.
