@@ -813,7 +813,7 @@ pub async fn remove(
 	Ok(app.id)
 }
 
-async fn remove_service(s: &AppState, team: TeamId, app: &Application) {
+pub(crate) async fn remove_service(s: &AppState, team: TeamId, app: &Application) {
 	let server = match scope::server(&s.db, team, app.server_id).await {
 		Ok(server) => server,
 		Err(e) => {

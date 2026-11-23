@@ -21,12 +21,12 @@ section_autodeploy() {
 	rules="$(jq -n '{ad_enabled: true, ad_branches: "main\nrelease/*", ad_tags: false,
 		ad_paths: "api/**\n!docs/**", ad_wait: true, ad_timeout: 15, ad_anyway: false, ad_status: true}')"
 	ui_post "$base" "$rules"
-	grep -qF 'Autodeploy saved' "$BODY" || fail "rules save: $(head -c 300 "$BODY")"
+	grep -qF 'Saved' "$BODY" || fail "rules save: $(head -c 300 "$BODY")"
 	expect_page "$base" "release/*"
 	echo "ok   POST $base (rules saved and shown back)"
 
 	ui_post "$base" "$(jq '.ad_timeout = "abc"' <<<"$rules")"
-	grep -qF 'Autodeploy saved' "$BODY" && fail "a bad timeout was saved"
+	grep -qF 'Saved' "$BODY" && fail "a bad timeout was saved"
 	echo "ok   a bad timeout is refused"
 
 	freeze="$(jq -n '{fz_kind: "recurring", fz_sday: 4, fz_stime: "16:00", fz_eday: 0, fz_etime: "08:00",

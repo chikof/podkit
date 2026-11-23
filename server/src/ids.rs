@@ -66,6 +66,7 @@ id!(
 	VolumeBackupId,
 	VolumeRestoreId,
 	CloneId,
+	PreviewId,
 	UptimeCheckId,
 	UptimeIncidentId,
 );

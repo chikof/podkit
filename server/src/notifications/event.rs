@@ -86,10 +86,12 @@ pub enum EventKind {
 	MetricAlert,
 	/// A metric alert's value is back under its threshold.
 	MetricRecovered,
+	/// A pull request's preview could not be made.
+	PreviewFailed,
 }
 
 impl EventKind {
-	pub const ALL: [Self; 19] = [
+	pub const ALL: [Self; 20] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
@@ -109,6 +111,7 @@ impl EventKind {
 		Self::UptimeUp,
 		Self::MetricAlert,
 		Self::MetricRecovered,
+		Self::PreviewFailed,
 	];
 
 	pub fn as_str(self) -> &'static str {
@@ -132,6 +135,7 @@ impl EventKind {
 			Self::UptimeUp => "uptime_up",
 			Self::MetricAlert => "metric_alert",
 			Self::MetricRecovered => "metric_recovered",
+			Self::PreviewFailed => "preview_failed",
 		}
 	}
 
@@ -160,13 +164,16 @@ impl EventKind {
 			Self::UptimeUp => "Uptime check up",
 			Self::MetricAlert => "Metric alert",
 			Self::MetricRecovered => "Metric alert recovered",
+			Self::PreviewFailed => "Preview failed",
 		}
 	}
 
 	/// The heading its checkbox sits under.
 	pub fn group(self) -> &'static str {
 		match self {
-			Self::DeploySucceeded | Self::DeployFailed | Self::Rollback => "Deploys",
+			Self::DeploySucceeded | Self::DeployFailed | Self::Rollback | Self::PreviewFailed => {
+				"Deploys"
+			}
 			Self::ServerUnreachable | Self::ServerRecovered | Self::DiskHigh => "Servers",
 			Self::BackupFailed | Self::BackupSucceeded | Self::CronFailed | Self::CronRecovered => {
 				"Backups and jobs"
@@ -194,7 +201,8 @@ impl EventKind {
 			| Self::CertExpiring
 			| Self::ContainerOom
 			| Self::ModelCrashed
-			| Self::MetricAlert => Severity::Warning,
+			| Self::MetricAlert
+			| Self::PreviewFailed => Severity::Warning,
 			Self::ServerUnreachable | Self::Vulnerability | Self::CrashLoop | Self::UptimeDown => {
 				Severity::Critical
 			}

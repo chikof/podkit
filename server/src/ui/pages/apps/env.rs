@@ -4,6 +4,8 @@
 //! with a Redeploy button. Values are write-only: the forms send them, and nothing here (HTML,
 //! signal patch or SSE event) ever carries one back. The list shows keys only.
 
+use std::collections::HashSet;
+
 use axum::Router;
 use axum::extract::{Path, State};
 use axum::response::{IntoResponse, Response};
@@ -18,6 +20,7 @@ use crate::auth::permission::{Action, Resource};
 use crate::env_vars::service::{self as env_vars, BulkReport, EnvVarKey};
 use crate::error::ServerError;
 use crate::ids::{ApplicationId, EnvVarId, ProjectId, TeamId};
+use crate::previews::service as previews;
 use crate::shared_env;
 use crate::shared_env::service::Inherited;
 use crate::state::AppState;
@@ -41,6 +44,10 @@ pub fn router() -> Router<AppState> {
 			post(env_bulk),
 		)
 		.route(
+			"/teams/{team_id}/projects/{project_id}/apps/{app_id}/env/{env_var_id}/preview/{on}",
+			post(env_preview),
+		)
+		.route(
 			"/teams/{team_id}/projects/{project_id}/apps/{app_id}/env/{env_var_id}/delete",
 			post(env_remove),
 		)
@@ -48,7 +55,25 @@ pub fn router() -> Router<AppState> {
 
 const ROW: &str = "ui-card-row";
 
-fn env_list(base: &str, keys: &[EnvVarKey], can_delete: bool) -> Markup {
+/// Which variables previews may read, and whether this reader may change that.
+struct Marks {
+	available: HashSet<String>,
+	can_mark: bool,
+}
+
+impl Marks {
+	/// Empty (nothing marked, no buttons) when the reader may not see the setting.
+	async fn load(s: &AppState, ctx: &TeamCtx, project: ProjectId, app: ApplicationId) -> Self {
+		Self {
+			available: previews::available_keys(s, ctx.user.id, ctx.team.id, project, app)
+				.await
+				.unwrap_or_default(),
+			can_mark: ctx.perms.can(Action::Update, Resource::Application),
+		}
+	}
+}
+
+fn env_list(base: &str, keys: &[EnvVarKey], can_delete: bool, marks: &Marks) -> Markup {
 	html! {
 		div id="env-list" {
 			@if keys.is_empty() {
@@ -66,11 +91,21 @@ fn env_list(base: &str, keys: &[EnvVarKey], can_delete: bool) -> Markup {
 								code class="font-mono text-sm font-medium break-all" { (var.key) }
 								span class="text-xs text-muted-foreground" { "Value hidden" }
 							}
+							div class="flex items-center gap-2" {
+							@let on = marks.available.contains(&var.key);
+							@if on { (badge(Tone::Neutral, "In previews")) }
+							@if marks.can_mark {
+								button type="button" class=(button_class(Variant::Outline, Size::Sm))
+									"data-on:click"={ "@post(" (js_string(&format!("{base}/env/{}/preview/{}", var.id, if on { "off" } else { "on" }))) ")" } {
+									@if on { "Withhold from previews" } @else { "Allow in previews" }
+								}
+							}
 							@if can_delete {
 								button type="button" class=(button_class(Variant::Ghost, Size::Icon)) aria-label={ "Delete " (var.key) }
 									"data-on:click"={ "@post(" (js_string(&format!("{base}/env/{}/delete", var.id))) ")" } {
 									(icon("trash-2"))
 								}
+							}
 							}
 						}
 					}
@@ -182,6 +217,7 @@ async fn env_page(
 	let base = app_url(ctx.team.id, project.id, app.id);
 	let can_create = ctx.perms.can(Action::Create, Resource::EnvVar);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::EnvVar);
+	let marks = Marks::load(&s, &ctx, project.id, app.id).await;
 
 	let set = format!(
 		"evt.preventDefault(); @post({})",
@@ -207,7 +243,7 @@ async fn env_page(
 				))
 				div class="ui-card-list" {
 					div class="ui-card-slot" { (form_error()) }
-					(env_list(&base, &keys, can_delete))
+					(env_list(&base, &keys, can_delete, &marks))
 				}
 			}))
 			(inherited_card(&ctx, &inherited))
@@ -269,12 +305,17 @@ async fn env_set(
 		Ok(keys) => {
 			let base = app_url(ctx.team.id, project, app);
 			let can_delete = ctx.perms.can(Action::Delete, Resource::EnvVar);
-			sse::patch(&env_list(&base, &keys, can_delete))
-				.and(sse::patch(&saved_slot(&ctx, &base, true)))
-				.and(sse::signals(
-					&json!({ "env_key": "", "env_value": "", "_error": "" }),
-				))
-				.into_response()
+			sse::patch(&env_list(
+				&base,
+				&keys,
+				can_delete,
+				&Marks::load(&s, &ctx, project, app).await,
+			))
+			.and(sse::patch(&saved_slot(&ctx, &base, true)))
+			.and(sse::signals(
+				&json!({ "env_key": "", "env_value": "", "_error": "" }),
+			))
+			.into_response()
 		}
 		Err(e) => error::action(&e),
 	}
@@ -305,7 +346,12 @@ async fn env_bulk(
 			let base = app_url(ctx.team.id, project, app);
 			let can_delete = ctx.perms.can(Action::Delete, Resource::EnvVar);
 			let mut events = sse::patch(&bulk_report(Some(&report)))
-				.and(sse::patch(&env_list(&base, &keys, can_delete)))
+				.and(sse::patch(&env_list(
+					&base,
+					&keys,
+					can_delete,
+					&Marks::load(&s, &ctx, project, app).await,
+				)))
 				.and(sse::signals(&json!({ "_bulk_error": "" })));
 			if report.saved > 0 {
 				events = events.and(sse::patch(&saved_slot(&ctx, &base, true)));
@@ -336,10 +382,47 @@ async fn env_remove(
 		Ok(keys) => {
 			let base = app_url(ctx.team.id, project, app);
 			let can_delete = ctx.perms.can(Action::Delete, Resource::EnvVar);
-			sse::patch(&env_list(&base, &keys, can_delete))
-				.and(sse::patch(&saved_slot(&ctx, &base, true)))
-				.and(sse::signals(&json!({ "_error": "" })))
-				.into_response()
+			sse::patch(&env_list(
+				&base,
+				&keys,
+				can_delete,
+				&Marks::load(&s, &ctx, project, app).await,
+			))
+			.and(sse::patch(&saved_slot(&ctx, &base, true)))
+			.and(sse::signals(&json!({ "_error": "" })))
+			.into_response()
+		}
+		Err(e) => error::action(&e),
+	}
+}
+
+/// Marks a variable as available to previews of pull requests, or withholds it.
+async fn env_preview(
+	State(s): State<AppState>,
+	ctx: TeamCtx,
+	Path((_, project, app, id, on)): Path<(TeamId, ProjectId, ApplicationId, EnvVarId, String)>,
+) -> Response {
+	let available = match on.as_str() {
+		"on" => true,
+		"off" => false,
+		_ => return error::action(&ServerError::NotFound),
+	};
+	let result = async {
+		previews::set_variable(&s, ctx.user.id, ctx.team.id, project, app, id, available).await?;
+		env_vars::list(&s.db, ctx.user.id, ctx.team.id, project, app).await
+	}
+	.await;
+	match result {
+		Ok(keys) => {
+			let base = app_url(ctx.team.id, project, app);
+			let can_delete = ctx.perms.can(Action::Delete, Resource::EnvVar);
+			sse::patch(&env_list(
+				&base,
+				&keys,
+				can_delete,
+				&Marks::load(&s, &ctx, project, app).await,
+			))
+			.into_response()
 		}
 		Err(e) => error::action(&e),
 	}

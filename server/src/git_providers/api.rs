@@ -59,6 +59,16 @@ pub struct CloneAccess {
 /// this name are left out when the commit's checks are read, so podkit never waits for itself.
 pub const STATUS_CONTEXT: &str = "podkit/deploy";
 
+/// The context (name) of the commit status of a pull request's preview. Left out of the
+/// commit's checks too.
+pub const PREVIEW_CONTEXT: &str = "podkit/preview";
+
+/// Whether a check is one podkit posted itself.
+#[must_use]
+pub fn is_own_context(context: &str) -> bool {
+	context == STATUS_CONTEXT || context == PREVIEW_CONTEXT
+}
+
 /// Where a deploy of a commit stands, as a provider's commit status says it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StatusState {
@@ -71,6 +81,8 @@ pub enum StatusState {
 
 /// A commit status to post.
 pub struct StatusPost<'a> {
+	/// [`STATUS_CONTEXT`] or [`PREVIEW_CONTEXT`].
+	pub context: &'a str,
 	pub state: StatusState,
 	/// One short line, cut to what providers accept.
 	pub description: &'a str,

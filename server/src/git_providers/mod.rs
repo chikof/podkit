@@ -14,10 +14,12 @@ mod github;
 mod gitlab;
 mod hooks;
 pub mod jwt;
+mod pulls;
 mod routes;
 pub mod service;
 
 pub(crate) use hooks::branch_of;
+pub use pulls::PullRequest;
 pub use routes::{public_router, router};
 
 use serde::{Deserialize, Serialize};
@@ -293,7 +295,7 @@ pub async fn first_delivery(
 }
 
 #[cfg(test)]
-mod live_tests;
+pub(crate) mod live_tests;
 #[cfg(test)]
 pub(crate) mod stubs;
 #[cfg(test)]

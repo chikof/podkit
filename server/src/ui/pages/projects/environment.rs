@@ -6,7 +6,7 @@
 //! list and its one primary action is "Create resource". `/projects/{p}` shows the default
 //! environment; `/projects/{p}/{env_slug}` a named one.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write as _;
 
 use axum::Router;
@@ -29,9 +29,9 @@ use crate::projects::overview::{self, EnvironmentView, Pick, ResourceCard, Resou
 use crate::scanning::{Badge, BadgeState, Subject};
 use crate::state::AppState;
 use crate::ui::components::{
-	BUTTON_DANGER, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, SELECT, Size, TabItem, Tone, Variant,
+	BUTTON_DANGER, INPUT, LABEL, MENU_ITEM, MENU_ITEM_DANGER, SELECT, Size, Tone, Variant,
 	button_class, dialog, dialog_cancel, dialog_open_button, dropdown_menu, empty_state, icon,
-	menu_label, security_badge, skeleton_row, tabs,
+	menu_label, security_badge, skeleton_row,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{Crumb, app_page, form_error};
@@ -442,32 +442,30 @@ fn filter_bar(view: &EnvironmentView, ctx: &TeamCtx, filter: &Filter) -> Markup 
 
 // --- tabs, menus, dialogs ------------------------------------------------------------
 
-fn tab_row(ctx: &TeamCtx, view: &EnvironmentView) -> Markup {
-	let items: Vec<(String, String, bool)> = view
-		.environments
-		.iter()
-		.map(|e| {
-			(
-				e.name.clone(),
-				env_url(ctx.team.id, view.project.id, &e.slug),
-				e.id == view.environment.id,
-			)
-		})
-		.collect();
-	let items: Vec<TabItem<'_>> = items
-		.iter()
-		.map(|(label, href, current)| TabItem {
-			label,
-			href,
-			current: *current,
-		})
-		.collect();
+/// The environment tabs. A preview of a pull request carries a small "preview" mark.
+fn env_tabs(ctx: &TeamCtx, view: &EnvironmentView, previews: &HashSet<EnvironmentId>) -> Markup {
+	html! {
+		nav aria-label="Environments" class="ui-tabs" {
+			@for e in &view.environments {
+				@let href = env_url(ctx.team.id, view.project.id, &e.slug);
+				@let current = e.id == view.environment.id;
+				a href=(href) class=(if current { "ui-tab ui-tab-on" } else { "ui-tab" })
+					aria-current=[current.then_some("page")] {
+					(e.name)
+					@if previews.contains(&e.id) { span class="ui-tab-n" { "preview" } }
+				}
+			}
+		}
+	}
+}
+
+fn tab_row(ctx: &TeamCtx, view: &EnvironmentView, previews: &HashSet<EnvironmentId>) -> Markup {
 	let can_create = ctx.perms.can(Action::Create, Resource::Project);
 	let can_update = ctx.perms.can(Action::Update, Resource::Project);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::Project);
 	html! {
 		div class="ui-res-tabrow" {
-			div class="min-w-0 flex-1" { (tabs("Environments", &items)) }
+			div class="min-w-0 flex-1" { (env_tabs(ctx, view, previews)) }
 			@if can_create {
 				(dialog_open_button(
 					"environment-create",
@@ -653,6 +651,9 @@ async fn render(
 		None
 	};
 
+	let previews = crate::previews::service::environment_ids(s, ctx.team.id, view.project.id)
+		.await
+		.unwrap_or_default();
 	let body = html! {
 		div class="ui-wide ui-res-page" data-signals=(signals.to_string()) {
 			header class="ui-page-head" {
@@ -681,7 +682,7 @@ async fn render(
 					}
 				}
 			}
-			(tab_row(ctx, &view))
+			(tab_row(ctx, &view, &previews))
 			(filter_bar(&view, ctx, filter))
 			(grid(s, ctx, &view, filter, now, None, &badges))
 			@if can_create_env { (create_env_dialog(ctx.team.id, view.project.id)) }

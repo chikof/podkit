@@ -65,6 +65,8 @@ pub struct SharedVar {
 	/// age-encrypted value; never stored or returned as plaintext.
 	pub value: Vec<u8>,
 	pub is_secret: bool,
+	/// A secret that previews of pull requests may read.
+	pub preview: bool,
 }
 
 impl SharedVar {
@@ -79,8 +81,7 @@ impl SharedVar {
 	}
 }
 
-const COLUMNS: &str =
-	"id, team_id, project_id, environment_id, key, value, is_secret, created_by, updated_at";
+const COLUMNS: &str = "id, team_id, project_id, environment_id, key, value, is_secret, preview, created_by, updated_at";
 
 /// The variables set exactly at `scope`, ordered by key.
 pub async fn list_scope(
@@ -190,4 +191,29 @@ pub async fn delete(
 	.bind(environment)
 	.fetch_optional(db)
 	.await
+}
+
+/// Marks a variable set at exactly `scope` as available (or not) to previews; false when it is
+/// not set there.
+pub async fn set_preview(
+	db: impl PgExecutor<'_>,
+	scope: Scope,
+	id: SharedVarId,
+	available: bool,
+) -> Result<bool, sqlx::Error> {
+	let (team, project, environment) = ids(scope);
+	let done = sqlx::query(
+		"UPDATE shared_env_vars SET preview = $5
+		 WHERE id = $1 AND team_id = $2
+		   AND project_id IS NOT DISTINCT FROM $3
+		   AND environment_id IS NOT DISTINCT FROM $4",
+	)
+	.bind(id)
+	.bind(team)
+	.bind(project)
+	.bind(environment)
+	.bind(available)
+	.execute(db)
+	.await?;
+	Ok(done.rows_affected() > 0)
 }

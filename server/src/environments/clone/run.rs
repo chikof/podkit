@@ -201,7 +201,7 @@ pub async fn sync_stack_services(s: &AppState, clone: &EnvironmentClone) -> AppR
 }
 
 /// How a step ended.
-enum Outcome {
+pub(crate) enum Outcome {
 	Done(Option<String>),
 	Skipped(String),
 	Failed(String),
@@ -233,7 +233,11 @@ fn sql(e: &sqlx::Error) -> String {
 	"database error".to_owned()
 }
 
-async fn provision(state: &AppState, cancel: &CancellationToken, db: &Database) -> Outcome {
+pub(crate) async fn provision(
+	state: &AppState,
+	cancel: &CancellationToken,
+	db: &Database,
+) -> Outcome {
 	if let Err(e) = databases::enqueue(state, JobKind::DatabaseProvision, db).await {
 		return Outcome::Failed(e.to_string());
 	}

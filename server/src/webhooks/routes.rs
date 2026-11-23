@@ -71,6 +71,19 @@ async fn deploy(
 		return Ok(ignored(None));
 	}
 
+	// Pull request events and `/preview` comments: previews, not deploys.
+	if let Some((kind, name)) = pull_request_event(&headers) {
+		let Some(event) = crate::previews::event::parse(kind, name, &body) else {
+			return Ok(ignored(None));
+		};
+		return Ok(
+			match crate::previews::service::handle(&s, &application, &event).await? {
+				crate::previews::service::Outcome::Ignored => ignored(Some("previews")),
+				_ => (StatusCode::ACCEPTED, Json(json!({ "preview": true }))).into_response(),
+			},
+		);
+	}
+
 	let not_a_push = header(&headers, "x-github-event").is_some_and(|event| event != "push")
 		|| header(&headers, "x-gitea-event").is_some_and(|event| event != "push")
 		|| header(&headers, "x-gitlab-event").is_some_and(|event| event != "Push Hook");
@@ -112,4 +125,18 @@ fn ignored(reason: Option<&'static str>) -> Response {
 		reason,
 	})
 	.into_response()
+}
+
+/// Who sent the delivery and what event it names, when it is one previews follow: a pull (or
+/// merge) request, or a comment. Gitea also sends GitHub's headers, so its own come first.
+fn pull_request_event(headers: &HeaderMap) -> Option<(crate::git_providers::Kind, &str)> {
+	use crate::git_providers::Kind;
+	if let Some(e) = header(headers, "x-gitlab-event") {
+		return matches!(e, "Merge Request Hook" | "Note Hook").then_some((Kind::Gitlab, e));
+	}
+	if let Some(e) = header(headers, "x-gitea-event") {
+		return matches!(e, "pull_request" | "issue_comment").then_some((Kind::Gitea, e));
+	}
+	let e = header(headers, "x-github-event")?;
+	matches!(e, "pull_request" | "issue_comment").then_some((Kind::GithubApp, e))
 }

@@ -364,12 +364,12 @@ pub fn manifest(
 		"setup_on_update": true,
 		"public": false,
 		"request_oauth_on_install": false,
-		"default_permissions": { "contents": "read", "metadata": "read", "checks": "read", "statuses": "write" },
+		"default_permissions": { "contents": "read", "metadata": "read", "checks": "read", "statuses": "write", "pull_requests": "read", "issues": "write" },
 		"default_events": [],
 	});
 	if let Some(hook) = hook_url {
 		m["hook_attributes"] = json!({ "url": hook, "active": true });
-		m["default_events"] = json!(["push"]);
+		m["default_events"] = json!(["push", "pull_request", "issue_comment"]);
 	}
 	m.to_string()
 }

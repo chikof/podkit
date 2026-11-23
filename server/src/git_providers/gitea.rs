@@ -162,7 +162,7 @@ pub(super) async fn create_hook(
 		&json!({
 			"type": "gitea",
 			"active": true,
-			"events": ["push"],
+			"events": ["push", "pull_request", "pull_request_sync", "pull_request_comment", "issue_comment"],
 			"config": { "url": url, "content_type": "json", "secret": secret },
 		}),
 	);
