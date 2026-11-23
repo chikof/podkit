@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT terminal_record FROM teams WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "terminal_record",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "teams",
+            "name": "terminal_record"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5f1cf2e32f71a91811f95000d8ede1391bf8ceafa126137dd0a35f689854ce75"
+}

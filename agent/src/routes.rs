@@ -5,7 +5,7 @@ use std::convert::Infallible;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query, State, WebSocketUpgrade};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, get, post, put};
@@ -45,6 +45,7 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/containers/{id}/stop", post(stop_container))
 		.route("/v1/containers/{id}/logs", get(container_logs))
 		.route("/v1/containers/{id}/health", get(container_health))
+		.route("/v1/containers/{id}/terminal", get(container_terminal))
 		.route("/v1/networks", get(list_networks).post(create_network))
 		.route(
 			"/v1/networks/{name}",
@@ -525,6 +526,30 @@ fn deploy_valid_alias(alias: &str) -> bool {
 struct LogsQuery {
 	tail: Option<u32>,
 	follow: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct TerminalQuery {
+	cols: Option<u16>,
+	rows: Option<u16>,
+}
+
+/// An interactive shell in the container over a WebSocket (see [`crate::terminal`]). The
+/// exec is created before the upgrade, so a missing or stopped container is an ordinary
+/// 404 or 409 answer.
+async fn container_terminal(
+	State(ctx): State<Arc<Ctx>>,
+	Path(id): Path<String>,
+	Query(query): Query<TerminalQuery>,
+	ws: WebSocketUpgrade,
+) -> Result<Response, ApiError> {
+	check_ref(&id)?;
+	let podman = ctx.podman();
+	let exec = crate::terminal::prepare(&podman, &id)
+		.await
+		.map_err(|e| ApiError::podman("terminal failed", &e))?;
+	let size = crate::terminal::clamp_size(query.cols, query.rows);
+	Ok(ws.on_upgrade(move |socket| crate::terminal::serve(podman, exec, size, socket)))
 }
 
 async fn container_logs(

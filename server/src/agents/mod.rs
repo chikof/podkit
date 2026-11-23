@@ -4,7 +4,7 @@
 mod client;
 pub mod tunnel;
 
-pub use client::AgentClient;
+pub use client::{AgentClient, AgentTerminal};
 
 use std::collections::HashMap;
 use std::path::PathBuf;

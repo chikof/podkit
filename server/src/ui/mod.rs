@@ -147,7 +147,7 @@ async fn origin_guard(req: Request, next: Next) -> Response {
 	}
 }
 
-fn same_origin(headers: &HeaderMap) -> bool {
+pub(crate) fn same_origin(headers: &HeaderMap) -> bool {
 	let Some(origin) = headers.get(header::ORIGIN) else {
 		return !headers
 			.get("sec-fetch-site")

@@ -39,6 +39,7 @@ mod monitoring;
 mod networks_tab;
 
 mod security;
+mod terminal_tab;
 pub(in crate::ui) use general::{SettingsSignals, schedule_hint};
 pub(in crate::ui) use header::reloaded;
 
@@ -52,6 +53,7 @@ pub fn router() -> Router<AppState> {
 		.merge(general::router())
 		.merge(connection::router())
 		.merge(logs::router())
+		.merge(terminal_tab::router())
 		.merge(monitoring::router())
 		.merge(networks_tab::router())
 		.merge(security::router())
@@ -188,11 +190,12 @@ pub(in crate::ui) enum Tab {
 	Networks,
 	Security,
 	Logs,
+	Terminal,
 	Advanced,
 }
 
 impl Tab {
-	const ALL: [Self; 8] = [
+	const ALL: [Self; 9] = [
 		Self::General,
 		Self::Connection,
 		Self::Backups,
@@ -200,6 +203,7 @@ impl Tab {
 		Self::Networks,
 		Self::Security,
 		Self::Logs,
+		Self::Terminal,
 		Self::Advanced,
 	];
 
@@ -212,6 +216,7 @@ impl Tab {
 			Self::Networks => "Networks",
 			Self::Security => "Security",
 			Self::Logs => "Logs",
+			Self::Terminal => "Terminal",
 			Self::Advanced => "Advanced",
 		}
 	}
@@ -226,6 +231,7 @@ impl Tab {
 			Self::Networks => "/networks",
 			Self::Security => "/security",
 			Self::Logs => "/logs",
+			Self::Terminal => "/terminal",
 			Self::Advanced => "/advanced",
 		}
 	}
@@ -235,6 +241,7 @@ impl Tab {
 		let can = |action, resource| ctx.perms.can(action, resource);
 		match self {
 			Self::General | Self::Logs => true,
+			Self::Terminal => can(Action::Create, Resource::Terminal),
 			Self::Connection => can(Action::Update, Resource::Database),
 			Self::Backups => can(Action::Read, Resource::Backup),
 			Self::Monitoring | Self::Networks => can(Action::Read, Resource::Database),

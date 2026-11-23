@@ -30,6 +30,13 @@ const SCAN_TIMEOUT: Duration = Duration::from_mins(25);
 const MAX_LINE_BYTES: usize = 1024 * 1024;
 const MAX_ERROR_BODY_BYTES: usize = 64 * 1024;
 
+/// An open terminal on an agent: the WebSocket, plus the tunnel it runs through (kept
+/// alive while the shell is).
+pub struct AgentTerminal {
+	pub socket: tokio_tungstenite::WebSocketStream<UnixStream>,
+	_tunnel: Option<Arc<SshTunnel>>,
+}
+
 /// Talks to one server's agent over its unix socket.
 #[derive(Clone)]
 pub struct AgentClient {
@@ -230,6 +237,58 @@ impl AgentClient {
 			drain(resp).await
 		})
 		.await
+	}
+
+	/// Opens an interactive shell in `container` and returns the agent's WebSocket (the
+	/// frames are described at [`proto::TerminalControl`]). The handshake happens here, so
+	/// a container that is gone or not running fails now, before the caller upgrades its
+	/// own client. There is no timeout once it is open; dropping the socket ends the shell.
+	///
+	/// # Errors
+	/// `Conflict` when the container is not running, `Validation` when it does not exist,
+	/// `AgentUnavailable` otherwise.
+	pub async fn terminal(
+		&self,
+		container: &str,
+		cols: u16,
+		rows: u16,
+	) -> Result<AgentTerminal, ServerError> {
+		use tokio_tungstenite::tungstenite::Error as WsError;
+
+		let stream = with_timeout(HEALTH_TIMEOUT, async {
+			UnixStream::connect(&self.socket)
+				.await
+				.map_err(unavailable("connect to agent"))
+		})
+		.await?;
+		let uri = format!("ws://agent/v1/containers/{container}/terminal?cols={cols}&rows={rows}");
+		let handshake = tokio_tungstenite::client_async(uri, stream);
+		match with_timeout(REQUEST_TIMEOUT, async { Ok(handshake.await) }).await? {
+			Ok((socket, _)) => Ok(AgentTerminal {
+				socket,
+				_tunnel: self.tunnel.clone(),
+			}),
+			Err(WsError::Http(resp)) => {
+				let message = resp
+					.body()
+					.as_deref()
+					.and_then(|b| serde_json::from_slice::<proto::ErrorBody>(b).ok())
+					.map(|b| b.error);
+				Err(match (resp.status(), message) {
+					(StatusCode::CONFLICT, _) => {
+						ServerError::Conflict("The container is not running.".to_owned())
+					}
+					(StatusCode::NOT_FOUND, _) => {
+						ServerError::Validation("The container does not exist.".to_owned())
+					}
+					(status, message) => {
+						tracing::warn!(%status, ?message, "agent refused the terminal");
+						ServerError::AgentUnavailable
+					}
+				})
+			}
+			Err(e) => Err(unavailable("agent terminal handshake")(e)),
+		}
 	}
 
 	/// Starts an NDJSON stream. There is no overall timeout: callers cancel by

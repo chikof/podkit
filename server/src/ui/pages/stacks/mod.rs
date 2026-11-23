@@ -23,6 +23,7 @@ mod networks;
 mod runs;
 mod security;
 mod services;
+mod terminal_tab;
 #[cfg(test)]
 mod tests;
 mod volumes;
@@ -53,6 +54,7 @@ pub fn router() -> Router<AppState> {
 		.route(&at("/deployments/log"), get(runs::deployment_log))
 		.route(&at("/logs"), get(runs::logs))
 		.route(&at("/logs/stream"), get(runs::logs_stream))
+		.route(&at("/terminal"), get(terminal_tab::page))
 		.route(&at("/monitoring"), get(monitoring::page))
 		.route(&at("/monitoring/charts"), get(monitoring::charts))
 		.route(&at("/networks"), get(networks::page))

@@ -2391,3 +2391,30 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-fw-line { display: block; white-space: pre; }
 .ui-fw-line.ui-fw-plus { background: var(--success-soft); }
 .ui-fw-line.ui-fw-minus { background: var(--destructive-soft); }
+/* == terminal (B5) ==
+   The web terminal: xterm.js drawn on the log surface. `terminal.js` reads the --term-* tokens (through a probe, because
+   light-dark() only resolves where it is used), so the screen follows the theme. xterm.css is loaded by the same page. */
+.ui-terminal {
+	--term-bg: var(--log); --term-fg: var(--foreground); --term-cursor: var(--primary-text);
+	--term-selection: color-mix(in oklab, var(--primary) 35%, transparent);
+	--term-black: var(--subtle-foreground); --term-white: var(--muted-foreground); --term-bright-black: var(--muted-foreground);
+	--term-red: var(--destructive); --term-green: var(--success); --term-yellow: var(--warning);
+	--term-blue: var(--info); --term-magenta: var(--chart-4); --term-cyan: var(--chart-6);
+	display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: min(34rem, 72dvh); min-height: 16rem;
+	border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--term-bg); color: var(--term-fg); overflow: hidden;
+}
+.ui-terminal-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-block-end: var(--bw) solid var(--border); }
+.ui-terminal-state { display: flex; align-items: center; gap: var(--s-3); margin: 0; font-size: var(--fs-sm); color: var(--muted-foreground); }
+.ui-terminal-state[data-state="open"] .ui-dot { background-color: var(--success); }
+.ui-terminal-state[data-state="connecting"] .ui-dot { background-color: var(--warning); }
+.ui-terminal-state[data-state="error"] .ui-dot { background-color: var(--destructive); }
+.ui-terminal-tools { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.ui-terminal-tools [hidden] { display: none; }
+.ui-terminal-screen { min-height: 0; padding: var(--s-3) var(--s-4); overflow: hidden; }
+.ui-terminal-screen .xterm { height: 100%; }
+.ui-terminal-screen .xterm-viewport { background-color: transparent !important; scrollbar-width: thin; }
+.ui-terminal-note { min-height: 1.25rem; margin: 0; padding: 0 var(--s-4) var(--s-2); font-size: var(--fs-xs); color: var(--muted-foreground); }
+.ui-terminal-hint { margin: var(--s-3) 0 0; font-size: var(--fs-xs); color: var(--muted-foreground); }
+.ui-terminal:fullscreen { height: 100dvh; border-radius: 0; border: 0; }
+.ui-terminal[data-full] { position: fixed; inset: 0; z-index: 60; height: 100dvh; border-radius: 0; border: 0; }
+@media (max-width: 40rem) { .ui-terminal { height: min(30rem, 65dvh); } }

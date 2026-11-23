@@ -952,3 +952,38 @@ async fn a_stack_can_pick_a_saved_registry_and_a_foreign_one_is_refused(db: PgPo
 	}
 	assert_eq!(count(&db, "stacks").await, 1);
 }
+
+#[db_test]
+async fn the_terminal_tab_opens_a_shell_in_the_chosen_service(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	let id = f.create("Blog", COMPOSE).await;
+	let uri = format!("{}/terminal", f.stack(id));
+	// Nothing runs yet: a sentence, no terminal.
+	let (s, body) = f.get(&uri).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_contains(page_main(&body), "isn't running");
+	assert_not_contains(&body, "data-terminal");
+
+	set_service(&db, id, "web", "running", Some("ctr-web"), None).await;
+	set_service(&db, id, "cache", "running", Some("ctr-cache"), None).await;
+	let (_, body) = f.get(&uri).await;
+	let main = page_main(&body);
+	// The first service by name, with a choice of the other.
+	assert_contains(
+		main,
+		&format!(
+			"data-socket=\"/ws/terminal/stack-{id}-cache?team={}&amp;project={}\"",
+			f.team, f.project
+		),
+	);
+	assert_contains(main, "name=\"service\"");
+	let (_, body) = f.get(&format!("{uri}?service=web")).await;
+	assert_contains(
+		page_main(&body),
+		&format!("/ws/terminal/stack-{id}-web?team="),
+	);
+	// A service name that is not the stack's falls back to a real one, never to the query.
+	let (_, body) = f.get(&format!("{uri}?service=..%2Fx")).await;
+	assert_not_contains(&body, "..%2Fx");
+	assert_not_contains(&body, "../x");
+}

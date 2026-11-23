@@ -70,4 +70,5 @@ id!(
 	UptimeCheckId,
 	UptimeIncidentId,
 	FirewallRuleId,
+	TerminalSessionId,
 );
