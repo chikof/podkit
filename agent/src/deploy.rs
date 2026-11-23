@@ -488,6 +488,9 @@ fn validate(spec: &DeploySpec) -> Result<(), String> {
 	if spec.routing.is_some() && spec.container_port.is_none() {
 		return Err("routing requires container_port".to_string());
 	}
+	if let Some(access) = spec.routing.as_ref().and_then(|r| r.access.as_ref()) {
+		validate_access(access)?;
+	}
 	validate_options(spec)?;
 	if let Some(gate) = &spec.health {
 		crate::health::validate(gate)?;
@@ -502,6 +505,29 @@ fn validate(spec: &DeploySpec) -> Result<(), String> {
 	}
 	if let Some(gpus) = &spec.gpus {
 		podman::gpu_devices(gpus)?;
+	}
+	Ok(())
+}
+
+/// Refuses access rules that would break Traefik's label syntax or fail open: ranges that do
+/// not parse, a basic-auth entry that is not `user:hash`, a value with a comma or newline.
+fn validate_access(access: &proto::AccessRules) -> Result<(), String> {
+	proto::cidr::effective_allow(&access.allow, &access.deny)?;
+	if access.rate_average == Some(0) || access.max_body_bytes == Some(0) {
+		return Err("rate limit and body size must be above 0".to_string());
+	}
+	for entry in &access.basic_auth {
+		let ok = entry.split_once(':').is_some_and(|(user, hash)| {
+			!user.is_empty()
+				&& user
+					.bytes()
+					.all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-' | b'@'))
+				&& hash.starts_with("$2")
+				&& hash.bytes().all(|b| b.is_ascii_graphic() && b != b',')
+		});
+		if !ok {
+			return Err("basic auth needs `user:bcrypt-hash` entries".to_string());
+		}
 	}
 	Ok(())
 }
@@ -522,6 +548,44 @@ fn check_gpu_support(request: &GpuRequest, cdi: &Cdi, kfd_present: bool) -> Resu
 	}
 }
 
+/// The Traefik labels of a routed service: the network to reach it on, its routers and the
+/// middlewares of its access rules. Nothing for a service that is not routed.
+fn traefik_labels(spec: &DeploySpec) -> Vec<(String, String)> {
+	let (Some(routing), Some(port)) = (&spec.routing, spec.container_port) else {
+		return Vec::new();
+	};
+	// Traefik reaches the container on the network it lives on.
+	let mut labels = vec![(
+		ingress::NETWORK_LABEL.to_string(),
+		spec.attach
+			.first()
+			.map_or(NETWORK, |a| a.name.as_str())
+			.to_string(),
+	)];
+	labels.extend(ingress::routing_labels(
+		&spec.service,
+		&routing.http_hosts,
+		port,
+	));
+	labels.extend(ingress::secure_routing_labels(
+		&spec.service,
+		&routing.https_hosts,
+	));
+	if let Some(access) = &routing.access {
+		// `validate` already refused rules that do not parse.
+		labels.extend(
+			ingress::access_labels(
+				&spec.service,
+				access,
+				!routing.http_hosts.is_empty(),
+				!routing.https_hosts.is_empty(),
+			)
+			.unwrap_or_default(),
+		);
+	}
+	labels
+}
+
 fn container_spec(
 	spec: &DeploySpec,
 	image: &str,
@@ -529,25 +593,7 @@ fn container_spec(
 	file_binds: &[String],
 ) -> ContainerSpec {
 	let mut labels = vec![("podkit.service".to_string(), spec.service.clone())];
-	if let (Some(routing), Some(port)) = (&spec.routing, spec.container_port) {
-		// Traefik reaches the container on the network it lives on.
-		labels.push((
-			ingress::NETWORK_LABEL.to_string(),
-			spec.attach
-				.first()
-				.map_or(NETWORK, |a| a.name.as_str())
-				.to_string(),
-		));
-		labels.extend(ingress::routing_labels(
-			&spec.service,
-			&routing.http_hosts,
-			port,
-		));
-		labels.extend(ingress::secure_routing_labels(
-			&spec.service,
-			&routing.https_hosts,
-		));
-	}
+	labels.extend(traefik_labels(spec));
 	// Where the container lives: the stack network alone when isolated,
 	// otherwise `podkit` first and the stack networks after it.
 	let attached = |skip: usize| {
@@ -822,6 +868,7 @@ mod tests {
 			routing: Some(Routing {
 				http_hosts: vec!["x.example.com".to_string()],
 				https_hosts: vec![],
+				access: None,
 			}),
 			network_aliases: vec!["db".to_string()],
 			volumes: vec![],
@@ -1064,6 +1111,33 @@ mod tests {
 		);
 	}
 
+	#[test]
+	fn container_spec_attaches_access_middlewares_and_validate_refuses_bad_rules() {
+		let mut s = spec();
+		s.routing.as_mut().unwrap().access = Some(proto::AccessRules {
+			allow: vec!["10.0.0.0/8".to_string()],
+			basic_auth: vec!["ann:$2y$10$abcdefghij".to_string()],
+			security_headers: true,
+			..Default::default()
+		});
+		assert!(validate(&s).is_ok());
+		let c = container_spec(&s, "alpine:3", "podkit-app-1-9", &[]);
+		assert!(c.labels.contains(&(
+			"traefik.http.routers.app-1.middlewares".to_string(),
+			"app-1-allow,app-1-auth,app-1-headers".to_string()
+		)));
+		for edit in [
+			(|a: &mut proto::AccessRules| a.allow = vec!["nope".to_string()]) as fn(&mut _),
+			|a| a.basic_auth = vec!["ann:plain".to_string()],
+			|a| a.basic_auth = vec!["a,b:$2y$x".to_string()],
+			|a| a.rate_average = Some(0),
+		] {
+			let mut bad = s.clone();
+			edit(bad.routing.as_mut().unwrap().access.as_mut().unwrap());
+			assert!(validate(&bad).is_err());
+		}
+	}
+
 	fn image(id: &str, tag: &str) -> ImageSummary {
 		ImageSummary {
 			id: id.to_string(),
@@ -1244,6 +1318,7 @@ mod tests {
 				s.routing = Some(proto::Routing {
 					http_hosts: vec!["a.example.com".into()],
 					https_hosts: vec![],
+					access: None,
 				});
 				s.container_port = Some(80);
 			})

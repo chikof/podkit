@@ -5,13 +5,14 @@ use axum::Router;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use axum::routing::get;
-use maud::Markup;
+use maud::{Markup, html};
 
 use super::{Tab, database_url, forbid_unless_allowed, load, page};
 use crate::ids::{DatabaseId, ProjectId, TeamId};
 use crate::scanning::Subject;
 use crate::state::AppState;
 use crate::ui::extract::TeamCtx;
+use crate::ui::pages::networks::policy;
 use crate::ui::pages::security::{self, TabQuery};
 
 const DB: &str = "/teams/{team_id}/projects/{project_id}/databases/{database_id}";
@@ -41,5 +42,9 @@ async fn security_page(
 		&query,
 	)
 	.await?;
+	let content = html! {
+		(policy::database_warning(ctx.team.id, project.id.0, d.database.id.0, &d.database.name, d.database.public_port))
+		(content)
+	};
 	Ok(page(&s, &ctx, &project, &d, Tab::Security, &content).await)
 }
