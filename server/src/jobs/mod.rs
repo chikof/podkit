@@ -63,6 +63,10 @@ pub enum JobKind {
 	/// `target_id` is an environment clone id. Provisions the cloned databases, copies their
 	/// data and the volumes when asked, and deploys; the report says what each step did.
 	EnvironmentClone,
+	/// `target_id` is an application id. Starts the Tailscale sidecar and waits for its node.
+	TailscaleStart,
+	/// `target_id` is an application id. Logs the node out and removes the sidecar.
+	TailscaleRemove,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -377,6 +381,22 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 		}
 		JobKind::EnvironmentClone => {
 			crate::environments::clone::fail_clone(state, target_id, failure).await
+		}
+		// A failed start leaves the row (the sidecar may be half there) so the page can show
+		// why; a failed removal leaves it so the removal can be tried again.
+		JobKind::TailscaleStart | JobKind::TailscaleRemove => {
+			let message = match failure {
+				JobFailure::Cancelled => "cancelled",
+				JobFailure::Failed(m) => m.as_str(),
+			};
+			sqlx::query(
+				"UPDATE tailscale_exposures SET status = 'failed', error = $2, updated_at = NOW()
+				WHERE application_id = $1",
+			)
+			.bind(target_id)
+			.bind(message)
+			.execute(&state.db)
+			.await
 		}
 	};
 	if let Err(e) = result {

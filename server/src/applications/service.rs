@@ -795,6 +795,7 @@ pub async fn remove(
 	let app = scope::application(&s.db, team, project, id).await?;
 	crate::mcp_servers::service::ensure_removable(&s.db, app.id).await?;
 	remove_service(s, team, &app).await;
+	crate::tailscale::service::before_app_removed(s, team, &app).await;
 	git_service::before_app_removed(s, &app).await;
 	super::delete(&s.db, app.id).await?;
 	audit::log(

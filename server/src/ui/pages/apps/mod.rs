@@ -48,6 +48,7 @@ mod monitoring;
 mod networks_tab;
 mod provider_source;
 mod security;
+mod tailnet;
 mod volumes;
 mod webhooks;
 
@@ -63,6 +64,7 @@ pub fn router() -> Router<AppState> {
 		.merge(logs::router())
 		.merge(env::router())
 		.merge(domains::router())
+		.merge(tailnet::router())
 		.merge(volumes::router())
 		.merge(models_tab::router())
 		.merge(mcp_tab::router())

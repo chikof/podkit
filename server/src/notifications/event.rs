@@ -86,10 +86,12 @@ pub enum EventKind {
 	MetricAlert,
 	/// A metric alert's value is back under its threshold.
 	MetricRecovered,
+	/// A tailnet sidecar could not start or join.
+	TailnetFailed,
 }
 
 impl EventKind {
-	pub const ALL: [Self; 19] = [
+	pub const ALL: [Self; 20] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
@@ -109,6 +111,7 @@ impl EventKind {
 		Self::UptimeUp,
 		Self::MetricAlert,
 		Self::MetricRecovered,
+		Self::TailnetFailed,
 	];
 
 	pub fn as_str(self) -> &'static str {
@@ -132,6 +135,7 @@ impl EventKind {
 			Self::UptimeUp => "uptime_up",
 			Self::MetricAlert => "metric_alert",
 			Self::MetricRecovered => "metric_recovered",
+			Self::TailnetFailed => "tailnet_failed",
 		}
 	}
 
@@ -160,6 +164,7 @@ impl EventKind {
 			Self::UptimeUp => "Uptime check up",
 			Self::MetricAlert => "Metric alert",
 			Self::MetricRecovered => "Metric alert recovered",
+			Self::TailnetFailed => "Private access failed",
 		}
 	}
 
@@ -172,7 +177,9 @@ impl EventKind {
 				"Backups and jobs"
 			}
 			Self::Vulnerability | Self::CertExpiring => "Security",
-			Self::ContainerOom | Self::CrashLoop | Self::ModelCrashed => "Containers and models",
+			Self::ContainerOom | Self::CrashLoop | Self::ModelCrashed | Self::TailnetFailed => {
+				"Containers and models"
+			}
 			Self::UptimeDown | Self::UptimeUp => "Uptime",
 			Self::MetricAlert | Self::MetricRecovered => "Metric alerts",
 		}
@@ -194,6 +201,7 @@ impl EventKind {
 			| Self::CertExpiring
 			| Self::ContainerOom
 			| Self::ModelCrashed
+			| Self::TailnetFailed
 			| Self::MetricAlert => Severity::Warning,
 			Self::ServerUnreachable | Self::Vulnerability | Self::CrashLoop | Self::UptimeDown => {
 				Severity::Critical

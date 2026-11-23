@@ -189,6 +189,9 @@ async fn dispatch(
 		JobKind::EnvironmentClone => {
 			crate::environments::clone::run::run(state, job, token, log).await
 		}
+		JobKind::TailscaleStart | JobKind::TailscaleRemove => {
+			crate::tailscale::run::run(state, job, token, log).await
+		}
 	}
 }
 

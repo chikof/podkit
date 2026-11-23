@@ -65,6 +65,7 @@ mod shared_env;
 mod ssh_keys;
 mod stacks;
 mod state;
+mod tailscale;
 mod teams;
 mod templates;
 mod ui;

@@ -331,6 +331,13 @@ pub(crate) async fn build_spec(
 	let aliases: Vec<String> = mcp
 		.iter()
 		.map(|_| crate::mcp_servers::alias(&application.slug))
+		// A tailnet sidecar reaches the application through this alias.
+		.chain(
+			crate::tailscale::service::wants_alias(&state.db, application.id)
+				.await
+				.map_err(|e| db_failure(&e))?
+				.then(|| crate::tailscale::spec::target_alias(application.id)),
+		)
 		.collect();
 	let mut options = proto::ContainerOptions::default();
 	if let Some(mcp) = mcp

@@ -189,6 +189,29 @@ pub struct ContainerEvent {
 	pub exit_code: Option<i64>,
 }
 
+/// `POST /v1/containers/{id}/exec` body. The agent runs the command only in a container of a
+/// tailnet sidecar service (`podkit.service` starting with [`TAILSCALE_SERVICE_PREFIX`]).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExecRequest {
+	/// The command and its arguments; no shell is involved.
+	pub cmd: Vec<String>,
+	/// Seconds the command may take; the agent's default when absent.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub timeout_s: Option<u32>,
+}
+
+/// `POST /v1/containers/{id}/exec` response.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExecResult {
+	/// The command's exit status; `-1` when Podman could not tell.
+	pub exit_code: i64,
+	/// What the command wrote to stdout.
+	pub output: String,
+}
+
+/// Service-name prefix of the Tailscale sidecars podkit runs next to an application.
+pub const TAILSCALE_SERVICE_PREFIX: &str = "ts-";
+
 /// `POST /v1/db-stats` body: which database containers to read.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DbStatsRequest {
