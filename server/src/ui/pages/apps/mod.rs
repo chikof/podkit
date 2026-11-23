@@ -47,6 +47,8 @@ mod models_tab;
 mod monitoring;
 mod networks_tab;
 mod provider_source;
+mod replica_list;
+mod replicas;
 mod security;
 mod volumes;
 mod webhooks;

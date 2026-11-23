@@ -400,6 +400,14 @@ pub async fn stop(
 	client
 		.send(Method::POST, &format!("/v1/containers/{container_id}/stop"))
 		.await?;
+	// The other replicas of the deployment go with it.
+	if let Ok(others) = crate::replicas::service::names(&client, app.id.0, current.id.0).await {
+		for other in others.iter().filter(|c| c.id != container_id) {
+			client
+				.send(Method::POST, &format!("/v1/containers/{}/stop", other.id))
+				.await?;
+		}
+	}
 
 	let stopped =
 		deployments::set_status(&s.db, current.id, DeploymentStatus::Stopped, None).await?;

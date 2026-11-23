@@ -2203,3 +2203,194 @@ async fn health_gate_the_timeline_and_header_say_what_the_gate_did(db: PgPool) {
 	);
 	assert_not_contains(&page, "<b>x</b>");
 }
+
+// --- replicas -----------------------------------------------------------------------------------
+
+/// The Replicas section's fields, as the form sends them.
+fn replicas_form(extra: Value) -> Value {
+	let mut form = json!({
+		"rp_count": "3", "rp_sticky": true, "rp_surge": "1", "rp_unavail": "0", "rp_shared": false,
+	});
+	merge(&mut form, extra);
+	form
+}
+
+async fn stored_replicas(db: &PgPool, app: i64) -> Option<(i32, bool, i32, i32, bool)> {
+	crate::replicas::config(db, crate::ids::ApplicationId(app))
+		.await
+		.unwrap()
+		.map(|c| {
+			(
+				c.replicas,
+				c.sticky,
+				c.max_surge,
+				c.max_unavailable,
+				c.shared_volumes,
+			)
+		})
+}
+
+#[db_test]
+async fn replicas_section_is_on_the_general_tab_and_prefilled(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let page = f.page("settings").await;
+	assert_contains(&page, "Replicas");
+	assert_contains(&page, "&quot;rp_count&quot;:&quot;1&quot;");
+	assert_contains(&page, "&quot;rp_sticky&quot;:false");
+	// The save bar and its dirty dialog watch the new fields like the old ones.
+	assert_contains(&page, "$rp_count !== $_initial.rp_count");
+	assert_contains(&page, "$rp_sticky !== $_initial.rp_sticky");
+	// Numbers are text inputs with a numeric keyboard, never type=number.
+	assert_contains(&page, "data-bind=\"rp_count\"");
+	assert_not_contains(&page, "type=\"number\"");
+	// No volumes, so nothing to vouch for.
+	assert_not_contains(&page, "safe to share");
+	assert_eq!(page.matches("<h1").count(), 1);
+}
+
+#[db_test]
+async fn replicas_saving_stores_the_settings_and_the_page_shows_them_back(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let uri = f.url("settings");
+	let mut form = f.form("web", json!({}));
+	merge(&mut form, replicas_form(json!({})));
+	assert_contains(&f.post(&uri, &form).await, "Settings saved");
+	assert_eq!(
+		stored_replicas(&db, f.application).await,
+		Some((3, true, 1, 0, false))
+	);
+	let page = f.page("settings").await;
+	assert_contains(&page, "&quot;rp_count&quot;:&quot;3&quot;");
+	assert_contains(&page, "&quot;rp_sticky&quot;:true");
+
+	// A form from before the section existed changes nothing.
+	let old = f.form("web", json!({ "name": "Renamed" }));
+	assert_contains(&f.post(&uri, &old).await, "Settings saved");
+	assert_eq!(
+		stored_replicas(&db, f.application).await,
+		Some((3, true, 1, 0, false))
+	);
+}
+
+#[db_test]
+async fn replicas_a_bad_number_refuses_the_whole_save(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let uri = f.url("settings");
+	for (extra, message) in [
+		(
+			json!({ "rp_count": "abc" }),
+			"Replicas must be a whole number",
+		),
+		(
+			json!({ "rp_count": "0" }),
+			"Replicas must be between 1 and 10",
+		),
+		(
+			json!({ "rp_count": "11" }),
+			"Replicas must be between 1 and 10",
+		),
+		(
+			json!({ "rp_surge": "0", "rp_unavail": "0" }),
+			"room to move",
+		),
+	] {
+		let mut form = f.form("web", json!({ "name": "Renamed" }));
+		merge(&mut form, replicas_form(extra));
+		let body = f.post(&uri, &form).await;
+		assert_contains(&body, message);
+		assert_not_contains(&body, "Settings saved");
+	}
+	// Nothing was stored, not even the name that was fine.
+	assert_eq!(stored_replicas(&db, f.application).await, None);
+	assert_not_contains(&f.page("settings").await, "Renamed");
+}
+
+#[db_test]
+async fn replicas_with_volumes_are_refused_until_the_owner_vouches_for_them(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	crate::volumes::insert(&db, crate::ids::ApplicationId(f.application), "/data")
+		.await
+		.unwrap();
+	let page = f.page("settings").await;
+	assert_contains(&page, "safe to share");
+	assert_contains(&page, "It has 1 volume");
+
+	let uri = f.url("settings");
+	let mut form = f.form("web", json!({ "name": "Renamed" }));
+	merge(&mut form, replicas_form(json!({})));
+	let body = f.post(&uri, &form).await;
+	assert_contains(&body, "An application with volumes runs one replica");
+	assert_not_contains(&body, "Settings saved");
+	assert_eq!(stored_replicas(&db, f.application).await, None);
+	assert_not_contains(&f.page("settings").await, "Renamed");
+
+	let mut form = f.form("web", json!({}));
+	merge(&mut form, replicas_form(json!({ "rp_shared": true })));
+	assert_contains(&f.post(&uri, &form).await, "Settings saved");
+	assert_eq!(
+		stored_replicas(&db, f.application).await,
+		Some((3, true, 1, 0, true))
+	);
+}
+
+#[db_test]
+async fn replicas_a_reader_sees_text_and_a_forged_post_changes_nothing(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let mut form = f.form("web", json!({}));
+	merge(&mut form, replicas_form(json!({})));
+	f.post(&f.url("settings"), &form).await;
+	let carol = f.member("carol").await;
+
+	let (_, _, page) = get_html(&f.app, &f.url("settings"), Some(&carol)).await;
+	let main = page_main(&page);
+	assert_contains(main, "Replicas");
+	assert_contains(main, "Sticky sessions");
+	assert_not_contains(main, "Unsaved changes");
+
+	let mut forged = f.form("web", json!({}));
+	merge(&mut forged, replicas_form(json!({ "rp_count": "9" })));
+	let (_, _, body) = post_signals(&f.app, &f.url("settings"), Some(&carol), &forged).await;
+	assert_contains(&body, "You don't have permission to do that.");
+	assert_eq!(stored_replicas(&db, f.application).await.unwrap().0, 3);
+}
+
+#[db_test]
+async fn replicas_another_team_cannot_reach_or_change_the_settings(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let mut form = f.form("web", json!({}));
+	merge(&mut form, replicas_form(json!({})));
+	f.post(&f.url("settings"), &form).await;
+	let (bob_cookie, bob_team) = ui_session(&f.app, "bob").await;
+	let theirs = format!(
+		"/teams/{bob_team}/projects/{}/apps/{}/settings",
+		f.project, f.application
+	);
+	let (s, _, _) = get_html(&f.app, &theirs, Some(&bob_cookie)).await;
+	assert_eq!(s, StatusCode::NOT_FOUND);
+	let mut forged = f.form("web", json!({}));
+	merge(&mut forged, replicas_form(json!({ "rp_count": "9" })));
+	let (_, _, body) = post_signals(&f.app, &theirs, Some(&bob_cookie), &forged).await;
+	assert_contains(&body, "That no longer exists.");
+	assert_eq!(stored_replicas(&db, f.application).await.unwrap().0, 3);
+}
+
+#[db_test]
+async fn replicas_monitoring_lists_them_only_for_a_scaled_application(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let single = f.page("monitoring").await;
+	assert_not_contains(&single, "id=\"replicas\"");
+	let (refresh, _, _) = get_html(&f.app, &f.url("monitoring/replicas"), Some(&f.cookie)).await;
+	assert_eq!(refresh, StatusCode::NO_CONTENT);
+
+	let mut form = f.form("web", json!({}));
+	merge(&mut form, replicas_form(json!({})));
+	f.post(&f.url("settings"), &form).await;
+	let page = f.page("monitoring").await;
+	assert_contains(&page, "id=\"replicas\"");
+	assert_contains(&page, "0 of 3 up");
+	// Nothing deployed yet: the page says so instead of an empty table.
+	assert_contains(&page, "No replica is running yet");
+	assert_eq!(page.matches("<h1").count(), 1);
+	// The 30-second refresh asks for the replica section alone.
+	assert_contains(&page, "monitoring/replicas");
+}

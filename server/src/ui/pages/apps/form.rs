@@ -68,6 +68,13 @@ pub(super) struct AppSignals {
 	pub hc_drain: String,
 	pub hc_window: String,
 	pub hc_after: String,
+	/// The Replicas section (General tab only): the count as typed, empty when the page did
+	/// not have the section, the rollout limits as typed, and the two checkboxes.
+	pub rp_count: String,
+	pub rp_surge: String,
+	pub rp_unavail: String,
+	pub rp_sticky: bool,
+	pub rp_shared: bool,
 }
 
 fn optional<T: std::str::FromStr>(raw: &str, what: &str) -> Result<Option<T>, ServerError> {

@@ -844,7 +844,8 @@ impl Podman {
 			.await?)
 	}
 
-	/// Containers named `podkit-{service}-{instance_id}`.
+	/// Containers named `podkit-{service}-{instance_id}`, or `…-r{n}` for the replicas after
+	/// the first.
 	///
 	/// # Errors
 	/// Podman is unreachable.
@@ -858,10 +859,7 @@ impl Podman {
 			.await?
 			.into_iter()
 			.filter(|c| {
-				summary_name(c).is_some_and(|n| {
-					let rest = &n[prefix.len()..];
-					!rest.is_empty() && rest.bytes().all(|b| b.is_ascii_digit())
-				})
+				summary_name(c).is_some_and(|n| crate::replicas::is_instance(&n[prefix.len()..]))
 			})
 			.collect())
 	}

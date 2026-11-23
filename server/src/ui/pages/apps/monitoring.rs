@@ -6,13 +6,14 @@ use axum::Router;
 use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use maud::Markup;
+use maud::{Markup, html};
 use serde::Deserialize;
 
-use super::{Tab, app_url, forbid_unless_allowed, load, page};
+use super::{Tab, app_url, forbid_unless_allowed, load, page, replica_list};
 use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::metrics::service::{Target, extras as load_extras};
 use crate::metrics::{Range, service as metrics_service};
+use crate::replicas::service as replicas_service;
 use crate::state::AppState;
 use crate::ui::components::{Flavor, MetricsSection, metrics_section, resource_monitoring};
 use crate::ui::extract::TeamCtx;
@@ -24,6 +25,7 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.route(&format!("{APP}/monitoring"), get(monitoring_page))
 		.route(&format!("{APP}/monitoring/charts"), get(charts))
+		.route(&format!("{APP}/monitoring/replicas"), get(replicas))
 }
 
 #[derive(Deserialize)]
@@ -76,8 +78,45 @@ async fn monitoring_page(
 		range,
 	};
 	let body = resource_monitoring(Flavor::Application, &points, &extras, range, now());
-	let content = metrics_section(&section, &body);
+	let content = html! {
+		(replica_section(&s, &ctx, project.id, app.id).await)
+		(metrics_section(&section, &body))
+	};
 	Ok(page(&s, &ctx, &project, &app, Tab::Monitoring, &content).await)
+}
+
+/// The replica table, when the application runs several copies. The page and the refresh
+/// share it, so the same rows come back every 30 seconds.
+async fn replica_section(
+	s: &AppState,
+	ctx: &TeamCtx,
+	project: ProjectId,
+	app: ApplicationId,
+) -> Markup {
+	let refresh = format!("{}/monitoring/replicas", app_url(ctx.team.id, project, app));
+	if let Ok(Some(live)) =
+		replicas_service::status(s, ctx.user.id, ctx.team.id, project, app).await
+	{
+		replica_list::section(&live, &refresh)
+	} else {
+		html! {}
+	}
+}
+
+/// The refresh of the replica table alone, as a Datastar patch.
+async fn replicas(
+	State(s): State<AppState>,
+	ctx: TeamCtx,
+	Path((_, project, app)): Path<(TeamId, ProjectId, ApplicationId)>,
+) -> Response {
+	match replicas_service::status(&s, ctx.user.id, ctx.team.id, project, app).await {
+		Ok(Some(live)) => {
+			let refresh = format!("{}/monitoring/replicas", app_url(ctx.team.id, project, app));
+			sse::patch(&replica_list::section(&live, &refresh)).into_response()
+		}
+		Ok(None) => axum::http::StatusCode::NO_CONTENT.into_response(),
+		Err(e) => error::action(&e),
+	}
 }
 
 /// The refresh: the charts alone, as a Datastar patch.

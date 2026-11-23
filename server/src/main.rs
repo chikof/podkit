@@ -56,6 +56,7 @@ mod networks;
 mod notifications;
 mod projects;
 mod registries;
+mod replicas;
 mod routes;
 mod scanning;
 mod scope;
