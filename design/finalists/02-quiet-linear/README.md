@@ -363,3 +363,29 @@ New parts and rules from wave A (notifications, audit log, shared variables, hea
 **Dialogs.** The first field has `autofocus`; a destructive confirmation focuses the safe button (Cancel, Keep it). Every wave A dialog was opened and checked; the volume backup settings dialog used to focus the close button.
 
 **Where a form is saved from (open).** The application Settings, a scheduled task's settings and the audit retention use the save bar. The uptime check's settings, the status page card, the email server and the noise control keep a `Save` in their card footer. Both work; pick one for edit forms (the save bar) and keep footer buttons for add forms.
+
+## 13. Patterns from wave B (from the DR-B review)
+
+New parts and rules from wave B (auto-deploy, previews, access rules, server firewall, terminal, stored logs, SSO and two-step sign-in, builds, replicas, Tailscale, importers, usage and limits). `REVIEW-wave-B.md` has the punch list and `review-wave-B/` the screenshots.
+
+**A row of tabs wider than the page scrolls, and says so.** The page tabs have their scrollbar hidden, and a Git application has 17 of them. Each end of the row fades while there are tabs beyond it (`.ui-tabs`: a `mask` made of an opaque layer minus one band per end, the band sizes `--fade-start` / `--fade-end` registered with `@property` and driven by `animation-timeline: scroll(self inline)`). Nothing is drawn when the row fits, and no script runs. From 16 tabs the gaps close from 16 to 12 px, which is enough for all of them at 1440 px. The canvas switch (`.ui-cv-bar .ui-tabs`) is a pill and opts out. New tab rows need nothing; new pages with 16 or more tabs should be checked at 1440 px.
+
+**Where an empty state sits in a card.** Alone in the body it is the whole body (no padding of its own). Next to something else (a form, a chooser) it keeps the body's padding and loses its own inset, so its title starts under the card heading (`.ui-card-b > .ui-empty:not(:only-child)`). Check the title's left edge against the heading's when an empty state shares a body.
+
+**A list that is the card's own child** (the identity providers, `.ui-card > .ui-sec-list`) sits on the card inset (`--card-pad`) and has no rule of its own: the heading's rule is its top, the card edge its bottom. In a body (the passkeys) the list keeps its rules and bottom margin.
+
+**A lone button in a card body** is as wide as its content (`.ui-card-b > .ui-button { justify-self: start }`). A card body is a grid, which stretches its children; a stretched button reads as a bar, not an action. Several buttons go in `.ui-actions`.
+
+**A form's field and its button** are 12 px apart (`.ui-card-b` is a grid with that gap; a form of its own, such as the passkey one, is a grid with `gap: var(--s-4)`). A button that touches its field is always a missing gap, never a design.
+
+**A unit in a label** follows the name on the same line: `CPU (cores)`, the label a block and the input under it (`.ui-quota-grid`). A grid label puts a span on a line of its own.
+
+**Name column in a short list of lines** (the firewall's always-open rules): a bold name in an 11 rem column, the text beside it (hanging indent), one run under 40 rem (`.ui-fw-always`).
+
+**A banner's reason is a sentence.** The lead ends in a full stop and the reason after it begins with a capital and ends in one; a helper's own message is turned into that where it is shown (`sentence()` in `pages/firewall/mod.rs`).
+
+**A provider's mark in a button** is 20 px like the line icons beside it, with no plate, drawn in the text colour (`.ui-button > .ui-logo`). The 28 px tinted plate it has elsewhere (`ui-logo-sm`) was heavier than the passkey icon under it.
+
+**Sign-in.** The password form, the "or" rule, one outline button per provider and the passkey button, all `ui-button-block`, 12 px apart; the facts under the card start on the form's edge.
+
+**Where a form is saved from (still open).** Wave B kept the rule: edit forms use the save bar (Builds, Usage & limits, Logs retention, Tailscale, Access rules, Autodeploy, Freeze windows, Replicas, Build), add forms keep their button (Add provider, Add allow, Add a user). Two things break it: the firewall's "Save ranges" has a button of its own, and the two-step policy's bar sits in the flow between two cards, so the cards below jump when it appears. A form that has its bar should wrap the whole page so the bar is sticky at the bottom.
