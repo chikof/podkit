@@ -431,3 +431,16 @@ async fn followups_uptime_a_check_that_skips_tls_verification_wears_a_warning(db
 	assert_eq!(s, StatusCode::OK);
 	assert!(skips_tls_verification(&db, strict_id).await);
 }
+
+/// The save bars watch the signals the forms are bound to: every one of them has to exist, or a
+/// field changes without the bar showing.
+#[test]
+fn the_save_bars_watch_signals_that_exist() {
+	let initial = super::form::initial(None);
+	let initial = initial.as_object().unwrap();
+	for field in super::detail::EDIT_FIELDS {
+		assert!(initial.contains_key(*field), "{field}");
+	}
+	assert_eq!(initial.len(), super::detail::EDIT_FIELDS.len());
+	assert_eq!(super::STATUS_FIELDS, ["publish", "title", "auto_checks"]);
+}

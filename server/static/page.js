@@ -151,6 +151,24 @@
 		});
 	}
 
+	/* A customizable select carries its own `<button><selectedcontent>`. Where the browser leaves that button
+	   empty (Firefox) it has no name, so it gets the select's: its `aria-label`, `aria-labelledby` or label. */
+	const labelText = (l) => {
+		const c = l.cloneNode(true);
+		c.querySelectorAll("select,input,textarea").forEach((x) => x.remove());
+		return c.textContent.replace(/\s+/g, " ").trim();
+	};
+	const selectName = (s) =>
+		s.getAttribute("aria-label")
+		|| (s.getAttribute("aria-labelledby") || "").split(/\s+/).map((i) => d.getElementById(i)?.textContent.trim()).filter(Boolean).join(" ")
+		|| [...(s.labels || [])].map(labelText).join(" ").trim()
+		|| s.name || "Choose an option";
+	const nameSelects = () => {
+		for (const b of $$("select > button:not([aria-label])")) b.setAttribute("aria-label", selectName(b.parentElement));
+	};
+	nameSelects();
+	new MutationObserver(nameSelects).observe(d.body, { childList: true, subtree: true });
+
 	/* Ctrl/Cmd+K toggles the command palette; another open dialog is left alone. */
 	addEventListener("keydown", (e) => {
 		const p = $("#palette");

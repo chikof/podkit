@@ -24,7 +24,7 @@ use crate::state::AppState;
 use crate::ui::components::{
 	BUTTON_DANGER, BUTTON_OUTLINE, BannerKind, INPUT, LABEL, SELECT, Size, TEXTAREA, Tone, Variant,
 	badge, banner, button_class, dialog, dialog_cancel, dialog_open_button, empty_state, icon,
-	table,
+	save_bar, save_bar_saved, table,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -225,10 +225,7 @@ fn ssh_form(base: &str, can_update: bool) -> Markup {
 					"One per line or separated by commas. Empty means anywhere. The source of every SSH session open when you apply is allowed too, so a typo cannot lock you out; it stays allowed until the next apply, and the preview lists those sources."
 				}
 			}
-			@if can_update {
-				div { button type="submit" class=(button_class(Variant::Outline, Size::Md))
-					"data-indicator:_busy" "data-attr:disabled"="$_busy" { "Save ranges" } }
-			}
+			@if can_update { (save_bar(&["fw_ssh"])) }
 		}
 	}
 }
@@ -431,6 +428,7 @@ async fn refreshed(s: &AppState, ctx: &TeamCtx, server: ServerId) -> Response {
 			"fw_proto": "tcp", "fw_port": "", "fw_source": "", "fw_note": "",
 			"fw_ssh": view.settings.ssh_sources.join("\n"), "_error": "",
 		})))
+		.and(save_bar_saved())
 		.and(sse::script(
 			"document.querySelectorAll('dialog[open]').forEach((d) => d.close())",
 		))

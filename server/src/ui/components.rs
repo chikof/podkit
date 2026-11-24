@@ -87,7 +87,7 @@ pub use metrics::{
 pub use metrics_extra::{Flavor, Ops, resource_monitoring};
 pub use progress::progress;
 pub use registry_select::{registry_choice, registry_select};
-pub use save_bar::{save_bar, saved as save_bar_saved};
+pub use save_bar::{save_bar, save_bar_in, saved as save_bar_saved, saved_in as save_bar_saved_in};
 pub use security_badge::{act_now_marker, security_badge, severity_chip};
 pub use skeleton::{skeleton, skeleton_row};
 pub use stepper::{Current, stepper};

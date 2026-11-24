@@ -27,7 +27,6 @@ use serde_json::json;
 
 use super::button::{Size, Variant, button_class};
 use crate::ui::assets::guard_script;
-use crate::ui::layout::form_error;
 use crate::ui::sse::{self, Events};
 
 /// A signal name is a JS identifier; a wrong one is a bug in the page, not user input.
@@ -45,33 +44,53 @@ fn checked<'a>(fields: &[&'a str]) -> Vec<&'a str> {
 /// `<form>`, after the last field; its Save button submits that form.
 #[must_use]
 pub fn save_bar(fields: &[&str]) -> Markup {
+	bar(fields, "_initial", "_busy", "_error")
+}
+
+/// The bar of a page with more than one edit form: each form names its `scope`, which gives
+/// it its own snapshot (`_initial_<scope>`), busy (`_<scope>_busy`) and error
+/// (`_<scope>_error`) signals. The handler that fails sets the error signal; one that succeeds
+/// redirects, or adds [`saved_in`].
+#[must_use]
+pub fn save_bar_in(scope: &str, fields: &[&str]) -> Markup {
+	checked(&[scope]);
+	bar(
+		fields,
+		&format!("_initial_{scope}"),
+		&format!("_{scope}_busy"),
+		&format!("_{scope}_error"),
+	)
+}
+
+fn bar(fields: &[&str], initial: &str, busy: &str, error: &str) -> Markup {
 	let fields = checked(fields);
 	let join = |sep: &str, f: &dyn Fn(&str) -> String| {
 		fields.iter().map(|n| f(n)).collect::<Vec<_>>().join(sep)
 	};
 	let snapshot = format!(
-		"$_initial === '' && ($_initial = {{{}}})",
+		"${initial} === '' && (${initial} = {{{}}})",
 		join(", ", &|n| format!("{n}: ${n}"))
 	);
 	let dirty = format!(
-		"$_initial !== '' && ({})",
-		join(" || ", &|n| format!("${n} !== $_initial.{n}"))
+		"${initial} !== '' && ({})",
+		join(" || ", &|n| format!("${n} !== ${initial}.{n}"))
 	);
 	let discard = format!(
-		"{}; $_error = ''",
-		join("; ", &|n| format!("${n} = $_initial.{n}"))
+		"{}; ${error} = ''",
+		join("; ", &|n| format!("${n} = ${initial}.{n}"))
 	);
+	let signals = format!("{{{initial}: ''}}");
 	html! {
-		div class="ui-save-bar" data-save-bar "data-signals"="{_initial: ''}" "data-effect"=(snapshot)
+		div class="ui-save-bar" data-save-bar "data-signals"=(signals) "data-effect"=(snapshot)
 				"data-attr:data-dirty"=(dirty) {
 			(guard_script())
 			div class="ui-save-msg" {
 				span class="ui-save-title" { "Unsaved changes" }
-				(form_error())
+				p class="text-sm text-destructive" role="alert" "data-show"={ "$" (error) } "data-text"={ "$" (error) } style="display: none" {}
 			}
 			div class="ui-save-act" {
 				button type="button" class=(button_class(Variant::Outline, Size::Md)) "data-on:click"=(discard) { "Discard" }
-				button type="submit" class=(button_class(Variant::Default, Size::Md)) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Save" }
+				button type="submit" class=(button_class(Variant::Default, Size::Md)) "data-indicator"=(busy) "data-attr:disabled"={ "$" (busy) } { "Save" }
 			}
 		}
 	}
@@ -82,6 +101,13 @@ pub fn save_bar(fields: &[&str]) -> Markup {
 #[must_use]
 pub fn saved() -> Events {
 	sse::signals(&json!({ "_initial": "" }))
+}
+
+/// [`saved`] for the bar of `scope` (see [`save_bar_in`]).
+#[must_use]
+pub fn saved_in(scope: &str) -> Events {
+	checked(&[scope]);
+	sse::signals(&json!({ format!("_initial_{scope}"): "" }))
 }
 
 #[cfg(test)]
@@ -105,6 +131,50 @@ mod tests {
 			"{html}"
 		);
 		assert!(html.contains("Unsaved changes"), "{html}");
+	}
+
+	#[test]
+	fn a_scoped_bar_has_signals_of_its_own() {
+		let a = save_bar_in("smtp", &["host"]).into_string();
+		let b = save_bar_in("nz", &["dedup"]).into_string();
+		for (html, scope, field) in [(&a, "smtp", "host"), (&b, "nz", "dedup")] {
+			assert!(
+				html.contains(&format!("$_initial_{scope} !== ''")),
+				"{html}"
+			);
+			assert!(
+				html.contains(&format!("${field} !== $_initial_{scope}.{field}")),
+				"{html}"
+			);
+			assert!(
+				html.contains(&format!("{{_initial_{scope}: ''}}")),
+				"{html}"
+			);
+			assert!(
+				html.contains(&format!("data-indicator=\"_{scope}_busy\"")),
+				"{html}"
+			);
+			assert!(
+				html.contains(&format!("data-attr:disabled=\"$_{scope}_busy\"")),
+				"{html}"
+			);
+			assert!(
+				html.contains(&format!("data-show=\"$_{scope}_error\"")),
+				"{html}"
+			);
+		}
+		assert!(!a.contains("_initial_nz") && !b.contains("_initial_smtp"));
+		assert!(!a.contains("$_initial ") && !a.contains("$_busy"), "{a}");
+		let _ = saved_in("smtp");
+	}
+
+	#[test]
+	fn the_default_bar_keeps_the_page_wide_signals() {
+		let html = save_bar(&["name"]).into_string();
+		assert!(html.contains("data-indicator=\"_busy\""), "{html}");
+		assert!(html.contains("data-attr:disabled=\"$_busy\""), "{html}");
+		assert!(html.contains("data-show=\"$_error\""), "{html}");
+		assert!(html.contains("{_initial: ''}"), "{html}");
 	}
 
 	#[test]

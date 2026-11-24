@@ -29,7 +29,8 @@ use crate::notifications::{EventKind, Severity};
 use crate::state::AppState;
 use crate::ui::components::{
 	BUTTON, BUTTON_OUTLINE, CHECKBOX, INPUT, LABEL, SELECT, SWITCH, Size, Tone, Variant, badge,
-	button_class, card, card_content, card_footer, card_section, dialog, empty_state, icon, table,
+	button_class, card, card_content, card_footer, card_section, dialog, empty_state, icon,
+	save_bar_in, save_bar_saved_in, table,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::Crumb;
@@ -365,6 +366,17 @@ fn channels_section(ctx: &TeamCtx, data: &Data, now: OffsetDateTime) -> Markup {
 	}
 }
 
+/// The signals the two edit forms of the page are bound to; their save bars watch them.
+const SMTP_FIELDS: &[&str] = &[
+	"smtp_host",
+	"smtp_port",
+	"smtp_security",
+	"smtp_user",
+	"smtp_password",
+	"smtp_from",
+];
+const NOISE_FIELDS: &[&str] = &["nz_dedup", "nz_quiet", "nz_start", "nz_end", "nz_offset"];
+
 fn smtp_section(ctx: &TeamCtx, data: &Data) -> Markup {
 	let can_update = ctx.perms.can(Action::Update, Resource::Notification);
 	let post = format!("evt.preventDefault(); {}", post_to(ctx.team.id, "/smtp"));
@@ -421,15 +433,14 @@ fn smtp_section(ctx: &TeamCtx, data: &Data) -> Markup {
 								input class=(INPUT) type="text" required autocomplete="off" spellcheck="false" placeholder="podkit <podkit@example.com>" "data-bind:smtp_from";
 							}
 						}
-						(err_line("_smtp_error"))
 					}))
 					@if can_update {
-						(card_footer(&html! {
-							button type="submit" class=(BUTTON) "data-indicator:_smtp_busy" "data-attr:disabled"="$_smtp_busy" { "Save email server" }
-							@if data.smtp.is_some() {
+						(save_bar_in("smtp", SMTP_FIELDS))
+						@if data.smtp.is_some() {
+							(card_footer(&html! {
 								button type="button" class=(BUTTON_OUTLINE) "data-on:click"=(post_to(ctx.team.id, "/smtp/delete")) { "Remove" }
-							}
-						}))
+							}))
+						}
 					}
 				}
 			}))
@@ -792,13 +803,8 @@ fn noise_section(ctx: &TeamCtx) -> Markup {
 								span class="ui-hint" { "Quiet hours follow this offset all year; change it when the clocks change." }
 							}
 						}
-						(err_line("_nz_error"))
 					}))
-					@if can_update {
-						(card_footer(&html! {
-							button type="submit" class=(BUTTON) "data-indicator:_nz_busy" "data-attr:disabled"="$_nz_busy" { "Save" }
-						}))
-					}
+					@if can_update { (save_bar_in("nz", NOISE_FIELDS)) }
 				}
 			}))
 		}
@@ -941,6 +947,15 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 fn done(cookies: &Cookies, team: TeamId, message: &str) -> Response {
 	shell::flash(cookies, Tone::Success, message);
 	sse::redirect(&page_url(team)).into_response()
+}
+
+/// A save from a form with a save bar: the bar's baseline is cleared before the page reloads, so
+/// leaving the page does not ask about changes that were just saved.
+fn saved(cookies: &Cookies, team: TeamId, scope: &str, message: &str) -> Response {
+	shell::flash(cookies, Tone::Success, message);
+	save_bar_saved_in(scope)
+		.and(sse::redirect(&page_url(team)))
+		.into_response()
 }
 
 fn refused(signal: &str, e: &ServerError) -> Response {
@@ -1123,7 +1138,7 @@ async fn save_smtp(
 		from_addr: sig.smtp_from,
 	};
 	match service::save_smtp(&s, ctx.user.id, ctx.team.id, input).await {
-		Ok(()) => done(&cookies, ctx.team.id, "Email server saved."),
+		Ok(()) => saved(&cookies, ctx.team.id, "smtp", "Email server saved."),
 		Err(e) => refused("_smtp_error", &e),
 	}
 }
@@ -1390,7 +1405,7 @@ async fn save_noise(
 		utc_offset_min: (offset * 60.0).round() as i32,
 	};
 	match service::save_settings(&s.db, ctx.user.id, ctx.team.id, &new).await {
-		Ok(()) => done(&cookies, ctx.team.id, "Noise control saved."),
+		Ok(()) => saved(&cookies, ctx.team.id, "nz", "Noise control saved."),
 		Err(e) => refused("_nz_error", &e),
 	}
 }
