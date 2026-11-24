@@ -498,7 +498,7 @@ async fn two_factor_passkeys_register_and_sign_in_with_a_soft_authenticator(db: 
 	let ann = uid(&db, "ann").await;
 	let cookie = crate::ui::testing::ui_login(&app, "ann").await;
 	let origin = Url::parse(ORIGIN).unwrap();
-	let mut key = WebauthnAuthenticator::new(SoftPasskey::new(true));
+	let mut key = SoftPasskey::new(true);
 
 	// Registration: the server's options go to the authenticator, its answer comes back.
 	let (status, start) =
@@ -657,7 +657,7 @@ async fn two_factor_passkeys_register_and_sign_in_with_a_soft_authenticator(db: 
 	.await;
 	let options: webauthn_rs::prelude::RequestChallengeResponse =
 		serde_json::from_value(start["options"].clone()).unwrap();
-	let mut stranger = WebauthnAuthenticator::new(SoftPasskey::new(true));
+	let mut stranger = SoftPasskey::new(true);
 	assert!(stranger.do_authentication(origin, options).is_err());
 	let (status, _) = json_post(
 		&app,
@@ -741,4 +741,40 @@ async fn two_factor_recovery_codes_and_secrets_never_reach_a_page_twice(db: PgPo
 		service::enrolled(&db, ann).await.unwrap(),
 		"eve could not turn Ann's app off"
 	);
+}
+
+/// A passkey saved by webauthn-rs 0.5.4 (OpenSSL) still loads and serialises to the same JSON in
+/// webauthn-rs 0.6 (RustCrypto): stored credentials survive the upgrade.
+#[test]
+fn two_factor_passkey_saved_by_webauthn_rs_0_5_loads_unchanged() {
+	let stored = json!({
+		"cred": {
+			"cred_id": "87Q8EPkrnz-qtL1qKxlYoJytnfidzIzODFKbNjntocM",
+			"cred": {
+				"type_": "ES256",
+				"key": { "EC_EC2": {
+					"curve": "SECP256R1",
+					"x": "udJX-Kj1RBOkoz-ZeKMylfycLQjO_kILdnH728gzUpI",
+					"y": "BERKFdokLWefcjGoDfzc0VlcLWDaI4rJWy3BWX338Yo"
+				} }
+			},
+			"counter": 0,
+			"transports": null,
+			"user_verified": true,
+			"backup_eligible": false,
+			"backup_state": false,
+			"registration_policy": "required",
+			"extensions": {
+				"cred_protect": "Ignored",
+				"hmac_create_secret": "NotRequested",
+				"appid": "NotRequested",
+				"cred_props": "Ignored"
+			},
+			"attestation": { "data": "Self_", "metadata": "None" },
+			"attestation_format": "packed"
+		}
+	});
+	let key: webauthn_rs::prelude::Passkey = serde_json::from_value(stored.clone()).unwrap();
+	assert_eq!(key.cred_id().len(), 32);
+	assert_eq!(serde_json::to_value(&key).unwrap(), stored);
 }
