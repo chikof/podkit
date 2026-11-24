@@ -5,7 +5,7 @@
 //! `cargo test -p server --all-features -- health_gate`
 
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::Router;
 use axum::body::Bytes;
@@ -917,6 +917,12 @@ async fn health_gate_zero_downtime_live_a_broken_release_never_takes_traffic(db:
 		assert_eq!(status, StatusCode::OK, "{body}");
 		let (second, result) = s.deploy(id).await;
 		tokio::time::sleep(Duration::from_secs(2)).await;
+		// A release that fails fast leaves a short window; keep polling until the sample is
+		// big enough to mean something (the count depends on how fast the gate gives up).
+		let enough = Instant::now() + Duration::from_secs(20);
+		while total.load(Ordering::Relaxed) <= 100 && Instant::now() < enough {
+			tokio::time::sleep(Duration::from_millis(200)).await;
+		}
 		stop.cancel();
 		poller.await.unwrap();
 

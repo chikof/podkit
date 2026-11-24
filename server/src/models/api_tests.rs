@@ -1070,7 +1070,7 @@ async fn members_can_read_but_not_change(db: PgPool) {
 }
 
 /// The proof from the card: llama.cpp on the CPU with a small GGUF, reached by
-/// name from another container on the `podkit` network. The agent runs in this
+/// name from another container on the model's own (environment) network. The agent runs in this
 /// process on the local server's socket. The GGUF is copied into a volume
 /// standing in for the AI 03 download.
 ///
@@ -1155,12 +1155,18 @@ async fn live_llama_cpu_serves_v1_models_on_the_podkit_network(db: PgPool) {
 
 	let (result, log) = run_job(&s, JobKind::ModelStart, id).await;
 	let model = s.get(id).await;
+	let container = model["container_id"]
+		.as_str()
+		.unwrap_or_default()
+		.to_owned();
 	let proof = (model["status"] == "running").then(|| {
+		// Models join their environment's network, not `podkit`: join the one it is on.
 		Command::new("sh")
 			.args([
 				"-c",
 				&format!(
-					"podman run --rm --network podkit docker.io/curlimages/curl -s \
+					"net=$(podman inspect -f '{{{{range $k, $_ := .NetworkSettings.Networks}}}}{{{{$k}}}} {{{{end}}}}' {container} | cut -d' ' -f1) && \\
+					podman run --rm --network \"$net\" docker.io/curlimages/curl -s \\
 					http://model-{slug}:8080/v1/models | jq -e '.data | length >= 1'"
 				),
 			])
