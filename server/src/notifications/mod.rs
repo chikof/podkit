@@ -59,6 +59,18 @@ pub async fn emit(state: &AppState, event: Event) {
 	}
 }
 
+/// [`emit`] for a caller that has only the database. The delivery pass picks the message up
+/// on its next round (a few seconds) instead of being woken.
+pub async fn emit_db(db: &PgPool, event: Event) {
+	let kind = event.kind;
+	if let Err(e) = pipeline::route(db, event, OffsetDateTime::now_utc()).await {
+		tracing::warn!(
+			kind = kind.as_str(),
+			"cannot route a notification event: {e}"
+		);
+	}
+}
+
 /// Hourly housekeeping from the maintenance loop.
 pub async fn maintain(db: &PgPool) {
 	if let Err(e) = delivery::purge(db).await {

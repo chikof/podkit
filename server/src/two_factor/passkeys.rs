@@ -244,12 +244,19 @@ pub async fn finish_login(
 	let user = flow.user.ok_or(ServerError::InvalidCredentials)?;
 	let state: PasskeyAuthentication =
 		serde_json::from_value(flow.data["state"].clone()).map_err(|_| ServerError::Internal)?;
-	let result = webauthn(origin)?
-		.finish_passkey_authentication(credential, &state)
-		.map_err(|e| {
+	// A refused assertion is a wrong guess like a wrong code: counted, and locks the account.
+	let attempt = crate::throttle::begin(db, crate::throttle::Who::User(user)).await?;
+	let result = match webauthn(origin)?.finish_passkey_authentication(credential, &state) {
+		Ok(result) => {
+			attempt.ok().await;
+			result
+		}
+		Err(e) => {
 			tracing::info!(error = %e, "passkey sign-in refused");
-			ServerError::InvalidCredentials
-		})?;
+			attempt.fail().await;
+			return Err(ServerError::InvalidCredentials);
+		}
+	};
 
 	let rows = sqlx::query!(
 		"SELECT id, credential FROM passkeys WHERE user_id = $1",

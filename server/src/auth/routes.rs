@@ -10,6 +10,7 @@ use zeroize::Zeroizing;
 
 use super::{AuthUser, SessionToken, service, session, users};
 use crate::audit::{Diff, Target};
+use crate::throttle::{self, Who};
 use crate::{error::ServerError, state::AppState};
 
 pub fn router() -> Router<AppState> {
@@ -89,11 +90,16 @@ pub async fn verify_password(
 	email: &str,
 	password: String,
 ) -> Result<crate::ids::UserId, ServerError> {
-	let Some(user) = users::find_by_email(db, email).await? else {
+	let found = users::find_by_email(db, email).await?;
+	// An email nobody has is counted and locked like one somebody has, so neither the
+	// answer nor the timing says which exist (SEC-01).
+	let attempt = throttle::begin(db, Who::of_email(found.as_ref().map(|u| u.id), email)).await?;
+	let Some(user) = found else {
 		// Run verify anyway to prevent timing-based user enumeration
 		crypto::verify(Zeroizing::new(password), crypto::DUMMY_HASH.clone())
 			.await
 			.ok();
+		attempt.fail().await;
 		return Err(ServerError::InvalidCredentials);
 	};
 
@@ -102,6 +108,7 @@ pub async fn verify_password(
 	let valid = crypto::verify(Zeroizing::new(password), user.password_hash)
 		.await
 		.map_err(|e| hashing_failed(&e))?;
+	attempt.finish(valid).await;
 	if !valid {
 		return Err(ServerError::InvalidCredentials);
 	}
@@ -132,6 +139,8 @@ pub async fn open_session(
 ) -> Result<String, ServerError> {
 	let token = session::create_with(&s.db, user, method).await?;
 	cookies.add(session_cookie(headers, &token));
+	// A full sign-in: the account's wrong guesses so far no longer count.
+	throttle::clear_account(&s.db, user).await;
 	super::record_everywhere(
 		&s.db,
 		user,
@@ -159,7 +168,10 @@ pub async fn log_in(
 		let Some(code) = code.filter(|c| !c.trim().is_empty()) else {
 			return Err(ServerError::TwoFactorCodeRequired);
 		};
-		if !crate::two_factor::service::check_code(s, user, &code).await? {
+		let attempt = throttle::begin(&s.db, Who::User(user)).await?;
+		let right = crate::two_factor::service::check_code(s, user, &code).await?;
+		attempt.finish(right).await;
+		if !right {
 			super::record_everywhere(
 				&s.db,
 				user,

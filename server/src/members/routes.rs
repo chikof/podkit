@@ -1,6 +1,6 @@
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::routing::{get, patch};
+use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use serde::{Deserialize, Serialize};
 
@@ -14,6 +14,7 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.route("/members", get(list).post(add))
 		.route("/members/{user_id}", patch(update_role))
+		.route("/members/{user_id}/unlock", post(unlock))
 		.route("/roles", get(list_roles))
 }
 
@@ -126,4 +127,14 @@ async fn list_roles(
 ) -> AppResult<Json<Vec<RoleResponse>>> {
 	let roles = service::roles(&s.db, user.id, team).await?;
 	Ok(Json(roles.iter().map(RoleResponse::from).collect()))
+}
+
+/// Clears a member's sign-in lockout. Caller must hold `update membership`.
+async fn unlock(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, member_user)): Path<(TeamId, UserId)>,
+) -> AppResult<StatusCode> {
+	service::unlock(&s.db, user.id, team, member_user).await?;
+	Ok(StatusCode::NO_CONTENT)
 }

@@ -340,10 +340,11 @@ async fn login(
 	.await;
 	let message = match outcome {
 		Ok(to) => return sse::redirect(&to).into_response(),
-		Err(ServerError::InvalidCredentials) => "Wrong email or password.",
+		Err(ServerError::InvalidCredentials) => "Wrong email or password.".to_owned(),
+		Err(e @ ServerError::TooManyAttempts { .. }) => e.to_string(),
 		Err(e) => {
 			tracing::error!(error = %e, "ui login failed");
-			"Sign-in failed. Try again."
+			"Sign-in failed. Try again.".to_owned()
 		}
 	};
 	sse::signals(&serde_json::json!({ "_error": message, "password": "" })).into_response()

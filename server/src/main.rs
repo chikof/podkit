@@ -80,6 +80,7 @@ mod tailscale;
 mod teams;
 mod templates;
 mod terminal;
+mod throttle;
 mod two_factor;
 mod ui;
 mod uptime;
@@ -88,6 +89,8 @@ mod volume_backups;
 mod volumes;
 mod webhooks;
 
+#[cfg(test)]
+mod sec_regression;
 #[cfg(test)]
 mod tests;
 

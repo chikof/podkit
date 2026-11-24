@@ -103,12 +103,15 @@ pub async fn confirm_password(db: &PgPool, user: UserId, password: &str) -> AppR
 	if !row.has_password {
 		return Ok(());
 	}
+	// Somebody holding a session can guess the password here: counted like a sign-in.
+	let attempt = crate::throttle::begin(db, crate::throttle::Who::User(user)).await?;
 	let ok = crypto::verify(Zeroizing::new(password.to_owned()), row.password_hash)
 		.await
 		.map_err(|e| {
 			tracing::error!(error = %format!("{e:#}"), "password check failed");
 			ServerError::Internal
 		})?;
+	attempt.finish(ok).await;
 	if ok {
 		Ok(())
 	} else {

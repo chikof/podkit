@@ -100,10 +100,12 @@ pub enum EventKind {
 	QuotaWarning,
 	/// A team reached a limit and something was refused.
 	QuotaExceeded,
+	/// An account was locked after repeated wrong sign-in attempts.
+	SignInLocked,
 }
 
 impl EventKind {
-	pub const ALL: [Self; 26] = [
+	pub const ALL: [Self; 27] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
@@ -130,6 +132,7 @@ impl EventKind {
 		Self::ImportFailed,
 		Self::QuotaWarning,
 		Self::QuotaExceeded,
+		Self::SignInLocked,
 	];
 
 	pub fn as_str(self) -> &'static str {
@@ -160,6 +163,7 @@ impl EventKind {
 			Self::ImportFailed => "import_failed",
 			Self::QuotaWarning => "quota_warning",
 			Self::QuotaExceeded => "quota_exceeded",
+			Self::SignInLocked => "sign_in_locked",
 		}
 	}
 
@@ -195,6 +199,7 @@ impl EventKind {
 			Self::ImportFailed => "Import failed",
 			Self::QuotaWarning => "Quota almost used",
 			Self::QuotaExceeded => "Quota reached",
+			Self::SignInLocked => "Sign-in locked",
 		}
 	}
 
@@ -211,7 +216,7 @@ impl EventKind {
 			Self::BackupFailed | Self::BackupSucceeded | Self::CronFailed | Self::CronRecovered => {
 				"Backups and jobs"
 			}
-			Self::Vulnerability | Self::CertExpiring => "Security",
+			Self::Vulnerability | Self::CertExpiring | Self::SignInLocked => "Security",
 			Self::ContainerOom | Self::CrashLoop | Self::ModelCrashed | Self::TailnetFailed => {
 				"Containers and models"
 			}
@@ -246,7 +251,8 @@ impl EventKind {
 			| Self::TailnetFailed
 			| Self::ImportFailed
 			| Self::QuotaWarning
-			| Self::QuotaExceeded => Severity::Warning,
+			| Self::QuotaExceeded
+			| Self::SignInLocked => Severity::Warning,
 			Self::ServerUnreachable | Self::Vulnerability | Self::CrashLoop | Self::UptimeDown => {
 				Severity::Critical
 			}

@@ -16,6 +16,7 @@ use crate::auth::{open_session, record_everywhere};
 use crate::error::{AppResult, ServerError};
 use crate::ids::UserId;
 use crate::state::AppState;
+use crate::throttle::{self, Who};
 
 /// The cookie that ties a browser to its second-factor flow.
 pub const COOKIE: &str = "pk_2fa";
@@ -128,7 +129,10 @@ pub async fn submit_code(
 		.await?
 		.ok_or(ServerError::InvalidCredentials)?;
 	let token = token(cookies).ok_or(ServerError::InvalidCredentials)?;
-	if !service::check_code(s, pending.user, code).await? {
+	let attempt = throttle::begin(&s.db, Who::User(pending.user)).await?;
+	let right = service::check_code(s, pending.user, code).await?;
+	attempt.finish(right).await;
+	if !right {
 		return Err(refuse(s, cookies, pending.user, &token).await);
 	}
 	finish(s, cookies, headers, pending.user, &token).await?;
