@@ -296,6 +296,7 @@ pub(super) const EDIT_FIELDS: &[&str] = &[
 	"timeout_secs",
 	"interval_secs",
 	"tls_warn_days",
+	"tls_skip_verify",
 	"enabled",
 	"status_visible",
 	"status_name",
