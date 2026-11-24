@@ -357,7 +357,7 @@ pub async fn purge(state: &AppState, backup: &Backup) -> Result<(), ServerError>
 			);
 			ServerError::Internal
 		})?;
-		s3::delete(&state.http, &target, &secret, key)
+		s3::delete(&state.outbound, &target, &secret, key)
 			.await
 			.map_err(|e| {
 				ServerError::Validation(format!("could not delete the backup from storage: {e}"))

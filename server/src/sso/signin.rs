@@ -101,7 +101,7 @@ pub async fn begin(
 	let url = match p.kind {
 		Kind::Oidc => {
 			let issuer = p.issuer.as_deref().ok_or(ServerError::Internal)?;
-			let disc = oidc::discover(&s.http, issuer)
+			let disc = oidc::discover(&s.outbound, issuer)
 				.await
 				.map_err(|e| untrusted(&e))?;
 			oidc::authorization_url(&oidc::AuthRequest {
@@ -230,7 +230,7 @@ async fn fetch_identity(
 		Kind::Github => {
 			let ep = github::endpoints(p.issuer.as_deref());
 			let token = github::exchange(
-				&s.http,
+				&s.outbound,
 				&ep,
 				&p.client_id,
 				&secret,
@@ -239,13 +239,13 @@ async fn fetch_identity(
 				verifier,
 			)
 			.await?;
-			github::identity(&s.http, &ep, &token).await
+			github::identity(&s.outbound, &ep, &token).await
 		}
 		Kind::Oidc => {
 			let issuer = p.issuer.as_deref().ok_or("the provider has no issuer")?;
-			let disc = oidc::discover(&s.http, issuer).await?;
+			let disc = oidc::discover(&s.outbound, issuer).await?;
 			let tokens = oidc::exchange(
-				&s.http,
+				&s.outbound,
 				&disc,
 				&p.client_id,
 				&secret,
@@ -258,13 +258,13 @@ async fn fetch_identity(
 				.id_token
 				.ok_or("the token endpoint returned no ID token")?;
 			let mut claims =
-				oidc::verify_id_token(&s.http, &disc, &p.client_id, nonce, &id_token).await?;
+				oidc::verify_id_token(&s.outbound, &disc, &p.client_id, nonce, &id_token).await?;
 			// Some providers leave the email out of the ID token and give it at userinfo.
 			if claims.email.is_none()
 				&& let (Some(endpoint), Some(access)) =
 					(&disc.userinfo_endpoint, &tokens.access_token)
 			{
-				let more = oidc::userinfo(&s.http, endpoint, access, &claims.subject).await?;
+				let more = oidc::userinfo(&s.outbound, endpoint, access, &claims.subject).await?;
 				claims.email = more.email;
 				claims.email_verified = claims.email_verified.or(more.email_verified);
 				claims.name = claims.name.or(more.name);

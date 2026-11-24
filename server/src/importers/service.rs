@@ -26,6 +26,7 @@ use crate::iac::doc;
 use crate::iac::objects::Secrets;
 use crate::iac::service::{self as iac, ImportOutcome, Input, ProjectPlan};
 use crate::ids::{TeamId, UserId};
+use crate::net::outbound::Outbound;
 use crate::notifications::emit;
 use crate::notifications::event::{Event, EventKind, clip};
 use crate::state::AppState;
@@ -167,13 +168,13 @@ fn take(
 /// # Errors
 /// `Validation` for an unusable address, credential or server name; `Import` when the
 /// source cannot be read.
-pub async fn read(request: &Request) -> AppResult<Imported> {
+pub async fn read(outbound: &Outbound, request: &Request) -> AppResult<Imported> {
 	if request.server.trim().is_empty() {
 		return Err(ServerError::Validation(
 			"Choose the server the applications go on.".to_owned(),
 		));
 	}
-	let client = Client::connect(request.source, &request.credentials).await?;
+	let client = Client::connect(outbound, request.source, &request.credentials).await?;
 	let snapshot = match request.source {
 		Source::Coolify => coolify::fetch(&client).await?,
 		Source::Dokploy => dokploy::fetch(&client).await?,
@@ -200,7 +201,7 @@ pub async fn preview(
 	request: &Request,
 ) -> AppResult<Preview> {
 	authorize(&state.db, user, team, Action::Create, Resource::Project).await?;
-	let imported = read(request).await?;
+	let imported = read(&state.outbound, request).await?;
 	let file = doc::render(&imported.doc).map_err(|e| ServerError::Validation(e.to_string()))?;
 	let plans = if imported.doc.projects.is_empty() {
 		Vec::new()

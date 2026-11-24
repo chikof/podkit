@@ -7,5 +7,10 @@ https_port = 443
 # Who may create an account: "first-user" (only while no account exists, so the
 # first user is the admin), "open" (anyone, for a hosted instance) or "closed".
 registration = "first-user"
+# Whether podkit may send requests (notifications, imports, uptime checks, git providers, ...)
+# to private network addresses: "allow" or "deny". Unset: the instance administrator's setting
+# in Settings -> Registration, and without one "allow" for first-user and closed, "deny" for
+# open. Loopback, link-local and metadata addresses are never reachable.
+# outbound_private = "allow"
 # Seconds between samples of each active server (CPU, memory, disk, network, containers).
 metrics_interval_secs = 30

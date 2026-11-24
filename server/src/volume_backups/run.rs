@@ -49,7 +49,7 @@ pub async fn purge(state: &AppState, backup: &VolumeBackup) -> Result<(), Server
 			);
 			ServerError::Internal
 		})?;
-		s3::delete(&state.http, &target, &secret, key)
+		s3::delete(&state.outbound, &target, &secret, key)
 			.await
 			.map_err(|e| {
 				ServerError::Validation(format!("could not delete the backup from storage: {e}"))
@@ -341,7 +341,7 @@ async fn upload(
 	log: &mut JobLog,
 ) -> Result<(), JobFailure> {
 	let (part_size, count) = plan_parts(size);
-	let upload_id = s3::create_multipart(&state.http, &p.target, &p.secret, key)
+	let upload_id = s3::create_multipart(&state.outbound, &p.target, &p.secret, key)
 		.await
 		.map_err(|e| failed(e.to_string()))?;
 	let sent = async {
@@ -365,14 +365,21 @@ async fn upload(
 				"server agent finished the upload without confirming it",
 			));
 		};
-		s3::complete_multipart(&state.http, &p.target, &p.secret, key, &upload_id, &etags)
-			.await
-			.map_err(|e| failed(e.to_string()))
+		s3::complete_multipart(
+			&state.outbound,
+			&p.target,
+			&p.secret,
+			key,
+			&upload_id,
+			&etags,
+		)
+		.await
+		.map_err(|e| failed(e.to_string()))
 	}
 	.await;
 	if sent.is_err()
 		&& let Err(e) =
-			s3::abort_multipart(&state.http, &p.target, &p.secret, key, &upload_id).await
+			s3::abort_multipart(&state.outbound, &p.target, &p.secret, key, &upload_id).await
 	{
 		warn!("cannot abort a multipart upload: {e}");
 	}

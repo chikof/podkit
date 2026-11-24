@@ -330,6 +330,11 @@ pub struct LogExport {
 	/// server's name.
 	#[serde(default)]
 	pub labels: Vec<(String, String)>,
+	/// Whether the control plane lets requests reach private network addresses: the agent
+	/// applies the same outbound policy to the backend's address as the control plane does.
+	/// Loopback, link-local and metadata addresses are never reachable.
+	#[serde(default)]
+	pub allow_private: bool,
 }
 
 /// `PUT /v1/logs/config` body: how long and how much the agent keeps, and where it forwards.

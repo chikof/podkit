@@ -204,7 +204,9 @@ pub async fn finish(
 	let state = open_state(s, user, raw_state)?;
 	let team = TeamId(state.team);
 	authorize(&s.db, user, team, Action::Create, Resource::GitProvider).await?;
-	let converted = github::convert_manifest(&s.http, &state.base_url, code).await?;
+	service::vet_base_url(s, &state.base_url).await?;
+	let converted =
+		github::convert_manifest(s.outbound.vetted_client(), &state.base_url, code).await?;
 	let provider = service::create_github(
 		s,
 		user,

@@ -44,10 +44,11 @@ pub async fn fetch(client: &Client) -> Result<Snapshot, ServerError> {
 	for path in [APPS, PROJECTS] {
 		let answer = client.get(path).await?;
 		if answer["status"].as_i64() != Some(100) {
-			let why = answer["description"]
-				.as_str()
-				.unwrap_or("it refused the request");
-			return Err(ServerError::Import(format!("CapRover: {why}")));
+			// What CapRover says about it is the other side's text: not repeated.
+			tracing::warn!("import from CapRover: it refused the request");
+			return Err(ServerError::Import(
+				"CapRover: it refused the request; check the password.".to_owned(),
+			));
 		}
 		snap.0.insert(path.to_owned(), answer);
 	}

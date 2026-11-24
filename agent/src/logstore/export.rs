@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use outbound::Outbound;
 use proto::{LogExport, LogExportKind, LogLevel, LogRecord, Stream};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -201,13 +202,17 @@ impl SendError {
 /// # Errors
 /// The backend is unreachable or does not accept the batch.
 pub async fn send(
-	http: &reqwest::Client,
+	http: &Outbound,
 	export: &LogExport,
 	lines: &[Outgoing],
 	now_ms: i64,
 ) -> Result<(), SendError> {
+	// The backend's address goes through the outbound policy at every batch: a name is
+	// resolved once and vetted, a redirect is not followed.
 	let mut request = http
-		.post(endpoint(export))
+		.post(&endpoint(export))
+		.await
+		.map_err(|d| SendError::Transport(d.to_string()))?
 		.timeout(REQUEST_TIMEOUT)
 		.json(&payload(export, lines, now_ms));
 	if let Some(auth) = &export.authorization {
@@ -234,7 +239,7 @@ pub async fn send(
 /// # Errors
 /// The last error.
 pub async fn send_with_retries(
-	http: &reqwest::Client,
+	http: &Outbound,
 	export: &LogExport,
 	lines: &[Outgoing],
 	pause: Duration,
@@ -301,7 +306,7 @@ async fn run(
 	counters: Arc<Counters>,
 	pause: Duration,
 ) {
-	let http = match reqwest::Client::builder().build() {
+	let http = match Outbound::new(export.allow_private, Vec::new()) {
 		Ok(http) => http,
 		Err(e) => {
 			tracing::warn!(error = %e, "log export: no HTTP client, forwarding is off");
@@ -350,6 +355,7 @@ mod tests {
 				("team".into(), "acme".into()),
 				("server".into(), "box".into()),
 			],
+			allow_private: false,
 		}
 	}
 
@@ -509,9 +515,11 @@ mod tests {
 		format!("http://{addr}")
 	}
 
-	fn client() -> reqwest::Client {
+	fn client() -> Outbound {
 		let _ = rustls::crypto::ring::default_provider().install_default();
-		reqwest::Client::new()
+		let out = Outbound::new(false, Vec::new()).unwrap();
+		out.loopback_ok(true);
+		out
 	}
 
 	#[tokio::test]

@@ -17,6 +17,8 @@ use serde::Deserialize;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
+use crate::net::outbound::{Outbound, read_capped};
+
 /// How long to wait for an identity provider.
 const TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -58,9 +60,11 @@ fn same_issuer(a: &str, b: &str) -> bool {
 	a.trim_end_matches('/') == b.trim_end_matches('/')
 }
 
-async fn get_json(http: &reqwest::Client, url: &str) -> Result<Value, Failure> {
+async fn get_json(http: &Outbound, url: &str) -> Result<Value, Failure> {
 	let response = http
 		.get(url)
+		.await
+		.map_err(|d| format!("cannot reach {url}: {d} ({})", d.reason()))?
 		.header("accept", "application/json")
 		.timeout(TIMEOUT)
 		.send()
@@ -77,13 +81,9 @@ pub async fn read_json<T: serde::de::DeserializeOwned>(
 	response: reqwest::Response,
 	what: &str,
 ) -> Result<T, Failure> {
-	let bytes = response
-		.bytes()
+	let bytes = read_capped(response, 1 << 20)
 		.await
-		.map_err(|e| format!("cannot read the answer of {what}: {e}"))?;
-	if bytes.len() > 1 << 20 {
-		return Err(format!("the answer of {what} is too large"));
-	}
+		.map_err(|e| format!("cannot read the answer of {what}: {e:?}"))?;
 	serde_json::from_slice(&bytes)
 		.map_err(|e| format!("{what} did not return the expected JSON: {e}"))
 }
@@ -97,7 +97,7 @@ pub fn form_body(pairs: &[(&str, &str)]) -> String {
 
 /// Reads `<issuer>/.well-known/openid-configuration`. The document must name the same issuer
 /// it was fetched for (Discovery §4.3), or a provider could vouch for another one's tokens.
-pub async fn discover(http: &reqwest::Client, issuer: &str) -> Result<Discovery, Failure> {
+pub async fn discover(http: &Outbound, issuer: &str) -> Result<Discovery, Failure> {
 	let url = format!(
 		"{}/.well-known/openid-configuration",
 		issuer.trim_end_matches('/')
@@ -179,7 +179,7 @@ pub struct Tokens {
 
 /// Trades the authorization `code` for tokens, proving the PKCE `verifier`.
 pub async fn exchange(
-	http: &reqwest::Client,
+	http: &Outbound,
 	disc: &Discovery,
 	client_id: &str,
 	client_secret: &str,
@@ -199,7 +199,11 @@ pub async fn exchange(
 	let post_only = !methods.is_empty()
 		&& !methods.iter().any(|m| m == "client_secret_basic")
 		&& methods.iter().any(|m| m == "client_secret_post");
-	let mut request = http.post(&disc.token_endpoint).timeout(TIMEOUT);
+	let mut request = http
+		.post(&disc.token_endpoint)
+		.await
+		.map_err(|d| format!("cannot reach the token endpoint: {d} ({})", d.reason()))?
+		.timeout(TIMEOUT);
 	if post_only {
 		form.push(("client_id", client_id));
 		form.push(("client_secret", client_secret));
@@ -291,7 +295,7 @@ impl Claims {
 
 /// The provider's signing keys. A key of a kind podkit does not know is skipped rather
 /// than failing the whole set.
-async fn keys(http: &reqwest::Client, jwks_uri: &str) -> Result<Vec<Jwk>, Failure> {
+async fn keys(http: &Outbound, jwks_uri: &str) -> Result<Vec<Jwk>, Failure> {
 	let doc = get_json(http, jwks_uri).await?;
 	let list = doc
 		.get("keys")
@@ -310,7 +314,7 @@ async fn keys(http: &reqwest::Client, jwks_uri: &str) -> Result<Vec<Jwk>, Failur
 /// there are several audiences), `exp` in the future, and `nonce` equal to the one this
 /// browser's request carried.
 pub async fn verify_id_token(
-	http: &reqwest::Client,
+	http: &Outbound,
 	disc: &Discovery,
 	client_id: &str,
 	nonce: &str,
@@ -380,13 +384,15 @@ fn check_claims(map: Map<String, Value>, client_id: &str, nonce: &str) -> Result
 /// The userinfo endpoint (Core §5.3), for a provider whose ID token omits the email. The
 /// subject must be the ID token's (§5.3.2), or the answer is about someone else.
 pub async fn userinfo(
-	http: &reqwest::Client,
+	http: &Outbound,
 	endpoint: &str,
 	access_token: &str,
 	subject: &str,
 ) -> Result<Claims, Failure> {
 	let response = http
 		.get(endpoint)
+		.await
+		.map_err(|d| format!("cannot reach the userinfo endpoint: {d} ({})", d.reason()))?
 		.bearer_auth(access_token)
 		.header("accept", "application/json")
 		.timeout(TIMEOUT)

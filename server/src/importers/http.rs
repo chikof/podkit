@@ -1,13 +1,17 @@
 //! Reading a source over HTTP.
 //!
-//! One [`Client`] per import. It follows no redirects (the credential must go only where the
-//! person pointed it), gives up on a slow instance, and refuses an answer that is absurdly
-//! large. A credential is only ever in a request header; no message made here contains it, or
-//! the response body of a failed request, which may echo it.
+//! One [`Client`] per import. Every request goes through the instance's outbound policy
+//! (`crate::net::outbound`): no loopback, link-local or metadata address, private networks only
+//! where the instance allows them, one resolution per name and no redirects (the credential
+//! must go only where the person pointed it). It gives up on a slow instance and refuses an
+//! answer that is absurdly large. A credential is only ever in a request header; no message
+//! made here contains it, or anything the other side said.
 //!
-//! The address is whatever the person typed, a homelab's LAN address included, so the only
-//! check is that it is an `http` or `https` address. Importing needs `create project`, the
-//! same permission that lets a person point podkit at their own servers.
+//! **No oracle.** The address is whatever the person typed, so what a failure says would
+//! otherwise map the network behind podkit ("cannot connect", 401, 403, 404, "not JSON" tell a
+//! closed port from a web server from an API). Every failure to read from the address, for
+//! whatever reason, is the same message; the reason goes to the log only. Importing needs
+//! `create project`, the same permission that lets a person point podkit at their own servers.
 
 use std::time::Duration;
 
@@ -16,6 +20,7 @@ use serde_json::Value;
 
 use super::{Credentials, Source};
 use crate::error::ServerError;
+use crate::net::outbound::{Outbound, read_capped};
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 /// The largest response taken: a Coolify project with a few hundred variables is some
@@ -25,7 +30,7 @@ const MAX_BODY: usize = 32 * 1024 * 1024;
 const MAX_REQUESTS: usize = 3000;
 
 pub struct Client {
-	http: reqwest::Client,
+	outbound: Outbound,
 	/// `https://host[:port][/prefix]` with no trailing slash.
 	base: String,
 	headers: HeaderMap,
@@ -35,6 +40,24 @@ pub struct Client {
 
 fn failed(source: Source, what: impl std::fmt::Display) -> ServerError {
 	ServerError::Import(format!("{}: {what}", source.label()))
+}
+
+/// The one message for every failure to read from the address: unreachable, refused by the
+/// policy, a wrong credential, a missing page, an answer that is not what was expected.
+fn unusable(source: Source, why: &str, detail: impl std::fmt::Display) -> ServerError {
+	tracing::warn!("import from {} failed: {why}: {detail}", source.as_str());
+	let credential = source.credential().to_lowercase();
+	let extra = if source == Source::Coolify {
+		" A Coolify token needs the read and read:sensitive abilities."
+	} else {
+		""
+	};
+	failed(
+		source,
+		format!(
+			"podkit could not read from that address. Check the address and the {credential}, and that the address is one this podkit may reach: private network addresses need the \"private addresses\" setting in Settings → Registration, and loopback never works.{extra}"
+		),
+	)
 }
 
 /// The address as `scheme://host[:port][/path]`.
@@ -81,7 +104,11 @@ impl Client {
 	/// # Errors
 	/// `Validation` for an unusable address or credential, `Import` when the instance does
 	/// not answer or refuses the credential.
-	pub async fn connect(source: Source, creds: &Credentials) -> Result<Self, ServerError> {
+	pub async fn connect(
+		outbound: &Outbound,
+		source: Source,
+		creds: &Credentials,
+	) -> Result<Self, ServerError> {
 		let base = base_url(&creds.url)?;
 		if creds.token.trim().is_empty() {
 			return Err(ServerError::Validation(format!(
@@ -89,11 +116,7 @@ impl Client {
 				source.credential().to_lowercase()
 			)));
 		}
-		let http = reqwest::Client::builder()
-			.timeout(TIMEOUT)
-			.redirect(reqwest::redirect::Policy::none())
-			.build()
-			.map_err(|_| ServerError::Internal)?;
+		let http = outbound.clone();
 		let mut headers = HeaderMap::new();
 		let token = creds.token.trim();
 		match source {
@@ -113,7 +136,7 @@ impl Client {
 			Source::Caprover => {}
 		}
 		let mut client = Self {
-			http,
+			outbound: http,
 			base,
 			headers,
 			source,
@@ -133,8 +156,11 @@ impl Client {
 		let url = format!("{}/api/v2/login", self.base);
 		let (ns_k, ns_v) = header("x-namespace", "captain")?;
 		let response = self
-			.http
+			.outbound
 			.post(&url)
+			.await
+			.map_err(|d| unusable(self.source, "refused by the outbound policy", d.reason()))?
+			.timeout(TIMEOUT)
 			.header(ns_k.clone(), ns_v.clone())
 			.header("content-type", "application/json")
 			.body(serde_json::json!({ "password": password }).to_string())
@@ -142,55 +168,38 @@ impl Client {
 			.await
 			.map_err(|e| unreachable(self.source, e))?;
 		let body = self.read(response, "log in").await?;
-		let answer: Value = serde_json::from_slice(&body).map_err(|_| {
-			failed(
-				self.source,
-				"the login answered something that is not JSON; is this the CapRover address?",
-			)
-		})?;
+		let answer: Value = serde_json::from_slice(&body)
+			.map_err(|_| unusable(self.source, "the login is not JSON", ""))?;
 		if answer["status"].as_i64() != Some(100) {
-			let why = answer["description"]
-				.as_str()
-				.unwrap_or("it refused the login");
-			return Err(failed(self.source, format!("login failed: {why}")));
+			return Err(unusable(self.source, "the login was refused", ""));
 		}
 		let token = answer["data"]["token"]
 			.as_str()
-			.ok_or_else(|| failed(self.source, "the login answered without a token"))?;
+			.ok_or_else(|| unusable(self.source, "the login answered without a token", ""))?;
 		let (k, v) = header("x-captain-auth", token)?;
 		self.headers.insert(k, v);
 		self.headers.insert(ns_k, ns_v);
 		Ok(())
 	}
 
-	async fn read(
-		&self,
-		mut response: reqwest::Response,
-		doing: &str,
-	) -> Result<Vec<u8>, ServerError> {
+	async fn read(&self, response: reqwest::Response, doing: &str) -> Result<Vec<u8>, ServerError> {
 		let status = response.status();
-		let mut body = Vec::new();
-		while let Some(chunk) = response
-			.chunk()
-			.await
-			.map_err(|e| unreachable(self.source, e))?
-		{
-			body.extend_from_slice(&chunk);
-			if body.len() > MAX_BODY {
-				return Err(failed(self.source, "an answer was too large to import"));
-			}
-		}
+		let body = read_capped(response, MAX_BODY).await.map_err(|e| {
+			unusable(
+				self.source,
+				"the answer could not be read",
+				format!("{e:?}"),
+			)
+		})?;
 		if status.is_success() {
-			return Ok(body);
+			return Ok(body.to_vec());
 		}
-		let why = match status.as_u16() {
-			401 => "it refused the credential (401); check the token and its permissions".to_owned(),
-			403 => "the credential is not allowed to read this (403); a Coolify token needs the read and read:sensitive abilities".to_owned(),
-			404 => format!("it does not know this address while trying to {doing} (404); is this the right instance and version?"),
-			code if (300..400).contains(&code) => format!("it redirected the request ({code}); use the address it redirects to"),
-			code => format!("it answered {code} while trying to {doing}"),
-		};
-		Err(failed(self.source, why))
+		// Which status it was goes to the log. The person is told one thing, whatever it was.
+		Err(unusable(
+			self.source,
+			&format!("answered {} while trying to {doing}", status.as_u16()),
+			"",
+		))
 	}
 
 	/// `GET {base}{path}` as JSON.
@@ -201,7 +210,7 @@ impl Client {
 	pub async fn get(&self, path: &str) -> Result<Value, ServerError> {
 		self.get_opt(path)
 			.await?
-			.ok_or_else(|| failed(self.source, format!("{path} is not on this instance")))
+			.ok_or_else(|| unusable(self.source, "a page is missing", path))
 	}
 
 	/// As [`Self::get`], and `None` when the instance has no such endpoint or object (404).
@@ -218,8 +227,11 @@ impl Client {
 		}
 		let url = format!("{}{path}", self.base);
 		let response = self
-			.http
+			.outbound
 			.get(&url)
+			.await
+			.map_err(|d| unusable(self.source, "refused by the outbound policy", d.reason()))?
+			.timeout(TIMEOUT)
 			.headers(self.headers.clone())
 			.header("accept", "application/json")
 			.send()
@@ -229,32 +241,16 @@ impl Client {
 			return Ok(None);
 		}
 		let body = self.read(response, &format!("read {path}")).await?;
-		let value = serde_json::from_slice(&body).map_err(|_| {
-			failed(
-				self.source,
-				format!("{path} answered something that is not JSON; is this the right address?"),
-			)
-		})?;
+		let value = serde_json::from_slice(&body)
+			.map_err(|_| unusable(self.source, "an answer is not JSON", path))?;
 		Ok(Some(value))
 	}
 }
 
-/// Never the URL of the request or the error's detail beyond its kind: neither holds the
-/// credential, but a hostname is the person's own business in a log.
+/// What went wrong with the request goes to the log; never the URL of the request, which holds
+/// nothing secret but is the person's own business in a log, and never to the person.
 fn unreachable(source: Source, e: reqwest::Error) -> ServerError {
-	let why = if e.is_timeout() {
-		"it did not answer in time"
-	} else if e.is_connect() {
-		"podkit could not connect to it; check the address, and that podkit's host can reach it"
-	} else {
-		"the request failed"
-	};
-	tracing::warn!(
-		"import from {} failed: {}",
-		source.as_str(),
-		e.without_url()
-	);
-	failed(source, why)
+	unusable(source, "the request failed", e.without_url())
 }
 
 #[cfg(test)]

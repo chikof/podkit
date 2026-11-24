@@ -60,6 +60,9 @@ pub struct Config {
 	pub model_ready_interval: std::time::Duration,
 	/// Who may create an account.
 	pub registration: Registration,
+	/// `OUTBOUND_PRIVATE`: `Some` pins whether private addresses are reachable, over the
+	/// instance setting. `None` leaves it to the setting and the registration default.
+	pub outbound_private: Option<bool>,
 	/// The address git providers can reach podkit at (`PUBLIC_URL`), without a trailing slash.
 	/// `None` on a homelab with no public address: push webhooks cannot be created then.
 	pub public_url: Option<String>,
@@ -75,6 +78,8 @@ pub struct AppState {
 	pub jobs: Arc<Jobs>,
 	pub logs: Arc<LogHub>,
 	pub http: reqwest::Client,
+	/// Every request to an address a person typed goes through this: see `net::outbound`.
+	pub outbound: outbound::Outbound,
 	/// Cancelled on SIGINT/SIGTERM; long-lived streams end on it so graceful shutdown can drain.
 	pub shutdown: tokio_util::sync::CancellationToken,
 	/// The billing provider of this build (`cloud` feature; see `docs/cloud-extension.md`).

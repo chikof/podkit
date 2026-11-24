@@ -105,6 +105,7 @@ dependencies = [
  "bytes",
  "flate2",
  "futures-util",
+ "outbound",
  "proto",
  "regex",
  "reqwest",
@@ -3217,6 +3218,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
+name = "outbound"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "bytes",
+ "reqwest",
+ "rustls",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "outref"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4491,6 +4505,7 @@ dependencies = [
  "jsonwebtoken",
  "lettre",
  "maud",
+ "outbound",
  "podkit-billing",
  "podkit-cloud",
  "podkit-firewall",

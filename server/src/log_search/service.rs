@@ -189,6 +189,14 @@ pub async fn update_settings(
 ) -> AppResult<Settings> {
 	authorize(&s.db, user, team, Action::Update, Resource::Logs).await?;
 	let v = validate(input)?;
+	if let Some((_, url, _)) = &v.export {
+		// Resolved now, so an address podkit will not send to is refused when it is typed;
+		// the agent applies the same policy at every batch.
+		s.outbound
+			.vet_url(url)
+			.await
+			.map_err(|_| crate::net::outbound::refused())?;
+	}
 	let before = stored(&s.db, team).await?;
 	let sealed = match &v.authorization {
 		Some(value) => Some(s.secrets.encrypt(value).map_err(|e| {

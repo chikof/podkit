@@ -784,8 +784,10 @@ async fn testing_a_destination_says_what_the_storage_answered_and_stores_nothing
 			"the bucket does not exist",
 			false,
 		),
-		(403, "", "refused the access key or secret key", false),
-		(500, "", "storage answered 500", false),
+		// Whatever the storage said, the person is told one thing: no key, bucket or status of
+		// whatever the endpoint points at.
+		(403, "", "podkit could not use that storage", false),
+		(500, "", "podkit could not use that storage", false),
 	] {
 		let endpoint = fake_storage(status, answer).await;
 		let body = f

@@ -629,9 +629,35 @@ async fn the_registration_page_shows_the_instance_policy_read_only(db: PgPool) {
 	.await;
 	assert_eq!(s, StatusCode::OK);
 	let main = page_main(&body);
-	assert_contains(main, "Open");
-	assert_contains(main, "The sign-up page is open right now.");
-	assert_contains(main, "REGISTRATION=open");
+	// The sign-ups card has no controls; the one control on the page is the administrator's
+	// switch for private networks, below it.
+	let (signups, outbound) = main.split_once("Requests to private networks").unwrap();
+	assert_contains(signups, "Open");
+	assert_contains(signups, "The sign-up page is open right now.");
+	assert_contains(signups, "REGISTRATION=open");
+	assert_not_contains(signups, "<form");
+	assert_not_contains(signups, "<input");
+	// Alice is the first account, so the instance's administrator: she can switch it. An open
+	// instance does not allow private networks by default.
+	assert_contains(outbound, "Blocked");
+	assert_contains(outbound, "id=\"outbound-private\"");
+	assert_contains(outbound, "Allow requests to private network addresses");
+	assert_contains(outbound, "169.254.169.254");
+
+	// Somebody else sees the state and no switch.
+	let (bob, bob_team) = ui_session(&app, "bob").await;
+	let (s, _, body) = get_html(
+		&app,
+		&format!("/teams/{bob_team}/settings/registration"),
+		Some(&bob),
+	)
+	.await;
+	assert_eq!(s, StatusCode::OK);
+	let main = page_main(&body);
+	assert_contains(
+		main,
+		"Only the administrator of this podkit instance can change it.",
+	);
 	assert_not_contains(main, "<form");
 	assert_not_contains(main, "<input");
 }

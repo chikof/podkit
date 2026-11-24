@@ -6,18 +6,21 @@ use std::time::Duration;
 use lettre::message::Mailbox;
 use lettre::message::header::ContentType;
 use lettre::transport::smtp::authentication::Credentials;
+use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
 
 use super::channel::{
 	Channel, ChannelKind, DEFAULT_NTFY_SERVER, DEFAULT_TELEGRAM_API, open_secret,
 };
-use super::event::clip;
 use super::format::{self, Message, absolute};
 use super::settings::{Security, Smtp, load_smtp};
 use crate::state::AppState;
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 const SMTP_TIMEOUT: Duration = Duration::from_secs(15);
+/// What a mail that could not reach its relay says: the same for a refused address, a closed
+/// port and a name that does not resolve.
+const UNREACHABLE: &str = "cannot reach the SMTP server";
 
 /// Sends `msg` through `channel`.
 pub async fn send(state: &AppState, channel: &Channel, msg: &Message) -> Result<(), String> {
@@ -93,32 +96,43 @@ async fn post_bytes(
 	body: Vec<u8>,
 	headers: &[(&str, String)],
 ) -> Result<(), String> {
+	// The address is vetted here, at the moment of sending: what it pointed at when the channel
+	// was saved is not what it points at now. The refusal and a connection that fails read the
+	// same, so this is no way to probe the network.
 	let mut request = state
-		.http
+		.outbound
 		.post(url)
+		.await
+		.map_err(|d| {
+			tracing::warn!(reason = d.reason(), "notification: the address was refused");
+			"cannot connect".to_owned()
+		})?
 		.timeout(HTTP_TIMEOUT)
 		.header("Content-Type", "application/json")
 		.header("User-Agent", "podkit");
 	for (name, value) in headers {
 		request = request.header(*name, value);
 	}
-	let response = request
-		.body(body)
-		.send()
-		.await
-		// The error would name the URL, and the URL is the secret.
-		.map_err(|e| e.without_url().to_string())?;
+	let response = request.body(body).send().await.map_err(|e| {
+		// The error would name the URL, and the URL is the secret; and what it says of the
+		// connection tells where something listens. Say only which kind of failure it was.
+		let kind = if e.is_timeout() {
+			"no answer in time"
+		} else if e.is_connect() {
+			"cannot connect"
+		} else {
+			"the request failed"
+		};
+		tracing::debug!("notification request failed: {}", e.without_url());
+		kind.to_owned()
+	})?;
 	let status = response.status();
 	if status.is_success() {
 		return Ok(());
 	}
-	let detail = response.text().await.unwrap_or_default();
-	let detail = clip(detail.trim(), 200);
-	if detail.is_empty() {
-		Err(format!("HTTP {}", status.as_u16()))
-	} else {
-		Err(format!("HTTP {}: {detail}", status.as_u16()))
-	}
+	// What the other side answered is never shown: it may be an internal service's error page.
+	// The status code is all there is to say.
+	Err(format!("HTTP {}", status.as_u16()))
 }
 
 async fn send_mail(
@@ -129,17 +143,33 @@ async fn send_mail(
 	body: String,
 ) -> Result<(), String> {
 	let port = u16::try_from(smtp.port).map_err(|_| "invalid SMTP port".to_owned())?;
+	// Resolve once, vet the answer and connect to that address; the name is only for the
+	// certificate. A relay on a forbidden address and one that does not answer read the same.
+	let addrs = state
+		.outbound
+		.resolve(&smtp.host, port)
+		.await
+		.map_err(|d| {
+			tracing::warn!(
+				reason = d.reason(),
+				"notification: the SMTP host was refused"
+			);
+			UNREACHABLE.to_owned()
+		})?;
+	let ip = addrs
+		.first()
+		.map(|a| a.ip().to_string())
+		.ok_or(UNREACHABLE)?;
+	let tls = || {
+		TlsParameters::new(smtp.host.clone()).map_err(|_| "the SMTP TLS setup failed".to_owned())
+	};
+	let builder = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(&ip).port(port);
 	let builder = match Security::parse(&smtp.security) {
-		Some(Security::StartTls) => {
-			AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&smtp.host)
-		}
-		Some(Security::Tls) => AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp.host),
-		_ => Ok(AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(
-			&smtp.host,
-		)),
-	}
-	.map_err(|e| e.to_string())?;
-	let mut builder = builder.port(port).timeout(Some(SMTP_TIMEOUT));
+		Some(Security::StartTls) => builder.tls(Tls::Required(tls()?)),
+		Some(Security::Tls) => builder.tls(Tls::Wrapper(tls()?)),
+		_ => builder,
+	};
+	let mut builder = builder.timeout(Some(SMTP_TIMEOUT));
 	if let (Some(user), Some(sealed)) = (&smtp.username, &smtp.password) {
 		let password = state
 			.secrets
@@ -161,10 +191,13 @@ async fn send_mail(
 		.header(ContentType::TEXT_PLAIN)
 		.body(body)
 		.map_err(|e| e.to_string())?;
-	builder
-		.build()
-		.send(mail)
-		.await
-		.map(|_| ())
-		.map_err(|e| clip(&e.to_string(), 300))
+	builder.build().send(mail).await.map(|_| ()).map_err(|e| {
+		// A reply says which SMTP code it was; anything else says only that the relay
+		// could not be used, not where or why.
+		tracing::debug!("SMTP send failed: {e}");
+		match e.status() {
+			Some(code) => format!("the SMTP server answered {code}"),
+			None => UNREACHABLE.to_owned(),
+		}
+	})
 }
