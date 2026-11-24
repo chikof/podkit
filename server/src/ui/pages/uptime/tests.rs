@@ -391,3 +391,16 @@ async fn uptime_a_team_without_a_status_page_looks_like_a_slug_nobody_has(db: Pg
 	assert_eq!((off, off_body.clone()), (none, none_body));
 	assert_not_contains(&off_body, "docs");
 }
+
+/// The save bars watch the signals the forms are bound to: every one of them has to exist, or a
+/// field changes without the bar showing.
+#[test]
+fn the_save_bars_watch_signals_that_exist() {
+	let initial = super::form::initial(None);
+	let initial = initial.as_object().unwrap();
+	for field in super::detail::EDIT_FIELDS {
+		assert!(initial.contains_key(*field), "{field}");
+	}
+	assert_eq!(initial.len(), super::detail::EDIT_FIELDS.len());
+	assert_eq!(super::STATUS_FIELDS, ["publish", "title", "auto_checks"]);
+}

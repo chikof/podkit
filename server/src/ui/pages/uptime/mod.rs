@@ -26,7 +26,7 @@ use crate::ids::TeamId;
 use crate::state::AppState;
 use crate::ui::components::{
 	BUTTON, CHECKBOX, INPUT, LABEL, Tone, badge, card, card_content, card_footer, card_section,
-	empty_state, percent_text,
+	empty_state, percent_text, save_bar_in, save_bar_saved_in,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -82,6 +82,9 @@ fn check_row(team: TeamId, check: &Check, days: &[DayStat], now: OffsetDateTime)
 	}
 }
 
+/// The signals of the status page form; its save bar watches them.
+pub(super) const STATUS_FIELDS: &[&str] = &["publish", "title", "auto_checks"];
+
 fn status_card(team: TeamId, page: &service::StatusPage, auto: bool, can_edit: bool) -> Markup {
 	let post = format!(
 		"evt.preventDefault(); @post({})",
@@ -111,13 +114,8 @@ fn status_card(team: TeamId, page: &service::StatusPage, auto: bool, can_edit: b
 				@if !auto {
 					p class="text-sm text-muted-foreground" { "Automatic checks are off. The ones that exist stay until you delete them." }
 				}
-				(form_error())
 			}))
-			@if can_edit {
-				(card_footer(&html! {
-					button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Save" }
-				}))
-			}
+			@if can_edit { (save_bar_in("status", STATUS_FIELDS)) }
 		}
 	})
 }
@@ -230,7 +228,10 @@ async fn save_status(
 	}
 	.await;
 	match saved {
-		Ok(()) => sse::redirect(&list_url(ctx.team.id)).into_response(),
-		Err(e) => error::action(&e),
+		Ok(()) => save_bar_saved_in("status")
+			.and(sse::redirect(&list_url(ctx.team.id)))
+			.into_response(),
+		Err(e) => sse::signals(&serde_json::json!({ "_status_error": error::message(&e) }))
+			.into_response(),
 	}
 }

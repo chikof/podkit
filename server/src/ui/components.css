@@ -1315,12 +1315,12 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 /* The head of a resource page: its mark, kind, name, status line and the actions. */
 .ui-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-5); }
 .ui-head-logo { flex-shrink: 0; }
-.ui-head > .ui-head-id { display: grid; flex: 1 1 15rem; align-items: start; gap: var(--s-2); min-width: 0; }
+.ui-head > .ui-head-id { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1 1 15rem; align-items: start; gap: var(--s-2); min-width: 0; }
 .ui-head > .ui-head-id h1 { margin: 0; font-size: var(--fs-2xl); font-weight: var(--fw-bold); line-height: 1.2; overflow-wrap: anywhere; }
 .ui-eyebrow { display: flex; align-items: center; gap: var(--s-2); margin: 0; color: var(--subtle-foreground); font-size: var(--fs-xs); }
 .ui-head-sub { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); color: var(--muted-foreground); font-size: var(--fs-sm); }
 .ui-head-url { display: inline-flex; min-width: 0; align-items: center; gap: var(--s-2); color: var(--primary-text); text-decoration: none; }
-.ui-head-url > span { min-width: 0; }
+.ui-head-url > span { min-width: 0; overflow-wrap: anywhere; }
 .ui-head-url:hover { text-decoration: underline; }
 .ui-head-ref { display: inline-flex; align-items: center; gap: var(--s-2); font-family: var(--font-mono); font-size: var(--fs-xs); overflow-wrap: anywhere; }
 .ui-head > .ui-app-actions { margin-inline-start: auto; }
@@ -1347,11 +1347,15 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-tl-state { color: var(--st, var(--muted-foreground)); }
 .ui-tl-actions { display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-2); }
 
-/* A few facts about the deployment being read. */
-.ui-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-6); margin: 0; }
+/* Facts, defined once. `.ui-facts` is a list of label/value pairs (`<dl>`): `.ui-fact` lines with hairlines
+   between (servers, models, MCP); `-col` stacks bare pairs; `-row` lays figures out in a row that wraps
+   (a deployment, a scan). */
+.ui-facts { display: grid; margin: 0; }
 .ui-facts dt { color: var(--subtle-foreground); font-size: var(--fs-xs); }
 .ui-facts dd { margin: 0; font-size: var(--fs-sm); }
 .ui-facts code { font-family: var(--font-mono); }
+.ui-facts-col { display: grid; gap: var(--s-3); margin: 0; }
+.ui-facts-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-6); }
 .ui-facts-act { margin-inline-start: auto; }
 
 /* The log viewer as one panel: a toolbar (title, live, follow, copy; then the level chips and
@@ -1430,7 +1434,6 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-button.ui-block { display: flex; width: 100%; justify-content: center; }
 .ui-stat-cell { display: grid; gap: var(--s-1); justify-items: start; }
 .ui-cell-err { margin: 0; color: var(--destructive); font-size: var(--fs-xs); overflow-wrap: anywhere; }
-.ui-facts-col { display: grid; gap: var(--s-3); }
 .ui-mono { font-family: var(--font-mono); font-size: var(--fs-xs); }
 .ui-tpl-page, .ui-dests { display: grid; align-content: start; gap: var(--page-gap); min-width: 0; }
 
@@ -1506,8 +1509,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-hw-v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground); font-size: var(--fs-md); font-weight: var(--fw-bold); }
 .ui-hw-s { font-size: var(--fs-xs); color: var(--muted-foreground); }
 
-/* Facts: a label and its value per line, hairlines between. */
-.ui-facts { display: grid; margin: 0; }
+/* Facts as lines: a label and its value per line, hairlines between. */
 .ui-fact { display: grid; grid-template-columns: minmax(7rem, 11rem) minmax(0, 1fr); gap: var(--s-4); padding: var(--s-3) 0; border-block-start: var(--bw) solid var(--border); font-size: var(--fs-sm); }
 .ui-fact:first-child { border-block-start: 0; }
 .ui-fact dt { color: var(--muted-foreground); }
@@ -1518,12 +1520,13 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-row { position: relative; display: grid; align-items: center; column-gap: var(--s-4); row-gap: var(--s-2); grid-template-columns: 2.5rem minmax(0, 1.3fr) minmax(0, 1.2fr) auto minmax(0, 14rem); min-height: 4.25rem; padding: var(--s-3) var(--s-4); border-block-end: var(--bw) solid var(--border); transition: background-color var(--dur-1) var(--ease); }
 .ui-rows-3 > .ui-row { grid-template-columns: 2.5rem minmax(0, 1fr) auto; }
 .ui-row:hover { background-color: var(--card); }
-.ui-row:has(.ui-row-link:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; border-radius: var(--r-sm); }
 .ui-row-logo { display: grid; place-items: center; }
 .ui-row-main, .ui-row-mid { display: grid; gap: var(--s-1); min-width: 0; }
 .ui-row-name { font-size: var(--fs-md); font-weight: var(--fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-row-link { color: inherit; text-decoration: none; outline: none; }
-.ui-row-link::after { content: ""; position: absolute; inset: 0; }
+.ui-row-link::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-sm); }
+/* The link is the whole row (its ::after covers it), so the ring is drawn on that. */
+.ui-row-link:focus-visible::after { outline: 2px solid var(--ring); outline-offset: -2px; }
 .ui-row-sub { font-size: var(--fs-xs); color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-row-mid .ui-row-sub { white-space: normal; }
 .ui-row-fp { font: var(--fs-xs) / 1.3 var(--font-mono); color: var(--subtle-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1633,10 +1636,6 @@ code.font-mono { font-size: 0.92em; }
 /* Hover and focus washes on rows ease in like every other control (--dur-1). */
 .ui-table tbody tr > *, .ui-log-line { transition: background-color var(--dur-1) var(--ease); }
 
-/* Two pages defined `.ui-facts` (a row of figures on the deployments tab; lines on a server
-   or model). The later rule won everywhere, so the deployment facts stacked in one long
-   column. Where the figures belong in a row, they are one. */
-.ui-dep .ui-facts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-6); }
 
 /* == keys ======================================================================================= */
 .ui-key-fp { font-family: var(--font-mono); font-size: var(--fs-xs); overflow-wrap: anywhere; }
@@ -1701,8 +1700,8 @@ code.font-mono { font-size: 0.92em; }
 /* == security pages == */
 /* The badge sits above the row-wide link of a resource list, so it is a link of its own. */
 .ui-res-kind .ui-sev-group { position: relative; z-index: 1; margin-inline-start: var(--s-2); }
-/* The scan facts sit in a row that wraps, like the deployment facts (the generic facts list is a column). */
-.ui-facts.ui-scan-facts { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-3) var(--s-6); }
+/* The scan facts sit in a row that wraps, like the deployment facts. */
+.ui-scan-facts { align-items: flex-start; }
 .ui-scan-facts code { font-size: var(--fs-sm); }
 /* In a resource row the badge shares the kind line, so it must not make that line taller than a row without one. */
 .ui-res-kind .ui-sev { padding-block: 0; line-height: 1rem; }

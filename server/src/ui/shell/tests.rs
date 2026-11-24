@@ -723,3 +723,161 @@ async fn the_sidebar_cookie_renders_the_rail_and_a_toggle(db: PgPool) {
 	let (_, _, junk) = get_html(&app, &path, Some(&format!("{cookie}; sidebar=nonsense"))).await;
 	assert_contains(&junk, "class=\"ui-shell\"");
 }
+
+// --- ids and scripts ------------------------------------------------------------------------
+
+/// Every `id="…"` of a page.
+fn page_ids(html: &str) -> Vec<&str> {
+	html.match_indices(" id=\"")
+		.filter_map(|(at, m)| {
+			let rest = &html[at + m.len()..];
+			rest.find('"').map(|end| &rest[..end])
+		})
+		.collect()
+}
+
+/// An id names one thing: `for`, `aria-labelledby`, `commandfor`, `popovertarget` and the anchors
+/// of a skip link all find the first match, so a second one makes them point at the wrong element.
+/// A team, project, environment, application and server, then the pages of each, one after
+/// another (every page repeats the header, the sidebar and the dialogs of the shell).
+#[db_test]
+async fn no_page_repeats_an_id(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (token, team) = user_with_team(&app, "alice").await;
+	let cookie = ui_login(&app, "alice").await;
+	let api = project(&app, &token, team, "api", "api").await;
+	let (s, staging) = call(
+		&app,
+		"POST",
+		&format!("/api/v1/teams/{team}/projects/{api}/environments"),
+		Some(&token),
+		Some(json!({ "name": "staging", "slug": "staging" })),
+	)
+	.await;
+	assert!(s.is_success(), "{staging}");
+	let server = crate::tests::server_id(&db, team).await;
+	let (s, application) = call(
+		&app,
+		"POST",
+		&format!("/api/v1/teams/{team}/projects/{api}/applications"),
+		Some(&token),
+		Some(json!({
+			"name": "web", "slug": "web", "server_id": server,
+			"image": "docker.io/library/busybox", "container_port": 80,
+		})),
+	)
+	.await;
+	assert!(s.is_success(), "{application}");
+	let application = application["id"].as_i64().unwrap();
+	let (_, apps) = call(
+		&app,
+		"GET",
+		&format!("/api/v1/teams/{team}/projects/{api}/applications"),
+		Some(&token),
+		None,
+	)
+	.await;
+	let env = apps[0]["environment_id"].as_i64().unwrap();
+
+	let t = format!("/teams/{team}");
+	let p = format!("{t}/projects/{api}");
+	let a = format!("{p}/apps/{application}");
+	let mut pages = vec![
+		format!("{t}/projects"),
+		p.clone(),
+		format!("{p}/staging"),
+		format!("{p}/canvas"),
+		format!("{p}/cron"),
+		format!("{p}/cron/new?environment={env}&kind=exec&application={application}"),
+		format!("{p}/cron/new?environment={env}&kind=container"),
+		format!("{p}/mcp/new"),
+		format!("{p}/shared-variables"),
+		format!("{p}/apps/new?environment={env}"),
+		format!("{p}/databases/new?environment={env}&engine=postgres"),
+		format!("{p}/templates?environment={env}"),
+		format!("{t}/templates"),
+		format!("{t}/uptime"),
+		format!("{t}/servers"),
+		format!("{t}/servers/{server}"),
+		format!("{t}/servers/{server}/firewall"),
+		format!("{t}/logs"),
+		format!("{t}/security"),
+		format!("{t}/models"),
+		format!("{t}/members"),
+		format!("{t}/registries"),
+		format!("{t}/git-providers"),
+		format!("{t}/backup-targets"),
+		format!("{t}/keys"),
+		format!("{t}/account"),
+		format!("{t}/account/security"),
+		format!("{t}/infrastructure"),
+		format!("{t}/notifications"),
+	];
+	for tab in [
+		"",
+		"/settings",
+		"/env",
+		"/domains",
+		"/deployments",
+		"/logs",
+		"/volumes",
+		"/cron",
+		"/mcp",
+		"/webhooks",
+		"/advanced",
+		"/build",
+		"/security",
+		"/monitoring",
+		"/networks",
+	] {
+		pages.push(format!("{a}{tab}"));
+	}
+	for tab in [
+		"",
+		"/authentication",
+		"/builds",
+		"/usage",
+		"/audit",
+		"/notifications",
+		"/tailscale",
+		"/import",
+		"/api-tokens",
+		"/shared-variables",
+		"/appearance",
+		"/registration",
+	] {
+		pages.push(format!("{t}/settings{tab}"));
+	}
+
+	let mut missing = Vec::new();
+	for path in &pages {
+		let (s, _, body) = get_html(&app, path, Some(&cookie)).await;
+		if s != StatusCode::OK {
+			missing.push(format!("{s} {path}"));
+			continue;
+		}
+		let mut ids = page_ids(&body);
+		ids.sort_unstable();
+		let repeated: Vec<&str> = ids
+			.windows(2)
+			.filter(|w| w[0] == w[1])
+			.map(|w| w[0])
+			.collect();
+		assert!(repeated.is_empty(), "{path} repeats {repeated:?}");
+		// The terminal and the passkey script belong to their own pages, not to every page.
+		if !path.ends_with("/terminal") && !path.ends_with("/account/security") {
+			assert_not_contains(&body, "terminal.js");
+			assert_not_contains(&body, "passkey.js");
+		}
+	}
+	assert!(
+		missing.is_empty(),
+		"pages that did not render: {missing:#?}"
+	);
+}
+
+#[test]
+fn the_id_scan_sees_each_id_and_only_ids() {
+	let html = r##"<a id="one" data-id="x" href="#one"></a><div id="two" aria-labelledby="one"></div><svg><symbol id="one"/></svg>"##;
+	assert_eq!(page_ids(html), ["one", "two", "one"]);
+}

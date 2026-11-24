@@ -285,7 +285,7 @@ fn scan_card(
 							span class="ui-lede" { (view.counts.summary()) }
 						}
 					}
-					dl class="ui-facts ui-scan-facts" aria-label="Scan details" {
+					dl class="ui-facts ui-facts-row ui-scan-facts" aria-label="Scan details" {
 						(fact("Image", &html! { code class="break-all" { (scan.image_ref) } }))
 						@if !scan.image_digest.is_empty() {
 							(fact("Digest", &html! { code title=(scan.image_digest) { (digest(&scan.image_digest)) } }))

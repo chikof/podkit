@@ -366,7 +366,7 @@ fn list_row(c: &Cx<'_>, n: &Node, flip: bool) -> Vec<Markup> {
 /// for the keyboard and for a phone.
 pub fn list(c: &Cx<'_>, flip: &[NodeKey]) -> Markup {
 	html! {
-		div class="ui-cv-list" id="cv-list" {
+		div class="ui-cv-list" id="cv-list-view" {
 			@for env in &c.graph.environments {
 				@let nodes: Vec<&Node> = c.graph.nodes.iter().filter(|n| n.environment == env.id).collect();
 				@if !nodes.is_empty() {

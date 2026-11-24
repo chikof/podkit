@@ -18,12 +18,12 @@ use crate::metrics::Range;
 use crate::state::AppState;
 use crate::ui::charts::{Chart, Series, Unit, line_chart};
 use crate::ui::components::{
-	BUTTON, BUTTON_OUTLINE, MetricsSection, Size, Tone, Variant, badge, button_class, card,
-	card_content, card_footer, card_section, dialog, icon, metrics_body, metrics_section,
-	percent_text, range_phrase,
+	BUTTON_OUTLINE, MetricsSection, Size, Tone, Variant, badge, button_class, card, card_content,
+	card_section, dialog, icon, metrics_body, metrics_section, percent_text, range_phrase,
+	save_bar, save_bar_saved,
 };
 use crate::ui::extract::TeamCtx;
-use crate::ui::layout::{app_page, form_error};
+use crate::ui::layout::app_page;
 use crate::ui::pages::projects::cards::relative_time;
 use crate::ui::sse::js_string;
 use crate::ui::{error, sse};
@@ -253,11 +253,8 @@ async fn page(
 						(card_section("Settings", Some("Changing the address starts the check over."), None))
 						(card_content(&html! {
 							(form::fields(check.kind() == Kind::Http))
-							(form_error())
 						}))
-						(card_footer(&html! {
-							button type="submit" class=(BUTTON) "data-indicator:_busy" "data-attr:disabled"="$_busy" { "Save" }
-						}))
+						(save_bar(EDIT_FIELDS))
 					}
 				}))
 			}
@@ -286,6 +283,24 @@ async fn chart(
 	}
 }
 
+/// The signals of the settings form (`form::initial`); its save bar watches them.
+pub(super) const EDIT_FIELDS: &[&str] = &[
+	"name",
+	"kind",
+	"url",
+	"method",
+	"expected_status",
+	"keyword",
+	"host",
+	"port",
+	"timeout_secs",
+	"interval_secs",
+	"tls_warn_days",
+	"enabled",
+	"status_visible",
+	"status_name",
+];
+
 async fn edit(
 	State(s): State<AppState>,
 	ctx: TeamCtx,
@@ -293,7 +308,9 @@ async fn edit(
 	ReadSignals(sig): ReadSignals<form::Signals>,
 ) -> Response {
 	match service::update(&s, ctx.user.id, ctx.team.id, id, &sig.input()).await {
-		Ok(_) => sse::redirect(&url(ctx.team.id, id)).into_response(),
+		Ok(_) => save_bar_saved()
+			.and(sse::redirect(&url(ctx.team.id, id)))
+			.into_response(),
 		Err(e) => error::action(&e),
 	}
 }

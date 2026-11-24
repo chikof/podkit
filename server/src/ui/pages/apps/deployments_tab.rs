@@ -415,7 +415,7 @@ fn status_card(
 	html! {
 		div id="deployment-status" class="flex flex-col gap-3" {
 			(poll(&format!("{url}/status"), d.in_flight()))
-			dl class="ui-facts" aria-label={ "Deployment #" (d.id) } {
+			dl class="ui-facts ui-facts-row" aria-label={ "Deployment #" (d.id) } {
 				(fact("Status", &{
 					let (shape, word) = chrome::deployment_state(d);
 					chrome::dot(shape, &word)
