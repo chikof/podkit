@@ -251,11 +251,23 @@ async fn container_target(state: &AppState, task: &CronTask) -> Result<CronTarge
 		let network = networks::ensure_environment(&state.db, task.environment_id, task.server_id)
 			.await
 			.map_err(|e| db_failure(&e))?;
+		// No application to inherit from, but the environment's shared variables still apply.
+		let env = crate::shared_env::resolve::app_env(
+			state,
+			task.project_id,
+			task.environment_id,
+			Vec::new(),
+		)
+		.await
+		.map_err(|e| {
+			tracing::error!(task = task.id.0, "shared variables: {e}");
+			failed(e.to_string())
+		})?;
 		return Ok(CronTarget::Container {
 			image,
 			auth: None,
 			command: task.command.clone(),
-			env: Vec::new(),
+			env,
 			attach: vec![proto::NetworkAttach {
 				name: network.podman_name,
 				aliases: Vec::new(),

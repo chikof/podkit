@@ -1660,7 +1660,7 @@ async fn notifications_another_teams_things_are_404_and_non_members_are_refused(
 			None,
 		)
 		.await;
-		assert_eq!(s, StatusCode::FORBIDDEN, "GET {path}");
+		assert_eq!(s, StatusCode::NOT_FOUND, "GET {path}");
 	}
 	let (s, _) = call(
 		&w.app,
@@ -1683,7 +1683,7 @@ async fn notifications_another_teams_things_are_404_and_non_members_are_refused(
 		Some(json!({ "name": "x", "kind": "discord", "url": "https://example.com/h" })),
 	)
 	.await;
-	assert_eq!(s, StatusCode::FORBIDDEN);
+	assert_eq!(s, StatusCode::NOT_FOUND);
 	assert_eq!(count(&db, "notification_channels").await, 1);
 }
 

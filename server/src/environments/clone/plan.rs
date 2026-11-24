@@ -8,6 +8,7 @@ use serde::Serialize;
 
 use super::{Kind, Options, Secrets};
 use crate::applications::{self, Application, public_hostname};
+use crate::cron::{self, CronTask};
 use crate::databases::{self, Database};
 use crate::env_vars::{self, EnvVar};
 use crate::environments::Environment;
@@ -64,6 +65,8 @@ pub struct Snapshot {
 	pub databases: Vec<DbSnap>,
 	pub stacks: Vec<StackSnap>,
 	pub models: Vec<ModelSnap>,
+	/// The scheduled tasks of the environment.
+	pub cron: Vec<CronTask>,
 	/// The variables set at the environment's own scope.
 	pub shared: Vec<SharedVar>,
 	/// The environment's own networks, one per server.
@@ -77,6 +80,7 @@ impl Snapshot {
 			&& self.databases.is_empty()
 			&& self.stacks.is_empty()
 			&& self.models.is_empty()
+			&& self.cron.is_empty()
 	}
 
 	/// The server the clone job is queued on: the first resource's.
@@ -88,6 +92,7 @@ impl Snapshot {
 			.or_else(|| self.databases.first().map(|d| d.db.server_id))
 			.or_else(|| self.stacks.first().map(|s| s.stack.server_id))
 			.or_else(|| self.models.first().map(|m| m.model.server_id))
+			.or_else(|| self.cron.first().map(|t| t.server_id))
 	}
 
 	/// Whether there is anything a data copy would copy: a dumpable database or a volume.
@@ -161,6 +166,8 @@ pub async fn load(s: &AppState, team: TeamId, environment: Environment) -> AppRe
 			model,
 		});
 	}
+	let cron =
+		cron::store::list_tasks(db, environment.project_id, Some(environment.id), None).await?;
 	let shared = shared_env::list_scope(
 		db,
 		Scope::Environment(team, environment.project_id, environment.id),
@@ -174,6 +181,7 @@ pub async fn load(s: &AppState, team: TeamId, environment: Environment) -> AppRe
 		databases: dbs,
 		stacks: stack_snaps,
 		models: model_snaps,
+		cron,
 		shared,
 		env_networks,
 	})
@@ -343,6 +351,23 @@ impl Plan {
 				url: None,
 				data: Vec::new(),
 				notes: vec!["uses the same downloaded files".to_owned()],
+			});
+		}
+
+		for t in &snap.cron {
+			let note = match (options.deploy, t.enabled) {
+				(true, true) => "switched on once the clone is deployed",
+				(_, true) => "copied paused: it runs when you resume it",
+				_ => "copied paused, as it is in the source",
+			};
+			items.push(Item {
+				kind: Kind::Cron,
+				name: t.name.clone(),
+				new_name: t.name.clone(),
+				new_slug: None,
+				url: None,
+				data: Vec::new(),
+				notes: vec![note.to_owned()],
 			});
 		}
 

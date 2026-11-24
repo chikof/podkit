@@ -204,6 +204,12 @@ async fn authorize_resources(
 			needs.push((Action::Update, Resource::Model));
 		}
 	}
+	if !snap.cron.is_empty() {
+		needs.push((Action::Create, Resource::Cron));
+		if options.deploy {
+			needs.push((Action::Update, Resource::Cron));
+		}
+	}
 	if options.data && snap.has_data() {
 		needs.push((Action::Create, Resource::Backup));
 	}

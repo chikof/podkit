@@ -98,7 +98,16 @@ pub async fn probe(
 				keyword: check.keyword.clone(),
 				timeout,
 			};
-			let outcome = probe::http(outbound, &spec).await;
+			// A check that skips certificate verification gets a client of its own, so one
+			// self-signed service never loosens the rest. The address policy is the same.
+			let lenient;
+			let http_outbound = if check.tls_skip_verify {
+				lenient = outbound.accepting_any_certificate();
+				&lenient
+			} else {
+				outbound
+			};
+			let outcome = probe::http(http_outbound, &spec).await;
 			let tls = match (check.tls_warn_days, url::Url::parse(&url)) {
 				(Some(_), Ok(parsed))
 					if parsed.scheme() == "https"

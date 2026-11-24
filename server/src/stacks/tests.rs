@@ -512,10 +512,10 @@ async fn other_teams_get_404_and_non_members_403(db: PgPool) {
 		);
 		let (status, _) = call(&s.app, method, &foreign, Some(&bob), body.clone()).await;
 		assert_eq!(status, StatusCode::NOT_FOUND, "{method} {foreign}");
-		// Alice's team: he is not a member.
+		// Alice's team: he is not a member, so it is not there for him.
 		let theirs = s.path(&rest);
 		let (status, _) = call(&s.app, method, &theirs, Some(&bob), body).await;
-		assert_eq!(status, StatusCode::FORBIDDEN, "{method} {theirs}");
+		assert_eq!(status, StatusCode::NOT_FOUND, "{method} {theirs}");
 	}
 	// Nothing happened to the stack.
 	assert_eq!(s.detail(id).await["name"], "shop");

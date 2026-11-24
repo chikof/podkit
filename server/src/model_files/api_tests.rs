@@ -358,7 +358,7 @@ async fn other_teams_get_not_found(db: PgPool) {
 		.await;
 		assert_eq!(status, StatusCode::NOT_FOUND, "{method} {rest}");
 	}
-	// The same ids through Alice's team path are Forbidden for Bob, not a leak either.
+	// The same ids through Alice's team path are 404 for Bob: the team is not there for him.
 	let (status, _) = call(
 		&s.app,
 		"GET",
@@ -367,7 +367,7 @@ async fn other_teams_get_not_found(db: PgPool) {
 		None,
 	)
 	.await;
-	assert_eq!(status, StatusCode::FORBIDDEN);
+	assert_eq!(status, StatusCode::NOT_FOUND);
 
 	// Bob cannot target Alice's server, and sees none of her files.
 	let (status, _) = call(

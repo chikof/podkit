@@ -76,6 +76,9 @@ pub struct CheckInput {
 	/// Warn this many days before the certificate expires; `None` for no watch.
 	#[serde(default)]
 	pub tls_warn_days: Option<i32>,
+	/// Accept any certificate, a self-signed one included. Only for an `https` URL.
+	#[serde(default)]
+	pub tls_skip_verify: bool,
 	#[serde(default = "yes")]
 	pub enabled: bool,
 	#[serde(default)]
@@ -98,6 +101,7 @@ pub struct Valid {
 	pub timeout_secs: i32,
 	pub interval_secs: i32,
 	pub tls_warn_days: Option<i32>,
+	pub tls_skip_verify: bool,
 	pub enabled: bool,
 	pub status_visible: bool,
 	pub status_name: Option<String>,
@@ -156,6 +160,7 @@ pub fn validate(input: &CheckInput) -> AppResult<Valid> {
 		timeout_secs: input.timeout_secs,
 		interval_secs: input.interval_secs,
 		tls_warn_days: None,
+		tls_skip_verify: false,
 		enabled: input.enabled,
 		status_visible: input.status_visible,
 		status_name,
@@ -200,6 +205,8 @@ pub fn validate(input: &CheckInput) -> AppResult<Valid> {
 			valid.expected_status = input.expected_status;
 			valid.keyword = (!keyword.is_empty()).then(|| keyword.to_owned());
 			valid.tls_warn_days = input.tls_warn_days.filter(|_| url.scheme() == "https");
+			// Nothing to verify on a plain-HTTP address, so the setting is not kept there.
+			valid.tls_skip_verify = input.tls_skip_verify && url.scheme() == "https";
 		}
 		Kind::Tcp => {
 			let host = input.host.trim().to_ascii_lowercase();
@@ -303,8 +310,9 @@ pub async fn create(
 	let v = validate(input)?;
 	let check = sqlx::query_as::<_, Check>(sqlx::AssertSqlSafe(format!(
 		"INSERT INTO uptime_checks (id, team_id, name, kind, url, method, expected_status, keyword,
-			host, port, timeout_secs, interval_secs, tls_warn_days, enabled, status_visible, status_name)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			host, port, timeout_secs, interval_secs, tls_warn_days, enabled, status_visible, status_name,
+			tls_skip_verify)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		RETURNING {CHECK_COLUMNS}"
 	)))
 	.bind(UptimeCheckId::generate())
@@ -323,6 +331,7 @@ pub async fn create(
 	.bind(v.enabled)
 	.bind(v.status_visible)
 	.bind(&v.status_name)
+	.bind(v.tls_skip_verify)
 	.fetch_one(&s.db)
 	.await
 	.map_err(name_taken)?;
@@ -337,7 +346,8 @@ pub async fn create(
 			.set("kind", v.kind.as_str())
 			.set("target", target_label(&check))
 			.set("interval_secs", i64::from(v.interval_secs))
-			.set("status_visible", v.status_visible),
+			.set("status_visible", v.status_visible)
+			.set("tls_skip_verify", v.tls_skip_verify),
 	)
 	.await;
 	Ok(check)
@@ -377,6 +387,7 @@ pub async fn update(
 			ok_streak = CASE WHEN $17 THEN 0 ELSE ok_streak END,
 			tls_expires_at = CASE WHEN $17 THEN NULL ELSE tls_expires_at END,
 			tls_checked_at = CASE WHEN $17 THEN NULL ELSE tls_checked_at END,
+			tls_skip_verify = $18,
 			next_check_at = NOW()
 		WHERE id = $1 AND team_id = $2 RETURNING {CHECK_COLUMNS}"
 	)))
@@ -397,6 +408,7 @@ pub async fn update(
 	.bind(v.status_visible)
 	.bind(&v.status_name)
 	.bind(moved)
+	.bind(v.tls_skip_verify)
 	.fetch_optional(&s.db)
 	.await
 	.map_err(name_taken)?
@@ -430,6 +442,11 @@ pub async fn update(
 				"status_visible",
 				current.status_visible,
 				check.status_visible,
+			)
+			.changed(
+				"tls_skip_verify",
+				current.tls_skip_verify,
+				check.tls_skip_verify,
 			),
 	)
 	.await;

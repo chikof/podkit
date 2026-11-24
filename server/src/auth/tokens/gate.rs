@@ -68,7 +68,10 @@ pub fn required_scope(method: &Method, segments: &[&str]) -> Scope {
 	} else if segments.last() == Some(&"plan") {
 		// A plan compares and changes nothing, so reading is enough to ask for one.
 		Scope::Read
-	} else if segments.last().is_some_and(|s| DEPLOY_VERBS.contains(s)) {
+	} else if segments.last().is_some_and(|s| DEPLOY_VERBS.contains(s))
+		// Running a scheduled task runs a command: as much a deploy as a restart is.
+		|| (segments.last() == Some(&"run") && segments.contains(&"cron"))
+	{
 		Scope::Deploy
 	} else {
 		Scope::Write

@@ -193,6 +193,7 @@ impl Session {
 			"stop" => self.verb(args, "stop").await,
 			"set_env_var" => self.set_env_var(args).await,
 			"create_from_template" => self.template_deploy(args).await,
+			"run_cron_task" => self.run_cron_task(args).await,
 			"delete_resource" => self.delete(args).await,
 			other => Err(format!("unknown tool {other}")),
 		}
@@ -329,6 +330,19 @@ impl Session {
 			}
 			_ => Err("deploy works on an application or a stack".to_owned()),
 		}
+	}
+
+	/// Starts a scheduled task now. The API queues the run and answers at once; the run
+	/// itself (and its audit event, `cron.run` as `mcp`) is the same as pressing Run now.
+	async fn run_cron_task(&self, args: &Value) -> Result<Value, String> {
+		let project = int(args, "project_id")?;
+		let task = int(args, "task_id")?;
+		self.json(
+			Method::POST,
+			&format!("{}/cron/{task}/run", self.project_path(project)),
+			None,
+		)
+		.await
 	}
 
 	/// `restart` and `stop`, which the API has for every kind (a stack restarts one
@@ -675,6 +689,16 @@ pub fn tools() -> Vec<Value> {
 				"inputs": { "type": "object", "additionalProperties": { "type": "string" } },
 			}),
 			&["project_id", "template", "server_id"],
+			&writes(),
+		),
+		tool(
+			"run_cron_task",
+			"Run a scheduled task now, whatever its schedule says. It is queued and returns at once; the task's own concurrency setting still applies. Needs the `deploy` scope.",
+			&json!({
+				"project_id": project,
+				"task_id": { "type": "integer", "description": "Scheduled task id" },
+			}),
+			&["project_id", "task_id"],
 			&writes(),
 		),
 		tool(

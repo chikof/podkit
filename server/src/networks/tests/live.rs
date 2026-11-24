@@ -258,8 +258,9 @@ impl Setup {
 #[sqlx::test]
 #[ignore = "needs PODKIT_LIVE_PODMAN_SOCKET (a private podman.sock), the podkit-agent binary, nginx:alpine, postgres:18, traefik and python:3.13-slim images; binds ports 28080 and 28443"]
 async fn networks_live_environments_are_isolated_and_user_networks_connect(db: PgPool) {
-	let socket = std::env::var("PODKIT_LIVE_PODMAN_SOCKET")
-		.expect("set PODKIT_LIVE_PODMAN_SOCKET to a private podman.sock; never the host's");
+	let Some(socket) = crate::tests::live_podman_socket("networks_live") else {
+		return;
+	};
 	let live = Live {
 		socket: socket.clone(),
 	};

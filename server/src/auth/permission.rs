@@ -116,6 +116,11 @@ pub async fn authorize(
 	.await?;
 
 	if !allowed {
+		// A stranger to the team learns nothing about it: 404, as for any resource of
+		// another team. A member who lacks the permission is told so.
+		if !super::team_gate::is_member(db, user, team).await? {
+			return Err(ServerError::NotFound);
+		}
 		return Err(ServerError::Forbidden);
 	}
 	// A team that requires two-step verification shuts out a member who has none, once
@@ -340,6 +345,6 @@ mod tests {
 		let outsider = authorize(&pool, UserId(9999), team, Action::Read, Resource::Team)
 			.await
 			.unwrap_err();
-		assert!(matches!(outsider, ServerError::Forbidden));
+		assert!(matches!(outsider, ServerError::NotFound), "{outsider:?}");
 	}
 }

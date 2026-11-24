@@ -518,9 +518,9 @@ async fn http_metrics_the_extra_endpoints_serve_the_owner_and_hide_from_other_te
 			let (status, _) = call(&app, "GET", &foreign, Some(&bob), None).await;
 			assert_eq!(status, StatusCode::NOT_FOUND, "{name}: {foreign}");
 		}
-		// Her team: he is not a member.
+		// Her team: he is not a member, so it is not there for him either.
 		let (status, _) = call(&app, "GET", &path, Some(&bob), None).await;
-		assert_eq!(status, StatusCode::FORBIDDEN, "{name}");
+		assert_eq!(status, StatusCode::NOT_FOUND, "{name}");
 	}
 }
 

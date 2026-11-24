@@ -1,6 +1,8 @@
 pub mod apps;
 pub mod cron_ui;
 pub mod dbs;
+mod followups;
+pub mod foreign_team_404;
 pub mod git_providers;
 pub mod grid;
 pub mod health;
@@ -32,6 +34,24 @@ use crate::state::{AppState, Config, Registration};
 
 pub async fn app(db: PgPool) -> Router {
 	crate::routes::routes(state(db)).await.unwrap()
+}
+
+/// The Podman socket a live test runs against: `PODKIT_LIVE_PODMAN_SOCKET`, a service of its
+/// own, never the host's. Unset (or empty) the test has nothing to run on: it says so and
+/// the caller returns, so `--ignored` on a machine without one is a skip, not a panic.
+pub fn live_podman_socket(test: &str) -> Option<String> {
+	let socket = socket_in(std::env::var("PODKIT_LIVE_PODMAN_SOCKET").ok());
+	if socket.is_none() {
+		eprintln!(
+			"skipping {test}: set PODKIT_LIVE_PODMAN_SOCKET to the socket of a Podman service of its own (never the host's)"
+		);
+	}
+	socket
+}
+
+/// What the variable's value says: a socket, or nothing to run on.
+pub fn socket_in(value: Option<String>) -> Option<String> {
+	value.filter(|s| !s.trim().is_empty())
 }
 
 /// Like [`app`], with another registration policy (tests default to `Open`).

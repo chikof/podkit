@@ -32,8 +32,9 @@ use crate::tests::state;
 #[sqlx::test]
 #[ignore = "needs PODKIT_LIVE_PODMAN_SOCKET (a private podman.sock), the podkit-agent binary, nginx:alpine and traefik images; binds ports 28080 and 28443"]
 async fn shared_env_live_a_team_variable_reaches_the_running_container(db: PgPool) {
-	let socket = std::env::var("PODKIT_LIVE_PODMAN_SOCKET")
-		.expect("set PODKIT_LIVE_PODMAN_SOCKET to a private podman.sock; never the host's");
+	let Some(socket) = crate::tests::live_podman_socket("shared_env_live") else {
+		return;
+	};
 	let live = Live {
 		socket: socket.clone(),
 	};

@@ -32,6 +32,8 @@ A token is the **intersection** of three things: the scopes it carries, your own
 
 Failures: `401` for a missing, unknown, revoked or expired token; `403` when a scope is missing; `404` outside its team or projects. A token never works for the web UI.
 
+A team you are not a member of is `404` for everyone, signed in with a token or a session, on every `/api/v1/teams/{team_id}/…` route and whatever the method or body: the answer never says whether the team exists. A member who lacks a permission still gets `403`.
+
 The secret is `pk_<prefix>_<secret>`. It is shown once, at creation; only a SHA-256 of it is stored, so a lost token cannot be recovered. Revoke it and make another. Revoking takes effect immediately. `last_used_at` is updated at most once a minute.
 
 ```sh

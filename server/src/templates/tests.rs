@@ -1339,7 +1339,7 @@ async fn other_teams_get_404_and_viewers_and_strangers_are_refused(db: PgPool) {
 	);
 	assert_eq!(
 		post(s.team, s.project, alice_server).await,
-		StatusCode::FORBIDDEN
+		StatusCode::NOT_FOUND
 	);
 	assert_eq!(count(&s.db, "applications").await, 0);
 

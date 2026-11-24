@@ -36,8 +36,9 @@ use crate::tests::state;
 #[sqlx::test]
 #[ignore = "needs PODKIT_LIVE_PODMAN_SOCKET (a private podman.sock), the podkit-agent binary, nginx:alpine, postgres:18 and traefik images; binds ports 28080 and 28443"]
 async fn canvas_live_wiring_an_app_to_postgres_injects_the_url_and_connects(db: PgPool) {
-	let socket = std::env::var("PODKIT_LIVE_PODMAN_SOCKET")
-		.expect("set PODKIT_LIVE_PODMAN_SOCKET to a private podman.sock; never the host's");
+	let Some(socket) = crate::tests::live_podman_socket("canvas_live") else {
+		return;
+	};
 	let live = Live {
 		socket: socket.clone(),
 	};

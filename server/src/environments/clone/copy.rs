@@ -11,6 +11,7 @@ use sqlx::PgConnection;
 use super::plan::{Snapshot, suffixed};
 use super::{Kind, Options, Pair, Secrets};
 use crate::applications::{self, NewApplication};
+use crate::cron::store::{self as cron_store, NewTask};
 use crate::databases::{self, Credentials, NewDatabase};
 use crate::environments::{self, Environment};
 use crate::error::{AppResult, ServerError};
@@ -241,6 +242,41 @@ pub async fn apply(
 			.execute(&mut *conn)
 			.await?;
 		}
+	}
+
+	// Scheduled tasks follow the applications: one that runs in an app runs in its clone.
+	// They start paused; the job switches them on when the clone deploys.
+	for t in &snap.cron {
+		let application_id = t
+			.application_id
+			.map(|a| ApplicationId(pair_of(&pairs, Kind::Application, a.0).unwrap_or(a.0)));
+		let new = cron_store::insert_task(
+			&mut *conn,
+			&NewTask {
+				project_id: project,
+				environment_id: env.id,
+				server_id: t.server_id,
+				application_id,
+				name: t.name.clone(),
+				kind: t.kind,
+				image: t.image.clone(),
+				command: t.command.clone(),
+				schedule: t.schedule.clone(),
+				timezone: t.timezone.clone(),
+				timeout_s: t.timeout_s,
+				concurrency: t.concurrency,
+				max_retries: t.max_retries,
+				retry_backoff_s: t.retry_backoff_s,
+				enabled: false,
+				next_run_at: None,
+			},
+		)
+		.await?;
+		pairs.push(Pair {
+			kind: Kind::Cron,
+			source: t.id.0,
+			id: new.id.0,
+		});
 	}
 
 	// Shared variables of the environment's own scope.

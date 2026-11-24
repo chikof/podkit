@@ -4,7 +4,7 @@
 use axum::http::{StatusCode, header};
 use serde_json::{Value, json};
 
-use crate::tests::uptime_ui::{add_results, check_id, set_state, state_of};
+use crate::tests::uptime_ui::{add_results, check_id, set_state, skips_tls_verification, state_of};
 use crate::tests::{PgPool, app, call, count, db_test, user_with_team};
 use crate::ui::testing::{
 	assert_contains, assert_not_contains, get_html, page_main, post_signals, ui_login,
@@ -390,4 +390,44 @@ async fn uptime_a_team_without_a_status_page_looks_like_a_slug_nobody_has(db: Pg
 	assert_eq!(off, StatusCode::NOT_FOUND);
 	assert_eq!((off, off_body.clone()), (none, none_body));
 	assert_not_contains(&off_body, "docs");
+}
+
+#[db_test]
+async fn followups_uptime_a_check_that_skips_tls_verification_wears_a_warning(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (token, cookie, team) = alice(&app).await;
+	let mut lax = form("Nas");
+	lax["tls_skip_verify"] = json!(true);
+	let lax_id = add_check(&app, &token, team, lax).await;
+	let strict_id = add_check(&app, &token, team, form("Docs")).await;
+
+	let page = format!("/teams/{team}/uptime");
+	let (_, _, body) = get_html(&app, &page, Some(&cookie)).await;
+	let main = page_main(&body);
+	assert_eq!(
+		main.matches("Certificate not verified").count(),
+		1,
+		"{main}"
+	);
+
+	let (_, _, body) = get_html(&app, &format!("{page}/{lax_id}"), Some(&cookie)).await;
+	assert_contains(page_main(&body), "Certificate not verified");
+	assert_eq!(page_main(&body).matches("<h1").count(), 1);
+	let (_, _, body) = get_html(&app, &format!("{page}/{strict_id}"), Some(&cookie)).await;
+	assert_not_contains(page_main(&body), "Certificate not verified");
+
+	// The check's page carries the edit form, with the setting ticked for the one that has it.
+	let (_, _, body) = get_html(&app, &format!("{page}/{lax_id}"), Some(&cookie)).await;
+	assert_contains(&body, "Skip TLS verification");
+	assert_contains(&body, "&quot;tls_skip_verify&quot;:true");
+
+	// The form posts it.
+	let (s, _, _) = post_signals(&app, &format!("{page}/{strict_id}/edit"), Some(&cookie), &{
+		let mut f = form("Docs");
+		f["tls_skip_verify"] = json!(true);
+		f
+	})
+	.await;
+	assert_eq!(s, StatusCode::OK);
+	assert!(skips_tls_verification(&db, strict_id).await);
 }

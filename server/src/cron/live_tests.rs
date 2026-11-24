@@ -29,8 +29,8 @@ const IMAGE: &str = "docker.io/library/busybox:latest";
 
 /// The private socket, or a refusal to run.
 fn socket() -> String {
-	std::env::var("PODKIT_LIVE_PODMAN_SOCKET")
-		.expect("set PODKIT_LIVE_PODMAN_SOCKET to the socket of a Podman service of its own")
+	// Only reached once the test has found the variable set (see `live_podman_socket`).
+	std::env::var("PODKIT_LIVE_PODMAN_SOCKET").unwrap_or_default()
 }
 
 /// The `podman` binary: on `PATH`, or where NixOS puts it.
@@ -66,7 +66,9 @@ async fn runs_of(db: &PgPool, task: i64) -> Vec<CronRun> {
 #[ignore = "runs real containers in the Podman named by PODKIT_LIVE_PODMAN_SOCKET, pulls busybox, takes about three minutes"]
 async fn cron_live_a_container_task_runs_twice_and_an_exec_task_runs_in_a_container(db: PgPool) {
 	let state = state(db.clone());
-	let socket = socket();
+	let Some(socket) = crate::tests::live_podman_socket("cron_live") else {
+		return;
+	};
 	let podman_agent =
 		agent::podman::Podman::connect(&socket).expect("connect to the private podman.sock");
 	let data_dir = tempfile::tempdir().unwrap().keep();

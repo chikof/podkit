@@ -23,7 +23,7 @@ use std::future::Future;
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, UdpSocket};
 use std::pin::Pin;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -348,10 +348,15 @@ impl Resolve for Vetting {
 pub struct Outbound {
 	shared: Arc<Shared>,
 	client: reqwest::Client,
+	/// Whether this handle's clients take any certificate (see [`Outbound::accepting_any_certificate`]).
+	lenient: bool,
+	/// The lenient client, built the first time a check asks for it.
+	lenient_client: Arc<OnceLock<reqwest::Client>>,
 }
 
-fn builder(shared: &Arc<Shared>) -> reqwest::ClientBuilder {
+fn builder(shared: &Arc<Shared>, lenient: bool) -> reqwest::ClientBuilder {
 	reqwest::Client::builder()
+		.tls_danger_accept_invalid_certs(lenient)
 		.redirect(reqwest::redirect::Policy::none())
 		.no_proxy()
 		.connect_timeout(CONNECT_TIMEOUT)
@@ -384,8 +389,35 @@ impl Outbound {
 			own,
 			lookup,
 		});
-		let client = builder(&shared).build()?;
-		Ok(Self { shared, client })
+		let client = builder(&shared, false).build()?;
+		Ok(Self {
+			shared,
+			client,
+			lenient: false,
+			lenient_client: Arc::new(OnceLock::new()),
+		})
+	}
+
+	/// The same policy with a client that takes any certificate: for a check the user marked
+	/// "skip certificate verification" (a self-signed service on the LAN). Only the certificate
+	/// is not checked; every address rule still applies. If the lenient client cannot be built
+	/// the strict one is used, so a failure never loosens anything.
+	#[must_use]
+	pub fn accepting_any_certificate(&self) -> Self {
+		let client = self
+			.lenient_client
+			.get_or_init(|| {
+				builder(&self.shared, true)
+					.build()
+					.unwrap_or_else(|_| self.client.clone())
+			})
+			.clone();
+		Self {
+			shared: Arc::clone(&self.shared),
+			client,
+			lenient: true,
+			lenient_client: Arc::clone(&self.lenient_client),
+		}
 	}
 
 	/// Whether private networks are reachable.
@@ -501,7 +533,7 @@ impl Outbound {
 			}
 			Some(Host::Domain(name)) if self.shared.wants_own_check(port) => {
 				let addrs = self.resolve(name, port).await?;
-				let pinned = builder(&self.shared)
+				let pinned = builder(&self.shared, self.lenient)
 					.resolve_to_addrs(name, &addrs)
 					.build()
 					.map_err(|_| Denied::new("no client"))?;

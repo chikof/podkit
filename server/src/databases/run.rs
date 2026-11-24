@@ -99,7 +99,7 @@ async fn provision(
 		.await
 		.map_err(|e| db_failure(&e))?;
 
-	let mut spec = build_spec(state, job, database)?;
+	let mut spec = deploy_spec(state, job, database).await?;
 	spec.attach = networks::attach::for_resource(
 		&state.db,
 		networks::attach::Home {
@@ -175,6 +175,28 @@ async fn provision(
 			None => return Err(failed(LOST_CONNECTION)),
 		}
 	}
+}
+
+/// The agent's deploy request: the engine's, with the shared variables of the environment
+/// under the engine's own.
+pub(crate) async fn deploy_spec(
+	state: &AppState,
+	job: &Job,
+	database: &Database,
+) -> Result<DeploySpec, JobFailure> {
+	let mut spec = build_spec(state, job, database)?;
+	spec.env = crate::shared_env::resolve::inherited_env(
+		state,
+		database.project_id,
+		database.environment_id,
+		spec.env,
+	)
+	.await
+	.map_err(|e| {
+		tracing::error!(database = database.id.0, "shared variables: {e}");
+		failed(e.to_string())
+	})?;
+	Ok(spec)
 }
 
 fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<DeploySpec, JobFailure> {
