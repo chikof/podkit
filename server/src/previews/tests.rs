@@ -1631,6 +1631,7 @@ fn previews_comment_texts_say_what_is_going_on_and_clip_reasons() {
 		head_repo: String::new(),
 		from_fork: false,
 		approved: false,
+		approved_sha: String::new(),
 		state: State::Failed.as_str().to_owned(),
 		detail: format!("{}\nsecond line that stays out", "x".repeat(400)),
 		environment_id: None,
@@ -2121,4 +2122,219 @@ async fn previews_a_preview_environment_is_listed_for_the_badge(db: PgPool) {
 		.unwrap();
 	assert_eq!(ids.len(), 1);
 	assert!(ids.contains(&p.environment_id.unwrap()));
+}
+
+// ---- pinned to the approved commit ------------------------------------------------------
+
+/// What the agent would be told to build for `p`: the source of its application's next deploy.
+async fn built_source(r: &Rig, p: &Preview) -> Result<proto::Source, crate::jobs::JobFailure> {
+	let app = build::preview_app(&r.st, p).await.unwrap().unwrap();
+	let d = crate::deployments::insert(&r.db, app.id, None, None, None)
+		.await
+		.unwrap();
+	crate::deployments::run::app_source(&r.st, &app, &d).await
+}
+
+fn commit_of(source: proto::Source) -> Option<String> {
+	match source {
+		proto::Source::Git { commit, .. } => commit,
+		proto::Source::Image { .. } => panic!("a git source"),
+	}
+}
+
+#[sqlx::test]
+async fn previews_approval_stores_the_sha_and_the_build_request_carries_it(db: PgPool) {
+	let r = rig(db).await;
+	let w = r.world(Prov::Gitea).await;
+	let head = "bob/fork";
+	*w.pulls().pr.lock().unwrap() = Some(w.pr_stub(9, head, &sha(1)));
+	w.send(&r, Ev::Open, 9, &sha(1), Some(head)).await;
+	let p = r.preview(&w, 9).await.unwrap();
+	assert_eq!(p.approved_sha, "", "nothing approved yet");
+	assert_eq!(p.pin(), previews::Pin::Unapproved);
+
+	*w.pulls().permission.lock().unwrap() = "write".to_owned();
+	let (s, b) = w.comment(&r, 9, "/preview", "maint").await;
+	assert_eq!(s.as_u16(), 202, "{b}");
+	let p = r.preview(&w, 9).await.unwrap();
+	assert!(p.approved);
+	assert_eq!(
+		p.approved_sha,
+		sha(1),
+		"the head at the time of the comment"
+	);
+
+	// The deploy is told the commit, and the build server's request has the same field.
+	let source = built_source(&r, &p).await.unwrap_or_else(|_| panic!());
+	let wire = serde_json::to_value(&source).unwrap();
+	assert_eq!(wire["commit"], sha(1).as_str(), "{wire}");
+	assert_eq!(commit_of(source), Some(sha(1)));
+}
+
+#[sqlx::test]
+async fn previews_a_push_after_approval_revokes_it_and_a_redeploy_is_refused(db: PgPool) {
+	let r = rig(db).await;
+	let w = r.world(Prov::Gitea).await;
+	let head = "bob/fork";
+	*w.pulls().pr.lock().unwrap() = Some(w.pr_stub(9, head, &sha(1)));
+	*w.pulls().permission.lock().unwrap() = "write".to_owned();
+	w.send(&r, Ev::Open, 9, &sha(1), Some(head)).await;
+	w.comment(&r, 9, "/preview", "maint").await;
+	let p = r.preview(&w, 9).await.unwrap();
+	assert_eq!(p.approved_sha, sha(1));
+	let jobs = r.jobs_for(&w).await;
+
+	// The fork's author pushes something else.
+	w.send(&r, Ev::Sync, 9, &sha(2), Some(head)).await;
+	let p = r.preview(&w, 9).await.unwrap();
+	assert!(!p.approved);
+	assert_eq!(
+		p.approved_sha,
+		sha(1),
+		"what may still be running is remembered"
+	);
+	assert_eq!(p.head_sha, sha(2));
+	assert_eq!(
+		p.pin(),
+		previews::Pin::Unapproved,
+		"but it is not a pin any more"
+	);
+	assert_eq!(p.state(), State::AwaitingApproval);
+	assert_eq!(
+		r.jobs_for(&w).await,
+		jobs,
+		"nothing was built from the push"
+	);
+	let revoked: i64 =
+		sqlx::query_scalar("SELECT COUNT(*) FROM audit_events WHERE action = 'preview.revoke'")
+			.fetch_one(&r.db)
+			.await
+			.unwrap();
+	assert_eq!(revoked, 1);
+
+	// The comment and the status say what to do.
+	let bodies = w.pulls().bodies(9);
+	assert!(
+		bodies[0].contains("New commits need a new `/preview`")
+			&& bodies[0].contains(&sha(2)[..7])
+			&& bodies[0].contains(&sha(1)[..7]),
+		"{}",
+		bodies[0]
+	);
+	let (_, description) = comment::status(&p);
+	assert_eq!(description, "New commits need a new /preview");
+	assert!(
+		w.statuses().iter().any(|s| s.1 == "pending"),
+		"{:?}",
+		w.statuses()
+	);
+
+	// A manual redeploy of the preview's application, or a job that was already queued,
+	// builds nothing.
+	assert!(
+		built_source(&r, &p).await.is_err(),
+		"an unapproved fork is not built"
+	);
+
+	// A new /preview approves the new head, and only that.
+	*w.pulls().pr.lock().unwrap() = Some(w.pr_stub(9, head, &sha(2)));
+	w.comment(&r, 9, "/preview", "maint").await;
+	let p = r.preview(&w, 9).await.unwrap();
+	assert_eq!(p.approved_sha, sha(2));
+	assert_eq!(
+		commit_of(built_source(&r, &p).await.unwrap_or_else(|_| panic!())),
+		Some(sha(2))
+	);
+}
+
+#[sqlx::test]
+async fn previews_same_repository_pull_requests_use_the_sha_of_the_event(db: PgPool) {
+	let r = rig(db).await;
+	let w = r.world(Prov::Github).await;
+	w.send(&r, Ev::Open, 7, &sha(1), None).await;
+	let p = r.preview(&w, 7).await.unwrap();
+	assert!(!p.from_fork);
+	assert_eq!(
+		commit_of(built_source(&r, &p).await.unwrap_or_else(|_| panic!())),
+		Some(sha(1))
+	);
+
+	// A push moves the pin with it, with no approval involved.
+	w.send(&r, Ev::Sync, 7, &sha(2), None).await;
+	let p = r.preview(&w, 7).await.unwrap();
+	assert_eq!(
+		commit_of(built_source(&r, &p).await.unwrap_or_else(|_| panic!())),
+		Some(sha(2))
+	);
+}
+
+#[sqlx::test]
+async fn previews_an_old_agent_cannot_build_a_fork_preview(db: PgPool) {
+	use std::sync::Arc;
+	use std::sync::atomic::AtomicBool;
+
+	let r = rig(db).await;
+	// An agent that answers `/v1/health` like the first release: no `features`, or with
+	// `commit-pin` once `upgraded` is set.
+	let upgraded = Arc::new(AtomicBool::new(false));
+	let flag = upgraded.clone();
+	let router = axum::Router::new().route(
+		"/v1/health",
+		axum::routing::get(move || {
+			let features = if flag.load(Ordering::SeqCst) {
+				json!(["commit-pin"])
+			} else {
+				Value::Null
+			};
+			async move {
+				let mut v = json!({ "version": "0.0.9", "podman_version": "5" });
+				if !features.is_null() {
+					v["features"] = features;
+				}
+				axum::Json(v)
+			}
+		}),
+	);
+	let listener = tokio::net::UnixListener::bind(&r.st.config.local_agent_socket).unwrap();
+	tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+	let w = r.world(Prov::Gitea).await;
+	let head = "bob/fork";
+	*w.pulls().pr.lock().unwrap() = Some(w.pr_stub(9, head, &sha(1)));
+	*w.pulls().permission.lock().unwrap() = "write".to_owned();
+	w.send(&r, Ev::Open, 9, &sha(1), Some(head)).await;
+	w.comment(&r, 9, "/preview", "maint").await;
+	let fork = r.preview(&w, 9).await.unwrap();
+	w.send(&r, Ev::Open, 7, &sha(1), None).await;
+	let same = r.preview(&w, 7).await.unwrap();
+
+	let check = |p: Preview| {
+		let r = &r;
+		async move {
+			let app = build::preview_app(&r.st, &p).await.unwrap().unwrap();
+			let server = crate::scope::server(&r.db, p.team_id, app.server_id)
+				.await
+				.unwrap();
+			let client = r.st.agents.client(&r.st, &server).await.unwrap();
+			crate::deployments::run::require_commit_pin(&r.st, &app, &client, Some(&sha(1))).await
+		}
+	};
+	let refused = check(fork.clone()).await;
+	let Err(crate::jobs::JobFailure::Failed(why)) = refused else {
+		panic!("a fork's preview must not build on an old agent");
+	};
+	assert!(
+		why.contains("update podkit-agent") && why.contains("0.0.9"),
+		"{why}"
+	);
+	assert!(
+		check(same).await.is_ok(),
+		"a same-repository preview only loses the pin, as before"
+	);
+
+	upgraded.store(true, Ordering::SeqCst);
+	assert!(
+		check(fork).await.is_ok(),
+		"an agent that reports it may build"
+	);
 }

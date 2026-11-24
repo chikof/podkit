@@ -36,7 +36,8 @@ pub struct Prepared {
 	pub dockerfile: String,
 }
 
-/// Clones `repo_url` at `git_ref` (a branch or tag) into `<work>/src`, resolves
+/// Clones `repo_url` at `git_ref` (a branch or tag) into `<work>/src`, or, with `commit`,
+/// checks out exactly that commit (the branch moving on makes no difference). Resolves
 /// the build file, strips `.git` and tars the tree to `<work>/context.tar`.
 ///
 /// `data_dir/known_hosts` persists the SSH host keys of git servers
@@ -49,12 +50,12 @@ pub async fn prepare(
 	work: &Path,
 	data_dir: &Path,
 	repo_url: &str,
-	git_ref: &str,
+	(git_ref, commit): (&str, Option<&str>),
 	auth: &GitAuth,
 	build: &Build,
 ) -> Result<Prepared, SourceError> {
 	let src = work.join("src");
-	clone(work, data_dir, repo_url, git_ref, auth, &src).await?;
+	clone(work, data_dir, repo_url, (git_ref, commit), auth, &src).await?;
 	let commit_sha = resolve_head(&src).await?;
 
 	let dockerfile = match build {
@@ -100,71 +101,156 @@ pub async fn prepare(
 	})
 }
 
+/// Whether `s` is a full git object name (SHA-1 or SHA-256), which is what a pin must be.
+fn is_full_sha(s: &str) -> bool {
+	matches!(s.len(), 40 | 64) && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// How git is run for one clone: the environment that carries the credentials, and the
+/// strings to hide from any error message.
+struct GitRun {
+	env: Vec<(&'static str, String)>,
+	secrets: Vec<String>,
+}
+
+impl GitRun {
+	fn new(work: &Path, data_dir: &Path, auth: &GitAuth) -> Result<Self, SourceError> {
+		let mut env = vec![("GIT_TERMINAL_PROMPT", "0".to_owned())];
+		let mut secrets: Vec<String> = Vec::new();
+		match auth {
+			GitAuth::None => {}
+			GitAuth::SshKey { private_key } => {
+				let key_path = work.join("deploy_key");
+				write_private_key(&key_path, private_key)?;
+				let known_hosts = data_dir.join("known_hosts");
+				env.push((
+					"GIT_SSH_COMMAND",
+					format!(
+						"ssh -i {} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={}",
+						sh_quote(&key_path.to_string_lossy()),
+						sh_quote(&known_hosts.to_string_lossy()),
+					),
+				));
+			}
+			GitAuth::HttpsToken { token, username } => {
+				let basic = STANDARD.encode(format!(
+					"{}:{token}",
+					username.as_deref().unwrap_or("x-access-token")
+				));
+				// GIT_CONFIG_PARAMETERS, not GIT_CONFIG_COUNT/KEY_n/VALUE_n: some git builds
+				// ignore the latter, and the header would silently not be sent. The value is
+				// shell-quoted by git's own rules; base64 holds no quote.
+				env.push((
+					"GIT_CONFIG_PARAMETERS",
+					format!("'http.extraHeader=Authorization: Basic {basic}'"),
+				));
+				secrets.push(token.clone());
+				secrets.push(basic);
+			}
+		}
+		Ok(Self { env, secrets })
+	}
+
+	/// Runs `git <args>` (in `cwd` when given). The error carries git's stderr, redacted.
+	async fn run(&self, args: &[&str], cwd: Option<&Path>) -> Result<(), SourceError> {
+		let mut cmd = Command::new("git");
+		if let Some(dir) = cwd {
+			cmd.arg("-C").arg(dir);
+		}
+		cmd.args(args)
+			.envs(self.env.iter().map(|(k, v)| (*k, v)))
+			.stdin(Stdio::null())
+			.stdout(Stdio::null())
+			.stderr(Stdio::piped())
+			.kill_on_drop(true);
+		let output = cmd.output().await.map_err(|e| {
+			SourceError::Failed(format!(
+				"failed to run git: {}",
+				redact(&e.to_string(), &self.secrets)
+			))
+		})?;
+		if !output.status.success() {
+			let stderr = redact(
+				String::from_utf8_lossy(&output.stderr).trim(),
+				&self.secrets,
+			);
+			let verb = args.first().copied().unwrap_or("");
+			return Err(SourceError::Failed(format!("git {verb} failed: {stderr}")));
+		}
+		Ok(())
+	}
+}
+
+/// Puts the repository's `git_ref` in `dest`; with `commit`, exactly that commit and nothing
+/// the branch has moved to since.
 async fn clone(
 	work: &Path,
 	data_dir: &Path,
 	repo_url: &str,
-	git_ref: &str,
+	(git_ref, commit): (&str, Option<&str>),
 	auth: &GitAuth,
 	dest: &Path,
 ) -> Result<(), SourceError> {
-	let mut cmd = Command::new("git");
-	cmd.arg("clone")
-		.arg("--depth")
-		.arg("1")
-		.arg("--branch")
-		.arg(git_ref)
-		.arg("--")
-		.arg(repo_url)
-		.arg(dest)
-		.env("GIT_TERMINAL_PROMPT", "0")
-		.stdin(Stdio::null())
-		.stdout(Stdio::null())
-		.stderr(Stdio::piped())
-		.kill_on_drop(true);
-
-	let mut secrets: Vec<String> = Vec::new();
-	match auth {
-		GitAuth::None => {}
-		GitAuth::SshKey { private_key } => {
-			let key_path = work.join("deploy_key");
-			write_private_key(&key_path, private_key)?;
-			let known_hosts = data_dir.join("known_hosts");
-			cmd.env(
-				"GIT_SSH_COMMAND",
-				format!(
-					"ssh -i {} -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile={}",
-					sh_quote(&key_path.to_string_lossy()),
-					sh_quote(&known_hosts.to_string_lossy()),
-				),
-			);
-		}
-		GitAuth::HttpsToken { token, username } => {
-			let basic = STANDARD.encode(format!(
-				"{}:{token}",
-				username.as_deref().unwrap_or("x-access-token")
-			));
-			// GIT_CONFIG_PARAMETERS, not GIT_CONFIG_COUNT/KEY_n/VALUE_n: some git builds ignore
-			// the latter, and the header would silently not be sent. The value is shell-quoted
-			// by git's own rules; base64 holds no quote.
-			cmd.env(
-				"GIT_CONFIG_PARAMETERS",
-				format!("'http.extraHeader=Authorization: Basic {basic}'"),
-			);
-			secrets.push(token.clone());
-			secrets.push(basic);
-		}
+	let git = GitRun::new(work, data_dir, auth)?;
+	let dest_str = dest.to_string_lossy();
+	let Some(commit) = commit else {
+		return git
+			.run(
+				&[
+					"clone", "--depth", "1", "--branch", git_ref, "--", repo_url, &dest_str,
+				],
+				None,
+			)
+			.await;
+	};
+	if !is_full_sha(commit) {
+		return Err(SourceError::Failed(format!(
+			"{commit:?} is not a full commit id"
+		)));
 	}
-
-	let output = cmd.output().await.map_err(|e| {
-		SourceError::Failed(format!(
-			"failed to run git: {}",
-			redact(&e.to_string(), &secrets)
-		))
-	})?;
-	if !output.status.success() {
-		let stderr = redact(String::from_utf8_lossy(&output.stderr).trim(), &secrets);
-		return Err(SourceError::Failed(format!("git clone failed: {stderr}")));
+	// The cheap way: ask the server for that one commit. GitHub, GitLab and Gitea answer.
+	tokio::fs::create_dir_all(dest).await?;
+	let fetched = async {
+		git.run(&["init", "--quiet"], Some(dest)).await?;
+		git.run(&["remote", "add", "origin", "--", repo_url], Some(dest))
+			.await?;
+		git.run(
+			&["fetch", "--quiet", "--depth", "1", "origin", commit],
+			Some(dest),
+		)
+		.await?;
+		git.run(
+			&["checkout", "--quiet", "--detach", "FETCH_HEAD"],
+			Some(dest),
+		)
+		.await
+	}
+	.await;
+	if fetched.is_err() {
+		// A server that will not serve a bare commit: take the branch with its history and
+		// check the commit out of it. It is only found if the branch still has it.
+		tokio::fs::remove_dir_all(dest).await?;
+		git.run(
+			&[
+				"clone", "--quiet", "--branch", git_ref, "--", repo_url, &dest_str,
+			],
+			None,
+		)
+		.await?;
+		git.run(&["checkout", "--quiet", "--detach", commit], Some(dest))
+			.await
+			.map_err(|_| {
+				SourceError::Failed(format!(
+					"commit {} is no longer on {git_ref}: the branch moved after approval",
+					&commit[..12]
+				))
+			})?;
+	}
+	let head = resolve_head(dest).await?;
+	if head != commit {
+		return Err(SourceError::Failed(format!(
+			"checked out {head} but {commit} was approved"
+		)));
 	}
 	Ok(())
 }

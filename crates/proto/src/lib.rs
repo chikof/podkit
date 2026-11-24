@@ -15,7 +15,16 @@ pub struct Health {
 	pub version: String,
 	/// The version Podman reports.
 	pub podman_version: String,
+	/// What this agent can do beyond the first version, for the server to check before it
+	/// relies on it (see [`FEATURE_COMMIT_PIN`]). Absent from an older agent.
+	#[serde(default)]
+	pub features: Vec<String>,
 }
+
+/// A [`Health::features`] entry: the agent checks out the exact `commit` of a [`Source::Git`]
+/// or a [`BuildRequest`], and fails when it cannot. An older agent ignores the field and
+/// builds the branch tip.
+pub const FEATURE_COMMIT_PIN: &str = "commit-pin";
 
 /// `GET /v1/hardware` response: a snapshot of what the host offers.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -866,6 +875,10 @@ pub enum Source {
 		repo_url: String,
 		/// Branch or tag.
 		git_ref: String,
+		/// Build exactly this commit (a full object name) instead of the branch tip. Absent
+		/// in older payloads.
+		#[serde(default, skip_serializing_if = "Option::is_none")]
+		commit: Option<String>,
 		/// Credentials for the clone.
 		auth: GitAuth,
 		/// How to build the image.
@@ -1017,6 +1030,9 @@ pub struct BuildRequest {
 	pub repo_url: String,
 	/// Branch or tag.
 	pub git_ref: String,
+	/// Build exactly this commit instead of the branch tip; see [`Source::Git`].
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub commit: Option<String>,
 	/// Credentials for the clone.
 	pub auth: GitAuth,
 	/// How to build the image.

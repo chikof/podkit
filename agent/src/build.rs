@@ -38,7 +38,13 @@ pub async fn run(ctx: Arc<Ctx>, req: BuildRequest, tx: mpsc::Sender<Event>) {
 			&ctx,
 			&ctx.podman(),
 			&req.service,
-			(&req.repo_url, &req.git_ref, &req.auth, &req.build),
+			(
+				&req.repo_url,
+				&req.git_ref,
+				req.commit.as_deref(),
+				&req.auth,
+				&req.build,
+			),
 			&req.options,
 			&tx,
 		)

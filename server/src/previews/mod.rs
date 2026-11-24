@@ -146,6 +146,8 @@ pub struct Preview {
 	pub head_repo: String,
 	pub from_fork: bool,
 	pub approved: bool,
+	/// The commit a maintainer approved (a fork's preview only); empty when none is.
+	pub approved_sha: String,
 	pub state: String,
 	pub detail: String,
 	pub environment_id: Option<EnvironmentId>,
@@ -163,10 +165,62 @@ impl Preview {
 	pub fn state(&self) -> State {
 		State::parse(&self.state).unwrap_or(State::Failed)
 	}
+
+	/// What a build of this preview may check out. A fork's preview is only built from the
+	/// commit a maintainer approved; any other preview from the head its last event named.
+	#[must_use]
+	pub fn pin(&self) -> Pin {
+		if self.from_fork {
+			if self.approved && !self.approved_sha.is_empty() {
+				Pin::Commit {
+					sha: self.approved_sha.clone(),
+					fork: true,
+				}
+			} else {
+				Pin::Unapproved
+			}
+		} else if self.head_sha.is_empty() {
+			Pin::Branch
+		} else {
+			Pin::Commit {
+				sha: self.head_sha.clone(),
+				fork: false,
+			}
+		}
+	}
+}
+
+/// The commit a preview's build is tied to; see [`Preview::pin`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Pin {
+	/// Build exactly this commit. `fork`: it came from a fork, so an agent that cannot honour
+	/// the pin must not build it.
+	Commit { sha: String, fork: bool },
+	/// No commit is known (an event that carried none): build the branch.
+	Branch,
+	/// A fork's code nobody approved, or approved before it moved: no build.
+	Unapproved,
+}
+
+/// The pin of the application a preview was made for; `None` when `app` is no preview's.
+///
+/// # Errors
+/// The database fails.
+pub async fn pin_for_application(
+	db: impl PgExecutor<'_>,
+	app: ApplicationId,
+) -> Result<Option<Pin>, sqlx::Error> {
+	Ok(sqlx::query_as::<_, Preview>(sqlx::AssertSqlSafe(format!(
+		"SELECT {COLUMNS} FROM previews WHERE preview_application_id = $1"
+	)))
+	.bind(app)
+	.fetch_optional(db)
+	.await?
+	.map(|p| p.pin()))
 }
 
 const COLUMNS: &str = "id, team_id, project_id, application_id, number, title, head_sha, head_ref,
-	head_repo, from_fork, approved, state, detail, environment_id, preview_application_id, url,
+	head_repo, from_fork, approved, approved_sha, state, detail, environment_id, preview_application_id, url,
 	comment_id, last_activity_at, created_at";
 
 const SETTINGS_COLUMNS: &str =
