@@ -791,6 +791,7 @@ async fn build_from_git(
 	let Source::Git {
 		repo_url,
 		git_ref,
+		commit,
 		auth,
 		build,
 		options,
@@ -802,7 +803,7 @@ async fn build_from_git(
 		ctx,
 		podman,
 		&spec.service,
-		(repo_url, git_ref, auth, build),
+		(repo_url, git_ref, commit.as_deref(), auth, build),
 		options,
 		tx,
 	)
@@ -816,7 +817,13 @@ pub(crate) async fn build_git_image(
 	ctx: &Ctx,
 	podman: &Podman,
 	service: &str,
-	(repo_url, git_ref, auth, build): (&str, &str, &proto::GitAuth, &proto::Build),
+	(repo_url, git_ref, commit, auth, build): (
+		&str,
+		&str,
+		Option<&str>,
+		&proto::GitAuth,
+		&proto::Build,
+	),
 	options: &proto::BuildOptions,
 	tx: &mpsc::Sender<Event>,
 ) -> Result<(String, String), String> {
@@ -828,9 +835,16 @@ pub(crate) async fn build_git_image(
 
 	phase(tx, Phase::Cloning).await?;
 	log(tx, Stream::System, format!("cloning {git_ref}")).await?;
-	let prepared = source::prepare(work.path(), &ctx.data_dir, repo_url, git_ref, auth, build)
-		.await
-		.map_err(|e| e.to_string())?;
+	let prepared = source::prepare(
+		work.path(),
+		&ctx.data_dir,
+		repo_url,
+		(git_ref, commit),
+		auth,
+		build,
+	)
+	.await
+	.map_err(|e| e.to_string())?;
 	let short = &prepared.commit_sha[..prepared.commit_sha.len().min(12)];
 	log(tx, Stream::System, format!("checked out {short}")).await?;
 

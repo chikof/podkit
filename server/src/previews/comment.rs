@@ -26,6 +26,12 @@ pub fn body(preview: &Preview, limit: i32, ttl_days: i32) -> String {
 	let short: String = preview.head_sha.chars().take(7).collect();
 	let head = "### podkit preview\n\n";
 	let state = match preview.state() {
+		State::AwaitingApproval if preview.environment_id.is_some() => {
+			let running: String = preview.approved_sha.chars().take(7).collect();
+			format!(
+				"**New commits need a new `/preview`.** The branch moved on to `{short}` after this preview was approved, and podkit builds nothing it has not been shown. The preview keeps serving the approved commit `{running}` until someone with write access to the repository comments `/preview`."
+			)
+		}
 		State::AwaitingApproval => "**Waiting for approval.** This pull request comes from a fork, so podkit builds nothing from it until someone with write access to the repository comments `/preview`.".to_owned(),
 		State::Limited => format!(
 			"**Waiting for a free place.** {limit} previews of this application are open, which is its limit. This one starts when another closes, or when someone comments `/preview` after making room."
@@ -48,6 +54,10 @@ pub fn body(preview: &Preview, limit: i32, ttl_days: i32) -> String {
 #[must_use]
 pub fn status(preview: &Preview) -> (StatusState, String) {
 	match preview.state() {
+		State::AwaitingApproval if preview.environment_id.is_some() => (
+			StatusState::Pending,
+			"New commits need a new /preview".to_owned(),
+		),
 		State::AwaitingApproval => (
 			StatusState::Pending,
 			"Waiting for a maintainer's /preview".to_owned(),

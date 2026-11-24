@@ -239,6 +239,7 @@ mod tests {
 			head_repo: "o/r".to_owned(),
 			from_fork: true,
 			approved: false,
+			approved_sha: String::new(),
 			state: state.to_owned(),
 			detail: "<img src=x>".to_owned(),
 			environment_id: None,

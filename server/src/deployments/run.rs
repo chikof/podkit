@@ -20,6 +20,7 @@ use crate::health_gate::machine::{Machine, Signal};
 use crate::ids::{DeploymentId, TeamId};
 use crate::jobs::{Job, JobFailure};
 use crate::logs::JobLog;
+use crate::previews::{self, Pin};
 use crate::servers::Server;
 use crate::state::AppState;
 use crate::{
@@ -98,6 +99,9 @@ pub async fn run(
 			_ => failed("server agent unavailable"),
 		}
 	})?;
+	if let Source::Git { commit, .. } = &spec.source {
+		require_commit_pin(state, &application, &client, commit.as_deref()).await?;
+	}
 	let mut events = client
 		.stream(Method::POST, "/v1/deploy", Some(&spec))
 		.await
@@ -256,6 +260,7 @@ async fn build_elsewhere(
 	let Source::Git {
 		repo_url,
 		git_ref,
+		commit,
 		auth,
 		build,
 		..
@@ -273,10 +278,12 @@ async fn build_elsewhere(
 		warn!(server = %builder.id, "cannot reach the build server's agent: {e}");
 		failed("the build server's agent is unavailable")
 	})?;
+	require_commit_pin(state, application, &builder_client, commit.as_deref()).await?;
 	let request = proto::BuildRequest {
 		service: format!("app-{}", application.id),
 		repo_url,
 		git_ref,
+		commit,
 		auth,
 		build,
 		options: plan.options(),
@@ -537,6 +544,64 @@ pub(crate) async fn build_spec(
 	})
 }
 
+/// The commit a build of `application` must check out: the one a preview is pinned to (a
+/// fork's is the approved one), `None` for every other application.
+///
+/// # Errors
+/// The application is a fork's preview that nobody approved, or the database fails.
+async fn preview_commit(
+	state: &AppState,
+	application: &Application,
+) -> Result<Option<String>, JobFailure> {
+	match previews::pin_for_application(&state.db, application.id)
+		.await
+		.map_err(|e| db_failure(&e))?
+	{
+		Some(Pin::Commit { sha, .. }) => Ok(Some(sha)),
+		Some(Pin::Unapproved) => Err(failed(
+			"the changes of this fork were not approved; a maintainer comments /preview on the pull request to approve them",
+		)),
+		Some(Pin::Branch) | None => Ok(None),
+	}
+}
+
+/// Refuses a fork's preview on an agent that would build the branch tip instead of the
+/// approved commit: one that does not list [`proto::FEATURE_COMMIT_PIN`].
+pub(crate) async fn require_commit_pin(
+	state: &AppState,
+	application: &Application,
+	client: &crate::agents::AgentClient,
+	commit: Option<&str>,
+) -> Result<(), JobFailure> {
+	if commit.is_none() {
+		return Ok(());
+	}
+	let fork = matches!(
+		previews::pin_for_application(&state.db, application.id)
+			.await
+			.map_err(|e| db_failure(&e))?,
+		Some(Pin::Commit { fork: true, .. })
+	);
+	if !fork {
+		return Ok(());
+	}
+	let health = client
+		.health()
+		.await
+		.map_err(|_| failed("the agent did not answer"))?;
+	if health
+		.features
+		.iter()
+		.any(|f| f == proto::FEATURE_COMMIT_PIN)
+	{
+		return Ok(());
+	}
+	Err(failed(format!(
+		"the agent (version {}) cannot build an exact commit, so a fork's preview is not built on it; update podkit-agent",
+		health.version
+	)))
+}
+
 /// What the agent runs. A deployment that already has an image (restart,
 /// rollback) reuses it as it is on the server. Otherwise a git app is cloned
 /// and built, and an image app pulls its reference again, so a redeploy or a
@@ -569,6 +634,7 @@ pub(crate) async fn app_source(
 				.clone()
 				.ok_or_else(|| failed("application has no repository"))?,
 			git_ref: application.git_ref.clone(),
+			commit: preview_commit(state, application).await?,
 			auth: git_auth(state, application).await?,
 			build: match application.build_strategy {
 				BuildStrategy::Dockerfile => Build::Dockerfile {

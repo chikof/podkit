@@ -184,10 +184,13 @@ async fn changed(
 	};
 	// New commits: the code is not the one a maintainer approved.
 	let moved = preview.head_sha != pr.head_sha;
-	let approved = preview.approved && !(preview.from_fork && moved);
+	let fork = preview.from_fork || pr.is_fork();
+	let revoked = preview.approved && fork && moved;
+	let approved = preview.approved && !revoked;
 	sqlx::query(
 		"UPDATE previews SET title = $2, head_sha = $3, head_ref = $4, head_repo = $5,
-			from_fork = $6, approved = $7, last_activity_at = NOW() WHERE id = $1",
+			from_fork = $6, approved = $7, last_activity_at = NOW()
+		WHERE id = $1",
 	)
 	.bind(preview.id)
 	.bind(pr.title.chars().take(200).collect::<String>())
@@ -201,7 +204,11 @@ async fn changed(
 	let preview = super::find_by_id(&s.db, preview.id)
 		.await?
 		.ok_or(ServerError::Internal)?;
-
+	if revoked {
+		// `approved_sha` stays: it is the commit that may still be running, and what the
+		// comment says it serves. Nothing is built from the new head until `/preview`.
+		record(s, app, &preview, "preview.revoke").await;
+	}
 	let outcome = if preview.from_fork && !preview.approved {
 		super::set_state(&s.db, preview.id, State::AwaitingApproval, "").await?;
 		Outcome::AwaitingApproval(preview.id)
@@ -299,7 +306,8 @@ async fn commented(
 	};
 	sqlx::query(
 		"UPDATE previews SET title = $2, head_sha = $3, head_ref = $4, head_repo = $5,
-			from_fork = $6, approved = TRUE, last_activity_at = NOW() WHERE id = $1",
+			from_fork = $6, approved = TRUE, approved_sha = $3, last_activity_at = NOW()
+		WHERE id = $1",
 	)
 	.bind(preview.id)
 	.bind(pr.title.chars().take(200).collect::<String>())

@@ -270,6 +270,7 @@ async fn health(State(ctx): State<Arc<Ctx>>) -> Result<Json<Health>, ApiError> {
 	Ok(Json(Health {
 		version: env!("CARGO_PKG_VERSION").to_string(),
 		podman_version,
+		features: vec![proto::FEATURE_COMMIT_PIN.to_owned()],
 	}))
 }
 
