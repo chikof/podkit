@@ -56,7 +56,7 @@ pub fn state(db: PgPool) -> AppState {
 		agents: Arc::new(AgentPool::new(local_agent_socket.clone())),
 		jobs: Arc::new(Jobs::new()),
 		logs: Arc::new(LogHub::new(log_dir)),
-		http: reqwest::Client::new(),
+		http: reqwest::Client::new().into(),
 		shutdown: tokio_util::sync::CancellationToken::new(),
 		#[cfg(feature = "cloud")]
 		billing: crate::billing::Billing::cloud(),
