@@ -1,9 +1,9 @@
 //! Regression tests for the findings of `SECURITY_REVIEW.md` (task `t_363c7e98`).
 //!
-//! Every test here that is still `#[ignore]`d FAILS on the branch it is in: it states what the
-//! code must do once its finding is fixed, so a fix card has a target. Un-ignore the test with
-//! the fix. SEC-02 (`net::outbound`) is fixed, so its tests run in the normal gate. Run the
-//! rest with `cargo test -p server --all-features -- --ignored sec_regression`.
+//! Each test states what the code must do once its finding is fixed, so a fix card has a
+//! target. A test still marked `#[ignore]` belongs to a finding nobody has fixed yet: it
+//! fails today, and its fix un-ignores it. SEC-01 (`throttle`) and SEC-02 (`net::outbound`) are
+//! fixed, so their tests run in the normal gate.
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -53,7 +53,6 @@ const GUESSES: usize = 25;
 /// correct password away.) With the password known, a 6-digit code falls to enough requests.
 /// Expected after the fix: after a handful of wrong codes the account (or the source) is
 /// locked for a while, and even the right code is refused (429 or 401).
-#[ignore = "SEC-01: second-factor guesses are not throttled"]
 #[db_test]
 async fn sec_regression_sec01_wrong_totp_codes_lock_the_login(db: PgPool) {
 	let (st, app) = world(db.clone()).await;
@@ -87,7 +86,12 @@ async fn sec_regression_sec01_wrong_totp_codes_lock_the_login(db: PgPool) {
 		if valid.contains(&wrong) {
 			continue;
 		}
-		assert_ne!(login(wrong).await, StatusCode::OK);
+		// Wrong, or refused because the account is waiting: never a session.
+		let status = login(wrong).await;
+		assert!(
+			status == StatusCode::UNAUTHORIZED || status == StatusCode::TOO_MANY_REQUESTS,
+			"{status}"
+		);
 		tried += 1;
 	}
 	let status = login(code(&setup.secret, 0)).await;
@@ -96,11 +100,11 @@ async fn sec_regression_sec01_wrong_totp_codes_lock_the_login(db: PgPool) {
 		StatusCode::OK,
 		"the right code was accepted after {GUESSES} wrong ones: nothing limits guesses"
 	);
+	assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
 }
 
 /// SEC-01 (high), the password half: wrong passwords for a known email are not counted
 /// either, so the account's password can be guessed at the speed of the hash check.
-#[ignore = "SEC-01: password guesses are not throttled"]
 #[db_test]
 async fn sec_regression_sec01_wrong_passwords_lock_the_login(db: PgPool) {
 	let (_st, app) = world(db).await;
@@ -120,9 +124,10 @@ async fn sec_regression_sec01_wrong_passwords_lock_the_login(db: PgPool) {
 		}
 	};
 	for i in 0..GUESSES {
-		assert_eq!(
-			login(format!("wrong password {i}")).await,
-			StatusCode::UNAUTHORIZED
+		let status = login(format!("wrong password {i}")).await;
+		assert!(
+			status == StatusCode::UNAUTHORIZED || status == StatusCode::TOO_MANY_REQUESTS,
+			"{status}"
 		);
 	}
 	let status = login(PASSWORD.to_owned()).await;
@@ -131,6 +136,7 @@ async fn sec_regression_sec01_wrong_passwords_lock_the_login(db: PgPool) {
 		StatusCode::OK,
 		"the right password was accepted after {GUESSES} wrong ones: nothing limits guesses"
 	);
+	assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
 }
 
 // ---- SEC-02: notification channels can reach (and read from) internal addresses -------

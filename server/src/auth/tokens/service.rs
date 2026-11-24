@@ -253,7 +253,12 @@ fn split(raw: &str) -> Option<(&str, &str)> {
 /// The grant behind a presented token: `InvalidToken` when it is malformed, unknown or
 /// revoked, `TokenExpired` past its expiry. Writes `last_used_at` at most once a minute.
 pub async fn resolve(db: &PgPool, raw: &str) -> Result<Grant, ServerError> {
-	let (prefix, secret) = split(raw).ok_or(ServerError::InvalidToken)?;
+	// An address that keeps sending wrong tokens waits (SEC-01); a right token is not slowed.
+	crate::throttle::check_token(db).await?;
+	let Some((prefix, secret)) = split(raw) else {
+		crate::throttle::token_failed(db).await;
+		return Err(ServerError::InvalidToken);
+	};
 	let row = sqlx::query!(
 		r#"
 			SELECT id AS "id: ApiTokenId", team_id AS "team_id: TeamId",
@@ -264,8 +269,11 @@ pub async fn resolve(db: &PgPool, raw: &str) -> Result<Grant, ServerError> {
 		digest(secret),
 	)
 	.fetch_optional(db)
-	.await?
-	.ok_or(ServerError::InvalidToken)?;
+	.await?;
+	let Some(row) = row else {
+		crate::throttle::token_failed(db).await;
+		return Err(ServerError::InvalidToken);
+	};
 
 	let now = OffsetDateTime::now_utc();
 	if row.expires_at.is_some_and(|t| t <= now) {

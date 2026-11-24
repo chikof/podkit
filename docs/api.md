@@ -9,6 +9,8 @@ Two kinds of bearer token are accepted:
 - a **session token** from `POST /api/v1/auth/login` (email and password). It has every right you have. When the account has two-step verification on, add `"code"` to the body: a 6-digit app code or a recovery code. Without it (or with a wrong one) the answer is 401. Passkeys sign in through the web page only.
 - an **API token** (`pk_…`), made in **Settings → API tokens** or with the API. It acts as you, narrowed to the scopes, projects and expiry you gave it. Use these for scripts and CI.
 
+Wrong guesses are throttled, per account and per client address. After 5 wrong passwords, codes or passkey answers on one account within 15 minutes, sign-in waits 1 s, then 2 s, 4 s … up to 15 minutes, and a right password is refused while it waits: the answer is `429` with `Retry-After` and `Too many attempts, try again in N minutes.` An unknown email is counted and answers the same, so nothing says which accounts exist. An address that sends 30 wrong guesses (over any accounts) or 30 wrong API tokens waits the same way. A full sign-in resets the account. A lockout is written to the audit log (`session.locked`), raises a `sign_in_locked` notification for the account's teams, and a member with `update membership` clears it with `POST /api/v1/teams/{team}/members/{user_id}/unlock` or the Unlock button on the Members page.
+
 ```sh
 export PODKIT=http://127.0.0.1:8080
 export PK_TOKEN=pk_1a2b3c4d_…            # shown once when made

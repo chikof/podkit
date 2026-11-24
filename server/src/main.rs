@@ -81,6 +81,7 @@ mod tailscale;
 mod teams;
 mod templates;
 mod terminal;
+mod throttle;
 mod two_factor;
 mod ui;
 mod uptime;

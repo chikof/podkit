@@ -1,6 +1,8 @@
 //! Membership use cases shared by the JSON API and the web UI: authorize, then
 //! scope, then validate, then touch the database.
 
+use std::collections::HashMap;
+
 use sqlx::PgPool;
 
 use super::TeamMember;
@@ -81,6 +83,38 @@ pub async fn update_role(
 		"member.update",
 		Target::new("member", member.user_id),
 		Diff::new().change("role_id", member.role_id.0, role.0),
+	)
+	.await;
+	Ok(())
+}
+
+/// Which members are locked out of signing in after too many wrong attempts, and for how many
+/// more seconds; needs `read membership`. Members who are free are left out.
+pub async fn locked(db: &PgPool, user: UserId, team: TeamId) -> AppResult<HashMap<UserId, u64>> {
+	authorize(db, user, team, Action::Read, Resource::Membership).await?;
+	let ids: Vec<UserId> = super::list_details(db, team)
+		.await?
+		.into_iter()
+		.map(|m| m.user_id)
+		.collect();
+	Ok(crate::throttle::locked_users(db, &ids).await?)
+}
+
+/// Lets a locked member try again now; needs `update membership`. Only the account's own
+/// counters are cleared: an address that sprayed too many guesses still waits.
+pub async fn unlock(db: &PgPool, user: UserId, team: TeamId, member: UserId) -> AppResult<()> {
+	authorize(db, user, team, Action::Update, Resource::Membership).await?;
+	let member = super::find(db, team, member)
+		.await?
+		.ok_or_else(|| ServerError::Validation("member not found".to_string()))?;
+	crate::throttle::clear_account(db, member.user_id).await;
+	audit::log(
+		db,
+		user,
+		team,
+		"member.unlock",
+		Target::new("member", member.user_id),
+		Diff::new(),
 	)
 	.await;
 	Ok(())

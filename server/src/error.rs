@@ -29,6 +29,10 @@ pub enum ServerError {
 	#[error("Invalid credentials")]
 	InvalidCredentials,
 
+	/// Too many wrong guesses at a password, code or token; see `throttle`.
+	#[error("Too many attempts, try again in {}.", crate::throttle::describe(*retry_after))]
+	TooManyAttempts { retry_after: u64 },
+
 	/// The account has two-step verification on and the sign-in came without a code.
 	#[error("two-step verification code required")]
 	TwoFactorCodeRequired,
@@ -200,6 +204,7 @@ impl ServerError {
 			| Self::InvalidCredentials
 			| Self::TwoFactorCodeRequired
 			| Self::TokenExpired => StatusCode::UNAUTHORIZED,
+			Self::TooManyAttempts { .. } => StatusCode::TOO_MANY_REQUESTS,
 			Self::EmailTaken
 			| Self::AlreadyMember
 			| Self::DomainTaken
@@ -268,6 +273,14 @@ impl IntoResponse for ServerError {
 				.into_response();
 		}
 		let message = self.to_string();
+		if let Self::TooManyAttempts { retry_after } = &self {
+			return (
+				status,
+				[(axum::http::header::RETRY_AFTER, retry_after.to_string())],
+				Json(ErrorBody { error: &message }),
+			)
+				.into_response();
+		}
 		if let Self::Unprocessable { issues, .. } = &self {
 			return (
 				status,

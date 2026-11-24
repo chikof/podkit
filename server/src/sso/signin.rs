@@ -586,12 +586,16 @@ pub async fn finish_link(
 			"That account was made by a provider and has no password to prove it with. Sign in with the provider you used before.",
 		));
 	}
+	// The outer limit the flow's own five tries lacked: an attacker's identity provider can
+	// start a fresh link flow at will, so the account itself counts too (SEC-01).
+	let attempt = crate::throttle::begin(&s.db, crate::throttle::Who::User(user)).await?;
 	let ok = crypto::verify(Zeroizing::new(password.to_owned()), row.password_hash)
 		.await
 		.map_err(|e| {
 			tracing::error!(error = %format!("{e:#}"), "password check failed");
 			ServerError::Internal
 		})?;
+	attempt.finish(ok).await;
 	if !ok {
 		return if flow::miss(&s.db, &token).await? {
 			Err(ServerError::InvalidCredentials)

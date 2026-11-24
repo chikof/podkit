@@ -1,6 +1,8 @@
 //! Members page: who is in the team and with which role, adding an existing
 //! user by email, changing a role, and the roles a team can assign.
 
+use std::collections::HashMap;
+
 use axum::Router;
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
@@ -15,8 +17,10 @@ use crate::error::AppResult;
 use crate::ids::{RoleId, TeamId, UserId};
 use crate::members::service::{self, MemberDetail, Role};
 use crate::state::AppState;
+use crate::throttle;
 use crate::ui::components::{
-	BUTTON, INPUT, LABEL, SELECT, card, card_content, card_heading, icon, user_avatar,
+	BUTTON, BUTTON_OUTLINE, INPUT, LABEL, SELECT, card, card_content, card_heading, icon,
+	user_avatar,
 };
 use crate::ui::extract::TeamCtx;
 use crate::ui::layout::{app_page, form_error};
@@ -31,6 +35,10 @@ pub fn router() -> Router<AppState> {
 			"/teams/{team_id}/members/role",
 			axum::routing::post(change_role),
 		)
+		.route(
+			"/teams/{team_id}/members/unlock",
+			axum::routing::post(unlock),
+		)
 }
 
 fn base(team: TeamId) -> String {
@@ -42,6 +50,9 @@ fn base(team: TeamId) -> String {
 struct Data {
 	members: Vec<MemberDetail>,
 	roles: Vec<Role>,
+	/// Members locked out of signing in, with the seconds left. Empty for someone who
+	/// may not read memberships (they could not see the page anyway).
+	locked: HashMap<UserId, u64>,
 }
 
 async fn load(s: &AppState, ctx: &TeamCtx) -> AppResult<Data> {
@@ -51,7 +62,12 @@ async fn load(s: &AppState, ctx: &TeamCtx) -> AppResult<Data> {
 	} else {
 		Vec::new()
 	};
-	Ok(Data { members, roles })
+	let locked = service::locked(&s.db, ctx.user.id, ctx.team.id).await?;
+	Ok(Data {
+		members,
+		roles,
+		locked,
+	})
 }
 
 /// The member rows; patched in place after an add or a role change. Someone
@@ -62,6 +78,11 @@ fn member_list(ctx: &TeamCtx, data: &Data) -> Markup {
 		"$target = el.dataset.user; $role = el.value; @post('{}/role')",
 		base(ctx.team.id)
 	);
+	let can_unlock = ctx.perms.can(Action::Update, Resource::Membership);
+	let unlock = format!(
+		"$target = el.dataset.user; @post('{}/unlock')",
+		base(ctx.team.id)
+	);
 	html! {
 		div id="member-list" {
 			table class="ui-table" {
@@ -70,6 +91,7 @@ fn member_list(ctx: &TeamCtx, data: &Data) -> Markup {
 					tr {
 						th scope="col" { "Member" }
 						th scope="col" { "Role" }
+						th scope="col" { "Sign-in" }
 					}
 				}
 				tbody {
@@ -98,6 +120,18 @@ fn member_list(ctx: &TeamCtx, data: &Data) -> Markup {
 									}
 								} @else {
 									span class="ui-role-fixed" { (m.role_name) }
+								}
+							}
+							td data-label="Sign-in" {
+								@if let Some(left) = data.locked.get(&m.user_id) {
+									span class="ui-tag ui-tag-warning" { "Locked, " (throttle::describe(*left)) " left" }
+									@if can_unlock {
+										" "
+										button type="button" class=(BUTTON_OUTLINE) data-user=(m.user_id.0)
+											"data-on:click"=(unlock) "data-indicator:_busy" "data-attr:disabled"="$_busy" {
+											"Unlock"
+										}
+									}
 								}
 							}
 						}
@@ -267,6 +301,33 @@ async fn change_role(
 			.and(sse::toast("Role updated"))
 			.into_response(),
 		Err(e) => redraw.and(sse::error(&error::message(&e))).into_response(),
+	}
+}
+
+#[derive(Deserialize)]
+struct UnlockSignals {
+	target: String,
+}
+
+async fn unlock(
+	State(s): State<AppState>,
+	ctx: TeamCtx,
+	ReadSignals(sig): ReadSignals<UnlockSignals>,
+) -> Response {
+	let Ok(member) = sig.target.parse::<i64>().map(UserId) else {
+		return sse::error("Pick a member.").into_response();
+	};
+	let result = async {
+		service::unlock(&s.db, ctx.user.id, ctx.team.id, member).await?;
+		load(&s, &ctx).await
+	}
+	.await;
+	match result {
+		Ok(data) => sse::patch(&member_list(&ctx, &data))
+			.and(sse::signals(&json!({ "target": "", "_error": "" })))
+			.and(sse::toast("Sign-in unlocked"))
+			.into_response(),
+		Err(e) => error::action(&e),
 	}
 }
 

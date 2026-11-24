@@ -844,3 +844,36 @@ fn oidc_the_ui_holds_no_queries_and_no_authorization() {
 	}
 	assert!(bad.is_empty(), "{bad:?}");
 }
+
+#[db_test]
+async fn throttle_link_password_guesses_are_counted_across_new_link_flows(db: PgPool) {
+	let (w, app) = world(db.clone()).await;
+	let p = instance_provider(&w).await;
+	user_with_team(&app, "ada").await;
+	w.stub.set(|b| b.email = Some("ada@example.com".to_owned()));
+
+	// The flow's own five tries end one link attempt; a provider that asserts the victim's
+	// email can start another at will. The account's count carries over.
+	let mut last = String::new();
+	for _ in 0..crate::throttle::ACCOUNT_LIMIT {
+		let mut b = Browser::default();
+		b.sso(&app, &w.stub, p.id).await;
+		let (_, _, body) = b
+			.post(&app, "/sso/link", &json!({ "password": "nope" }))
+			.await;
+		last = body;
+	}
+	assert!(
+		!last.contains("Too many attempts"),
+		"the fifth is still a plain miss"
+	);
+	crate::throttle::tests::hold(&db).await;
+	let mut b = Browser::default();
+	b.sso(&app, &w.stub, p.id).await;
+	let (_, _, body) = b
+		.post(&app, "/sso/link", &json!({ "password": PASSWORD }))
+		.await;
+	assert!(body.contains("Too many attempts, try again in "), "{body}");
+	assert!(!b.has_session());
+	assert_eq!(count(&db, "user_identities").await, 0);
+}

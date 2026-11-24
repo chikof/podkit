@@ -192,6 +192,10 @@ async fn two_factor_web_sign_in_waits_for_the_second_step(db: PgPool) {
 	.await;
 	assert!(!b.has_session());
 
+	// Five wrong codes also locked the account itself (`throttle`); an admin, or the wait,
+	// would lift that. Here it is cleared so the rest of the scenario can go on.
+	assert!(count(&db, "auth_failures").await >= 5);
+	crate::throttle::clear_account(&db, ann).await;
 	// A fresh attempt with the right code signs in; the half-done cookie is gone.
 	let mut ok = Browser::default();
 	ok.post(&app, "/login", &creds("ann")).await;
@@ -740,5 +744,62 @@ async fn two_factor_recovery_codes_and_secrets_never_reach_a_page_twice(db: PgPo
 	assert!(
 		service::enrolled(&db, ann).await.unwrap(),
 		"eve could not turn Ann's app off"
+	);
+}
+
+#[db_test]
+async fn throttle_wrong_passkey_assertions_lock_the_account(db: PgPool) {
+	let (_st, app) = world(db.clone()).await;
+	user_with_team(&app, "ann").await;
+	let cookie = crate::ui::testing::ui_login(&app, "ann").await;
+	let origin = Url::parse(ORIGIN).unwrap();
+	let mut key = WebauthnAuthenticator::new(SoftPasskey::new(true));
+	let (_, start) = json_post(&app, "/account/passkeys/start", Some(&cookie), &json!({})).await;
+	let options = serde_json::from_value(start["options"].clone()).unwrap();
+	let credential = key.do_registration(origin.clone(), options).unwrap();
+	let (status, _) = json_post(
+		&app,
+		"/account/passkeys/finish",
+		Some(&cookie),
+		&json!({ "flow": start["flow"], "name": "Soft key", "credential": credential }),
+	)
+	.await;
+	assert_eq!(status, StatusCode::OK);
+
+	// An assertion for one challenge, handed to another flow: well formed and refused.
+	let email = json!({ "email": "ann@example.com" });
+	for i in 0..crate::throttle::ACCOUNT_LIMIT {
+		let (_, a) = json_post(&app, "/login/passkey/start", None, &email).await;
+		let (_, b) = json_post(&app, "/login/passkey/start", None, &email).await;
+		let options = serde_json::from_value(b["options"].clone()).unwrap();
+		let assertion = key.do_authentication(origin.clone(), options).unwrap();
+		let (status, body) = json_post(
+			&app,
+			"/login/passkey/finish",
+			None,
+			&json!({ "flow": a["flow"], "credential": assertion }),
+		)
+		.await;
+		assert_eq!(status, StatusCode::UNAUTHORIZED, "guess {i}: {body}");
+	}
+
+	crate::throttle::tests::hold(&db).await;
+	// Now even a perfect assertion is refused until the wait is over.
+	let (_, c) = json_post(&app, "/login/passkey/start", None, &email).await;
+	let options = serde_json::from_value(c["options"].clone()).unwrap();
+	let assertion = key.do_authentication(origin, options).unwrap();
+	let (status, headers, text) = post_signals(
+		&app,
+		"/login/passkey/finish",
+		None,
+		&json!({ "flow": c["flow"], "credential": assertion }),
+	)
+	.await;
+	assert_eq!(status, StatusCode::TOO_MANY_REQUESTS, "{text}");
+	assert!(
+		!headers
+			.get_all(header::SET_COOKIE)
+			.iter()
+			.any(|c| c.to_str().unwrap().starts_with("session="))
 	);
 }
