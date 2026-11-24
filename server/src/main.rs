@@ -31,6 +31,7 @@ mod billing;
 mod builds;
 mod catalog;
 mod change;
+mod client_ip;
 mod config;
 mod cron;
 mod databases;
@@ -107,6 +108,7 @@ fn main() -> AppResult<()> {
 	runtime.build()?.block_on(run())
 }
 
+#[allow(clippy::too_many_lines, reason = "start-up reads best straight down")]
 async fn run() -> AppResult<()> {
 	if let Some(code) = templates::import::cli() {
 		std::process::exit(code);
@@ -200,6 +202,11 @@ async fn run() -> AppResult<()> {
 	maintenance::spawn(state.clone());
 	tokio::spawn(signal_shutdown(shutdown.clone()));
 
+	mcp_servers::seal_legacy(&state.db, &state.secrets).await?;
+	client_ip::set_trusted(
+		client_ip::TrustedProxies::parse(config.trusted_proxies.as_deref().unwrap_or(""))
+			.map_err(|e| ServerError::Validation(format!("TRUSTED_PROXIES: {e}")))?,
+	);
 	let app = routes(state.clone()).await?;
 	let listener = TcpListener::bind(&addr).await?;
 

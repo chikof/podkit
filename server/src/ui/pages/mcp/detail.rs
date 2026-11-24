@@ -78,7 +78,6 @@ fn header(ctx: &TeamCtx, project_name: &str, detail: &Detail) -> Markup {
 
 fn connection_card(detail: &Detail) -> Markup {
 	let mcp = &detail.mcp;
-	let args = mcp.args();
 	card(&html! {
 		(card_section("Connection", Some("Linked applications reach the server through the gateway with a key of their own. It is never routed to the internet."), None))
 		(card_content(&facts(&[
@@ -92,8 +91,9 @@ fn connection_card(detail: &Detail) -> Markup {
 			("Endpoint", html! { code { (mcp.path) } " on port " code { (detail.app.container_port) } }),
 			("Command", html! {
 				@if mcp.transport == Transport::Http { "Not used" }
-				@else if args.is_empty() { "The image's own entrypoint and command" }
-				@else { code { (args.join(" ")) } }
+				@else if !mcp.has_command() { "The image's own entrypoint and command" }
+				// It may carry a token, so the page never prints it; the API reveals it.
+				@else { code { (crate::audit::MASK) } " set, hidden. Pass secrets as environment variables." }
 			}),
 		])))
 	})

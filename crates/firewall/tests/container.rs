@@ -216,10 +216,10 @@ fn unconfirmed_rules_are_reverted_and_confirmed_ones_stay() {
 	assert!(p.diff.iter().any(|l| l.op == '+'));
 	assert!(lab.table().is_none(), "a preview must not apply");
 
-	// Apply, with a 5 s window.
+	// Apply, with a 10 s window.
 	let Response::Applied { token, .. } = Lab::ask(&Request::Apply {
 		policy: policy(),
-		confirm_secs: Some(5),
+		confirm_secs: Some(10),
 	}) else {
 		panic!("apply");
 	};
@@ -230,7 +230,7 @@ fn unconfirmed_rules_are_reverted_and_confirmed_ones_stay() {
 	assert!(token > 0);
 
 	// No confirm: after the window the table is gone, the other one is not.
-	std::thread::sleep(Duration::from_secs(8));
+	std::thread::sleep(Duration::from_secs(13));
 	assert!(lab.table().is_none(), "unconfirmed rules must be reverted");
 	let tables = String::from_utf8_lossy(&lab.nft(&["list", "tables"]).stdout).into_owned();
 	assert!(tables.contains("someone_else"), "{tables}");
@@ -238,12 +238,12 @@ fn unconfirmed_rules_are_reverted_and_confirmed_ones_stay() {
 	// Apply again and confirm: it stays past the window.
 	let Response::Applied { token, .. } = Lab::ask(&Request::Apply {
 		policy: policy(),
-		confirm_secs: Some(5),
+		confirm_secs: Some(10),
 	}) else {
 		panic!("apply");
 	};
 	assert_eq!(Lab::ask(&Request::Confirm { token }), Response::Done);
-	std::thread::sleep(Duration::from_secs(8));
+	std::thread::sleep(Duration::from_secs(13));
 	assert!(lab.table().is_some(), "confirmed rules must stay");
 
 	// A change that is not confirmed goes back to the confirmed ruleset, not to nothing.
@@ -255,10 +255,10 @@ fn unconfirmed_rules_are_reverted_and_confirmed_ones_stay() {
 	});
 	Lab::ask(&Request::Apply {
 		policy: wider,
-		confirm_secs: Some(5),
+		confirm_secs: Some(10),
 	});
 	assert!(lab.table().unwrap().contains("dport 6379 accept"));
-	std::thread::sleep(Duration::from_secs(8));
+	std::thread::sleep(Duration::from_secs(13));
 	let back = lab.table().expect("still there");
 	assert!(!back.contains("6379"), "{back}");
 	assert!(back.contains("5432"));

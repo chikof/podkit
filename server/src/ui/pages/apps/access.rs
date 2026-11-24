@@ -7,10 +7,10 @@
 //! application. Nothing here reads the database: `access_rules::service` hands over an
 //! [`AccessView`]. Basic-auth passwords are write-only; the page lists user names only.
 
-use std::net::{IpAddr, SocketAddr};
+use std::net::IpAddr;
 
 use axum::Router;
-use axum::extract::{ConnectInfo, Path, State};
+use axum::extract::{Path, State};
 use axum::http::request::Parts;
 use axum::response::{IntoResponse, Response};
 use axum::routing::post;
@@ -75,11 +75,7 @@ pub(super) fn signals(view: &AccessView) -> Map<String, Value> {
 
 /// Where this request came from, for the "add my IP" button.
 pub(super) fn client_ip(parts: &Parts) -> Option<IpAddr> {
-	let peer = parts
-		.extensions
-		.get::<ConnectInfo<SocketAddr>>()
-		.map(|c| c.0.ip());
-	crate::audit::client_addr(peer, &parts.headers)
+	crate::client_ip::client_addr(crate::client_ip::peer_of(&parts.extensions), &parts.headers)
 }
 
 fn internal_card(base: &str, internal: bool, can_update: bool) -> Markup {
@@ -483,28 +479,22 @@ mod tests {
 	}
 
 	#[test]
-	fn the_client_address_is_the_forwarded_one_behind_a_local_proxy_and_never_a_spoofed_header() {
-		let parts = |peer: &str, forwarded: Option<&str>| {
-			let mut req = axum::http::Request::builder().uri("/");
-			if let Some(f) = forwarded {
-				req = req.header("x-forwarded-for", f);
-			}
-			let (mut parts, ()) = req.body(()).unwrap().into_parts();
-			parts.extensions.insert(ConnectInfo(
-				format!("{peer}:1234").parse::<SocketAddr>().unwrap(),
-			));
-			parts
-		};
-		let ip = |p: &Parts| client_ip(p).map(|i| i.to_string());
-		// Traefik on this machine: believe it.
+	fn the_client_address_is_the_socket_peer_unless_a_trusted_proxy_forwards_it() {
+		use axum::extract::ConnectInfo;
+		use std::net::SocketAddr;
+		// No `TRUSTED_PROXIES` is set in tests: nobody's forwarding header is believed, not
+		// even a proxy on this machine's. The trusted case is in `sec_cleanup`.
+		let mut req = axum::http::Request::builder()
+			.uri("/")
+			.header("x-forwarded-for", "198.51.100.4")
+			.body(())
+			.unwrap();
+		req.extensions_mut()
+			.insert(ConnectInfo("127.0.0.1:1234".parse::<SocketAddr>().unwrap()));
+		let (parts, ()) = req.into_parts();
 		assert_eq!(
-			ip(&parts("127.0.0.1", Some("198.51.100.4, 10.0.0.1"))).as_deref(),
-			Some("198.51.100.4")
-		);
-		// A client that talks to podkit directly cannot name itself something else.
-		assert_eq!(
-			ip(&parts("203.0.113.9", Some("198.51.100.4"))).as_deref(),
-			Some("203.0.113.9")
+			client_ip(&parts).map(|i| i.to_string()).as_deref(),
+			Some("127.0.0.1")
 		);
 	}
 }

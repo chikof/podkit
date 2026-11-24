@@ -23,7 +23,8 @@ pub enum Request {
 	Apply {
 		/// The wanted ruleset.
 		policy: Policy,
-		/// Seconds to confirm in; `None` is the default, `Some(0)` applies for good.
+		/// Seconds to confirm in; `None` is the default. Less than 10 is refused: there is no
+		/// way to apply without a revert.
 		#[serde(default)]
 		confirm_secs: Option<u64>,
 	},
@@ -81,7 +82,7 @@ pub enum Response {
 	Applied {
 		/// To confirm with.
 		token: u64,
-		/// Seconds until the revert; 0 when applied for good.
+		/// Seconds until the revert.
 		confirm_secs: u64,
 	},
 	/// Done.

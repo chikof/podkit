@@ -143,6 +143,7 @@ async fn oidc_live_dex_round_trip(db: PgPool) {
 			scopes: "openid email profile".into(),
 			jit: true,
 			allow_unverified_email: false,
+			domains: String::new(),
 			group_claim: String::new(),
 			group_roles: String::new(),
 			enabled: true,

@@ -177,6 +177,7 @@ pub async fn create(
 	let app = created.app;
 	if let Err(e) = mcp_servers::insert(
 		&s.db,
+		&s.secrets,
 		app.id,
 		input.settings.transport,
 		&checked.path,
@@ -190,7 +191,7 @@ pub async fn create(
 				"failed to clean up a half-made MCP server: {clean}"
 			);
 		}
-		return Err(e.into());
+		return Err(e);
 	}
 	audit::log(
 		&s.db,
@@ -249,6 +250,7 @@ pub async fn register(
 	}
 	mcp_servers::insert(
 		&s.db,
+		&s.secrets,
 		app.id,
 		settings.transport,
 		&checked.path,
@@ -347,9 +349,22 @@ pub async fn update(
 	let checked = check(&Settings {
 		transport: mcp.transport,
 		path: path.or_else(|| Some(mcp.path.clone())),
-		command: command.unwrap_or_else(|| mcp.args()),
+		command: match command {
+			Some(c) => c,
+			None => mcp.args(&s.secrets).map_err(|e| {
+				tracing::error!(application = app.id.0, "{e}");
+				ServerError::Internal
+			})?,
+		},
 	})?;
-	mcp_servers::update(&s.db, app.id, &checked.path, checked.command.as_deref()).await?;
+	mcp_servers::update(
+		&s.db,
+		&s.secrets,
+		app.id,
+		&checked.path,
+		checked.command.as_deref(),
+	)
+	.await?;
 	links::push_after_change(s, app.server_id).await;
 	audit::log(
 		&s.db,
@@ -361,7 +376,12 @@ pub async fn update(
 			.in_project(project),
 		Diff::new()
 			.set("path", checked.path)
-			.set("command", checked.command),
+			// The command line may carry a token: the log keeps that it was set and how long.
+			.secret("command")
+			.set(
+				"arguments",
+				checked.command.as_deref().map_or(0, |c| c.lines().count()),
+			),
 	)
 	.await;
 	mcp_servers::find(&s.db, app.id)

@@ -1,7 +1,7 @@
 //! HTTP handlers of the MCP server slice. They only translate: the rules live in
 //! [`super::service`].
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::routing::{delete, get, post};
 use axum::{Json, Router};
@@ -40,7 +40,7 @@ struct ServerResponse {
 	slug: String,
 	transport: Transport,
 	path: String,
-	/// stdio only.
+	/// stdio only. Every argument is `•••` unless the caller asked to `reveal` it.
 	command: Vec<String>,
 	server_id: ServerId,
 	/// Where linked applications call it.
@@ -49,14 +49,29 @@ struct ServerResponse {
 }
 
 impl ServerResponse {
-	fn new(detail: &service::Detail) -> Self {
+	fn new(s: &AppState, detail: &service::Detail, reveal: bool) -> AppResult<Self> {
+		let args = detail.mcp.args(&s.secrets).map_err(|e| {
+			tracing::error!(application = detail.app.id.0, "{e}");
+			ServerError::Internal
+		})?;
+		Ok(Self::with_command(
+			detail,
+			if reveal {
+				args
+			} else {
+				super::mask_args(&args)
+			},
+		))
+	}
+
+	fn with_command(detail: &service::Detail, command: Vec<String>) -> Self {
 		Self {
 			id: detail.app.id,
 			name: detail.app.name.clone(),
 			slug: detail.app.slug.clone(),
 			transport: detail.mcp.transport,
 			path: detail.mcp.path.clone(),
-			command: detail.mcp.args(),
+			command,
 			server_id: detail.app.server_id,
 			gateway_url: super::gateway_url(&detail.app.slug),
 			running: detail.running,
@@ -170,19 +185,54 @@ async fn create(
 	Ok((
 		StatusCode::CREATED,
 		Json(CreateResponse {
-			server: ServerResponse::new(&detail),
+			server: ServerResponse::new(&s, &detail, false)?,
 			deployment_id: created.deploy_id,
 		}),
 	))
 }
 
+#[derive(Deserialize, Default)]
+struct ShowQuery {
+	/// Ask for the command line itself instead of `•••`.
+	#[serde(default)]
+	reveal: bool,
+}
+
+/// Fetches one server. `?reveal=true` returns the stdio command in clear: it needs a session
+/// or a token with `read:sensitive`, and `update application`, and it is audited.
 async fn show(
 	State(s): State<AppState>,
 	user: AuthUser,
 	Path((team, project, id)): Path<(TeamId, ProjectId, ApplicationId)>,
+	Query(query): Query<ShowQuery>,
 ) -> AppResult<Json<ServerResponse>> {
 	let detail = service::get(&s, user.id, team, project, id).await?;
-	Ok(Json(ServerResponse::new(&detail)))
+	let reveal = query.reveal;
+	if reveal {
+		if !user.can_reveal() {
+			return Err(ServerError::Forbidden);
+		}
+		crate::auth::permission::authorize(
+			&s.db,
+			user.id,
+			team,
+			crate::auth::permission::Action::Update,
+			crate::auth::permission::Resource::Application,
+		)
+		.await?;
+		crate::audit::log(
+			&s.db,
+			user.id,
+			team,
+			"mcp.reveal",
+			crate::audit::Target::new("application", detail.app.id)
+				.named(&detail.app.slug)
+				.in_project(project),
+			crate::audit::Diff::new().secret("command"),
+		)
+		.await;
+	}
+	Ok(Json(ServerResponse::new(&s, &detail, reveal)?))
 }
 
 #[derive(Deserialize)]
@@ -200,7 +250,7 @@ async fn update(
 	let _: McpServer =
 		service::update(&s, user.id, team, project, id, body.path, body.command).await?;
 	let detail = service::get(&s, user.id, team, project, id).await?;
-	Ok(Json(ServerResponse::new(&detail)))
+	Ok(Json(ServerResponse::new(&s, &detail, false)?))
 }
 
 async fn tools(

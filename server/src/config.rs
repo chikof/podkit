@@ -75,6 +75,12 @@ pub struct ServerConfig {
 	#[config(env = "PUBLIC_URL")]
 	pub public_url: Option<String>,
 
+	/// Reverse proxies whose `X-Forwarded-For` / `Forwarded` headers are believed:
+	/// addresses or CIDR ranges, comma-separated (`127.0.0.1, 172.18.0.0/16`). Empty by
+	/// default, so the client address is always the socket peer's.
+	#[config(env = "TRUSTED_PROXIES")]
+	pub trusted_proxies: Option<String>,
+
 	/// Who may create an account: `first-user` (only while no account
 	/// exists; the default, for a homelab where the first user is the
 	/// admin), `open` (anyone; for a hosted instance) or `closed` (nobody).

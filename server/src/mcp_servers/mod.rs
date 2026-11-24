@@ -21,6 +21,7 @@ pub mod service;
 #[cfg(test)]
 mod tests;
 
+use crypto::age::SecretBox;
 use proto::{GATEWAY_HOST, GATEWAY_PORT, GatewayMcp, GatewayMcpKey};
 use serde::Serialize;
 use sqlx::{PgExecutor, PgPool};
@@ -72,18 +73,74 @@ pub struct McpServer {
 	pub application_id: ApplicationId,
 	pub transport: Transport,
 	pub path: String,
-	/// stdio only: one argument per line; `None` runs the image's own command.
-	pub command: Option<String>,
+	/// Before migration 0074 sealed it: the command, one argument per line, in plain text.
+	/// New writes leave it `NULL` ([`seal_legacy`] moves the rest).
+	command: Option<String>,
+	/// stdio only: the command, one argument per line, encrypted (a command line often
+	/// carries a token). `None` with no `command` runs the image's own command.
+	command_enc: Option<Vec<u8>>,
 	#[allow(dead_code)]
 	pub created_at: OffsetDateTime,
 }
 
 impl McpServer {
-	/// The command line as arguments.
+	/// Whether a command line is set (the image's own is used otherwise).
 	#[must_use]
-	pub fn args(&self) -> Vec<String> {
-		args_of(self.command.as_deref())
+	pub const fn has_command(&self) -> bool {
+		self.command_enc.is_some() || self.command.is_some()
 	}
+
+	/// The command line as arguments, decrypted. Never put these in an answer or the audit
+	/// log without asking [`mask_args`].
+	///
+	/// # Errors
+	/// A message when the stored command cannot be decrypted.
+	pub fn args(&self, secrets: &SecretBox) -> Result<Vec<String>, String> {
+		match (&self.command_enc, &self.command) {
+			(Some(sealed), _) => secrets
+				.decrypt(sealed)
+				.map(|c| args_of(Some(&c)))
+				.map_err(|e| format!("cannot decrypt the command: {e}")),
+			(None, legacy) => Ok(args_of(legacy.as_deref())),
+		}
+	}
+}
+
+/// `args`, each replaced by [`crate::audit::MASK`]: what an answer shows when the caller may
+/// not (or did not ask to) see the command.
+#[must_use]
+pub fn mask_args(args: &[String]) -> Vec<String> {
+	args.iter().map(|_| crate::audit::MASK.to_owned()).collect()
+}
+
+/// Encrypts the command lines that were stored in plain text before they were sealed.
+/// Run once at start-up; cheap when there is nothing to do.
+///
+/// # Errors
+/// The database or encryption failed.
+pub async fn seal_legacy(db: &PgPool, secrets: &SecretBox) -> AppResult<u64> {
+	let rows: Vec<(ApplicationId, String)> = sqlx::query_as(
+		"SELECT application_id, command FROM mcp_servers
+		WHERE command IS NOT NULL AND command_enc IS NULL",
+	)
+	.fetch_all(db)
+	.await?;
+	let mut sealed = 0;
+	for (app, command) in rows {
+		let blob = secrets
+			.encrypt(&command)
+			.map_err(|_| ServerError::Internal)?;
+		sealed += sqlx::query(
+			"UPDATE mcp_servers SET command_enc = $2, command = NULL
+			WHERE application_id = $1 AND command_enc IS NULL",
+		)
+		.bind(app)
+		.bind(blob)
+		.execute(db)
+		.await?
+		.rows_affected();
+	}
+	Ok(sealed)
 }
 
 /// Splits the stored command into its arguments.
@@ -129,7 +186,7 @@ pub async fn find(
 	app: ApplicationId,
 ) -> Result<Option<McpServer>, sqlx::Error> {
 	sqlx::query_as(
-		"SELECT application_id, transport, path, command, created_at FROM mcp_servers
+		"SELECT application_id, transport, path, command, command_enc, created_at FROM mcp_servers
 		WHERE application_id = $1",
 	)
 	.bind(app)
@@ -137,20 +194,27 @@ pub async fn find(
 	.await
 }
 
+fn seal_command(secrets: &SecretBox, command: Option<&str>) -> AppResult<Option<Vec<u8>>> {
+	command
+		.map(|c| secrets.encrypt(c).map_err(|_| ServerError::Internal))
+		.transpose()
+}
+
 pub async fn insert(
 	db: impl PgExecutor<'_>,
+	secrets: &SecretBox,
 	app: ApplicationId,
 	transport: Transport,
 	path: &str,
 	command: Option<&str>,
-) -> Result<(), sqlx::Error> {
+) -> AppResult<()> {
 	sqlx::query(
-		"INSERT INTO mcp_servers (application_id, transport, path, command) VALUES ($1, $2, $3, $4)",
+		"INSERT INTO mcp_servers (application_id, transport, path, command_enc) VALUES ($1, $2, $3, $4)",
 	)
 	.bind(app)
 	.bind(transport)
 	.bind(path)
-	.bind(command)
+	.bind(seal_command(secrets, command)?)
 	.execute(db)
 	.await?;
 	Ok(())
@@ -158,16 +222,20 @@ pub async fn insert(
 
 pub async fn update(
 	db: impl PgExecutor<'_>,
+	secrets: &SecretBox,
 	app: ApplicationId,
 	path: &str,
 	command: Option<&str>,
-) -> Result<(), sqlx::Error> {
-	sqlx::query("UPDATE mcp_servers SET path = $2, command = $3 WHERE application_id = $1")
-		.bind(app)
-		.bind(path)
-		.bind(command)
-		.execute(db)
-		.await?;
+) -> AppResult<()> {
+	sqlx::query(
+		"UPDATE mcp_servers SET path = $2, command = NULL, command_enc = $3
+		WHERE application_id = $1",
+	)
+	.bind(app)
+	.bind(path)
+	.bind(seal_command(secrets, command)?)
+	.execute(db)
+	.await?;
 	Ok(())
 }
 

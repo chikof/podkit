@@ -26,6 +26,7 @@ use crate::auth::origin::external_base;
 use crate::auth::permission::{Action, Resource};
 use crate::error::{AppResult, ServerError};
 use crate::ids::{AuthProviderId, TeamId};
+use crate::sso::domains::{self, Domain, Pending};
 use crate::sso::providers::{self, Input, Kind, Provider, Scope};
 use crate::sso::signin::redirect_uri;
 use crate::state::AppState;
@@ -59,6 +60,10 @@ pub fn router() -> Router<AppState> {
 		.route(
 			"/teams/{team_id}/settings/authentication/{scope}/providers/{provider_id}/delete",
 			post(delete),
+		)
+		.route(
+			"/teams/{team_id}/settings/authentication/domains/{provider_id}/{domain}/approve",
+			post(approve_domain),
 		)
 }
 
@@ -219,11 +224,18 @@ fn fields(scope: Scope, editing: bool) -> Markup {
 			input id={ "p-jit-" (segment(scope)) } type="checkbox" class=(CHECKBOX) "data-bind:p_jit";
 			label for={ "p-jit-" (segment(scope)) } class="cursor-pointer" { "Create an account on first sign-in, when the instance's registration policy allows new accounts" }
 		}
-		div class="ui-check" {
-			input id={ "p-unverified-" (segment(scope)) } type="checkbox" class=(CHECKBOX) "data-bind:p_unverified";
-			label for={ "p-unverified-" (segment(scope)) } class="cursor-pointer" { "Trust the provider's email even when it does not say it was verified (Microsoft)" }
+		@if matches!(scope, Scope::Instance) {
+			div class="ui-check" {
+				input id={ "p-unverified-" (segment(scope)) } type="checkbox" class=(CHECKBOX) "data-bind:p_unverified";
+				label for={ "p-unverified-" (segment(scope)) } class="cursor-pointer" { "Trust the provider's email even when it does not say it was verified (Microsoft)" }
+			}
 		}
 		@if matches!(scope, Scope::Team(_)) {
+			label class=(LABEL) {
+				"Email domains it may create accounts for (one per line)"
+				textarea class=(TEXTAREA) rows="2" spellcheck="false" autocapitalize="none" autocorrect="off" placeholder="example.com" "aria-describedby"="p-domains-hint" "data-bind:p_domains" {}
+				small id="p-domains-hint" class="ui-hint" { "A team provider creates an account only for an address on one of these domains, once the instance administrator approved the domain. Without one, it only signs in people who already have an account." }
+			}
 			div class="ui-pair" {
 				label class=(LABEL) {
 					"Groups claim"
@@ -242,18 +254,65 @@ fn fields(scope: Scope, editing: bool) -> Markup {
 	}
 }
 
-fn signals_for(p: Option<&Provider>, groups: &str) -> Value {
+/// Which of a team provider's domains the instance administrator approved.
+fn domain_status(list: &[Domain]) -> Markup {
+	html! {
+		@if !list.is_empty() {
+			(card(&html! {
+				(card_heading("Email domains", Some("A domain waits for the instance administrator before this provider may create accounts on it.")))
+				ul class="ui-sec-list" aria-label="Email domains" {
+					@for d in list {
+						li class="ui-sec-item" {
+							div class="ui-sec-main" { code { (d.name) } }
+							div class="ui-actions" {
+								@if d.approved { (badge(Tone::Success, "Approved")) } @else { (badge(Tone::Warning, "Waiting for approval")) }
+							}
+						}
+					}
+				}
+			}))
+		}
+	}
+}
+
+/// The instance administrator's queue of domains to approve.
+fn approvals(ctx: &TeamCtx, pending: &[Pending]) -> Markup {
+	let b = base(ctx.team.id);
+	html! {
+		@if !pending.is_empty() {
+			(card(&html! {
+				(card_heading("Domains waiting for approval", Some("Team providers may create accounts only for domains you approve. Approve one when you know the team owns the domain.")))
+				ul class="ui-sec-list" aria-label="Domains waiting for approval" {
+					@for p in pending {
+						li class="ui-sec-item" {
+							div class="ui-sec-main" {
+								b { (p.domain) }
+								small class="ui-hint" { (p.provider) " · team " (p.team) }
+							}
+							div class="ui-actions" {
+								button type="button" class=(button_class(Variant::Outline, Size::Md))
+									"data-on:click"=(format!("@post({})", js_string(&format!("{b}/domains/{}/{}/approve", p.provider_id, p.domain)))) { "Approve" }
+							}
+						}
+					}
+				}
+			}))
+		}
+	}
+}
+
+fn signals_for(p: Option<&Provider>, groups: &str, domains: &str) -> Value {
 	match p {
 		Some(p) => json!({
 			"p_kind": p.kind.as_str(), "p_name": p.name, "p_slug": p.slug,
 			"p_issuer": p.issuer.clone().unwrap_or_default(), "p_client_id": p.client_id,
-			"p_secret": "", "p_scopes": p.scopes, "p_jit": p.jit, "p_unverified": p.allow_unverified_email,
+			"p_secret": "", "p_scopes": p.scopes, "p_jit": p.jit, "p_unverified": p.allow_unverified_email, "p_domains": domains,
 			"p_claim": p.group_claim.clone().unwrap_or_default(), "p_groups": groups,
 			"p_enabled": p.enabled, "_error": "",
 		}),
 		None => json!({
 			"p_kind": "oidc", "p_name": "", "p_slug": "", "p_issuer": "", "p_client_id": "",
-			"p_secret": "", "p_scopes": "openid email profile", "p_jit": true, "p_unverified": false,
+			"p_secret": "", "p_scopes": "openid email profile", "p_jit": true, "p_unverified": false, "p_domains": "",
 			"p_claim": "", "p_groups": "", "p_enabled": true, "_error": "",
 		}),
 	}
@@ -269,7 +328,7 @@ fn add_form(ctx: &TeamCtx, scope: Scope, heading: &str) -> Markup {
 		))
 	);
 	html! {
-		form "data-on:submit"=(post) data-signals=(signals_for(None, "").to_string()) {
+		form "data-on:submit"=(post) data-signals=(signals_for(None, "", "").to_string()) {
 			(card(&html! {
 				(card_heading(heading, Some("Register podkit with the provider first; the redirect URL to give it is on the provider's page once you save.")))
 				(card_content(&html! { (fields(scope, false)) (form_error()) }))
@@ -293,6 +352,7 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> axum::response::Result
 		let team_scope = Scope::Team(ctx.team.id);
 		let team_providers = if can_edit { providers::list(&s.db, ctx.user.id, team_scope).await? } else { Vec::new() };
 		let admin = providers::is_instance_admin(&s.db, ctx.user.id).await?;
+		let pending = if admin { domains::pending(&s.db, ctx.user.id).await? } else { Vec::new() };
 		let instance_providers = if admin { providers::list(&s.db, ctx.user.id, Scope::Instance).await? } else { Vec::new() };
 
 		let signals = json!({ "require": pol.required, "grace": pol.grace_days.to_string(), "_error": "" });
@@ -306,6 +366,7 @@ async fn page(State(s): State<AppState>, ctx: TeamCtx) -> axum::response::Result
 				@if admin {
 					(provider_list(&ctx, Scope::Instance, &instance_providers, "Instance providers", "Offered on the sign-in page for everyone on this podkit. Only the administrator, the oldest account, manages them."))
 					(add_form(&ctx, Scope::Instance, "Add an instance provider"))
+					(approvals(&ctx, &pending))
 				}
 			}
 		};
@@ -328,23 +389,28 @@ async fn edit_page(
 			Scope::Team(team) => providers::group_roles_text(&s.db, team, &p.group_roles).await?,
 			Scope::Instance => String::new(),
 		};
+		let listed = domains::list(&s.db, p.id).await?;
+		let domain_text = domains::text(&listed);
 		let b = base(ctx.team.id);
 		let save = format!("evt.preventDefault(); @post({})", js_string(&format!("{b}/{segment_name}/providers/{id}")));
 		let delete = format!("@post({})", js_string(&format!("{b}/{segment_name}/providers/{id}/delete")));
 		let redirect = redirect_uri(&s, &headers, p.id);
 		let _ = external_base(&s.config, &headers);
 		let content = html! {
-			div class="flex flex-col gap-6" data-signals=(signals_for(Some(&p), &groups).to_string()) {
+			div class="flex flex-col gap-6" data-signals=(signals_for(Some(&p), &groups, &domain_text).to_string()) {
 				(card(&html! {
 					(card_heading("Redirect URL", Some("Give this to the provider as the redirect (callback) URL of the application you made for podkit.")))
 					(card_content(&copy_field("sso-redirect", "Redirect URL", &redirect)))
 				}))
+				@if matches!(scope, Scope::Team(_)) {
+					(domain_status(&listed))
+				}
 				form "data-on:submit"=(save) {
 					(card(&html! {
 						(card_heading(&p.name, Some("Leave the client secret empty to keep the one podkit has.")))
 						(card_content(&html! { (fields(scope, true)) }))
 					}))
-					(save_bar(&["p_name", "p_slug", "p_issuer", "p_client_id", "p_secret", "p_scopes", "p_jit", "p_unverified", "p_claim", "p_groups", "p_enabled"]))
+					(save_bar(&["p_name", "p_slug", "p_issuer", "p_client_id", "p_secret", "p_scopes", "p_jit", "p_unverified", "p_domains", "p_claim", "p_groups", "p_enabled"]))
 				}
 				(card(&html! {
 					(card_heading("Remove this provider", Some("People who signed in through it can still sign in with their password. Accounts it created have none, so they would be locked out.")))
@@ -411,6 +477,7 @@ struct ProviderSignals {
 	p_scopes: String,
 	p_jit: bool,
 	p_unverified: bool,
+	p_domains: String,
 	p_claim: String,
 	p_groups: String,
 	p_enabled: bool,
@@ -431,6 +498,7 @@ impl ProviderSignals {
 			scopes: self.p_scopes,
 			jit: self.p_jit,
 			allow_unverified_email: self.p_unverified,
+			domains: self.p_domains,
 			group_claim: self.p_claim,
 			group_roles: self.p_groups,
 			enabled: self.p_enabled,
@@ -513,6 +581,21 @@ async fn delete(
 	match result {
 		Ok(()) => {
 			shell::flash(&cookies, Tone::Success, "Provider removed.");
+			sse::redirect(&base(ctx.team.id)).into_response()
+		}
+		Err(e) => error::action(&e),
+	}
+}
+
+async fn approve_domain(
+	State(s): State<AppState>,
+	ctx: TeamCtx,
+	cookies: Cookies,
+	Path((_, id, domain)): Path<(TeamId, AuthProviderId, String)>,
+) -> Response {
+	match domains::approve(&s, ctx.user.id, id, &domain).await {
+		Ok(()) => {
+			shell::flash(&cookies, Tone::Success, &format!("{domain} approved."));
 			sse::redirect(&base(ctx.team.id)).into_response()
 		}
 		Err(e) => error::action(&e),

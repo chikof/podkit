@@ -833,3 +833,44 @@ fn every_skipped_endpoint_says_why() {
 }
 
 // --- END OF TESTS (new ones go above this line)
+
+/// SEC-06 end to end: the address in the audit log is the socket peer's, whatever header a
+/// LAN client sends.
+#[sqlx::test]
+async fn sec_cleanup_the_audit_address_is_the_socket_peer_not_a_forwarded_header(db: PgPool) {
+	use axum::extract::ConnectInfo;
+
+	let app = app(db.clone()).await;
+	let (token, team) = user_with_team(&app, "alice").await;
+	let from = |peer: &str, name: &str| {
+		let mut req = Request::builder()
+			.method("POST")
+			.uri(format!("/api/v1/teams/{team}/projects"))
+			.header(header::AUTHORIZATION, format!("Bearer {token}"))
+			.header(header::CONTENT_TYPE, "application/json")
+			.header("x-forwarded-for", "203.0.113.9")
+			.body(Body::from(
+				json!({ "name": name, "slug": name }).to_string(),
+			))
+			.unwrap();
+		req.extensions_mut().insert(ConnectInfo(
+			format!("{peer}:51000")
+				.parse::<std::net::SocketAddr>()
+				.unwrap(),
+		));
+		req
+	};
+	for (peer, name) in [
+		("192.168.1.50", "lan"),
+		("127.0.0.1", "local"),
+		("198.51.100.4", "wan"),
+	] {
+		let resp = app.clone().oneshot(from(peer, name)).await.unwrap();
+		assert!(resp.status().is_success(), "{peer}: {}", resp.status());
+		assert_eq!(
+			newest(&db).await.ip.as_deref(),
+			Some(peer),
+			"{peer} wrote a forwarded address into the log"
+		);
+	}
+}

@@ -24,6 +24,13 @@ answers `POST <path>` with `application/json`, and answers `GET`/`DELETE` with 4
 server-initiated stream, no sessions). `GET /healthz` is `ok`. Without a `command`, the image's
 own entrypoint and command are used.
 
+A command line often carries a token, so podkit treats it as a secret: it is stored encrypted, the
+API answers `•••` for every argument (you still see how many there are), and the audit log records
+only that it changed. `GET .../mcp-servers/{id}?reveal=true` returns it in clear for a session or a
+token with `read:sensitive` that also holds `update application`; each reveal is audited as
+`mcp.reveal`. The page shows that a command is set, not what it says. Still prefer the application's
+environment variables for tokens when the server reads them from there.
+
 An MCP server gets the network alias `mcp-<slug>` on its environment network and no public
 route.
 

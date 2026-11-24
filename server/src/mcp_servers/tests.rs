@@ -256,6 +256,175 @@ fn value<'a>(env: &'a [(String, String)], key: &str) -> Option<&'a str> {
 	env.iter().find(|(k, _)| k == key).map(|(_, v)| v.as_str())
 }
 
+const TOKEN: &str = "PKTOKEN-in-an-argument-1234";
+const TOKEN2: &str = "PKTOKEN-second-5678";
+
+async fn stored_command(db: &PgPool, id: i64) -> (Option<String>, Option<Vec<u8>>) {
+	sqlx::query_as("SELECT command, command_enc FROM mcp_servers WHERE application_id = $1")
+		.bind(id)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}
+
+/// SEC-05: the command line of a stdio server may carry a token. It is stored encrypted, the API
+/// shows `•••` unless the caller reveals it with `read:sensitive` and `update application`, and
+/// the audit log never holds it.
+#[sqlx::test]
+async fn sec_cleanup_an_mcp_stdio_command_is_sealed_masked_and_redacted_in_the_audit(db: PgPool) {
+	let s = Setup::new(db.clone()).await;
+	let (status, made) = s
+		.api(
+			"POST",
+			"/mcp-servers",
+			Some(json!({
+				"name": "tokened", "server_id": s.server, "image": "ghcr.io/acme/mcp:1",
+				"transport": "stdio",
+				"command": ["node", "server.js", format!("--api-key={TOKEN}")],
+			})),
+		)
+		.await;
+	assert_eq!(status, StatusCode::CREATED, "{made}");
+	assert_eq!(made["command"], json!(["•••", "•••", "•••"]), "{made}");
+	let id = made["id"].as_i64().unwrap();
+
+	// At rest: no plain text, and the ciphertext does not hold the token.
+	let (plain, sealed) = stored_command(&db, id).await;
+	assert_eq!(plain, None, "the plain column stays empty");
+	let sealed = sealed.expect("the command is stored encrypted");
+	assert!(!sealed.windows(TOKEN.len()).any(|w| w == TOKEN.as_bytes()));
+
+	// In answers: masked, in the list's detail and after an update.
+	let (_, shown) = s.api("GET", &format!("/mcp-servers/{id}"), None).await;
+	assert_eq!(shown["command"], json!(["•••", "•••", "•••"]), "{shown}");
+	let (status, updated) = s
+		.api(
+			"PUT",
+			&format!("/mcp-servers/{id}"),
+			Some(json!({ "command": ["node", format!("--token={TOKEN2}")] })),
+		)
+		.await;
+	assert_eq!(status, StatusCode::OK, "{updated}");
+	assert_eq!(updated["command"], json!(["•••", "•••"]), "{updated}");
+	assert!(!updated.to_string().contains(TOKEN2));
+
+	// In the audit log: that it changed and how long it is, never what it says.
+	let events: Vec<(String, Value)> = sqlx::query_as(
+		"SELECT action, diff FROM audit_events WHERE action LIKE 'mcp.%' ORDER BY id",
+	)
+	.fetch_all(&db)
+	.await
+	.unwrap();
+	let update = events
+		.iter()
+		.find(|(a, _)| a == "mcp.update")
+		.expect("the update is audited");
+	assert_eq!(update.1["command"], json!("•••"), "{}", update.1);
+	assert_eq!(update.1["arguments"], json!(2), "{}", update.1);
+	for (action, diff) in &events {
+		let text = diff.to_string();
+		assert!(
+			!text.contains(TOKEN) && !text.contains(TOKEN2),
+			"{action} leaks the command: {text}"
+		);
+	}
+	let everything: String = sqlx::query_scalar(
+		"SELECT COALESCE(string_agg(summary || diff::text, ' '), '') FROM audit_events",
+	)
+	.fetch_one(&db)
+	.await
+	.unwrap();
+	assert!(!everything.contains("PKTOKEN"), "{everything}");
+
+	// Revealing needs `read:sensitive` and says so in the log; a plain `read` token is refused.
+	let (status, revealed) = s
+		.api("GET", &format!("/mcp-servers/{id}?reveal=true"), None)
+		.await;
+	assert_eq!(status, StatusCode::OK, "{revealed}");
+	assert_eq!(
+		revealed["command"],
+		json!(["node", format!("--token={TOKEN2}")])
+	);
+	let reveal: Value = sqlx::query_scalar(
+		"SELECT diff FROM audit_events WHERE action = 'mcp.reveal' ORDER BY id DESC LIMIT 1",
+	)
+	.fetch_one(&db)
+	.await
+	.unwrap();
+	assert_eq!(reveal, json!({ "command": "•••" }));
+	let (status, read_token) = call(
+		&s.app,
+		"POST",
+		&format!("/api/v1/teams/{}/api-tokens", s.team),
+		Some(&s.token),
+		Some(json!({ "name": "reader", "scopes": ["read"] })),
+	)
+	.await;
+	assert!(status.is_success(), "{read_token}");
+	let reader = read_token["secret"].as_str().unwrap();
+	let (status, _) = call(
+		&s.app,
+		"GET",
+		&format!("{}/mcp-servers/{id}?reveal=true", s.base()),
+		Some(reader),
+		None,
+	)
+	.await;
+	assert_eq!(status, StatusCode::FORBIDDEN);
+	let (status, masked) = call(
+		&s.app,
+		"GET",
+		&format!("{}/mcp-servers/{id}", s.base()),
+		Some(reader),
+		None,
+	)
+	.await;
+	assert_eq!(status, StatusCode::OK);
+	assert_eq!(masked["command"], json!(["•••", "•••"]));
+
+	// The agent still gets the real command.
+	let spec = s.deploy(id).await;
+	assert_eq!(
+		spec["options"]["mcp_bridge"]["command"],
+		json!(["node", format!("--token={TOKEN2}")])
+	);
+}
+
+/// Rows written before migration 0074 hold the command in plain text; start-up seals them.
+#[sqlx::test]
+async fn sec_cleanup_a_command_stored_in_plain_text_is_sealed_at_start_up(db: PgPool) {
+	let s = Setup::new(db.clone()).await;
+	let (_, made) = s.server("Legacy", "stdio").await;
+	let id = made["id"].as_i64().unwrap();
+	sqlx::query(
+		"UPDATE mcp_servers SET command = 'node' || E'\\n' || '--token=OLD', command_enc = NULL
+		WHERE application_id = $1",
+	)
+	.bind(id)
+	.execute(&db)
+	.await
+	.unwrap();
+	assert_eq!(
+		crate::mcp_servers::seal_legacy(&db, &s.state.secrets)
+			.await
+			.unwrap(),
+		1
+	);
+	let (plain, sealed) = stored_command(&db, id).await;
+	assert_eq!((plain, sealed.is_some()), (None, true));
+	let (_, revealed) = s
+		.api("GET", &format!("/mcp-servers/{id}?reveal=true"), None)
+		.await;
+	assert_eq!(revealed["command"], json!(["node", "--token=OLD"]));
+	// A second pass has nothing to do.
+	assert_eq!(
+		crate::mcp_servers::seal_legacy(&db, &s.state.secrets)
+			.await
+			.unwrap(),
+		0
+	);
+}
+
 #[sqlx::test]
 async fn mcp_resource_create_deploys_on_the_environment_network_and_never_publicly(db: PgPool) {
 	let s = Setup::new(db).await;

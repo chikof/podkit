@@ -73,6 +73,7 @@ fn input(stub: &Stub, slug: &str) -> Input {
 		scopes: "openid email profile".to_owned(),
 		jit: true,
 		allow_unverified_email: false,
+		domains: String::new(),
 		group_claim: String::new(),
 		group_roles: String::new(),
 		enabled: true,
@@ -530,6 +531,8 @@ async fn team_with_provider(w: &World, groups: &str) -> (i64, Provider) {
 	let mut i = input(&w.stub, "acme");
 	i.group_claim = "groups".to_owned();
 	i.group_roles = groups.to_owned();
+	// The instance administrator lists it, so the domain is approved at once.
+	i.domains = "corp.test".to_owned();
 	let p = providers::create(&w.st, w.admin, Scope::Team(TeamId(team)), &i)
 		.await
 		.unwrap();
@@ -843,4 +846,131 @@ fn oidc_the_ui_holds_no_queries_and_no_authorization() {
 		}
 	}
 	assert!(bad.is_empty(), "{bad:?}");
+}
+
+/// SEC-07: a team administrator's own identity provider cannot create accounts for email it has
+/// not been given: only for domains the instance administrator approved.
+#[db_test]
+async fn sec_cleanup_oidc_a_team_provider_cannot_claim_a_domain_nobody_approved(db: PgPool) {
+	use super::domains;
+
+	let (w, app) = world(db.clone()).await;
+	let (eve_cookie, eve_team) = ui_session(&app, "eve").await;
+	let eve = UserId(crate::tests::user_id(&db, "eve").await);
+
+	// Eve runs the identity provider of her own team and lists the domain she wants.
+	let mut i = input(&w.stub, "eves");
+	i.domains = "corp.test".to_owned();
+	i.allow_unverified_email = true;
+	let p = providers::create(&w.st, eve, Scope::Team(TeamId(eve_team)), &i)
+		.await
+		.unwrap();
+	assert!(
+		!p.allow_unverified_email,
+		"a team provider cannot vouch for an unverified email"
+	);
+	let listed = domains::list(&db, p.id).await.unwrap();
+	assert_eq!(
+		listed,
+		vec![domains::Domain {
+			name: "corp.test".to_owned(),
+			approved: false
+		}]
+	);
+
+	// A person nobody has registered cannot be signed up by it, even in its own domain.
+	let mut b = Browser::default();
+	let (status, _, body) = b.sso(&app, &w.stub, p.id).await;
+	assert!(status.is_client_error(), "{status}\n{body}");
+	assert!(body.contains("not approved"), "{body}");
+	assert!(user_by_email(&db, "ada@corp.test").await.is_none());
+	assert!(!b.has_session());
+
+	// Nor does an unverified address get in, whatever the form said.
+	w.stub.set(|b| b.email_verified = Some(false));
+	let mut b = Browser::default();
+	let (status, _, body) = b.sso(&app, &w.stub, p.id).await;
+	assert!(status.is_client_error(), "{status}");
+	assert!(body.contains("verified email"), "{body}");
+	w.stub.set(|b| b.email_verified = Some(true));
+
+	// She cannot approve her own domain; the instance administrator sees it waiting.
+	assert!(matches!(
+		domains::approve(&w.st, eve, p.id, "corp.test").await,
+		Err(crate::error::ServerError::Forbidden)
+	));
+	assert!(domains::pending(&db, eve).await.is_err());
+	let waiting = domains::pending(&db, w.admin).await.unwrap();
+	assert_eq!(
+		waiting
+			.iter()
+			.map(|d| (d.provider.as_str(), d.domain.as_str()))
+			.collect::<Vec<_>>(),
+		vec![("Corp eves", "corp.test")]
+	);
+	let (status, _, page) = get_html(
+		&app,
+		&format!("/teams/{}/settings/authentication", w.admin_team),
+		Some(&w.admin_cookie),
+	)
+	.await;
+	assert_eq!(status, StatusCode::OK);
+	assert!(page.contains("Domains waiting for approval"), "{page}");
+	let (status, _, eve_page) = get_html(
+		&app,
+		&format!("/teams/{eve_team}/settings/authentication"),
+		Some(&eve_cookie),
+	)
+	.await;
+	assert_eq!(status, StatusCode::OK);
+	assert!(!eve_page.contains("Domains waiting for approval"));
+
+	// Another domain stays closed even after the first is approved.
+	domains::approve(&w.st, w.admin, p.id, "corp.test")
+		.await
+		.unwrap();
+	assert!(domains::pending(&db, w.admin).await.unwrap().is_empty());
+	w.stub
+		.set(|b| b.email = Some("mallory@evil.test".to_owned()));
+	let mut b = Browser::default();
+	let (status, _, body) = b.sso(&app, &w.stub, p.id).await;
+	assert!(status.is_client_error(), "{status}");
+	assert!(body.contains("not approved"), "{body}");
+	assert!(user_by_email(&db, "mallory@evil.test").await.is_none());
+
+	// The approved one works; the approval is in the audit log.
+	w.stub.set(|b| b.email = Some("ada@corp.test".to_owned()));
+	let mut b = Browser::default();
+	let (status, _, body) = b.sso(&app, &w.stub, p.id).await;
+	assert_eq!(status, StatusCode::OK, "{body}");
+	assert!(user_by_email(&db, "ada@corp.test").await.is_some());
+	assert!(
+		audit_actions(&db)
+			.await
+			.iter()
+			.any(|a| a == "auth_provider.domain_approve")
+	);
+
+	// Dropping the domain from the list closes it again.
+	let mut i = input(&w.stub, "eves");
+	i.domains = String::new();
+	providers::update(&w.st, eve, Scope::Team(TeamId(eve_team)), p.id, &i)
+		.await
+		.unwrap();
+	assert!(domains::list(&db, p.id).await.unwrap().is_empty());
+}
+
+#[test]
+fn sec_cleanup_oidc_domains_are_parsed_strictly() {
+	use super::domains::{of_email, parse};
+	assert_eq!(
+		parse("Example.com, @corp.example\nexample.com").unwrap(),
+		vec!["example.com", "corp.example"]
+	);
+	assert!(parse("").unwrap().is_empty());
+	assert!(parse("localhost").is_err());
+	assert!(parse("a..com").is_err());
+	assert!(parse("*.com").is_err());
+	assert_eq!(of_email("Ada@Corp.Test").as_deref(), Some("corp.test"));
+	assert_eq!(of_email("nobody"), None);
 }
