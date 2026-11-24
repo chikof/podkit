@@ -102,10 +102,12 @@ pub enum EventKind {
 	QuotaExceeded,
 	/// An account was locked after repeated wrong sign-in attempts.
 	SignInLocked,
+	/// A restore drill could not restore a database's backup, or found it empty or short.
+	RestoreDrillFailed,
 }
 
 impl EventKind {
-	pub const ALL: [Self; 27] = [
+	pub const ALL: [Self; 28] = [
 		Self::DeploySucceeded,
 		Self::DeployFailed,
 		Self::Rollback,
@@ -133,6 +135,7 @@ impl EventKind {
 		Self::QuotaWarning,
 		Self::QuotaExceeded,
 		Self::SignInLocked,
+		Self::RestoreDrillFailed,
 	];
 
 	pub fn as_str(self) -> &'static str {
@@ -164,6 +167,7 @@ impl EventKind {
 			Self::QuotaWarning => "quota_warning",
 			Self::QuotaExceeded => "quota_exceeded",
 			Self::SignInLocked => "sign_in_locked",
+			Self::RestoreDrillFailed => "restore_drill_failed",
 		}
 	}
 
@@ -200,6 +204,7 @@ impl EventKind {
 			Self::QuotaWarning => "Quota almost used",
 			Self::QuotaExceeded => "Quota reached",
 			Self::SignInLocked => "Sign-in locked",
+			Self::RestoreDrillFailed => "Restore drill failed",
 		}
 	}
 
@@ -213,9 +218,11 @@ impl EventKind {
 			| Self::ServerRecovered
 			| Self::DiskHigh
 			| Self::FirewallReverted => "Servers",
-			Self::BackupFailed | Self::BackupSucceeded | Self::CronFailed | Self::CronRecovered => {
-				"Backups and jobs"
-			}
+			Self::BackupFailed
+			| Self::BackupSucceeded
+			| Self::RestoreDrillFailed
+			| Self::CronFailed
+			| Self::CronRecovered => "Backups and jobs",
 			Self::Vulnerability | Self::CertExpiring | Self::SignInLocked => "Security",
 			Self::ContainerOom | Self::CrashLoop | Self::ModelCrashed | Self::TailnetFailed => {
 				"Containers and models"
@@ -239,6 +246,7 @@ impl EventKind {
 			Self::DeployFailed
 			| Self::Rollback
 			| Self::BackupFailed
+			| Self::RestoreDrillFailed
 			| Self::CronFailed
 			| Self::DiskHigh
 			| Self::CertExpiring

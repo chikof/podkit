@@ -25,7 +25,8 @@ pub async fn roles(db: &PgPool, user: UserId, team: TeamId) -> AppResult<Vec<Rol
 	Ok(super::list_roles(db, team).await?)
 }
 
-/// Adds an existing user to the team by email; needs `create membership`.
+/// Adds an existing user to the team by email; needs `create membership`, and the role may
+/// not reach further than the caller's own.
 pub async fn add(
 	db: &PgPool,
 	user: UserId,
@@ -40,6 +41,7 @@ pub async fn add(
 		.ok_or_else(|| ServerError::Validation("no user with that email".to_string()))?;
 
 	super::ensure_assignable(db, team, role).await?;
+	super::ensure_within(db, user, team, role).await?;
 
 	if super::find(db, team, invitee.id).await?.is_some() {
 		return Err(ServerError::AlreadyMember);
@@ -59,7 +61,9 @@ pub async fn add(
 }
 
 /// Changes a member's role; needs `update membership`. The role must be
-/// built-in or the team's own.
+/// built-in or the team's own, and neither the member's current role nor the new one may
+/// reach further than the caller's own. Open invites the member sent that their new role no
+/// longer covers are dropped.
 pub async fn update_role(
 	db: &PgPool,
 	user: UserId,
@@ -74,15 +78,25 @@ pub async fn update_role(
 		.ok_or_else(|| ServerError::Validation("member not found".to_string()))?;
 
 	super::ensure_assignable(db, team, role).await?;
+	if !super::role_within(db, user, team, member.role_id).await? {
+		return Err(ServerError::Validation(
+			"You can't change the role of someone who can do more than you.".to_owned(),
+		));
+	}
+	super::ensure_within(db, user, team, role).await?;
 
-	super::set_role(db, team, member.user_id, role).await?;
+	let dropped = super::set_role(db, team, member.user_id, role).await?;
+	let mut diff = Diff::new().change("role_id", member.role_id.0, role.0);
+	if dropped > 0 {
+		diff = diff.set("invites_dropped", dropped);
+	}
 	audit::log(
 		db,
 		user,
 		team,
 		"member.update",
 		Target::new("member", member.user_id),
-		Diff::new().change("role_id", member.role_id.0, role.0),
+		diff,
 	)
 	.await;
 	Ok(())

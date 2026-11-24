@@ -1,6 +1,6 @@
 //! Servers: the team's podman hosts as cards with live figures, adding one in a stepped
-//! dialog, and a server's pages: Overview (status, hardware, bootstrap log, actions) and
-//! Monitoring (charts from the sampler).
+//! dialog, and a server's pages: Overview (status, hardware, bootstrap log, drain, actions)
+//! and Monitoring (charts from the sampler).
 //!
 //! The SSH private key is write-only: it travels from the form to the create action and is
 //! never rendered back, into HTML or into a signal.
@@ -17,6 +17,7 @@ use crate::ui::layout::Crumb;
 
 mod detail;
 pub(in crate::ui) use detail::header;
+mod drain;
 mod key_picker;
 mod list;
 mod monitoring;
@@ -27,6 +28,7 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.merge(list::router())
 		.merge(detail::router())
+		.merge(drain::router())
 		.merge(monitoring::router())
 }
 

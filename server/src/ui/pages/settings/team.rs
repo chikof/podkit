@@ -91,6 +91,9 @@ async fn page(ctx: TeamCtx) -> Markup {
 					p class="font-mono text-sm" { (ctx.team.slug) }
 				}))
 			}))
+			@if let Some(eject) = crate::ui::pages::quadlet::team_card(&ctx) {
+				(eject)
+			}
 		}
 	};
 	settings_page(&ctx, "Team", &content)

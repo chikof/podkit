@@ -1,0 +1,200 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT e.id AS \"id: AuditEventId\", e.actor_kind, e.actor_user_id AS \"actor_user_id: UserId\",\n\t\t\t\tu.name AS \"actor_name?\", e.actor_token_id AS \"actor_token_id: ApiTokenId\",\n\t\t\t\tt.name AS \"token_name?\", e.action, e.target_kind, e.target_id,\n\t\t\t\te.project_id AS \"project_id: ProjectId\", e.summary, e.diff, e.ip, e.user_agent,\n\t\t\t\te.created_at\n\t\t\tFROM audit_events e\n\t\t\tJOIN UNNEST($2::text[], $3::bigint[]) AS want(kind, id)\n\t\t\t\tON want.kind = e.target_kind AND want.id = e.target_id\n\t\t\tLEFT JOIN users u ON u.id = e.actor_user_id\n\t\t\tLEFT JOIN api_tokens t ON t.id = e.actor_token_id\n\t\t\tWHERE e.team_id = $1 AND NOT (e.action = ANY($4::text[]))\n\t\t\tORDER BY e.created_at DESC, e.id DESC\n\t\t\tLIMIT $5\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: AuditEventId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "actor_kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "actor_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "actor_user_id: UserId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "actor_user_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "actor_name?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "users",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "actor_token_id: ApiTokenId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "actor_token_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "token_name?",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "api_tokens",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "action",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "action"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "target_kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "target_kind"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "target_id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "target_id"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "project_id: ProjectId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "project_id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "summary",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "summary"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "diff",
+        "type_info": "Jsonb",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "diff"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "ip",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "ip"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "user_agent",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "user_agent"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "audit_events",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "TextArray",
+        "Int8Array",
+        "TextArray",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "dfe696d1388d3f3c793df9f6e4b835740bf7faec102a3d3d3453078ab6ec9bfa"
+}

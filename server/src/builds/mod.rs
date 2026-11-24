@@ -253,16 +253,22 @@ pub fn plan(
 	}
 }
 
-/// The plan for an application, read from the database.
+/// The plan for an application, read from the database. A build server that is being
+/// drained takes no new builds: the application then builds where it runs.
 pub async fn plan_for(
 	db: &PgPool,
 	team: TeamId,
 	app: ApplicationId,
 	runs_on: ServerId,
 ) -> Result<Plan, sqlx::Error> {
-	let team_settings = team_settings(db, team).await?;
-	let app_settings = app_settings(db, app).await?;
-	let server = choose_server(runs_on, &app_settings, &team_settings);
+	let mut team_settings = team_settings(db, team).await?;
+	let mut app_settings = app_settings(db, app).await?;
+	let mut server = choose_server(runs_on, &app_settings, &team_settings);
+	if server != runs_on && crate::moves::draining_since(db, server).await?.is_some() {
+		app_settings.build_server_id = None;
+		team_settings.build_server_id = None;
+		server = runs_on;
+	}
 	let builder = server_settings(db, server).await?;
 	Ok(plan(runs_on, &app_settings, &team_settings, builder))
 }

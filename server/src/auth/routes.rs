@@ -2,7 +2,7 @@ use axum::{
 	Json, Router,
 	extract::State,
 	http::{HeaderMap, StatusCode},
-	routing::post,
+	routing::{get, post},
 };
 use serde::{Deserialize, Serialize};
 use tower_cookies::{Cookie, Cookies, cookie::SameSite};
@@ -18,6 +18,53 @@ pub fn router() -> Router<AppState> {
 		.route("/register", post(register))
 		.route("/login", post(login))
 		.route("/logout", post(logout))
+		.route("/invites/accept", post(accept_invite))
+}
+
+/// `GET /me`: who the caller is. Outside `/auth` because tokens may not reach that.
+pub fn me_router() -> Router<AppState> {
+	Router::new().route("/me", get(me))
+}
+
+/// The caller, and for an API token what it may do. Never carries the secret.
+#[derive(Serialize)]
+struct MeResponse {
+	id: crate::ids::UserId,
+	name: String,
+	email: String,
+	/// `None` for a session.
+	token: Option<MeToken>,
+}
+
+#[derive(Serialize)]
+struct MeToken {
+	id: crate::ids::ApiTokenId,
+	team_id: crate::ids::TeamId,
+	scopes: Vec<&'static str>,
+	/// Empty means every project of the team.
+	project_ids: Vec<crate::ids::ProjectId>,
+}
+
+/// Says who the caller is: the account, and the scopes and limits of the token used, so a
+/// command line can show them and tell what it may do before it tries. Any signed-in
+/// caller may ask about themselves; a token needs only `read`.
+async fn me(State(s): State<AppState>, user: AuthUser) -> Result<Json<MeResponse>, ServerError> {
+	let name = users::name_of(&s.db, user.id).await?;
+	let email = users::email_of(&s.db, user.id).await?;
+	let (Some(name), Some(email)) = (name, email) else {
+		return Err(ServerError::InvalidToken);
+	};
+	Ok(Json(MeResponse {
+		id: user.id,
+		name,
+		email,
+		token: user.grant.map(|g| MeToken {
+			id: g.token,
+			team_id: g.team,
+			scopes: g.scopes.iter().map(|s| s.as_str()).collect(),
+			project_ids: g.projects,
+		}),
+	}))
 }
 
 fn hashing_failed(e: &anyhow::Error) -> ServerError {
@@ -30,22 +77,65 @@ struct RegisterRequest {
 	name: String,
 	email: String,
 	password: String,
+	/// The first-run setup token from podkit's log; needed only while no account exists.
+	#[serde(default)]
+	setup_token: Option<String>,
+	/// The token of an invite link: signs up the invited address whatever the registration
+	/// policy says, and joins its team.
+	#[serde(default)]
+	invite: Option<String>,
 }
 
 async fn register(
 	State(s): State<AppState>,
 	Json(body): Json<RegisterRequest>,
 ) -> Result<StatusCode, ServerError> {
+	if let Some(invite) = body.invite.as_deref() {
+		crate::members::invites::sign_up(
+			&s.db,
+			invite,
+			&body.name,
+			Some(&body.email),
+			&body.password,
+		)
+		.await?;
+		return Ok(StatusCode::CREATED);
+	}
 	service::register(
 		&s.db,
 		s.config.registration,
-		&body.name,
-		&body.email,
-		&body.password,
+		&s.setup,
+		service::SignUp {
+			name: &body.name,
+			email: &body.email,
+			password: &body.password,
+			setup_token: body.setup_token.as_deref(),
+		},
 	)
 	.await?;
 
 	Ok(StatusCode::CREATED)
+}
+
+#[derive(Deserialize)]
+struct AcceptInviteRequest {
+	token: String,
+}
+
+#[derive(Serialize)]
+struct AcceptedInvite {
+	team_id: crate::ids::TeamId,
+}
+
+/// Joins the team of an invite for the signed-in person's own address. A session only: the
+/// token gate keeps API tokens out of `/auth`.
+async fn accept_invite(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Json(body): Json<AcceptInviteRequest>,
+) -> Result<Json<AcceptedInvite>, ServerError> {
+	let team_id = crate::members::invites::accept(&s.db, user.id, &body.token).await?;
+	Ok(Json(AcceptedInvite { team_id }))
 }
 
 #[derive(Deserialize)]

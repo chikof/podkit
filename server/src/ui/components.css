@@ -1265,6 +1265,35 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-res-newt { font-weight: var(--fw-medium); }
 .ui-res-news { font-size: var(--fs-xs); }
 
+/* A deployment on its way, under the status the resource keeps: smaller than the badge,
+   with its own shaped dot and the word ("Building 9f3c2ab"). */
+.ui-res-status { display: grid; justify-items: end; gap: var(--s-1); }
+.ui-res-next { display: inline-flex; align-items: center; gap: var(--s-2); font-size: var(--fs-xs); color: var(--muted-foreground); white-space: nowrap; }
+.ui-res-next code { font-family: var(--font-mono); }
+:where(.ui-res-next, .ui-res-ev-dot) > .ui-dot { width: 7px; height: 7px; background-color: var(--st, var(--muted-foreground)); }
+
+/* The resources and the Activity panel: side by side on a wide screen, the panel below on a
+   narrow one. Without the panel the resources keep the whole width. */
+.ui-res-split { display: grid; gap: var(--page-gap); align-items: start; min-width: 0; }
+.ui-res-col { display: grid; gap: var(--page-gap); align-content: start; min-width: 0; }
+@media (min-width: 1200px) {
+	.ui-res-split:has(> .ui-res-activity) { grid-template-columns: minmax(0, 1fr) minmax(17rem, 21rem); }
+}
+.ui-res-activity { display: grid; align-content: start; gap: var(--s-4); padding: 18px; }
+.ui-res-act-h { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); }
+.ui-res-act-all { display: inline-flex; align-items: center; gap: var(--s-1); white-space: nowrap; }
+.ui-res-act-all:hover { text-decoration: underline; }
+.ui-res-feed { display: grid; gap: var(--s-4); margin: 0; padding: 0; list-style: none; }
+.ui-res-ev { display: grid; grid-template-columns: 0.75rem minmax(0, 1fr) auto; column-gap: var(--s-3); align-items: start; }
+.ui-res-ev-dot { display: grid; place-items: center; block-size: 1.25rem; }
+.ui-res-ev-main { display: grid; gap: 2px; min-width: 0; }
+.ui-res-ev-name { font-size: var(--fs-sm); font-weight: var(--fw-medium); line-height: 1.25rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-res-ev-name a { color: inherit; text-decoration: none; }
+.ui-res-ev-name a:hover { text-decoration: underline; }
+.ui-res-ev-name a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--r-sm); }
+.ui-res-ev-line { font-size: var(--fs-xs); color: var(--muted-foreground); overflow-wrap: anywhere; }
+.ui-res-ev-when { font-size: var(--fs-xs); line-height: 1.25rem; color: var(--subtle-foreground); white-space: nowrap; }
+
 /* While the filter is fetching, skeleton rows with the geometry of the rows they stand in
    for; they only show if the answer takes longer than a blink. */
 .ui-res-skel { animation: ui-vt-in var(--dur-2) var(--ease-out) 150ms both; }
@@ -1352,6 +1381,8 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-stats > div { display: grid; align-content: start; gap: var(--s-2); min-width: 0; padding: 18px; border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--card); }
 .ui-stats dt { color: var(--muted-foreground); font-size: var(--fs-sm); }
 .ui-stats dd { margin: 0; font-family: var(--font-display); font-size: 26px; font-weight: var(--fw-bold); line-height: 1.15; letter-spacing: -0.01em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+/* A short line under a number ("1 failed"). */
+.ui-stats .ui-stats-sub { margin-top: calc(var(--s-1) * -1); font-family: var(--font-sans); font-size: var(--fs-xs); font-weight: var(--fw-regular); letter-spacing: 0; color: var(--muted-foreground); }
 
 /* The deployments: the history on the left, the log of the one being read on the right. */
 .ui-dep { display: grid; grid-template-columns: minmax(16rem, 0.8fr) minmax(0, 1.6fr); gap: var(--s-6); align-items: start; }
@@ -1394,6 +1425,8 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-logbar-filter { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
 .ui-logbar-search { flex: 1 1 10rem; max-width: 16rem; margin-inline-start: auto; }
 .ui-logbox > .ui-log { height: min(32rem, 60dvh); border: 0; border-radius: 0; background-color: transparent; }
+/* A generated file (the Quadlet tab): as tall as its text, up to the log's height. */
+.ui-logbox > .ui-log.ui-quadlet-log { height: auto; max-block-size: min(32rem, 60dvh); }
 .ui-log-line:has(> .ui-log-ts) { display: grid; grid-template-columns: 8ch 5ch minmax(0, 1fr); gap: var(--s-3); color: var(--foreground); }
 .ui-log-ts { color: var(--subtle-foreground); }
 .ui-log-lv { font-weight: var(--fw-bold); }
@@ -2124,6 +2157,32 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 	.ui-sidebar .ui-nav-link, .ui-side-toggle, .ui-sidebar .ui-team-trigger, .ui-sidebar .ui-user-trigger, .ui-sidebar .ui-brand {
 		transition-property: background-color, border-color, color, transform, padding; transition-duration: var(--dur-1), var(--dur-1), var(--dur-1), var(--dur-1), var(--dur-3);
 	}
+}
+
+/* == agent card ==
+   At the sidebar's foot, above the account: the Podman the team's agents run and how many
+   servers answer, as a link to the servers page. The rail keeps the dot alone (the tooltip has
+   the figures); below 760 px it is not shown. */
+.ui-agent-card {
+	display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
+	border: var(--bw) solid var(--border); border-radius: 10px; background-color: color-mix(in oklab, var(--card) 70%, var(--sidebar));
+	color: var(--foreground); text-decoration: none;
+	transition: background-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease), padding var(--dur-3) var(--ease);
+}
+.ui-agent-card:hover { background-color: var(--accent); }
+.ui-agent-card:active { transform: scale(var(--press-scale)); }
+.ui-agent-card:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ui-agent-card > .ui-dot { margin-top: 0.3rem; }
+.ui-agent-text { display: grid; min-width: 0; flex: 1; line-height: 1.35; }
+.ui-agent-title { font-size: var(--fs-xs); font-weight: var(--fw-bold); }
+.ui-agent-line { overflow: hidden; color: var(--muted-foreground); font-size: var(--fs-xs); text-overflow: ellipsis; white-space: nowrap; }
+.ui-shell:not(.ui-shell-collapsed) #agent-card-tip { display: none !important; }
+@media (max-width: 760px) {
+	.ui-agent-card, #agent-card-tip { display: none; }
+}
+@media (min-width: 761px) {
+	.ui-shell-collapsed .ui-agent-card { justify-content: center; padding-inline: 0; }
+	.ui-shell-collapsed .ui-agent-text { display: none; }
 }
 
 /* == save bar ==

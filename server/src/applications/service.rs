@@ -433,11 +433,11 @@ fn slug_conflict(e: sqlx::Error) -> ServerError {
 	}
 }
 
-/// The team's servers, for the create form's server select; needs
-/// `create application`.
+/// The team's servers that take new resources (not draining), for the create form's
+/// server select; needs `create application`.
 pub async fn servers_for_create(db: &PgPool, user: UserId, team: TeamId) -> AppResult<Vec<Server>> {
 	authorize(db, user, team, Action::Create, Resource::Application).await?;
-	Ok(servers::list_by_team(db, team).await?)
+	crate::moves::open_servers(db, servers::list_by_team(db, team).await?).await
 }
 
 /// Creates an application under a project, deployed to one of the team's
@@ -460,6 +460,7 @@ pub async fn create(
 	let environment =
 		environments::service::resolve(&s.db, team, project, body.environment_id).await?;
 	let server = scope::server(&s.db, team, server_id).await?;
+	crate::moves::ensure_open(&s.db, &server).await?;
 
 	validate_basics(&body)?;
 	crate::quotas::service::check_create(

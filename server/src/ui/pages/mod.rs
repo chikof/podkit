@@ -25,6 +25,7 @@ pub mod networks;
 pub mod notifications;
 pub mod profile;
 pub mod projects;
+pub mod quadlet;
 pub mod registries;
 pub mod search;
 pub mod security;

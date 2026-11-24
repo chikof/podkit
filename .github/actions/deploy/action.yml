@@ -1,0 +1,83 @@
+name: podkit deploy
+description: Deploy a podkit application and wait for it, failing the job if the deploy fails or the health gate rolls it back.
+inputs:
+  url:
+    description: podkit's address, e.g. https://podkit.example.com
+    required: true
+  token:
+    description: An API token (pk_...) with the read and deploy scopes. Pass it from a secret.
+    required: true
+  app:
+    description: The application's slug or id.
+    required: true
+  team:
+    description: The team's slug or id (default the token's team).
+    required: false
+    default: ""
+  project:
+    description: The project's slug or id (default the one that has the application).
+    required: false
+    default: ""
+  settle:
+    description: After the deploy is running, keep watching this long for an automatic rollback (e.g. 2m). Empty skips it.
+    required: false
+    default: ""
+  timeout:
+    description: Give up waiting after this long.
+    required: false
+    default: 30m
+  cli-url:
+    description: URL of a prebuilt Linux podkit binary to download instead of building the CLI from the action's own source.
+    required: false
+    default: ""
+outputs:
+  deployment:
+    description: The final deployment, as JSON.
+    value: ${{ steps.deploy.outputs.deployment }}
+runs:
+  using: composite
+  steps:
+    - name: Get the podkit CLI
+      shell: bash
+      env:
+        CLI_URL: ${{ inputs.cli-url }}
+        SOURCE: ${{ github.action_path }}/../../..
+      run: |
+        set -euo pipefail
+        bin="$RUNNER_TEMP/podkit-cli/bin"
+        mkdir -p "$bin"
+        if [ -n "$CLI_URL" ]; then
+          curl -fsSL --retry 3 -o "$bin/podkit" "$CLI_URL"
+          chmod +x "$bin/podkit"
+        else
+          # The workspace's own lockfile, so the build is the one podkit tested.
+          cargo build --locked --release -p cli --manifest-path "$SOURCE/Cargo.toml" \
+            --target-dir "$RUNNER_TEMP/podkit-cli/target"
+          cp "$RUNNER_TEMP/podkit-cli/target/release/podkit" "$bin/podkit"
+        fi
+        echo "$bin" >> "$GITHUB_PATH"
+    - name: Deploy
+      id: deploy
+      shell: bash
+      env:
+        PODKIT_URL: ${{ inputs.url }}
+        PODKIT_TOKEN: ${{ inputs.token }}
+        PODKIT_TEAM: ${{ inputs.team }}
+        PODKIT_PROJECT: ${{ inputs.project }}
+        APP: ${{ inputs.app }}
+        SETTLE: ${{ inputs.settle }}
+        TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        set -euo pipefail
+        args=(deploy "$APP" --wait --json --timeout "$TIMEOUT")
+        if [ -n "$SETTLE" ]; then args+=(--settle "$SETTLE"); fi
+        out="$RUNNER_TEMP/podkit-deployment.json"
+        # Build output goes to stderr (the job log), the final deployment to the file.
+        status=0
+        podkit "${args[@]}" > "$out" || status=$?
+        {
+          echo "deployment<<PODKIT_EOF"
+          cat "$out"
+          echo "PODKIT_EOF"
+        } >> "$GITHUB_OUTPUT"
+        exit "$status"

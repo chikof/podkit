@@ -17,7 +17,9 @@ use crate::change::Change;
 use crate::deployments::{self, DeploymentResponse};
 use crate::environments::EnvironmentFilter;
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, EnvironmentId, ProjectId, RegistryId, ServerId, TeamId};
+use crate::ids::{
+	ApplicationId, DeploymentId, EnvironmentId, ProjectId, RegistryId, ServerId, TeamId,
+};
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -26,6 +28,10 @@ pub fn router() -> Router<AppState> {
 		.route("/{application_id}", delete(remove).patch(update))
 		.route("/{application_id}/stop", post(stop))
 		.route("/{application_id}/restart", post(restart))
+		.route(
+			"/{application_id}/promote",
+			get(promotion_plan).post(promote),
+		)
 		.route("/{application_id}/logs", get(logs))
 }
 
@@ -479,5 +485,149 @@ pub async fn restart(
 	Ok((
 		StatusCode::ACCEPTED,
 		Json(DeploymentResponse::from(&deployment)),
+	))
+}
+
+#[derive(Serialize)]
+pub struct EnvironmentRef {
+	pub id: EnvironmentId,
+	pub name: String,
+	pub slug: String,
+}
+
+impl From<&crate::environments::Environment> for EnvironmentRef {
+	fn from(e: &crate::environments::Environment) -> Self {
+		Self {
+			id: e.id,
+			name: e.name.clone(),
+			slug: e.slug.clone(),
+		}
+	}
+}
+
+/// The image a promotion would deploy.
+#[derive(Serialize)]
+pub struct PromotionSource {
+	pub deployment_id: DeploymentId,
+	pub commit_sha: Option<String>,
+	pub image: Option<String>,
+}
+
+/// The application of another environment a promotion would deploy.
+#[derive(Serialize)]
+pub struct PromotionTarget {
+	pub id: ApplicationId,
+	pub name: String,
+	pub slug: String,
+	pub server_id: ServerId,
+	pub server_name: String,
+	/// What it runs now.
+	pub running_deployment_id: Option<DeploymentId>,
+	pub running_image: Option<String>,
+}
+
+#[derive(Serialize)]
+pub struct PromotionDestination {
+	pub environment: EnvironmentRef,
+	/// `None` when nothing matches; `refusal` says why.
+	pub application: Option<PromotionTarget>,
+	pub refusal: Option<String>,
+	/// The target runs on another server: the image is copied there before it starts.
+	pub moves_image: bool,
+	/// The target already runs this very image.
+	pub already_running: bool,
+}
+
+#[derive(Serialize)]
+pub struct PromotionPlanResponse {
+	pub application_id: ApplicationId,
+	pub environment: EnvironmentRef,
+	/// `None` when the application runs nothing: there is no image to promote.
+	pub source: Option<PromotionSource>,
+	pub destinations: Vec<PromotionDestination>,
+}
+
+impl From<&deployments::promote::Plan> for PromotionPlanResponse {
+	fn from(plan: &deployments::promote::Plan) -> Self {
+		let image = plan.source.as_ref().and_then(|d| d.image_tag.as_deref());
+		Self {
+			application_id: plan.application.id,
+			environment: (&plan.environment).into(),
+			source: plan.source.as_ref().map(|d| PromotionSource {
+				deployment_id: d.id,
+				commit_sha: d.commit_sha.clone(),
+				image: d.image_tag.clone(),
+			}),
+			destinations: plan
+				.destinations
+				.iter()
+				.map(|d| match &d.matched {
+					Ok(m) => PromotionDestination {
+						environment: (&d.environment).into(),
+						application: Some(PromotionTarget {
+							id: m.application.id,
+							name: m.application.name.clone(),
+							slug: m.application.slug.clone(),
+							server_id: m.server.id,
+							server_name: m.server.name.clone(),
+							running_deployment_id: m.running.as_ref().map(|r| r.id),
+							running_image: m.running.as_ref().and_then(|r| r.image_tag.clone()),
+						}),
+						refusal: None,
+						moves_image: m.moves_image,
+						already_running: m.runs(image),
+					},
+					Err(why) => PromotionDestination {
+						environment: (&d.environment).into(),
+						application: None,
+						refusal: Some(why.clone()),
+						moves_image: false,
+						already_running: false,
+					},
+				})
+				.collect(),
+		}
+	}
+}
+
+/// What promoting the application would deploy, to each other environment of its project.
+async fn promotion_plan(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, project, id)): Path<(TeamId, ProjectId, ApplicationId)>,
+) -> AppResult<Json<PromotionPlanResponse>> {
+	let plan = deployments::promote::plan(&s.db, user.id, team, project, id).await?;
+	Ok(Json(PromotionPlanResponse::from(&plan)))
+}
+
+#[derive(Deserialize)]
+struct PromoteRequest {
+	environment_id: EnvironmentId,
+	/// The source deployment the caller reviewed; refused with 409 if it no longer runs.
+	#[serde(default)]
+	deployment_id: Option<DeploymentId>,
+}
+
+/// Deploys the image this application runs to the matching application of
+/// `environment_id`, without rebuilding. Answers with the target's new deployment.
+async fn promote(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, project, id)): Path<(TeamId, ProjectId, ApplicationId)>,
+	Json(body): Json<PromoteRequest>,
+) -> AppResult<(StatusCode, Json<DeploymentResponse>)> {
+	let promoted = deployments::promote::promote(
+		&s,
+		user.id,
+		team,
+		project,
+		id,
+		body.environment_id,
+		body.deployment_id,
+	)
+	.await?;
+	Ok((
+		StatusCode::ACCEPTED,
+		Json(DeploymentResponse::from(&promoted.deployment)),
 	))
 }

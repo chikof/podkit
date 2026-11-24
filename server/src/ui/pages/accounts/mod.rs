@@ -1,9 +1,10 @@
-//! Account pages: sign-up and creating a team.
+//! Account pages: sign-up, accepting an invite and creating a team.
 
 use axum::Router;
 
 use crate::state::AppState;
 
+mod invite;
 mod register;
 mod teams;
 
@@ -14,4 +15,5 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.merge(teams::router())
 		.merge(register::router())
+		.merge(invite::router())
 }

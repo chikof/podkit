@@ -115,6 +115,70 @@ async fn fetch(db: &PgPool, team: TeamId, f: &Filter, limit: i64) -> AppResult<V
 		.collect())
 }
 
+/// The newest events about any of `targets` (`(target_kind, target_id)` pairs), leaving out
+/// the actions in `skip`, at most `limit`; needs `read audit`. A page's activity feed reads its
+/// resources' events with it in one query.
+pub async fn about(
+	db: &PgPool,
+	user: UserId,
+	team: TeamId,
+	targets: &[(&str, i64)],
+	skip: &[&str],
+	limit: i64,
+) -> AppResult<Vec<Event>> {
+	allow(db, user, team).await?;
+	if targets.is_empty() {
+		return Ok(Vec::new());
+	}
+	let kinds: Vec<String> = targets.iter().map(|(k, _)| (*k).to_owned()).collect();
+	let ids: Vec<i64> = targets.iter().map(|(_, id)| *id).collect();
+	let skip: Vec<String> = skip.iter().map(|a| (*a).to_owned()).collect();
+	let rows = sqlx::query!(
+		r#"
+			SELECT e.id AS "id: AuditEventId", e.actor_kind, e.actor_user_id AS "actor_user_id: UserId",
+				u.name AS "actor_name?", e.actor_token_id AS "actor_token_id: ApiTokenId",
+				t.name AS "token_name?", e.action, e.target_kind, e.target_id,
+				e.project_id AS "project_id: ProjectId", e.summary, e.diff, e.ip, e.user_agent,
+				e.created_at
+			FROM audit_events e
+			JOIN UNNEST($2::text[], $3::bigint[]) AS want(kind, id)
+				ON want.kind = e.target_kind AND want.id = e.target_id
+			LEFT JOIN users u ON u.id = e.actor_user_id
+			LEFT JOIN api_tokens t ON t.id = e.actor_token_id
+			WHERE e.team_id = $1 AND NOT (e.action = ANY($4::text[]))
+			ORDER BY e.created_at DESC, e.id DESC
+			LIMIT $5
+		"#,
+		team as TeamId,
+		&kinds,
+		&ids,
+		&skip,
+		limit.clamp(1, MAX_LIMIT),
+	)
+	.fetch_all(db)
+	.await?;
+	Ok(rows
+		.into_iter()
+		.map(|r| Event {
+			id: r.id,
+			actor_kind: ActorKind::parse(&r.actor_kind).unwrap_or(ActorKind::System),
+			actor_user: r.actor_user_id,
+			actor_name: r.actor_name,
+			actor_token: r.actor_token_id,
+			actor_token_name: r.token_name,
+			action: r.action,
+			target_kind: r.target_kind,
+			target_id: r.target_id,
+			project: r.project_id,
+			summary: r.summary,
+			diff: r.diff,
+			ip: r.ip,
+			user_agent: r.user_agent,
+			created_at: r.created_at,
+		})
+		.collect())
+}
+
 /// The actions the team's log holds, for a filter to offer; needs `read audit`.
 pub async fn actions(db: &PgPool, user: UserId, team: TeamId) -> AppResult<Vec<String>> {
 	allow(db, user, team).await?;

@@ -20,6 +20,7 @@ mod frame;
 mod issues;
 mod monitoring;
 mod networks;
+mod quadlet;
 mod runs;
 mod security;
 mod services;
@@ -59,6 +60,7 @@ pub fn router() -> Router<AppState> {
 		.route(&at("/monitoring/charts"), get(monitoring::charts))
 		.route(&at("/networks"), get(networks::page))
 		.route(&at("/security"), get(security::page))
+		.route(&at("/quadlet"), get(quadlet::page))
 		.route(&at("/advanced"), get(danger::page))
 		.route(&at("/remove"), post(danger::remove))
 }

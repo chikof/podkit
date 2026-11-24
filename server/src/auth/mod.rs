@@ -19,12 +19,14 @@ pub mod permission;
 mod routes;
 pub mod service;
 pub mod session;
+pub mod setup;
 pub mod team_gate;
 pub mod tokens;
 
 pub use events::record_everywhere;
 pub use routes::{
-	Credentials, log_in, log_out, open_session, reached_over_https, router, verify_password,
+	Credentials, log_in, log_out, me_router, open_session, reached_over_https, router,
+	verify_password,
 };
 
 /// The authenticated caller: a live session, or an API token acting as the user who made

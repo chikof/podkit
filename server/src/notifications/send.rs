@@ -135,7 +135,9 @@ async fn post_bytes(
 	Err(format!("HTTP {}", status.as_u16()))
 }
 
-async fn send_mail(
+/// Sends one plain-text mail through the team's relay `smtp`. The relay's address goes
+/// through the outbound policy; team invites (`members::invites`) use this too.
+pub(crate) async fn send_mail(
 	state: &AppState,
 	smtp: &Smtp,
 	to: &str,

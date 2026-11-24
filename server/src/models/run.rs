@@ -21,6 +21,7 @@ use crate::error::ServerError;
 use crate::ids::ModelId;
 use crate::jobs::{Job, JobFailure, JobKind};
 use crate::logs::JobLog;
+use crate::model_files::ModelFile;
 use crate::servers::{self, Server};
 use crate::state::AppState;
 use crate::{model_files, models, networks};
@@ -110,37 +111,7 @@ async fn start(
 		.map_err(|e| db_failure(&e))?;
 
 	let engine = engines::spec(model.engine);
-	let vendor = model.gpu.then(|| {
-		engine
-			.gpu_vendor
-			.or_else(|| servers::gpu_vendors(server).first().copied())
-			.unwrap_or(GpuVendor::Nvidia)
-	});
-	let mut spec = deploy_spec(
-		state,
-		model,
-		&file.volume_name,
-		vendor,
-		Ingress {
-			http_port: state.config.ingress_port,
-			https_port: state.config.https_port,
-			acme_email: state.config.acme_email.clone(),
-		},
-		job.id.0,
-	)
-	.await?;
-	spec.attach = networks::attach::for_resource(
-		&state.db,
-		networks::attach::Home {
-			kind: networks::ResourceKind::Model,
-			id: model.id.0,
-			environment: model.environment_id,
-			server: model.server_id,
-		},
-		&spec.network_aliases,
-	)
-	.await
-	.map_err(|e| db_failure(&e))?;
+	let spec = full_spec(state, model, server, &file, job.id.0).await?;
 
 	let container_id = deploy(state, cancel, log, model, client, &spec).await?;
 
@@ -210,6 +181,51 @@ async fn deploy(
 			None => return Err(failed(LOST_CONNECTION)),
 		}
 	}
+}
+
+/// What a start sends the agent: [`deploy_spec`] with the server's GPU vendor, on the
+/// environment's network and the networks the model was attached to. The Quadlet view uses
+/// it too (`instance_id` 0), so the units match what runs.
+pub(crate) async fn full_spec(
+	state: &AppState,
+	model: &Model,
+	server: &Server,
+	file: &ModelFile,
+	instance_id: i64,
+) -> Result<DeploySpec, JobFailure> {
+	let engine = engines::spec(model.engine);
+	let vendor = model.gpu.then(|| {
+		engine
+			.gpu_vendor
+			.or_else(|| servers::gpu_vendors(server).first().copied())
+			.unwrap_or(GpuVendor::Nvidia)
+	});
+	let mut spec = deploy_spec(
+		state,
+		model,
+		&file.volume_name,
+		vendor,
+		Ingress {
+			http_port: state.config.ingress_port,
+			https_port: state.config.https_port,
+			acme_email: state.config.acme_email.clone(),
+		},
+		instance_id,
+	)
+	.await?;
+	spec.attach = networks::attach::for_resource(
+		&state.db,
+		networks::attach::Home {
+			kind: networks::ResourceKind::Model,
+			id: model.id.0,
+			environment: model.environment_id,
+			server: model.server_id,
+		},
+		&spec.network_aliases,
+	)
+	.await
+	.map_err(|e| db_failure(&e))?;
+	Ok(spec)
 }
 
 /// The format a model path points at, for the engines that care.
@@ -304,6 +320,7 @@ fn build_spec(
 		attach: Vec::new(),
 		health: None,
 		replicas: None,
+		auto_update: false,
 	}
 }
 

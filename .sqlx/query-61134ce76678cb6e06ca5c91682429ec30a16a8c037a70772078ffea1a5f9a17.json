@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT d.id AS \"id: DeploymentId\", d.application_id AS \"application_id: ApplicationId\",\n\t\t\t\td.container_id AS \"container_id!\"\n\t\t\tFROM deployments d\n\t\t\tJOIN applications a ON a.id = d.application_id\n\t\t\tWHERE a.server_id = $1 AND d.status = 'running' AND d.container_id IS NOT NULL\n\t\t\t\t-- A moving application's container is on the other server for a while.\n\t\t\t\tAND NOT EXISTS (SELECT 1 FROM application_moves m\n\t\t\t\t\tWHERE m.application_id = a.id AND m.status IN ('queued', 'running'))\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: DeploymentId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "deployments",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "application_id: ApplicationId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "deployments",
+            "name": "application_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "container_id!",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "deployments",
+            "name": "container_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "61134ce76678cb6e06ca5c91682429ec30a16a8c037a70772078ffea1a5f9a17"
+}

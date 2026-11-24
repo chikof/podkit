@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT a.server_id AS \"server_id: crate::ids::ServerId\"\n\t\t\tFROM deployments d\n\t\t\tJOIN deployments src ON src.id = d.promoted_from\n\t\t\tJOIN applications a ON a.id = src.application_id\n\t\t\tWHERE d.id = $1\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "server_id: crate::ids::ServerId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "applications",
+            "name": "server_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "637c982bdd682fc41f69a293a2463808f26e20962cd5fb0b679e1a1c263922e1"
+}

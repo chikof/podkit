@@ -82,7 +82,9 @@ pub(super) async fn candidates(
 		 WHERE a.server_id = $1 AND d.status = 'running' AND d.container_id IS NOT NULL \
 		 AND d.finished_at IS NOT NULL AND h.state = 'healthy' AND h.rollback_of IS NULL \
 		 AND ah.rollback_window_min > 0 \
-		 AND d.finished_at > NOW() - make_interval(mins => ah.rollback_window_min)",
+		 AND d.finished_at > NOW() - make_interval(mins => ah.rollback_window_min) \
+		 AND NOT EXISTS (SELECT 1 FROM application_moves m \
+			WHERE m.application_id = a.id AND m.status IN ('queued', 'running'))",
 	)
 	.bind(server.0)
 	.fetch_all(db)

@@ -24,6 +24,7 @@ mod agents;
 mod applications;
 mod audit;
 mod auth;
+mod auto_update;
 mod autodeploy;
 mod avatars;
 mod backups;
@@ -61,11 +62,13 @@ mod members;
 mod metrics;
 mod model_files;
 mod models;
+mod moves;
 mod net;
 mod networks;
 mod notifications;
 mod previews;
 mod projects;
+mod quadlet;
 mod quotas;
 mod registries;
 mod replicas;
@@ -154,6 +157,8 @@ async fn run() -> AppResult<()> {
 		.await
 		.map_err(|e| ServerError::Sqlx(e.into()))?;
 
+	let setup = arm_setup_token(&db, &runtime_config, &config).await?;
+
 	let shutdown = CancellationToken::new();
 	let state = AppState {
 		outbound: outbound_policy(&db, &runtime_config, &config).await?,
@@ -163,6 +168,7 @@ async fn run() -> AppResult<()> {
 		jobs: Arc::new(Jobs::new()),
 		logs: Arc::new(LogHub::new(log_dir)),
 		http: crate::state::Http::default(),
+		setup: Arc::new(setup),
 		shutdown: shutdown.clone(),
 		config: Arc::new(runtime_config),
 		#[cfg(feature = "cloud")]
@@ -202,6 +208,7 @@ async fn run() -> AppResult<()> {
 		shutdown.clone(),
 	));
 	tokio::spawn(backups::schedule::run(state.clone(), shutdown.clone()));
+	tokio::spawn(auto_update::engine::run(state.clone(), shutdown.clone()));
 	tokio::spawn(volume_backups::schedule::run(
 		state.clone(),
 		shutdown.clone(),
@@ -237,6 +244,44 @@ async fn run() -> AppResult<()> {
 	}
 
 	Ok(())
+}
+
+/// The first-run setup token (`auth::setup`): armed while no account exists, on any policy
+/// that lets somebody sign up. A generated token is printed here, once, and nowhere else.
+async fn arm_setup_token(
+	db: &sqlx::PgPool,
+	runtime: &state::Config,
+	config: &ServerConfig,
+) -> AppResult<auth::setup::SetupToken> {
+	let configured = config.setup_token.as_deref();
+	if runtime.registration == state::Registration::Closed || auth::users::any(db).await? {
+		if configured.is_some_and(|t| !t.trim().is_empty()) {
+			info!(
+				"SETUP_TOKEN is ignored: the first-run setup is over (or registration is closed)"
+			);
+		}
+		return Ok(auth::setup::SetupToken::spent());
+	}
+	let (setup, armed) = auth::setup::SetupToken::arm(configured)?;
+	if config
+		.trusted_proxies
+		.as_deref()
+		.is_none_or(|p| p.trim().is_empty())
+	{
+		warn!(
+			"TRUSTED_PROXIES is empty: wrong setup tokens are throttled per client address, and behind a reverse proxy every client is the proxy's address, so a stranger's guesses can make you wait too. Set TRUSTED_PROXIES to the proxy's address if there is one"
+		);
+	}
+	let url = auth::setup::register_url(runtime.public_url.as_deref(), &config.host, config.port);
+	match armed {
+		auth::setup::Armed::Generated(token) => warn!(
+			"no account exists yet. Create the administrator account at {url} with this one-time setup token: {token}  (a new one is made at every start until then)"
+		),
+		auth::setup::Armed::Configured => warn!(
+			"no account exists yet. Create the administrator account at {url} with the setup token from SETUP_TOKEN"
+		),
+	}
+	Ok(setup)
 }
 
 /// The policy for requests to addresses people type, from the setting and the listen address.

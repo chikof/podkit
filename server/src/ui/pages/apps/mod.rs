@@ -1,7 +1,7 @@
 //! Application pages: an Operate surface, the resource page of one application.
 //!
 //! A header (logo, name, type, status, public URL, Deploy / Restart / Stop and a menu with
-//! Rollback and Delete) over a row of tabs, each a page of its own: General, Environment,
+//! Rollback, Promote and Delete) over a row of tabs, each a page of its own: General, Environment,
 //! Domains, Deployments, Logs, Volumes, Models, Webhooks and Advanced. The create flows
 //! (a Git repository or a Docker image) are one page with sections, `create`.
 //!
@@ -33,6 +33,7 @@ use crate::ui::sse::js_string;
 
 mod access;
 mod advanced;
+mod auto_update_card;
 mod build_tab;
 pub mod chrome;
 mod create;
@@ -49,9 +50,12 @@ mod logs;
 mod mcp_tab;
 mod models_tab;
 mod monitoring;
+mod move_app;
 mod networks_tab;
 mod previews_card;
+mod promote;
 mod provider_source;
+mod quadlet_tab;
 mod replica_list;
 mod replicas;
 mod security;
@@ -70,6 +74,8 @@ pub fn router() -> Router<AppState> {
 		.merge(build_tab::router())
 		.merge(header::router())
 		.merge(deployments_tab::router())
+		.merge(promote::router())
+		.merge(move_app::router())
 		.merge(logs::router())
 		.merge(terminal_tab::router())
 		.merge(env::router())
@@ -85,6 +91,8 @@ pub fn router() -> Router<AppState> {
 		.merge(security::router())
 		.merge(git_tab::router())
 		.merge(webhooks::router())
+		.merge(quadlet_tab::router())
+		.merge(auto_update_card::router())
 		.merge(advanced::router())
 }
 
@@ -155,12 +163,13 @@ enum Tab {
 	Monitoring,
 	Security,
 	Build,
+	Quadlet,
 	Settings,
 	Advanced,
 }
 
 impl Tab {
-	const ALL: [Self; 17] = [
+	const ALL: [Self; 18] = [
 		Self::Deployments,
 		Self::Logs,
 		Self::Terminal,
@@ -176,6 +185,7 @@ impl Tab {
 		Self::Monitoring,
 		Self::Security,
 		Self::Build,
+		Self::Quadlet,
 		Self::Settings,
 		Self::Advanced,
 	];
@@ -197,6 +207,7 @@ impl Tab {
 			Self::Monitoring => "Monitoring",
 			Self::Security => "Security",
 			Self::Build => "Build",
+			Self::Quadlet => "Quadlet",
 			Self::Settings => "Settings",
 			Self::Advanced => "Advanced",
 		}
@@ -221,6 +232,7 @@ impl Tab {
 			Self::Monitoring => "/monitoring",
 			Self::Security => "/security",
 			Self::Build => "/build",
+			Self::Quadlet => "/quadlet",
 			Self::Settings => "/settings",
 			Self::Advanced => "/advanced",
 		}
@@ -242,6 +254,7 @@ impl Tab {
 			}
 			Self::Security => can(Action::Read, Resource::Scan),
 			Self::Cron => can(Action::Read, Resource::Cron),
+			Self::Quadlet => crate::ui::pages::quadlet::tab_allowed(ctx, Resource::Application),
 			Self::Webhooks => can(Action::Update, Resource::Application),
 			Self::Advanced => {
 				can(Action::Update, Resource::Application)

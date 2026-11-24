@@ -880,3 +880,121 @@ async fn the_refresh_endpoint_patches_only_the_charts(db: PgPool) {
 	assert_not_contains(&out, "data-on-interval");
 	assert_not_contains(&out, "<script>");
 }
+
+#[db_test]
+async fn the_overview_forecasts_when_the_disk_fills(db: PgPool) {
+	const GB: u64 = 1024 * 1024 * 1024;
+	let (app, _) = app_and_state(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	let local = server_id(&db, team).await;
+	let url = format!("/teams/{team}/servers/{local}");
+
+	// No disk reported: no figure, so no forecast either.
+	let (_, _, body) = get_html(&app, &url, Some(&cookie)).await;
+	assert_not_contains(&body, "at this rate");
+	assert_not_contains(&body, "Not enough data yet");
+
+	// A disk but no samples.
+	set_hardware(&db, team, &hardware(false)).await;
+	let (_, _, body) = get_html(&app, &url, Some(&cookie)).await;
+	assert_contains(
+		page_main(&body),
+		"<p class=\"ui-hw-s\">Not enough data yet</p>",
+	);
+
+	// Two days of hourly samples, 1 GB a day, ending at 481.5 of 500 GB: 18.5 days left.
+	let now = OffsetDateTime::now_utc();
+	for h in 0..=48u64 {
+		let used = 479 * GB + GB / 2 + h * GB / 24;
+		let stats = Stats {
+			host: HostStats {
+				disks: vec![DiskStats {
+					path: "/data".to_owned(),
+					used,
+					free: 500 * GB - used,
+					total: 500 * GB,
+				}],
+				..HostStats::default()
+			},
+			..Stats::default()
+		};
+		let at = now - time::Duration::hours(48 - h.cast_signed());
+		crate::metrics::record(&db, ServerId(local), at, &stats)
+			.await
+			.unwrap();
+	}
+	let (_, _, body) = get_html(&app, &url, Some(&cookie)).await;
+	assert_contains(
+		page_main(&body),
+		"<p class=\"ui-hw-s\">Full in about 18 days at this rate</p>",
+	);
+}
+
+#[db_test]
+async fn draining_lists_what_moves_and_keeps_the_server_out_of_create_forms(db: PgPool) {
+	let (app, _) = app_and_state(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	let (local, _) = local_server(&db, team).await;
+	let other = add(&app, &cookie, team, "edge-1").await;
+	sqlx::query("UPDATE servers SET status = 'active' WHERE id = ANY($1)")
+		.bind(vec![local, other])
+		.execute(&db)
+		.await
+		.unwrap();
+	let token = ui_token(&app).await;
+	let (_, project) = call(
+		&app,
+		"POST",
+		&format!("/api/v1/teams/{team}/projects"),
+		Some(&token),
+		Some(json!({ "name": "web", "slug": "web" })),
+	)
+	.await;
+	let project = project["id"].as_i64().unwrap();
+	seed_application_on(&db, project, local).await;
+
+	// The Overview offers the drain; its dialog asks for a body naming what is there.
+	let page = format!("/teams/{team}/servers/{local}");
+	let (_, _, body) = get_html(&app, &page, Some(&cookie)).await;
+	assert_contains(&body, "Drain server");
+	assert_contains(&body, "id=\"drain-server\"");
+	assert_contains(&body, &format!("@get('{page}/drain/plan')"));
+	let (s, _, plan) = get_html(&app, &format!("{page}/drain/plan"), Some(&cookie)).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_contains(&plan, "edge-1");
+	assert_contains(&plan, "application");
+
+	// Draining marks the server and shows the report on the Overview.
+	let (s, _, done) = post_signals(
+		&app,
+		&format!("{page}/drain"),
+		Some(&cookie),
+		&json!({ "drain_target": other.to_string(), "drain_backup": "" }),
+	)
+	.await;
+	assert_eq!(s, StatusCode::OK, "{done}");
+	assert_contains(&done, &page);
+	let (_, _, body) = get_html(&app, &page, Some(&cookie)).await;
+	assert_contains(&body, "Draining");
+	assert_contains(&body, "Into ");
+	assert_contains(&body, &format!("@post('{page}/undrain')"));
+
+	// The create form no longer offers it.
+	let (_, _, form) = get_html(
+		&app,
+		&format!("/teams/{team}/projects/{project}/apps/new"),
+		Some(&cookie),
+	)
+	.await;
+	assert_not_contains(&form, &format!("value=\"{local}\""));
+
+	// Stopping takes the mark off.
+	let (s, _, _) = post_signals(&app, &format!("{page}/undrain"), Some(&cookie), &json!({})).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_eq!(
+		crate::moves::draining_since(&db, ServerId(local))
+			.await
+			.unwrap(),
+		None
+	);
+}

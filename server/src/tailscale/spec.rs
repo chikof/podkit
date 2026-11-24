@@ -270,6 +270,7 @@ pub fn build_spec(s: &Sidecar<'_>) -> DeploySpec {
 		attach: vec![s.network.clone()],
 		health: None,
 		replicas: None,
+		auto_update: false,
 	}
 }
 

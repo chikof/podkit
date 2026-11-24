@@ -54,12 +54,29 @@ pub fn socket_in(value: Option<String>) -> Option<String> {
 	value.filter(|s| !s.trim().is_empty())
 }
 
-/// Like [`app`], with another registration policy (tests default to `Open`).
+/// The setup token [`app_with_registration`] arms.
+pub const SETUP_TOKEN: &str = "test-setup-token-0123456789";
+
+/// Like [`app`], with another registration policy (tests default to `Open`). On `first-user`
+/// the first account needs [`SETUP_TOKEN`], as on a freshly started instance.
 pub async fn app_with_registration(db: PgPool, registration: Registration) -> Router {
 	let mut state = state(db);
 	let mut config = (*state.config).clone();
 	config.registration = registration;
 	state.config = Arc::new(config);
+	if registration == Registration::FirstUser {
+		state.setup = Arc::new(crate::auth::setup::SetupToken::for_test(SETUP_TOKEN));
+	}
+	crate::routes::routes(state).await.unwrap()
+}
+
+/// [`app`] on a policy with the setup token armed as [`SETUP_TOKEN`], whatever the policy.
+pub async fn app_with_setup_token(db: PgPool, registration: Registration) -> Router {
+	let mut state = state(db);
+	let mut config = (*state.config).clone();
+	config.registration = registration;
+	state.config = Arc::new(config);
+	state.setup = Arc::new(crate::auth::setup::SetupToken::for_test(SETUP_TOKEN));
 	crate::routes::routes(state).await.unwrap()
 }
 
@@ -100,6 +117,8 @@ pub fn state(db: PgPool) -> AppState {
 			outbound.loopback_ok(true);
 			outbound
 		},
+		// Tests make many first accounts; the setup token has tests of its own.
+		setup: Arc::new(crate::auth::setup::SetupToken::not_required()),
 		shutdown: tokio_util::sync::CancellationToken::new(),
 		#[cfg(feature = "cloud")]
 		billing: crate::billing::Billing::cloud(),
@@ -184,6 +203,11 @@ pub async fn scalar(db: &PgPool, sql: &'static str, arg: Option<i64>) -> i64 {
 		Some(arg) => query.bind(arg).fetch_one(db).await.unwrap(),
 		None => query.fetch_one(db).await.unwrap(),
 	}
+}
+
+/// Runs `sql`, a fixed statement. For tests of the UI, which must not carry queries themselves.
+pub async fn execute(db: &PgPool, sql: &'static str) {
+	sqlx::query(sql).execute(db).await.unwrap();
 }
 
 /// Rows in `table`. For asserting that a refused request changed nothing.

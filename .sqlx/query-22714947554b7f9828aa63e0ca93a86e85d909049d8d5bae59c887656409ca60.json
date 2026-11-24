@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT EXISTS (\n\t\t\t\tSELECT 1 FROM role_permissions rp\n\t\t\t\tWHERE rp.role_id = $1\n\t\t\t\tAND rp.permission_id NOT IN (\n\t\t\t\t\tSELECT own.permission_id FROM team_members tm\n\t\t\t\t\tJOIN role_permissions own ON own.role_id = tm.role_id\n\t\t\t\t\tWHERE tm.team_id = $2 AND tm.user_id = $3\n\t\t\t\t)\n\t\t\t) AS \"exists!\"\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "22714947554b7f9828aa63e0ca93a86e85d909049d8d5bae59c887656409ca60"
+}

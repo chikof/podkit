@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE restore_drills SET status = 'passed', finished_at = NOW(),\n\t\t\tduration_ms = (EXTRACT(EPOCH FROM (NOW() - started_at)) * 1000)::BIGINT\n\t\tWHERE id = $1 AND status = 'running'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c00d0fd4aeac9d2b913b6452f9f62e20ee34eb796d4a8b3de5d7c78ed793d17a"
+}

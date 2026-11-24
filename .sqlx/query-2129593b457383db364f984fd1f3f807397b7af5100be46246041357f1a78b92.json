@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT id, team_id AS \"team: TeamId\", email, role_id AS \"role: RoleId\"\n\t\t\tFROM team_invites WHERE token_hash = $1 AND expires_at > NOW()\n\t\t\tFOR UPDATE\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "team_invites",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "team: TeamId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "team_invites",
+            "name": "team_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "email",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "team_invites",
+            "name": "email"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "role: RoleId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "team_invites",
+            "name": "role_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2129593b457383db364f984fd1f3f807397b7af5100be46246041357f1a78b92"
+}

@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tUPDATE servers SET podman_version = $2, podman_rootless = $3\n\t\t\tWHERE id = $1\n\t\t\t\tAND (podman_version IS DISTINCT FROM $2 OR podman_rootless IS DISTINCT FROM $3)\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1391ea88b8419951e28f7939a4b181bf1c84f9f177027f4bfc0283f8a3668002"
+}

@@ -14,8 +14,9 @@ use crate::tests::grid::{
 	set_database_status,
 };
 use crate::tests::{
-	PgPool, app, call, count, db_test, project_id, rename_applications, seed_app_and_database,
-	seed_deployment, seed_model, user_with_team,
+	PgPool, app, call, count, db_test, insert_deployment, join_as_project_reader, project_id,
+	rename_applications, seed_app_and_database, seed_deployment, seed_model, user_id,
+	user_with_team,
 };
 use crate::ui::testing::{
 	assert_contains, assert_not_contains, get_html, page_main, post_signals, send, ui_login,
@@ -1038,4 +1039,256 @@ async fn a_status_that_moved_since_the_last_poll_plays_the_change_animation_once
 	// No signals at all (a plain request) never animates.
 	let (_, _, body) = get_html(&app, &format!("{base}/resources"), Some(&cookie)).await;
 	assert_not_contains(&body, "data-flip");
+}
+
+// --- builds on their way, the week's deploys, the activity panel ----------------------------
+
+/// Moves a deployment's `created_at` (and its start and end) `days` into the past.
+async fn age_deployment(db: &PgPool, id: i64, days: i32) {
+	sqlx::query(
+		"UPDATE deployments SET created_at = now() - make_interval(days => $2),
+			started_at = now() - make_interval(days => $2),
+			finished_at = now() - make_interval(days => $2)
+		 WHERE id = $1",
+	)
+	.bind(id)
+	.bind(days)
+	.execute(db)
+	.await
+	.unwrap();
+}
+
+/// A log event about `kind` `id`, written the way `audit::record` would.
+#[allow(clippy::too_many_arguments)]
+async fn seed_event(
+	db: &PgPool,
+	id: i64,
+	team: i64,
+	project: i64,
+	action: &str,
+	kind: &str,
+	target: i64,
+	summary: &str,
+) {
+	sqlx::query(
+		"INSERT INTO audit_events (id, team_id, actor_kind, action, target_kind, target_id,
+			project_id, summary)
+		 VALUES ($1, $2, 'system', $3, $4, $5, $6, $7)",
+	)
+	.bind(id)
+	.bind(team)
+	.bind(action)
+	.bind(kind)
+	.bind(target)
+	.bind(project)
+	.bind(summary)
+	.execute(db)
+	.await
+	.unwrap();
+}
+
+#[db_test]
+async fn a_running_application_with_a_build_on_its_way_shows_both_and_counts_as_in_progress(
+	db: PgPool,
+) {
+	let app = app(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	make_project(&app, &cookie, team, "Shop", "shop").await;
+	let project = project_id(&db, "shop").await;
+	seed_app_and_database(&db, team, project).await;
+	set_database_status(&db, "running").await;
+	// What is live, then the next release building (no commit known yet).
+	insert_deployment(&db, 5001, 4001, "running", Some("img:1"), Some("c1")).await;
+	seed_deployment(&db, 5001, "building").await;
+	let uri = format!("/teams/{team}/projects/{project}/production");
+
+	let (_, _, body) = get_html(&app, &uri, Some(&cookie)).await;
+	let main = page_main(&body);
+	// The row keeps its live state and carries the build under it.
+	assert_contains(main, "data-resource=\"5001\" data-status=\"running\"");
+	assert_contains(main, "class=\"ui-res-next\" data-status=\"building\"");
+	assert_contains(main, "Building\u{2026}");
+	// The stats count it as running and in progress, and the summary says both.
+	assert_contains(main, "<dt>Running</dt><dd>2</dd>");
+	assert_contains(main, "<dt>In progress</dt><dd>1</dd>");
+	assert_contains(main, "2 running · 1 building");
+	// Still changing: the region polls, and the page remembers both states.
+	assert_contains(&body, "data-on-interval__duration.3s");
+	assert_contains(
+		&body,
+		"application:5001=running+building;database:6001=running",
+	);
+
+	// The build went live: one change animation, nothing in flight, no more polling.
+	finish_deployments(&db).await;
+	let poll = format!(
+		"{uri}/resources?{}",
+		signals_query(&json!({
+			"q": "", "type": "all",
+			"seen": "application:5001=running+building;database:6001=running"
+		}))
+	);
+	let (_, _, body) = get_html(&app, &poll, Some(&cookie)).await;
+	assert_eq!(body.matches("data-flip").count(), 1, "{body}");
+	assert_not_contains(&body, "ui-res-next");
+	assert_not_contains(&body, "data-on-interval__duration.3s");
+	assert_contains(&body, "application:5001=running;database:6001=running");
+	// The poll refreshes the stats, the summary and the activity with the rows.
+	assert_contains(&body, "id=\"env-stats\"");
+	assert_contains(&body, "id=\"env-summary\"");
+	assert_contains(&body, "id=\"env-activity\"");
+	assert_contains(&body, "<dt>In progress</dt><dd>0</dd>");
+}
+
+#[db_test]
+async fn deploys_this_week_count_and_say_what_failed_or_rolled_back(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	make_project(&app, &cookie, team, "Shop", "shop").await;
+	let project = project_id(&db, "shop").await;
+	seed_app_and_database(&db, team, project).await;
+	let uri = format!("/teams/{team}/projects/{project}/production");
+
+	insert_deployment(&db, 5001, 4001, "running", Some("img:1"), Some("c1")).await;
+	insert_deployment(&db, 5001, 4002, "stopped", Some("img:2"), None).await;
+	// Ten days old: not this week.
+	insert_deployment(&db, 5001, 4003, "failed", None, None).await;
+	age_deployment(&db, 4003, 10).await;
+	let (_, _, body) = get_html(&app, &uri, Some(&cookie)).await;
+	let main = page_main(&body);
+	assert_contains(main, "<dt>Deploys this week</dt><dd>2</dd></div>");
+
+	insert_deployment(&db, 5001, 4004, "failed", None, None).await;
+	insert_deployment(&db, 5001, 4005, "crashed", Some("img:5"), None).await;
+	sqlx::query(
+		"INSERT INTO deployment_health (deployment_id, state) VALUES (4002, 'rolled_back')",
+	)
+	.execute(&db)
+	.await
+	.unwrap();
+	let (_, _, body) = get_html(&app, &uri, Some(&cookie)).await;
+	assert_contains(
+		page_main(&body),
+		"<dt>Deploys this week</dt><dd>4</dd><dd class=\"ui-stats-sub\">2 failed · 1 rolled back</dd>",
+	);
+}
+
+#[db_test]
+async fn the_activity_panel_lists_deployments_and_log_events_the_viewer_may_read(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (owner_token, team) = user_with_team(&app, "alice").await;
+	let owner = ui_login(&app, "alice").await;
+	let (_, _) = user_with_team(&app, "carol").await;
+	join_as_member(&app, &owner_token, team, "carol").await;
+	let carol = ui_login(&app, "carol").await;
+	make_project(&app, &owner, team, "Shop", "shop").await;
+	let project = project_id(&db, "shop").await;
+	seed_app_and_database(&db, team, project).await;
+	insert_deployment(&db, 5001, 4001, "running", Some("img:1"), Some("c1")).await;
+	insert_deployment(&db, 5001, 4002, "failed", None, None).await;
+	seed_event(
+		&db,
+		1,
+		team,
+		project,
+		"database.stop",
+		"database",
+		6001,
+		"Stopped database <b>orders</b>",
+	)
+	.await;
+	// Told by the deployment rows already: left out of the feed.
+	seed_event(
+		&db,
+		2,
+		team,
+		project,
+		"app.deploy",
+		"application",
+		5001,
+		"Deployed application storefront",
+	)
+	.await;
+	// About a resource that is not in this environment.
+	seed_event(
+		&db,
+		3,
+		team,
+		project,
+		"database.stop",
+		"database",
+		999_999,
+		"Stopped database elsewhere",
+	)
+	.await;
+	let uri = format!("/teams/{team}/projects/{project}/production");
+
+	let (_, _, body) = get_html(&app, &uri, Some(&owner)).await;
+	let main = page_main(&body);
+	assert_contains(main, "id=\"env-activity\"");
+	assert_contains(main, "Live abcdef1");
+	assert_contains(main, "Deploy started abcdef1");
+	assert_contains(main, "Failed abcdef1");
+	assert_contains(
+		main,
+		&format!("/teams/{team}/projects/{project}/apps/5001/deployments/4001"),
+	);
+	assert_contains(main, "Stopped database &lt;b&gt;orders&lt;/b&gt;");
+	assert_not_contains(main, "Deployed application storefront");
+	assert_not_contains(main, "Stopped database elsewhere");
+	assert_contains(main, &format!("href=\"/teams/{team}/settings/audit\""));
+	assert!(main.matches("class=\"ui-res-ev\"").count() <= 8, "{main}");
+	// The resource search stays as it was.
+	assert_contains(main, "Search resources");
+
+	// A member reads deployments but not the log: no log events, and the way to the
+	// deployments instead of the log.
+	let (_, _, body) = get_html(&app, &uri, Some(&carol)).await;
+	let main = page_main(&body);
+	assert_contains(main, "Live abcdef1");
+	assert_not_contains(main, "Stopped database");
+	assert_not_contains(main, "/settings/audit");
+	assert_contains(main, "All deployments");
+	assert_contains(main, "<dt>Deploys this week</dt><dd>2</dd>");
+}
+
+#[db_test]
+async fn without_deployments_or_the_log_there_is_no_activity_panel_and_no_week(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	make_project(&app, &cookie, team, "Shop", "shop").await;
+	let project = project_id(&db, "shop").await;
+	seed_app_and_database(&db, team, project).await;
+	// A role that reads projects and nothing else.
+	let (_, _) = user_with_team(&app, "dave").await;
+	join_as_project_reader(&db, team, user_id(&db, "dave").await, 9001).await;
+	let dave = ui_login(&app, "dave").await;
+	let (_, _, body) = get_html(
+		&app,
+		&format!("/teams/{team}/projects/{project}/production"),
+		Some(&dave),
+	)
+	.await;
+	let main = page_main(&body);
+	assert_contains(main, "Shop");
+	assert_not_contains(main, "env-activity");
+	assert_not_contains(main, "Deploys this week");
+}
+
+#[test]
+fn the_week_sub_line_names_only_what_went_wrong() {
+	use super::environment::week_sub;
+	use crate::projects::overview::DeployWeek;
+	let week = |failed, rolled_back| DeployWeek {
+		total: 9,
+		failed,
+		rolled_back,
+	};
+	assert_eq!(week_sub(week(0, 0)), None);
+	assert_eq!(week_sub(week(2, 0)).as_deref(), Some("2 failed"));
+	assert_eq!(week_sub(week(0, 1)).as_deref(), Some("1 rolled back"));
+	assert_eq!(
+		week_sub(week(1, 3)).as_deref(),
+		Some("1 failed · 3 rolled back")
+	);
 }

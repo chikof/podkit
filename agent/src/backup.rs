@@ -744,7 +744,7 @@ async fn restore_via_upload(
 	Ok(())
 }
 
-async fn restore_inner(
+pub(crate) async fn restore_inner(
 	ctx: &Ctx,
 	req: &RestoreRequest,
 	tx: &mpsc::Sender<Event>,

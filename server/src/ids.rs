@@ -65,6 +65,7 @@ id!(
 	VolumePolicyId,
 	VolumeBackupId,
 	VolumeRestoreId,
+	RestoreDrillId,
 	CloneId,
 	PreviewId,
 	UptimeCheckId,
@@ -75,4 +76,7 @@ id!(
 	IdentityId,
 	PasskeyId,
 	RecoveryCodeId,
+	TeamInviteId,
+	MoveId,
+	DrainId,
 );

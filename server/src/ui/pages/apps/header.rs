@@ -1,6 +1,6 @@
 //! The head of an application's page: logo, name, type, status, public URL, and the actions
-//! Deploy, Restart, Stop and a menu with Rollback and Delete. Delete and Rollback open
-//! dialogs; deleting asks for the slug to be typed.
+//! Deploy, Restart, Stop and a menu with Rollback, Promote, Move to another server and Delete.
+//! Delete, Rollback, Promote and Move open dialogs; deleting asks for the slug to be typed.
 //!
 //! Every action comes back as an SSE stream. A refusal ("not running", "no previous build")
 //! lands in the `_action_error` signal, which the header shows, so no tab needs its own line.
@@ -83,7 +83,8 @@ fn actions(ctx: &TeamCtx, app: &ApplicationView, rollback_to: Option<&Deployment
 			js_string(id)
 		)
 	};
-	let has_menu = can_create || can_stop || can_delete;
+	let can_move = super::move_app::allowed(ctx);
+	let has_menu = can_create || can_stop || can_delete || can_move;
 	html! {
 		div class="ui-app-actions" {
 			@if can_create {
@@ -130,6 +131,21 @@ fn actions(ctx: &TeamCtx, app: &ApplicationView, rollback_to: Option<&Deployment
 								}
 							} @else {
 								button type="button" class=(MENU_ITEM) disabled { (icon("undo-2")) "Rollback" }
+							}
+							// Only a running release has an image to promote.
+							@if running {
+								button type="button" class=(MENU_ITEM) command="show-modal" commandfor=(super::promote::DIALOG)
+									"data-on:click"=(super::promote::open_action(&base)) {
+									(icon("arrow-up-right")) "Promote"
+								}
+							} @else {
+								button type="button" class=(MENU_ITEM) disabled { (icon("arrow-up-right")) "Promote" }
+							}
+						}
+						@if can_move {
+							button type="button" class=(MENU_ITEM) command="show-modal" commandfor=(super::move_app::DIALOG)
+								"data-on:click"=(super::move_app::open_action(&base)) {
+								(icon("server")) "Move to another server"
 							}
 						}
 						@if can_delete {
@@ -324,8 +340,8 @@ pub async fn header(
 
 // --- dialogs --------------------------------------------------------------------------------
 
-/// Rollback and Delete, opened from the menu (and Rollback from a deployment's row). They sit
-/// outside the header so a poll never closes them.
+/// Rollback, Promote, Move and Delete, opened from the menu (and Rollback from a deployment's
+/// row). They sit outside the header so a poll never closes them.
 pub fn dialogs(ctx: &TeamCtx, app: &ApplicationView) -> Markup {
 	let base = app_url(ctx.team.id, app.project_id, app.id);
 	let can_create = ctx.perms.can(Action::Create, Resource::Deployment);
@@ -338,6 +354,8 @@ pub fn dialogs(ctx: &TeamCtx, app: &ApplicationView) -> Markup {
 	let delete = format!("@post({})", js_string(&format!("{base}/delete")));
 	let matches = format!("$confirm !== {}", js_string(&app.slug));
 	html! {
+		(super::promote::dialog_for(ctx))
+		(super::move_app::dialog_for(ctx))
 		@if can_create {
 			(dialog(
 				"rollback-dialog",

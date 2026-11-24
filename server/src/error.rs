@@ -59,6 +59,19 @@ pub enum ServerError {
 	#[error("registration is closed")]
 	RegistrationClosed,
 
+	/// The first account of an instance needs the setup token (`auth::setup`).
+	#[error(
+		"a setup token is required to create the first account; podkit printed it in its log when it started"
+	)]
+	SetupTokenRequired,
+
+	#[error("wrong setup token; use the one podkit printed in its log when it last started")]
+	InvalidSetupToken,
+
+	/// An invite link that does not exist, was used, revoked or has expired: one answer for all.
+	#[error("this invite is not valid any more; ask for a new one")]
+	InviteNotFound,
+
 	#[error("environment not found")]
 	EnvironmentNotFound,
 
@@ -232,6 +245,7 @@ impl ServerError {
 			| Self::UptimeCheckNotFound
 			| Self::TokenNotFound
 			| Self::GitProviderNotFound
+			| Self::InviteNotFound
 			| Self::ModelNotFound => StatusCode::NOT_FOUND,
 			Self::PayloadTooLarge(_) => StatusCode::PAYLOAD_TOO_LARGE,
 			Self::QuotaExceeded(_) => StatusCode::PAYMENT_REQUIRED,
@@ -239,6 +253,8 @@ impl ServerError {
 			Self::Forbidden
 			| Self::TwoFactorRequired
 			| Self::MissingScope(_)
+			| Self::SetupTokenRequired
+			| Self::InvalidSetupToken
 			| Self::RegistrationClosed => StatusCode::FORBIDDEN,
 			Self::AgentUnavailable
 			| Self::HuggingFaceUnavailable

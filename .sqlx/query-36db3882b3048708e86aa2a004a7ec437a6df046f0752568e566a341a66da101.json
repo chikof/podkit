@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM team_invites WHERE team_id = $1 AND lower(email) = lower($2) AND expires_at <= NOW()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "36db3882b3048708e86aa2a004a7ec437a6df046f0752568e566a341a66da101"
+}

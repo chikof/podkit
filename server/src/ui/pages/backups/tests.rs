@@ -879,3 +879,181 @@ async fn deleting_a_destination_asks_first_and_names_it(db: PgPool) {
 	assert_contains(&page, "Delete this destination?");
 	assert_contains(&page, "aria-label=\"Delete offsite\"");
 }
+
+// --- restore drills -------------------------------------------------------------------------
+
+/// A succeeded backup whose dump is stored, so a drill can use it.
+async fn stored_backup(db: &PgPool, f: &Fixture, id: i64) {
+	add_backup(
+		db,
+		id,
+		f.database,
+		Some(f.target),
+		"succeeded",
+		Some(1),
+		None,
+		None,
+	)
+	.await;
+	sqlx::query("UPDATE backups SET object_key = 'k', source_tables = 3 WHERE id = $1")
+		.bind(id)
+		.execute(db)
+		.await
+		.unwrap();
+}
+
+impl Fixture {
+	fn drills_api(&self) -> String {
+		format!(
+			"/api/v1/teams/{}/projects/{}/databases/{}/drills",
+			self.team, self.project, self.database
+		)
+	}
+}
+
+#[db_test]
+async fn the_backups_tab_shows_restore_drills_off_by_default(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	let (s, page) = f.get(&f.base()).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_contains(&page, "Restore drills");
+	assert_contains(&page, "No drills yet.");
+	assert_contains(&page, "Scheduled drills are off.");
+	assert_contains(&page, "id=\"drill-section\"");
+	// No backup yet: the button says why instead.
+	assert_not_contains(&page, "Run drill now");
+	assert_contains(&page, "There is no succeeded backup to drill yet");
+}
+
+#[db_test]
+async fn running_a_drill_from_the_tab_queues_it_and_shows_it(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	stored_backup(&db, &f, 10).await;
+	let (_, page) = f.get(&f.base()).await;
+	assert_contains(&page, "Run drill now");
+
+	let body = f.post(&format!("{}/drills", f.base()), &json!({})).await;
+	assert_contains(&body, "id=\"drill-section\"");
+	assert_contains(&body, "Restore drill queued");
+	assert_contains(&body, "Queued");
+	let kinds: Vec<String> =
+		sqlx::query_scalar("SELECT kind FROM jobs WHERE kind = 'restore_drill'")
+			.fetch_all(&db)
+			.await
+			.unwrap();
+	assert_eq!(kinds, ["restore_drill"]);
+	// The database is not touched: no restore of the backup, and nothing queued for the
+	// database beyond the provision from its creation (no stop).
+	assert!(job_kinds(&db, 10).await.is_empty());
+	assert_eq!(job_kinds(&db, f.database).await, ["database_provision"]);
+
+	// A second one while the first is queued is refused, in the card.
+	let body = f.post(&format!("{}/drills", f.base()), &json!({})).await;
+	assert_contains(&body, "already queued or running");
+}
+
+#[db_test]
+async fn the_drill_api_lists_runs_and_schedules(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	let (s, body) = call(&f.app, "POST", &f.drills_api(), Some(&f.token), None).await;
+	assert_eq!(s, StatusCode::BAD_REQUEST, "no backup yet: {body}");
+
+	stored_backup(&db, &f, 10).await;
+	let (s, drill) = call(&f.app, "POST", &f.drills_api(), Some(&f.token), None).await;
+	assert_eq!(s, StatusCode::ACCEPTED, "{drill}");
+	assert_eq!(drill["status"], "queued");
+	assert_eq!(drill["backup_id"], 10);
+	assert_eq!(drill["source_tables"], 3);
+	let (s, again) = call(&f.app, "POST", &f.drills_api(), Some(&f.token), None).await;
+	assert_eq!(s, StatusCode::CONFLICT, "{again}");
+
+	let (s, list) = call(&f.app, "GET", &f.drills_api(), Some(&f.token), None).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_eq!(list.as_array().unwrap().len(), 1);
+
+	let schedule = format!("{}/schedule", f.drills_api());
+	let (s, off) = call(&f.app, "GET", &schedule, Some(&f.token), None).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_eq!(off, json!({ "schedule": null, "next_run_at": null }));
+	let (s, on) = call(
+		&f.app,
+		"PUT",
+		&schedule,
+		Some(&f.token),
+		Some(json!({ "schedule": " 0 4 * * 0 " })),
+	)
+	.await;
+	assert_eq!(s, StatusCode::OK, "{on}");
+	assert_eq!(on["schedule"], "0 4 * * 0");
+	assert!(on["next_run_at"].is_string());
+	let (s, bad) = call(
+		&f.app,
+		"PUT",
+		&schedule,
+		Some(&f.token),
+		Some(json!({ "schedule": "weekly" })),
+	)
+	.await;
+	assert_eq!(s, StatusCode::BAD_REQUEST, "{bad}");
+	let (s, cleared) = call(
+		&f.app,
+		"PUT",
+		&schedule,
+		Some(&f.token),
+		Some(json!({ "schedule": null })),
+	)
+	.await;
+	assert_eq!(s, StatusCode::OK);
+	assert_eq!(cleared, json!({ "schedule": null, "next_run_at": null }));
+}
+
+#[db_test]
+async fn a_reader_sees_drills_but_cannot_run_or_schedule_them(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	stored_backup(&db, &f, 10).await;
+	let cookie = f.reader("rita").await;
+	let (s, _, page) = get_html(&f.app, &f.base(), Some(&cookie)).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_contains(&page, "Restore drills");
+	assert_not_contains(&page, "Run drill now");
+	assert_not_contains(&page, "Save drill schedule");
+
+	for (uri, signals) in [
+		(format!("{}/drills", f.base()), json!({})),
+		(
+			format!("{}/drills/schedule", f.base()),
+			json!({ "drill_schedule": "0 4 * * 0" }),
+		),
+	] {
+		let (_, _, body) = post_signals(&f.app, &uri, Some(&cookie), &signals).await;
+		assert_contains(&body, "permission");
+	}
+	let drills: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM restore_drills")
+		.fetch_one(&db)
+		.await
+		.unwrap();
+	assert_eq!(drills, 0);
+	let schedule: Option<String> =
+		sqlx::query_scalar("SELECT drill_schedule FROM databases WHERE id = $1")
+			.bind(f.database)
+			.fetch_one(&db)
+			.await
+			.unwrap();
+	assert_eq!(schedule, None);
+}
+
+#[db_test]
+async fn saving_the_drill_schedule_answers_with_the_next_run(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	let body = f
+		.post(
+			&format!("{}/drills/schedule", f.base()),
+			&json!({ "drill_schedule": "0 4 * * 0" }),
+		)
+		.await;
+	assert_contains(&body, "id=\"drill-next\"");
+	assert_contains(&body, "Next drill");
+	assert_contains(&body, "Drill schedule saved");
+	let (_, page) = f.get(&f.base()).await;
+	assert_contains(&page, "&quot;drill_schedule&quot;:&quot;0 4 * * 0&quot;");
+}

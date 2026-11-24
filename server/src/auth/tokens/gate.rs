@@ -13,13 +13,14 @@ use crate::ids::ProjectId;
 use crate::state::AppState;
 
 /// Segments after which a `POST` is a deploy rather than a write.
-const DEPLOY_VERBS: [&str; 8] = [
+const DEPLOY_VERBS: [&str; 9] = [
 	"deploy",
 	"deployments",
 	"stop",
 	"restart",
 	"start",
 	"rollback",
+	"promote",
 	"cancel",
 	"bootstrap",
 ];
@@ -71,6 +72,8 @@ pub fn required_scope(method: &Method, segments: &[&str]) -> Scope {
 	} else if segments.last().is_some_and(|s| DEPLOY_VERBS.contains(s))
 		// Running a scheduled task runs a command: as much a deploy as a restart is.
 		|| (segments.last() == Some(&"run") && segments.contains(&"cron"))
+		// Check now deploys the new image it finds.
+		|| (segments.last() == Some(&"check") && segments.contains(&"auto-update"))
 	{
 		Scope::Deploy
 	} else {
@@ -110,9 +113,10 @@ pub fn check(grant: &Grant, method: &Method, path: &str) -> Result<(), ServerErr
 	}
 
 	let need = match (first, segments.get(2), method) {
-		// Tokens manage tokens, teams get made and members change, only with `root`.
+		// Tokens manage tokens, teams get made, members change and invites go out, only with
+		// `root`.
 		("teams", Some(&"api-tokens"), _) => Scope::Root,
-		("teams", Some(&"members"), m) if m != Method::GET => Scope::Root,
+		("teams", Some(&"members" | &"invites"), m) if m != Method::GET => Scope::Root,
 		("teams", None, m) if m != Method::GET => Scope::Root,
 		_ => required_scope(method, &segments),
 	};
@@ -124,13 +128,13 @@ pub fn check(grant: &Grant, method: &Method, path: &str) -> Result<(), ServerErr
 }
 
 /// What a project-limited token may still read outside its projects: the lists it needs
-/// to find them, and the public catalogs.
+/// to find them, who it acts as (`/me`), and the public catalogs.
 fn limited_may_reach(method: &Method, segments: &[&str]) -> bool {
 	if method != Method::GET {
 		return false;
 	}
 	matches!(
 		segments,
-		["teams"] | ["teams", _, "projects" | "servers"] | ["templates" | "catalog", ..]
+		["teams" | "me"] | ["teams", _, "projects" | "servers"] | ["templates" | "catalog", ..]
 	)
 }

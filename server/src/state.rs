@@ -103,6 +103,8 @@ pub struct AppState {
 	pub http: Http,
 	/// Every request to an address a person typed goes through this: see `net::outbound`.
 	pub outbound: outbound::Outbound,
+	/// The first-run setup token, armed at start while no account exists (`auth::setup`).
+	pub setup: Arc<crate::auth::setup::SetupToken>,
 	/// Cancelled on SIGINT/SIGTERM; long-lived streams end on it so graceful shutdown can drain.
 	pub shutdown: tokio_util::sync::CancellationToken,
 	/// The billing provider of this build (`cloud` feature; see `docs/cloud-extension.md`).

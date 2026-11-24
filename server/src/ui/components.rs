@@ -51,7 +51,7 @@ mod tooltip;
 mod uptime_strip;
 mod usage_meter;
 
-pub use audit_events::{activity_card, audit_table};
+pub use audit_events::{activity_card, audit_table, href as audit_event_href};
 pub use avatar::{avatar, user_avatar, user_avatar_lg};
 pub use avatar_field::{AvatarField, avatar_field};
 pub use badge::{Status, Tone, badge, status_badge, status_dot};

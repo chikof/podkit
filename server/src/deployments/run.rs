@@ -90,6 +90,10 @@ pub async fn run(
 		}
 	}
 
+	// A promotion runs the image of a deployment in another environment; when that one runs
+	// on another server, the image is moved here first, the way a remote build's is.
+	bring_promoted_image(state, &deployment, &server, cancel, log).await?;
+
 	let spec = build_spec(state, &application, &deployment, &server).await?;
 
 	let client = state.agents.client(state, &server).await.map_err(|e| {
@@ -198,6 +202,7 @@ pub async fn run(
 				| Event::Exited { .. }
 				| Event::VolumeDumped { .. }
 				| Event::PartsUploaded { .. }
+				| Event::TablesCounted { .. }
 				| Event::Built { .. }
 				| Event::Done,
 			)) => {}
@@ -300,6 +305,57 @@ async fn build_elsewhere(
 	deployment.image_tag = Some(image);
 	deployment.commit_sha = Some(commit_sha);
 	Ok(())
+}
+
+/// Moves a promoted deployment's image from the server of the deployment it came from to
+/// `server`, when they differ. Nothing for any other deployment.
+///
+/// # Errors
+/// The source server is gone or not ready, either agent cannot be reached, or the move
+/// fails ([`builds::delivery::deliver`]).
+async fn bring_promoted_image(
+	state: &AppState,
+	deployment: &Deployment,
+	server: &Server,
+	cancel: &CancellationToken,
+	log: &mut JobLog,
+) -> Result<(), JobFailure> {
+	let Some(from) = deployments::promotion_source_server(&state.db, deployment.id)
+		.await
+		.map_err(|e| db_failure(&e))?
+		.filter(|from| *from != server.id)
+	else {
+		return Ok(());
+	};
+	let Some(image) = deployment.image_tag.as_deref() else {
+		return Err(failed("the promoted deployment has no image"));
+	};
+	let source = scope::server(&state.db, server.team_id, from)
+		.await
+		.map_err(|_| failed("the server the image was promoted from no longer exists"))?;
+	if source.status != crate::servers::ServerStatus::Active {
+		return Err(failed(format!(
+			"the server the image is on ({}) is not ready (its agent is not running)",
+			source.name
+		)));
+	}
+	log.push(
+		proto::Stream::System,
+		&format!(
+			"promoted image is on {}, copying it to {}",
+			source.name, server.name
+		),
+	)
+	.await;
+	let from_client = state.agents.client(state, &source).await.map_err(|e| {
+		warn!(server = %source.id, "cannot reach the source server's agent: {e}");
+		failed(format!("the agent of {} is unavailable", source.name))
+	})?;
+	let to_client = state.agents.client(state, server).await.map_err(|e| {
+		warn!(server = %server.id, "cannot reach server agent: {e}");
+		failed("server agent unavailable")
+	})?;
+	builds::delivery::deliver(&from_client, &to_client, image, cancel, log).await
 }
 
 /// Feeds the health machine and stores the state it reaches. Best effort: the deploy itself
@@ -499,6 +555,11 @@ pub(crate) async fn build_spec(
 		access: access.rules,
 	});
 	let routed = routing.is_some();
+	// Only a label: the check that redeploys runs in the control plane.
+	let auto_update = application.source_kind == SourceKind::Image
+		&& crate::auto_update::enabled(&state.db, application.id)
+			.await
+			.map_err(|e| db_failure(&e))?;
 
 	Ok(DeploySpec {
 		service: format!("app-{}", application.id),
@@ -544,7 +605,62 @@ pub(crate) async fn build_spec(
 		},
 		health,
 		replicas: replica_config.map(|c| c.spec(routed)),
+		auto_update,
 	})
+}
+
+/// What runs for `application` now, as the Quadlet view shows it: [`build_spec`] for the
+/// newest running deployment (or else the newest that produced an image), so the units match
+/// the container. An application never deployed gets the spec its first deploy would send,
+/// except that a git one is not cloned: no credential is minted for a page view, and the
+/// source says what would be built.
+pub(crate) async fn current_spec(
+	state: &AppState,
+	application: &Application,
+) -> Result<DeploySpec, JobFailure> {
+	let running = deployments::latest_running(&state.db, application.id)
+		.await
+		.map_err(|e| db_failure(&e))?
+		.filter(|d| d.image_tag.is_some());
+	let deployment = match running {
+		Some(d) => Some(d),
+		None => deployments::latest_with_image(&state.db, application.id)
+			.await
+			.map_err(|e| db_failure(&e))?,
+	};
+	let unbuilt_git = deployment.is_none() && application.source_kind == SourceKind::Git;
+	let deployment = deployment.unwrap_or_else(|| Deployment {
+		id: DeploymentId(0),
+		application_id: application.id,
+		status: DeploymentStatus::Queued,
+		commit_sha: None,
+		// Stands in for the build, which a view never starts; replaced below.
+		image_tag: unbuilt_git.then(|| format!("podkit-app-{}:latest", application.id)),
+		container_id: None,
+		error_message: None,
+		started_at: None,
+		finished_at: None,
+		promoted_from: None,
+		promoted_from_environment: None,
+	});
+	let server = load_server(state, application).await?;
+	let mut spec = build_spec(state, application, &deployment, &server).await?;
+	if unbuilt_git {
+		spec.source = Source::Git {
+			repo_url: application.repo_url.clone().unwrap_or_default(),
+			git_ref: application.git_ref.clone(),
+			commit: None,
+			auth: GitAuth::None,
+			build: match application.build_strategy {
+				BuildStrategy::Dockerfile => Build::Dockerfile {
+					path: application.dockerfile_path.clone(),
+				},
+				BuildStrategy::Nixpacks => Build::Nixpacks,
+			},
+			options: proto::BuildOptions::default(),
+		};
+	}
+	Ok(spec)
 }
 
 /// The commit a build of `application` must check out: the one a preview is pinned to (a

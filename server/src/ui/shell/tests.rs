@@ -263,6 +263,53 @@ async fn a_link_the_role_may_not_use_is_not_rendered(db: PgPool) {
 	}
 }
 
+#[db_test]
+async fn the_agent_card_counts_the_servers_and_names_podman_for_server_readers_only(db: PgPool) {
+	let app = app(db.clone()).await;
+	let (cookie, team) = ui_session(&app, "alice").await;
+	// The local server answered with Podman 5.4.0, rootless; a second one does not answer.
+	sqlx::query(
+		"UPDATE servers SET status = 'active', podman_version = '5.4.0', podman_rootless = TRUE \
+		 WHERE team_id = $1",
+	)
+	.bind(team)
+	.execute(&db)
+	.await
+	.unwrap();
+	sqlx::query(
+		"INSERT INTO servers (id, team_id, name, hostname, podman_socket_path, is_local, status) \
+		 VALUES ($1, $2, 'gone', 'localhost', '/run/podman.sock', TRUE, 'unreachable')",
+	)
+	.bind(crate::ids::ServerId::generate().0)
+	.bind(team)
+	.execute(&db)
+	.await
+	.unwrap();
+
+	let (s, _, body) = get_html(&app, &format!("/teams/{team}/projects"), Some(&cookie)).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_contains(
+		&body,
+		&format!("<a class=\"ui-agent-card\" href=\"/teams/{team}/servers\""),
+	);
+	assert_contains(&body, "<span class=\"ui-agent-title\">podkit agent</span>");
+	assert_contains(&body, "Podman 5.4.0 · rootless");
+	assert_contains(&body, "1 of 2 servers connected");
+	assert_contains(&body, "class=\"ui-dot ui-dot-warning\"");
+	// The card sits in the foot, above the account menu.
+	let foot = &body[body.find("ui-chrome-foot").unwrap()..];
+	assert!(foot.find("ui-agent-card").unwrap() < foot.find("side-user-menu").unwrap());
+
+	// Someone who may not read servers gets no card.
+	register(&app, "carol").await;
+	let carol = user_id(&db, "carol").await;
+	crate::tests::join_as_project_reader(&db, team, carol, 9001).await;
+	let carol = ui_login(&app, "carol").await;
+	let (_, _, body) = get_html(&app, &format!("/teams/{team}/projects"), Some(&carol)).await;
+	assert_not_contains(&body, "ui-agent-card");
+	assert_not_contains(&body, "podkit agent");
+}
+
 // --- breadcrumbs and switchers --------------------------------------------------------
 
 #[db_test]

@@ -2394,3 +2394,150 @@ async fn replicas_monitoring_lists_them_only_for_a_scaled_application(db: PgPool
 	// The 30-second refresh asks for the replica section alone.
 	assert_contains(&page, "monitoring/replicas");
 }
+
+#[db_test]
+async fn promote_shows_what_would_be_deployed_and_opens_the_new_deployment(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	// Nothing runs: the entry is there, disabled, and the dialog waits for its body.
+	let (_, page) = f.get(&f.url("")).await;
+	assert_contains(&page, "id=\"promote-dialog\"");
+	assert_not_contains(&page, &format!("@get('{}/promote')", f.url("")));
+
+	// The same application in staging, under the name the create form suggests there.
+	f.post(
+		&format!("/teams/{}/projects/{}/environments", f.team, f.project),
+		&json!({ "newName": "Staging", "newSlug": "staging" }),
+	)
+	.await;
+	let staging = env_id(&db, f.project, "staging").await;
+	f.create("web-staging", json!({ "environment": staging.to_string() }))
+		.await;
+	let copy = application_id(&db, "web-staging").await;
+	f.seed(101, "running", Some("img:2"), Some("c1")).await;
+
+	let (_, page) = f.get(&f.url("")).await;
+	assert_contains(&page, &format!("@get('{}/promote')", f.url("")));
+
+	// The body names the release, its image, and where it would go.
+	let (s, body) = f.get(&format!("{}/promote", f.url(""))).await;
+	assert_eq!(s, StatusCode::OK, "{body}");
+	assert_contains(&body, "#101");
+	assert_contains(&body, "img:2");
+	assert_contains(&body, "Staging");
+	assert_contains(&body, "web-staging on");
+	let go = format!("{}/promote/{staging}?deployment=101", f.url(""));
+	assert_contains(&body, &go);
+
+	// A release that changed since the dialog opened is refused inline.
+	let before = count(&db, "deployments").await;
+	let body = f
+		.post_empty(&format!("{}/promote/{staging}?deployment=1", f.url("")))
+		.await;
+	assert_contains(&body, "Look again before promoting");
+	assert_eq!(count(&db, "deployments").await, before);
+
+	// Promoting opens the new deployment of the staging copy, running the same image.
+	let body = f.post_empty(&go).await;
+	let new = newest_deployment(&db).await;
+	assert_contains(
+		&body,
+		&format!(
+			"window.location.assign('{}/{copy}/deployments/{new}')",
+			f.base()
+		),
+	);
+	assert_eq!(deployment_image(&db, new).await.as_deref(), Some("img:2"));
+
+	// Its history says where the release came from, and links back.
+	let (_, page) = f.get(&format!("{}/{copy}", f.base())).await;
+	assert_contains(&page, "Promoted from production");
+	assert_contains(&page, &format!("{}/deployments/101", f.url("")));
+}
+
+#[db_test]
+async fn quadlet_tab_shows_the_units_and_never_a_value(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	f.set_env("API_KEY", SECRET).await;
+	let page = f.page("quadlet").await;
+	let main = page_main(&page);
+	assert_contains(main, ">Quadlet</a>");
+	assert_contains(main, "Generated Quadlet unit");
+	assert_contains(main, &format!("podkit-app-{}.container", f.application));
+	assert_contains(
+		main,
+		&format!(
+			"~/.config/containers/systemd/podkit-app-{}.container",
+			f.application
+		),
+	);
+	// Never deployed: the image podkit would build, and where it comes from.
+	assert_contains(
+		main,
+		&format!("Image=localhost/podkit-app-{}:latest", f.application),
+	);
+	assert_contains(main, "https://example.com/web.git (main)");
+	assert_contains(
+		main,
+		&format!("EnvironmentFile=podkit-app-{}.env", f.application),
+	);
+	assert_contains(main, "API_KEY");
+	assert_contains(main, "navigator.clipboard");
+	assert_not_contains(&page, SECRET);
+	assert_eq!(page.matches("<h1").count(), 1);
+}
+
+#[db_test]
+async fn quadlet_export_page_downloads_an_archive_and_offers_secrets_to_owners_only(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let page_url = format!("/teams/{}/projects/{}/quadlet", f.team, f.project);
+	let (s, page) = f.get(&page_url).await;
+	assert_eq!(s, StatusCode::OK);
+	assert_contains(&page, "Eject to Quadlet");
+	assert_contains(&page, "name=\"secrets\"");
+	assert_contains(&page, &format!("action=\"{page_url}/export\""));
+
+	// A member may not update variables: no secrets box (or no page at all).
+	let carol = f.member("carol").await;
+	let (s, _, page) = get_html(&f.app, &page_url, Some(&carol)).await;
+	if s == StatusCode::OK {
+		assert_not_contains(&page, "name=\"secrets\"");
+	} else {
+		assert_eq!(s, StatusCode::FORBIDDEN);
+	}
+}
+
+#[db_test]
+async fn move_lists_the_other_servers_and_queues_the_move(db: PgPool) {
+	let f = Fixture::with_web(&db).await;
+	let (_, page) = f.get(&f.url("")).await;
+	assert_contains(&page, "Move to another server");
+	assert_contains(&page, "id=\"move-dialog\"");
+	assert_contains(&page, &format!("@get('{}/move')", f.url("")));
+
+	// One other server, not ready: the body says why it cannot go there.
+	let builder = add_pending_server(&db, f.team).await;
+	let (s, body) = f.get(&format!("{}/move", f.url(""))).await;
+	assert_eq!(s, StatusCode::OK, "{body}");
+	assert_contains(&body, "builder");
+	assert_contains(&body, "is not ready");
+	assert_not_contains(&body, &format!("{}/move/{builder}", f.url("")));
+
+	// Ready, it can: the method and what its users notice are named.
+	sqlx::query("UPDATE servers SET status = 'active' WHERE id = ANY($1)")
+		.bind(vec![builder, f.server])
+		.execute(&db)
+		.await
+		.unwrap();
+	let (_, body) = f.get(&format!("{}/move", f.url(""))).await;
+	assert_contains(&body, "Redeploy the running image");
+	let go = format!("{}/move/{builder}", f.url(""));
+	assert_contains(&body, &go);
+
+	let before = count(&db, "application_moves").await;
+	let body = f.post_empty(&go).await;
+	assert_contains(&body, "Moving to builder");
+	assert_eq!(count(&db, "application_moves").await, before + 1);
+	// A deploy waits for the move.
+	let body = f.post_empty(&f.url("deploy")).await;
+	assert_contains(&body, "being moved");
+}

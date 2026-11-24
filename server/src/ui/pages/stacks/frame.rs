@@ -44,6 +44,7 @@ pub(super) enum Tab {
 	Monitoring,
 	Networks,
 	Security,
+	Quadlet,
 	Advanced,
 }
 
@@ -61,6 +62,7 @@ impl Tab {
 			Self::Monitoring => "Monitoring",
 			Self::Networks => "Networks",
 			Self::Security => "Security",
+			Self::Quadlet => "Quadlet",
 			Self::Advanced => "Advanced",
 		}
 	}
@@ -78,11 +80,12 @@ impl Tab {
 			Self::Monitoring => "/monitoring",
 			Self::Networks => "/networks",
 			Self::Security => "/security",
+			Self::Quadlet => "/quadlet",
 			Self::Advanced => "/advanced",
 		}
 	}
 
-	const ALL: [Self; 12] = [
+	const ALL: [Self; 13] = [
 		Self::Services,
 		Self::Compose,
 		Self::Environment,
@@ -94,6 +97,7 @@ impl Tab {
 		Self::Monitoring,
 		Self::Networks,
 		Self::Security,
+		Self::Quadlet,
 		Self::Advanced,
 	];
 }
@@ -299,6 +303,7 @@ fn tab_row(ctx: &TeamCtx, l: &Loaded, active: Tab) -> Markup {
 		.filter(|t| match t {
 			Tab::Advanced => ctx.perms.can(Action::Delete, Resource::Stack),
 			Tab::Security => ctx.perms.can(Action::Read, Resource::Scan),
+			Tab::Quadlet => crate::ui::pages::quadlet::tab_allowed(ctx, Resource::Stack),
 			Tab::Volumes => ctx.perms.can(Action::Read, Resource::Backup),
 			Tab::Terminal => crate::ui::pages::terminal::allowed(ctx),
 			_ => true,

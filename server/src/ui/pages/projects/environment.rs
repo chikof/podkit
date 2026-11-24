@@ -20,12 +20,16 @@ use serde_json::json;
 use time::OffsetDateTime;
 use tower_cookies::Cookies;
 
-use super::cards::{card_logo, in_flight, relative_time, status_badge, status_data};
-use super::picker;
+use super::cards::{
+	card_logo, in_flight, in_flight_badge, in_flight_key, relative_time, status_badge, status_data,
+};
+use super::{activity, picker};
 use crate::auth::permission::{Action, Resource};
 use crate::environments;
 use crate::ids::{EnvironmentId, ProjectId, TeamId};
-use crate::projects::overview::{self, EnvironmentView, Pick, ResourceCard, ResourceKind};
+use crate::projects::overview::{
+	self, DeployWeek, EnvironmentView, Pick, ResourceCard, ResourceKind,
+};
 use crate::scanning::{Badge, BadgeState, Subject};
 use crate::state::AppState;
 use crate::ui::components::{
@@ -152,7 +156,30 @@ fn network_line(team: TeamId, networks: &[crate::networks::service::NetworkView]
 	}
 }
 
-/// "6 resources in production · 4 running · 1 building": the environment at a glance.
+/// The status keys a resource counts under: its own, and that of a deployment on its way on
+/// top of it (an application that runs while its next release builds counts as both).
+fn keys_of(card: &ResourceCard) -> (&'static str, Option<&'static str>) {
+	(
+		status_data(card.status),
+		card.deployment.as_ref().map(in_flight_key),
+	)
+}
+
+/// Whether a resource is on its way somewhere: its own status is, or a deployment of it is.
+fn in_progress(card: &ResourceCard) -> bool {
+	matches!(
+		status_data(card.status),
+		"building" | "deploying" | "pending"
+	) || card.deployment.is_some()
+}
+
+/// Whether a resource will change by itself, so the page keeps polling.
+fn busy(card: &ResourceCard) -> bool {
+	in_flight(card.status) || card.deployment.is_some()
+}
+
+/// "6 resources in production · 4 running · 1 building": the environment at a glance. A
+/// running application with a build on its way counts as running and as building.
 fn summary_line(view: &EnvironmentView) -> String {
 	let n = view.resources.len();
 	let mut line = format!(
@@ -171,7 +198,10 @@ fn summary_line(view: &EnvironmentView) -> String {
 		let count = view
 			.resources
 			.iter()
-			.filter(|c| status_data(c.status) == key)
+			.filter(|c| {
+				let (own, next) = keys_of(c);
+				own == key || next == Some(key)
+			})
 			.count();
 		if count > 0 {
 			let _ = write!(line, " · {count} {key}");
@@ -180,25 +210,72 @@ fn summary_line(view: &EnvironmentView) -> String {
 	line
 }
 
+/// The sub line of "Deploys this week": what went wrong, when anything did.
+pub(super) fn week_sub(week: DeployWeek) -> Option<String> {
+	let parts: Vec<String> = [(week.failed, "failed"), (week.rolled_back, "rolled back")]
+		.into_iter()
+		.filter(|(n, _)| *n > 0)
+		.map(|(n, word)| format!("{n} {word}"))
+		.collect();
+	(!parts.is_empty()).then(|| parts.join(" · "))
+}
+
 /// The environment as stat cards: how many resources it has, how many run, how many are
-/// on their way and how many need a look. The same counts as [`summary_line`].
-fn summary_stats(view: &EnvironmentView) -> Markup {
-	let count = |keys: &[&str]| {
+/// on their way (a deployment in flight counts) and how many need a look; then how often it
+/// was deployed this week, for people who may read deployments. The same counts as
+/// [`summary_line`]. Wrapped in `#env-stats` so the poll can refresh it.
+fn summary_stats(view: &EnvironmentView, week: Option<DeployWeek>) -> Markup {
+	let count = |key: &str| {
 		view.resources
 			.iter()
-			.filter(|c| keys.contains(&status_data(c.status)))
+			.filter(|c| status_data(c.status) == key)
 			.count()
 			.to_string()
 	};
-	crate::ui::pages::apps::chrome::stats(
-		&format!("{} at a glance", view.environment.name),
-		&[
-			("Resources", view.resources.len().to_string()),
-			("Running", count(&["running"])),
-			("In progress", count(&["building", "deploying", "pending"])),
-			("Failed", count(&["failed"])),
-		],
-	)
+	let mut items = vec![
+		("Resources", view.resources.len().to_string(), None),
+		("Running", count("running"), None),
+		(
+			"In progress",
+			view.resources
+				.iter()
+				.filter(|c| in_progress(c))
+				.count()
+				.to_string(),
+			None,
+		),
+		("Failed", count("failed"), None),
+	];
+	if let Some(week) = week {
+		items.push(("Deploys this week", week.total.to_string(), week_sub(week)));
+	}
+	html! {
+		div id="env-stats" class="contents" {
+			@if !view.resources.is_empty() {
+				(crate::ui::pages::apps::chrome::stats_with_sub(
+					&format!("{} at a glance", view.environment.name),
+					&items,
+				))
+			}
+		}
+	}
+}
+
+/// The summary line under the title, with the id the poll patches it by.
+fn summary_lede(view: &EnvironmentView) -> Markup {
+	html! { p id="env-summary" class="ui-lede" { (summary_line(view)) } }
+}
+
+/// The deployments of this week, for someone who may read them; `None` hides the stat.
+async fn week_of(s: &AppState, ctx: &TeamCtx, view: &EnvironmentView) -> Option<DeployWeek> {
+	if !(ctx.perms.can(Action::Read, Resource::Application)
+		&& ctx.perms.can(Action::Read, Resource::Deployment))
+	{
+		return None;
+	}
+	overview::deploy_week(&s.db, ctx.user.id, ctx.team.id, view.environment.id)
+		.await
+		.ok()
 }
 
 // --- the list ------------------------------------------------------------------------
@@ -254,18 +331,28 @@ fn metrics(card: &ResourceCard) -> Markup {
 	}
 }
 
+/// What a card shows of its state: its status key, then `+` and the key of a deployment on
+/// its way (`running+building`).
+fn seen_key(card: &ResourceCard) -> String {
+	match keys_of(card) {
+		(own, Some(next)) => format!("{own}+{next}"),
+		(own, None) => own.to_owned(),
+	}
+}
+
 /// What the page last showed of each resource, as `kind:id=status` pairs. The poll sends it
 /// back so the server can say which statuses changed since.
 fn seen_of(cards: &[ResourceCard]) -> String {
 	cards
 		.iter()
-		.map(|c| format!("{}:{}={}", c.kind.slug(), c.id, status_data(c.status)))
+		.map(|c| format!("{}:{}={}", c.kind.slug(), c.id, seen_key(c)))
 		.collect::<Vec<_>>()
 		.join(";")
 }
 
-/// Whether a card's status differs from the one the page last showed. A card the page has
-/// not seen yet, or a first render, is not a change.
+/// Whether a card's status differs from the one the page last showed, a deployment on its
+/// way included: a new release going live plays the change too. A card the page has not
+/// seen yet, or a first render, is not a change.
 fn changed_since(seen: Option<&str>, card: &ResourceCard) -> bool {
 	let Some(seen) = seen.filter(|s| !s.is_empty()) else {
 		return false;
@@ -273,7 +360,7 @@ fn changed_since(seen: Option<&str>, card: &ResourceCard) -> bool {
 	let key = format!("{}:{}=", card.kind.slug(), card.id);
 	seen.split(';')
 		.find_map(|pair| pair.strip_prefix(&key))
-		.is_some_and(|before| before != status_data(card.status))
+		.is_some_and(|before| before != seen_key(card))
 }
 
 /// The security badge of each resource the list shows, by what it is. A resource never
@@ -349,7 +436,10 @@ fn row(
 					span class="ui-res-when ui-res-none" { "—" }
 				}
 			}
-			div class="ui-res-status" { (status_badge(card.status, flip)) }
+			div class="ui-res-status" {
+				(status_badge(card.status, flip))
+				@if let Some(d) = &card.deployment { (in_flight_badge(d)) }
+			}
 			(metrics(card))
 		}
 	}
@@ -377,12 +467,12 @@ fn grid(
 	badges: &Badges,
 ) -> Markup {
 	let shown: Vec<&ResourceCard> = view.resources.iter().filter(|c| filter.keeps(c)).collect();
-	let busy = shown.iter().any(|c| in_flight(c.status));
+	let polling = shown.iter().any(|c| busy(c));
 	let fragment = fragment_url(ctx.team.id, view.project.id, &view.environment.slug);
 	let create = create_url(ctx.team.id, view.project.id, &view.environment.slug);
 	html! {
 		div id="resource-grid" class="ui-res-region" {
-			(poll(&fragment, busy))
+			(poll(&fragment, polling))
 			@if view.resources.is_empty() {
 				(empty_state(
 					"boxes",
@@ -522,6 +612,9 @@ fn tab_row(ctx: &TeamCtx, view: &EnvironmentView, previews: &HashSet<Environment
 					a href=(format!("{}/iac", project_url(ctx.team.id, view.project.id))) class=(MENU_ITEM) {
 						(icon("file-text")) "Infrastructure as code"
 					}
+					a href=(crate::ui::pages::quadlet::export_url(ctx.team.id, view.project.id)) class=(MENU_ITEM) {
+						(icon("package")) "Eject to Quadlet"
+					}
 				},
 			))
 		}
@@ -634,6 +727,8 @@ async fn render(
 		.map_err(|e| error::page(ctx, &e))?;
 	let now = OffsetDateTime::now_utc();
 	let badges = badges_of(s, ctx, &view).await;
+	let week = week_of(s, ctx, &view).await;
+	let activity = activity::load(s, ctx, &view, now).await;
 	let can_pick = picker::can_create_any(ctx);
 	let can_read_shared = ctx.perms.can(Action::Read, Resource::EnvVar);
 	let can_create_env = ctx.perms.can(Action::Create, Resource::Project);
@@ -681,7 +776,7 @@ async fn render(
 				div class="ui-page-title" {
 					p class="ui-eyebrow" { "Project" }
 					h1 { (view.project.name) }
-					p class="ui-lede" { (summary_line(&view)) }
+					(summary_lede(&view))
 					(network_line(ctx.team.id, &env_networks))
 				}
 				div class="ui-page-actions" {
@@ -703,10 +798,15 @@ async fn render(
 					}
 				}
 			}
-			@if !view.resources.is_empty() { (summary_stats(&view)) }
+			(summary_stats(&view, week))
 			(tab_row(ctx, &view, &previews))
-			(filter_bar(&view, ctx, filter))
-			(grid(s, ctx, &view, filter, now, None, &badges))
+			div class="ui-res-split" {
+				div class="ui-res-col" {
+					(filter_bar(&view, ctx, filter))
+					(grid(s, ctx, &view, filter, now, None, &badges))
+				}
+				@if let Some(panel) = &activity { (panel) }
+			}
 			@if can_create_env { (create_env_dialog(ctx.team.id, view.project.id)) }
 			@if let Some(dialog) = &clone_dialog { (dialog) }
 			@if can_update { (rename_env_dialog(ctx.team.id, view.project.id)) }
@@ -766,16 +866,17 @@ async fn resources(
 			// change animation, then `seen` catches up so the next poll does not repeat it.
 			let seen = (!sig.seen.is_empty()).then_some(sig.seen.as_str());
 			let badges = badges_of(&s, &ctx, &view).await;
-			let markup = grid(
-				&s,
-				&ctx,
-				&view,
-				&filter,
-				OffsetDateTime::now_utc(),
-				seen,
-				&badges,
-			);
-			sse::patch(&markup)
+			let now = OffsetDateTime::now_utc();
+			let markup = grid(&s, &ctx, &view, &filter, now, seen, &badges);
+			// The stats, the summary and the activity move with the rows: refresh them too.
+			let week = week_of(&s, &ctx, &view).await;
+			let mut events = sse::patch(&markup)
+				.and(sse::patch(&summary_stats(&view, week)))
+				.and(sse::patch(&summary_lede(&view)));
+			if let Some(panel) = activity::load(&s, &ctx, &view, now).await {
+				events = events.and(sse::patch(&panel));
+			}
+			events
 				.and(sse::signals(&json!({ "seen": seen_of(&view.resources) })))
 				.into_response()
 		}

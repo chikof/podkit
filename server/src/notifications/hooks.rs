@@ -237,6 +237,19 @@ pub async fn job_finished(state: &AppState, job: &Job, result: &Result<(), JobFa
 					.link(link),
 			}
 		}
+		JobKind::RestoreDrill => {
+			let Err(e) = result else { return };
+			let database_id = sqlx::query_scalar::<_, i64>(
+				"SELECT database_id FROM restore_drills WHERE id = $1",
+			)
+			.bind(job.target_id)
+			.fetch_optional(db)
+			.await
+			.ok()
+			.flatten();
+			restore_drill_failed(state, database_id.unwrap_or_default(), failure_text(e)).await;
+			return;
+		}
 		JobKind::ModelStart => {
 			let Err(e) = result else { return };
 			let Some(target) = model(db, job.target_id).await else {
@@ -272,6 +285,23 @@ pub async fn job_finished(state: &AppState, job: &Job, result: &Result<(), JobFa
 		}
 		_ => return,
 	};
+	super::emit(state, event).await;
+}
+
+/// A restore drill of a database failed: its backup did not restore, the copy came back
+/// empty or short, or there was no backup to try.
+pub async fn restore_drill_failed(state: &AppState, database_id: i64, why: &str) {
+	let Some(target) = database(&state.db, database_id).await else {
+		return;
+	};
+	let link = format!("{}/backups", target.link);
+	let event = target
+		.event(
+			EventKind::RestoreDrillFailed,
+			format!("Restore drill of {} failed", target.name),
+		)
+		.body(clip(why, 500))
+		.link(link);
 	super::emit(state, event).await;
 }
 

@@ -7,6 +7,10 @@ https_port = 443
 # Who may create an account: "first-user" (only while no account exists, so the
 # first user is the admin), "open" (anyone, for a hosted instance) or "closed".
 registration = "first-user"
+# While no account exists, the first sign-up needs a one-time setup token. podkit makes a random
+# one at every start and prints it to its log; set this (32+ characters) for an automated install
+# that creates the first account itself. Ignored once an account exists.
+# setup_token = ""
 # Whether podkit may send requests (notifications, imports, uptime checks, git providers, ...)
 # to private network addresses: "allow" or "deny". Unset: the instance administrator's setting
 # in Settings -> Registration, and without one "allow" for first-user and closed, "deny" for

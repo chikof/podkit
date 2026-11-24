@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM team_invites WHERE expires_at < NOW() - INTERVAL '30 days'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "4f3814984d7d999af84935bedfc026a7825017bdd571b053805a82e6ab4daf0e"
+}

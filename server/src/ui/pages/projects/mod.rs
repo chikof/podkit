@@ -6,6 +6,7 @@ use axum::Router;
 use crate::state::AppState;
 
 // The application pages reuse the resource status line and relative times.
+mod activity;
 pub(in crate::ui) mod cards;
 mod clone;
 #[cfg(test)]

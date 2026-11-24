@@ -2,6 +2,9 @@
 //! application, its status state machine, and the queries over the
 //! `deployments` table.
 
+pub mod promote;
+#[cfg(test)]
+mod promote_tests;
 mod routes;
 pub mod run;
 pub mod service;
@@ -111,6 +114,10 @@ pub struct Deployment {
 	pub started_at: Option<OffsetDateTime>,
 	/// When the attempt reached a terminal state.
 	pub finished_at: Option<OffsetDateTime>,
+	/// The deployment of another environment whose image this one runs, while it exists.
+	pub promoted_from: Option<DeploymentId>,
+	/// The name of that deployment's environment, kept after it is deleted.
+	pub promoted_from_environment: Option<String>,
 }
 
 impl Deployment {
@@ -147,7 +154,9 @@ impl Deployment {
 
 /// Inserts a new deployment row in the `queued` state. `commit_sha` and
 /// `image_tag` are pre-filled only for restarts and rollbacks, which reuse
-/// an already-built image instead of building from source.
+/// an already-built image instead of building from source. Only tests insert a row without
+/// queueing its job; everything else goes through [`queue`].
+#[cfg(test)]
 pub async fn insert(
 	db: impl PgExecutor<'_>,
 	application_id: ApplicationId,
@@ -155,30 +164,62 @@ pub async fn insert(
 	commit_sha: Option<&str>,
 	image_tag: Option<&str>,
 ) -> Result<Deployment, sqlx::Error> {
+	insert_from(
+		db,
+		application_id,
+		triggered_by,
+		commit_sha,
+		image_tag,
+		None,
+	)
+	.await
+}
+
+/// Where a promoted deployment came from: the deployment whose image it runs and the name
+/// of that deployment's environment.
+#[derive(Debug, Clone, Copy)]
+pub struct Origin<'a> {
+	pub deployment: DeploymentId,
+	pub environment: &'a str,
+}
+
+/// [`insert`], recording the deployment it was promoted from when there is one.
+async fn insert_from(
+	db: impl PgExecutor<'_>,
+	application_id: ApplicationId,
+	triggered_by: Option<UserId>,
+	commit_sha: Option<&str>,
+	image_tag: Option<&str>,
+	origin: Option<Origin<'_>>,
+) -> Result<Deployment, sqlx::Error> {
 	sqlx::query_as!(
 		Deployment,
 		r#"
-			INSERT INTO deployments (id, application_id, triggered_by, commit_sha, image_tag)
-			VALUES ($1, $2, $3, $4, $5)
+			INSERT INTO deployments (id, application_id, triggered_by, commit_sha, image_tag,
+				promoted_from, promoted_from_environment)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 			RETURNING
 				id AS "id!: DeploymentId",
 				application_id AS "application_id!: ApplicationId",
 				status AS "status!: DeploymentStatus",
 				commit_sha, image_tag, container_id, error_message,
-				started_at, finished_at
+				started_at, finished_at,
+				promoted_from AS "promoted_from: DeploymentId", promoted_from_environment
 		"#,
 		DeploymentId::generate().0,
 		application_id.0,
 		triggered_by.map(|u| u.0),
 		commit_sha,
 		image_tag,
+		origin.map(|o| o.deployment.0),
+		origin.map(|o| o.environment),
 	)
 	.fetch_one(db)
 	.await
 }
 
 /// Inserts a queued deployment for `app` and enqueues its Deploy job, which
-/// is the single entry point for deploy, restart, rollback and webhook.
+/// is the single entry point for deploy, restart, rollback, promotion and webhook.
 /// With `reuse`, the new row carries that deployment's image and commit so
 /// the job redeploys it without cloning or building.
 ///
@@ -190,6 +231,112 @@ pub async fn queue(
 	app: &Application,
 	triggered_by: Option<UserId>,
 	reuse: Option<&Deployment>,
+) -> Result<Deployment, ServerError> {
+	crate::moves::ensure_not_moving(&state.db, app).await?;
+	queue_from(state, app, triggered_by, reuse, None, "push").await
+}
+
+/// [`queue`], naming what started a deploy nobody asked for (`push`, `auto-update`) in its
+/// audit event.
+///
+/// # Errors
+/// See [`queue`].
+pub async fn queue_as(
+	state: &AppState,
+	app: &Application,
+	triggered_by: Option<UserId>,
+	reuse: Option<&Deployment>,
+	trigger: &str,
+) -> Result<Deployment, ServerError> {
+	crate::moves::ensure_not_moving(&state.db, app).await?;
+	queue_from(state, app, triggered_by, reuse, None, trigger).await
+}
+
+/// [`queue`] for a promotion: `source` is a deployment of the matching application in
+/// another environment, and the new deployment of `app` runs its image. The Deploy job
+/// brings the image over first when the two applications run on different servers.
+///
+/// # Errors
+/// As [`queue`].
+pub async fn queue_promotion(
+	state: &AppState,
+	app: &Application,
+	triggered_by: UserId,
+	source: &Deployment,
+	source_environment: &str,
+) -> Result<Deployment, ServerError> {
+	let origin = Origin {
+		deployment: source.id,
+		environment: source_environment,
+	};
+	crate::moves::ensure_not_moving(&state.db, app).await?;
+	queue_from(
+		state,
+		app,
+		Some(triggered_by),
+		Some(source),
+		Some(origin),
+		"promote",
+	)
+	.await
+}
+
+/// The deploy a move runs on the target (`moves::run`): `app` already points at it. With
+/// `reuse`, the image and commit of that deployment (copied there first); without, a fresh
+/// build or pull. No quota check, since the application is counted already, and no audit
+/// event: the move has its own.
+///
+/// # Errors
+/// [`ServerError::Validation`] when `reuse` has no image; the database fails.
+pub async fn queue_for_move(
+	state: &AppState,
+	app: &Application,
+	triggered_by: Option<UserId>,
+	reuse: Option<&Deployment>,
+) -> Result<Deployment, ServerError> {
+	let image_tag = match reuse {
+		Some(d) => Some(d.image_tag.as_deref().ok_or_else(|| {
+			ServerError::Validation("that deployment never produced an image".to_owned())
+		})?),
+		None => None,
+	};
+	let deployment = insert_from(
+		&state.db,
+		app.id,
+		triggered_by,
+		reuse.and_then(|d| d.commit_sha.as_deref()),
+		image_tag,
+		None,
+	)
+	.await?;
+	if let Err(e) = jobs::enqueue(
+		state,
+		JobKind::Deploy,
+		app.server_id,
+		deployment.id.0,
+		format!("app:{}", app.id),
+	)
+	.await
+	{
+		let _ = set_status(
+			&state.db,
+			deployment.id,
+			DeploymentStatus::Failed,
+			Some("failed to queue deploy job"),
+		)
+		.await;
+		return Err(e.into());
+	}
+	Ok(deployment)
+}
+
+async fn queue_from(
+	state: &AppState,
+	app: &Application,
+	triggered_by: Option<UserId>,
+	reuse: Option<&Deployment>,
+	origin: Option<Origin<'_>>,
+	trigger: &str,
 ) -> Result<Deployment, ServerError> {
 	let image_tag = reuse
 		.map(|t| {
@@ -203,7 +350,15 @@ pub async fn queue(
 	let commit_sha = reuse.and_then(|t| t.commit_sha.as_deref());
 	crate::quotas::service::check_deploy_in_project(state, app.project_id, "application").await?;
 
-	let deployment = insert(&state.db, app.id, triggered_by, commit_sha, image_tag).await?;
+	let deployment = insert_from(
+		&state.db,
+		app.id,
+		triggered_by,
+		commit_sha,
+		image_tag,
+		origin,
+	)
+	.await?;
 	if let Err(e) = jobs::enqueue(
 		state,
 		JobKind::Deploy,
@@ -244,11 +399,32 @@ pub async fn queue(
 				.in_project(app.project_id),
 			crate::audit::Diff::new()
 				.set("deployment_id", deployment.id.0)
-				.set("trigger", "push"),
+				.set("trigger", trigger.to_owned()),
 		)
 		.await;
 	}
 	Ok(deployment)
+}
+
+/// The server a promoted deployment's image is on now: the server of the application the
+/// deployment it came from belongs to. `None` for a deployment that was not promoted, or
+/// whose source has since been deleted.
+pub async fn promotion_source_server(
+	db: impl PgExecutor<'_>,
+	id: DeploymentId,
+) -> Result<Option<crate::ids::ServerId>, sqlx::Error> {
+	sqlx::query_scalar!(
+		r#"
+			SELECT a.server_id AS "server_id: crate::ids::ServerId"
+			FROM deployments d
+			JOIN deployments src ON src.id = d.promoted_from
+			JOIN applications a ON a.id = src.application_id
+			WHERE d.id = $1
+		"#,
+		id.0,
+	)
+	.fetch_optional(db)
+	.await
 }
 
 /// Persists the mutable fields of `d` (status plus what changes alongside
@@ -307,7 +483,8 @@ pub async fn set_status(
 				application_id AS "application_id!: ApplicationId",
 				status AS "status!: DeploymentStatus",
 				commit_sha, image_tag, container_id, error_message,
-				started_at, finished_at
+				started_at, finished_at,
+				promoted_from AS "promoted_from: DeploymentId", promoted_from_environment
 		"#,
 		id.0,
 		status.as_str(),
@@ -331,7 +508,8 @@ pub async fn find_by_id(
 				application_id AS "application_id!: ApplicationId",
 				status AS "status!: DeploymentStatus",
 				commit_sha, image_tag, container_id, error_message,
-				started_at, finished_at
+				started_at, finished_at,
+				promoted_from AS "promoted_from: DeploymentId", promoted_from_environment
 			FROM deployments
 			WHERE id = $1
 		"#,
@@ -356,7 +534,8 @@ pub async fn find(
 				application_id AS "application_id!: ApplicationId",
 				status AS "status!: DeploymentStatus",
 				commit_sha, image_tag, container_id, error_message,
-				started_at, finished_at
+				started_at, finished_at,
+				promoted_from AS "promoted_from: DeploymentId", promoted_from_environment
 			FROM deployments
 			WHERE id = $2 AND application_id = $1
 		"#,
@@ -383,7 +562,8 @@ pub async fn list(
 				application_id AS "application_id!: ApplicationId",
 				status AS "status!: DeploymentStatus",
 				commit_sha, image_tag, container_id, error_message,
-				started_at, finished_at
+				started_at, finished_at,
+				promoted_from AS "promoted_from: DeploymentId", promoted_from_environment
 			FROM deployments
 			WHERE application_id = $1 AND ($2::BIGINT IS NULL OR id < $2)
 			ORDER BY id DESC
@@ -410,7 +590,8 @@ pub async fn latest_with_image(
 				application_id AS "application_id!: ApplicationId",
 				status AS "status!: DeploymentStatus",
 				commit_sha, image_tag, container_id, error_message,
-				started_at, finished_at
+				started_at, finished_at,
+				promoted_from AS "promoted_from: DeploymentId", promoted_from_environment
 			FROM deployments
 			WHERE application_id = $1 AND image_tag IS NOT NULL
 			ORDER BY id DESC
@@ -435,7 +616,8 @@ pub async fn latest_running(
 				application_id AS "application_id!: ApplicationId",
 				status AS "status!: DeploymentStatus",
 				commit_sha, image_tag, container_id, error_message,
-				started_at, finished_at
+				started_at, finished_at,
+				promoted_from AS "promoted_from: DeploymentId", promoted_from_environment
 			FROM deployments
 			WHERE application_id = $1 AND status = 'running'
 			ORDER BY id DESC
@@ -480,6 +662,8 @@ mod tests {
 			error_message: None,
 			started_at: None,
 			finished_at: None,
+			promoted_from: None,
+			promoted_from_environment: None,
 		}
 	}
 

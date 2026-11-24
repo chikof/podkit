@@ -124,6 +124,72 @@ pub async fn run(
 	}
 }
 
+/// Parses and translates `stack`'s current compose file and variables: what a deploy runs.
+/// The Quadlet view uses it too, so the units match what runs.
+pub(crate) async fn plan(
+	state: &AppState,
+	stack: &Stack,
+	services: &[StackService],
+) -> Result<translate::Plan, JobFailure> {
+	let env = stacks::decrypt_env(&state.secrets, stack).map_err(|e| {
+		tracing::error!(stack = stack.id.0, "{e}");
+		failed("failed to read the stack's variables")
+	})?;
+	// The shared variables sit under the stack's own, so `${KEY}` finds them.
+	let env = shared_env::resolve::stack_inputs(state, stack.project_id, stack.environment_id, env)
+		.await
+		.map_err(|e| {
+			tracing::error!(stack = stack.id.0, "shared variables: {e}");
+			failed(e.to_string())
+		})?;
+	let files = stacks::decrypt_files(&state.secrets, stack).map_err(|e| {
+		tracing::error!(stack = stack.id.0, "{e}");
+		failed("failed to read the stack's files")
+	})?;
+	let compose = compose::parse(
+		&stack.compose_yaml,
+		&Inputs {
+			env: &env,
+			files: &files,
+		},
+	)
+	.map_err(|issues| failed(describe(&issues)))?;
+	let domains: BTreeMap<String, Domain> = services
+		.iter()
+		.filter(|svc| svc.status != ServiceStatus::Removing)
+		.filter_map(|svc| {
+			svc.domain.as_ref().map(|host| {
+				(
+					svc.name.clone(),
+					Domain {
+						host: host.clone(),
+						port: svc.domain_port.and_then(|p| u16::try_from(p).ok()),
+					},
+				)
+			})
+		})
+		.collect();
+	let mut plan = translate::plan(
+		&compose,
+		&Settings {
+			stack: stack.id.0,
+			ingress: proto::Ingress {
+				http_port: state.config.ingress_port,
+				https_port: state.config.https_port,
+				acme_email: state.config.acme_email.clone(),
+			},
+			domains: &domains,
+		},
+	)
+	.map_err(|issues| failed(describe(&issues)))?;
+	// The stack's own network, plus the ones it was attached to.
+	let linked = networks::attach::stack_links(&state.db, stack.id)
+		.await
+		.map_err(|e| db_failure(&e))?;
+	translate::link_networks(&mut plan, &linked);
+	Ok(plan)
+}
+
 struct Ctx<'a> {
 	state: &'a AppState,
 	job: &'a Job,
@@ -135,68 +201,7 @@ struct Ctx<'a> {
 impl Ctx<'_> {
 	/// Parses and translates the stack's current compose file and variables.
 	async fn plan(&self, services: &[StackService]) -> Result<translate::Plan, JobFailure> {
-		let env = stacks::decrypt_env(&self.state.secrets, self.stack).map_err(|e| {
-			tracing::error!(stack = self.stack.id.0, "{e}");
-			failed("failed to read the stack's variables")
-		})?;
-		// The shared variables sit under the stack's own, so `${KEY}` finds them.
-		let env = shared_env::resolve::stack_inputs(
-			self.state,
-			self.stack.project_id,
-			self.stack.environment_id,
-			env,
-		)
-		.await
-		.map_err(|e| {
-			tracing::error!(stack = self.stack.id.0, "shared variables: {e}");
-			failed(e.to_string())
-		})?;
-		let files = stacks::decrypt_files(&self.state.secrets, self.stack).map_err(|e| {
-			tracing::error!(stack = self.stack.id.0, "{e}");
-			failed("failed to read the stack's files")
-		})?;
-		let compose = compose::parse(
-			&self.stack.compose_yaml,
-			&Inputs {
-				env: &env,
-				files: &files,
-			},
-		)
-		.map_err(|issues| failed(describe(&issues)))?;
-		let domains: BTreeMap<String, Domain> = services
-			.iter()
-			.filter(|svc| svc.status != ServiceStatus::Removing)
-			.filter_map(|svc| {
-				svc.domain.as_ref().map(|host| {
-					(
-						svc.name.clone(),
-						Domain {
-							host: host.clone(),
-							port: svc.domain_port.and_then(|p| u16::try_from(p).ok()),
-						},
-					)
-				})
-			})
-			.collect();
-		let mut plan = translate::plan(
-			&compose,
-			&Settings {
-				stack: self.stack.id.0,
-				ingress: proto::Ingress {
-					http_port: self.state.config.ingress_port,
-					https_port: self.state.config.https_port,
-					acme_email: self.state.config.acme_email.clone(),
-				},
-				domains: &domains,
-			},
-		)
-		.map_err(|issues| failed(describe(&issues)))?;
-		// The stack's own network, plus the ones it was attached to.
-		let linked = networks::attach::stack_links(&self.state.db, self.stack.id)
-			.await
-			.map_err(|e| db_failure(&e))?;
-		translate::link_networks(&mut plan, &linked);
-		Ok(plan)
+		plan(self.state, self.stack, services).await
 	}
 
 	async fn services(&self) -> Result<Vec<StackService>, JobFailure> {
@@ -331,6 +336,7 @@ impl Ctx<'_> {
 					| Event::Exited { .. }
 					| Event::VolumeDumped { .. }
 					| Event::PartsUploaded { .. }
+					| Event::TablesCounted { .. }
 					| Event::Built { .. }
 					| Event::Done,
 				)) => {}

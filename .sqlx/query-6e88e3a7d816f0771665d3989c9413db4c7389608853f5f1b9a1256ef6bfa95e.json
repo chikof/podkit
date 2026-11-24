@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE restore_drills SET status = 'running', started_at = NOW() WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6e88e3a7d816f0771665d3989c9413db4c7389608853f5f1b9a1256ef6bfa95e"
+}

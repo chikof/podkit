@@ -31,6 +31,25 @@ fn view(err: &ServerError) -> View {
 			message: err.to_string(),
 		};
 	}
+	if matches!(
+		err,
+		ServerError::SetupTokenRequired | ServerError::InvalidSetupToken
+	) {
+		return View {
+			status,
+			title: "Setup token needed",
+			heading: "The first account needs the setup token",
+			message: err.to_string(),
+		};
+	}
+	if matches!(err, ServerError::InviteNotFound) {
+		return View {
+			status,
+			title: "Invite not valid",
+			heading: "This invite is not valid any more",
+			message: err.to_string(),
+		};
+	}
 	if matches!(err, ServerError::TwoFactorRequired) {
 		return View {
 			status,
@@ -136,6 +155,7 @@ fn humanize(raw: &str) -> String {
 pub fn message(err: &ServerError) -> String {
 	let v = view(err);
 	match v.status {
+		StatusCode::NOT_FOUND if matches!(err, ServerError::InviteNotFound) => v.message,
 		StatusCode::NOT_FOUND => "That no longer exists.".to_owned(),
 		s if s.is_server_error() && s != StatusCode::BAD_GATEWAY => GENERIC.to_owned(),
 		_ => humanize(&v.message),

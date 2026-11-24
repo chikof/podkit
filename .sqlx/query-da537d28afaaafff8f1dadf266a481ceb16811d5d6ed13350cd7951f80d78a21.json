@@ -1,0 +1,71 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT DISTINCT ON (d.application_id, d.status IN ('queued', 'building', 'deploying'))\n\t\t\t\td.id AS \"id: DeploymentId\",\n\t\t\t\td.application_id AS \"application_id: ApplicationId\",\n\t\t\t\td.status AS \"status!: DeploymentStatus\",\n\t\t\t\td.commit_sha,\n\t\t\t\tCOALESCE(d.finished_at, d.started_at) AS at\n\t\t\tFROM deployments d JOIN applications a ON a.id = d.application_id\n\t\t\tWHERE a.environment_id = $1\n\t\t\tORDER BY d.application_id, d.status IN ('queued', 'building', 'deploying'), d.id DESC\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: DeploymentId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "deployments",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "application_id: ApplicationId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "deployments",
+            "name": "application_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "status!: DeploymentStatus",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "deployments",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "commit_sha",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "deployments",
+            "name": "commit_sha"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "at",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "da537d28afaaafff8f1dadf266a481ceb16811d5d6ed13350cd7951f80d78a21"
+}

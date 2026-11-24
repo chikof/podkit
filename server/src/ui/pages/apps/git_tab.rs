@@ -193,7 +193,7 @@ fn blank_freeze() -> Value {
 }
 
 /// The page's signals: the blank freeze form and the shared error line.
-fn page_signals() -> Value {
+pub(super) fn page_signals() -> Value {
 	let mut signals = blank_freeze();
 	signals["_error"] = json!("");
 	signals
@@ -409,14 +409,19 @@ fn freeze_form(base: &str) -> Markup {
 }
 
 /// The freeze card. Its id is what the handlers patch.
-fn freeze_card(base: &str, freezes: &[Freeze], frozen_now: bool, can_edit: bool) -> Markup {
+pub(super) fn freeze_card(
+	base: &str,
+	freezes: &[Freeze],
+	frozen_now: bool,
+	can_edit: bool,
+) -> Markup {
 	let now = OffsetDateTime::now_utc();
 	html! {
 		div id="autodeploy-freezes" {
 			(card(&html! {
 				(card_section(
 					"Freeze windows",
-					Some("A push during a freeze waits and deploys when the freeze ends, unless someone with deploy rights sends it sooner."),
+					Some("A push or an image auto-update during a freeze waits and deploys when the freeze ends, unless someone with deploy rights sends it sooner."),
 					None,
 				))
 				(card_content(&html! {
@@ -424,11 +429,11 @@ fn freeze_card(base: &str, freezes: &[Freeze], frozen_now: bool, can_edit: bool)
 						@if frozen_now {
 							div class="ui-banner ui-banner-warn" role="status" {
 								(icon("triangle-alert"))
-								div class="ui-banner-body" { "A freeze is open now. Pushes wait." }
+								div class="ui-banner-body" { "A freeze is open now. Pushes and auto-updates wait." }
 							}
 						}
 						@if freezes.is_empty() {
-							p class="text-sm text-muted-foreground" { "No freezes. Every push that passes the rules deploys at once." }
+							p class="text-sm text-muted-foreground" { "No freezes. Deploys from pushes and auto-update start at once." }
 						} @else {
 							ul class="m-0 flex list-none flex-col gap-2 p-0" {
 								@for f in freezes {

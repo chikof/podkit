@@ -298,6 +298,7 @@ pub async fn create(
 	let environment =
 		environments::service::resolve(&s.db, team, project, body.environment_id).await?;
 	let server = scope::server(&s.db, team, body.server_id).await?;
+	crate::moves::ensure_open(&s.db, &server).await?;
 	let slug = validate_name(&body.name)?;
 	validate_env(&body.env)?;
 	crate::quotas::service::check_create(

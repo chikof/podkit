@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT COUNT(*) AS \"total!\",\n\t\t\t\tCOUNT(*) FILTER (WHERE d.status IN ('failed', 'crashed')\n\t\t\t\t\tAND h.state IS DISTINCT FROM 'rolled_back') AS \"failed!\",\n\t\t\t\tCOUNT(*) FILTER (WHERE h.state = 'rolled_back') AS \"rolled_back!\"\n\t\t\tFROM deployments d\n\t\t\tJOIN applications a ON a.id = d.application_id\n\t\t\tJOIN projects p ON p.id = a.project_id\n\t\t\tLEFT JOIN deployment_health h ON h.deployment_id = d.id\n\t\t\tWHERE a.environment_id = $1 AND p.team_id = $2\n\t\t\t\tAND d.created_at > now() - INTERVAL '7 days'\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "failed!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "rolled_back!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c65ae9adf4b4a5fb6fc568f13b5f701d837ec62ffafb010819055a0505add92a"
+}

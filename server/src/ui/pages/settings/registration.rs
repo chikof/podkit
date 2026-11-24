@@ -45,7 +45,7 @@ const fn describe(policy: Registration) -> (&'static str, Tone, &'static str, &'
 			"First user only",
 			Tone::Neutral,
 			"first-user",
-			"Only while no account exists. The first person to sign up becomes the administrator; after that the sign-up page is closed and people are added to a team by someone already in it.",
+			"Only while no account exists, and only with the setup token from podkit's log. The first person to sign up becomes the administrator; after that the sign-up page is closed and people join with an invite from a team's Members page.",
 		),
 		Registration::Open => (
 			"Open",
@@ -57,7 +57,7 @@ const fn describe(policy: Registration) -> (&'static str, Tone, &'static str, &'
 			"Closed",
 			Tone::Neutral,
 			"closed",
-			"Nobody can create an account. Add people to a team from the Members page; they need an account first, so switch to open for a moment to let them sign up.",
+			"Nobody can create an account without an invite. Invite people by email from a team's Members page; the invite lets that address sign up.",
 		),
 	}
 }

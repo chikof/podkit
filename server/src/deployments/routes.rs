@@ -34,6 +34,34 @@ pub struct DeploymentResponse {
 	pub image_tag: Option<String>,
 	pub container_id: Option<String>,
 	pub error_message: Option<String>,
+	/// The deployment of another environment this one was promoted from.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub promoted_from: Option<DeploymentId>,
+	/// The name of that deployment's environment.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub promoted_from_environment: Option<String>,
+	/// The health gate's verdict: `waiting`, `healthy`, `unhealthy` or `rolled_back`.
+	/// Absent when the application has no gate, and in answers that do not look it up.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub health: Option<crate::health_gate::State>,
+	/// Why the gate decided what it did, when it says.
+	#[serde(skip_serializing_if = "Option::is_none")]
+	pub health_detail: Option<String>,
+}
+
+impl DeploymentResponse {
+	/// Adds what the health gate recorded about each deployment.
+	async fn with_health(db: &sqlx::PgPool, mut list: Vec<Self>) -> AppResult<Vec<Self>> {
+		let ids: Vec<DeploymentId> = list.iter().map(|d| d.id).collect();
+		let mut verdicts = crate::health_gate::verdicts(db, &ids).await?;
+		for d in &mut list {
+			if let Some((state, detail)) = verdicts.remove(&d.id) {
+				d.health = Some(state);
+				d.health_detail = detail;
+			}
+		}
+		Ok(list)
+	}
 }
 
 impl From<&Deployment> for DeploymentResponse {
@@ -46,6 +74,10 @@ impl From<&Deployment> for DeploymentResponse {
 			image_tag: d.image_tag.clone(),
 			container_id: d.container_id.clone(),
 			error_message: d.error_message.clone(),
+			promoted_from: d.promoted_from,
+			promoted_from_environment: d.promoted_from_environment.clone(),
+			health: None,
+			health_detail: None,
 		}
 	}
 }
@@ -69,7 +101,7 @@ async fn create(
 }
 
 /// Lists deployments for an application, newest first, paged with `?limit=`
-/// (1..=200, default 50) and `?before=<deployment id>`.
+/// (1..=200, default 50) and `?before=<deployment id>`, each with the health gate's verdict.
 async fn list(
 	State(s): State<AppState>,
 	user: AuthUser,
@@ -84,11 +116,12 @@ async fn list(
 		.unwrap_or(DEFAULT_PAGE_SIZE)
 		.clamp(1, MAX_PAGE_SIZE);
 	let rows = deployments::list(&s.db, app.id, params.before, limit).await?;
-	Ok(Json(rows.iter().map(DeploymentResponse::from).collect()))
+	let list = rows.iter().map(DeploymentResponse::from).collect();
+	Ok(Json(DeploymentResponse::with_health(&s.db, list).await?))
 }
 
-/// Fetches a single deployment's current status. This is the endpoint to
-/// poll after `POST .../deployments`.
+/// Fetches a single deployment's current status, with the health gate's verdict. This is
+/// the endpoint to poll after `POST .../deployments`.
 async fn get_one(
 	State(s): State<AppState>,
 	user: AuthUser,
@@ -99,7 +132,9 @@ async fn get_one(
 	let d = deployments::find(&s.db, app.id, id)
 		.await?
 		.ok_or(ServerError::DeploymentNotFound)?;
-	Ok(Json(DeploymentResponse::from(&d)))
+	let mut one =
+		DeploymentResponse::with_health(&s.db, vec![DeploymentResponse::from(&d)]).await?;
+	Ok(Json(one.remove(0)))
 }
 
 /// Redeploys `{deployment_id}`'s already-built image (no git clone or

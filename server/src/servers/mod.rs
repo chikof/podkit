@@ -379,6 +379,125 @@ pub async fn mark_active(db: impl sqlx::PgExecutor<'_>, id: ServerId) -> Result<
 	Ok(())
 }
 
+/// Longest Podman version kept (the column's width); a longer one is cut.
+const PODMAN_VERSION_MAX: usize = 40;
+
+/// Stores what the agent's health check said about Podman. Writes only on a change, so a
+/// sweep of steady servers costs no row versions.
+///
+/// # Errors
+/// The database rejects the write.
+pub async fn record_podman(
+	db: impl sqlx::PgExecutor<'_>,
+	id: ServerId,
+	health: &proto::Health,
+) -> Result<(), sqlx::Error> {
+	let version: String = health
+		.podman_version
+		.chars()
+		.take(PODMAN_VERSION_MAX)
+		.collect();
+	let version = Some(version).filter(|v| !v.is_empty());
+	sqlx::query!(
+		r#"
+			UPDATE servers SET podman_version = $2, podman_rootless = $3
+			WHERE id = $1
+				AND (podman_version IS DISTINCT FROM $2 OR podman_rootless IS DISTINCT FROM $3)
+		"#,
+		id as ServerId,
+		version,
+		health.rootless,
+	)
+	.execute(db)
+	.await?;
+	Ok(())
+}
+
+/// What the sidebar's agent card says about a team's servers: how many there are, how many
+/// answer, and what the answering ones run. Read from the columns the status sync keeps, so
+/// it never reaches an agent.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AgentSummary {
+	/// Every server of the team.
+	pub total: i64,
+	/// Those whose agent answered the last health check.
+	pub connected: i64,
+	/// Distinct Podman versions the connected servers reported, sorted.
+	pub podman_versions: Vec<String>,
+	/// Connected servers whose Podman said it runs rootless.
+	pub rootless: i64,
+	/// Connected servers whose Podman said it runs as root.
+	pub rootful: i64,
+}
+
+impl AgentSummary {
+	/// `rootless`, `rootful` or `mixed`; `None` while no agent said (an older agent does not).
+	#[must_use]
+	pub fn mode(&self) -> Option<&'static str> {
+		match (self.rootless > 0, self.rootful > 0) {
+			(true, false) => Some("rootless"),
+			(false, true) => Some("rootful"),
+			(true, true) => Some("mixed"),
+			(false, false) => None,
+		}
+	}
+
+	/// `Podman 5.4.0`, or the range when the servers differ; `None` before any report.
+	#[must_use]
+	pub fn podman_label(&self) -> Option<String> {
+		match self.podman_versions.as_slice() {
+			[] => None,
+			[one] => Some(format!("Podman {one}")),
+			[first, .., last] => Some(format!("Podman {first} to {last}")),
+		}
+	}
+}
+
+/// Orders `5.10.0` after `5.4.0`: the numeric parts compare as numbers, the rest as text.
+fn version_key(version: &str) -> Vec<(u64, String)> {
+	version
+		.split(['.', '-', '+'])
+		.map(|part| (part.parse().unwrap_or(u64::MAX), part.to_owned()))
+		.collect()
+}
+
+/// The team's [`AgentSummary`] in one aggregate query over its servers.
+///
+/// # Errors
+/// The database rejects the read.
+pub async fn agent_summary(
+	db: impl sqlx::PgExecutor<'_>,
+	team: TeamId,
+) -> Result<AgentSummary, sqlx::Error> {
+	let row = sqlx::query!(
+		r#"
+			SELECT COUNT(*) AS "total!",
+				COUNT(*) FILTER (WHERE status = 'active') AS "connected!",
+				COUNT(*) FILTER (WHERE status = 'active' AND podman_rootless) AS "rootless!",
+				COUNT(*) FILTER (WHERE status = 'active' AND NOT podman_rootless) AS "rootful!",
+				COALESCE(
+					ARRAY_AGG(DISTINCT podman_version ORDER BY podman_version)
+						FILTER (WHERE status = 'active' AND podman_version IS NOT NULL),
+					'{}'
+				) AS "versions!: Vec<String>"
+			FROM servers
+			WHERE team_id = $1
+		"#,
+		team as TeamId
+	)
+	.fetch_one(db)
+	.await?;
+	let mut versions = row.versions;
+	versions.sort_by_cached_key(|v| version_key(v));
+	Ok(AgentSummary {
+		total: row.total,
+		connected: row.connected,
+		podman_versions: versions,
+		rootless: row.rootless,
+		rootful: row.rootful,
+	})
+}
+
 pub async fn delete(
 	db: impl sqlx::PgExecutor<'_>,
 	team: TeamId,
@@ -485,5 +604,31 @@ mod tests {
 		assert_eq!(host_key_fingerprint(""), None);
 		assert_eq!(host_key_fingerprint("host ssh-ed25519 !!!notbase64"), None);
 		assert_eq!(host_key_fingerprint("host"), None);
+	}
+
+	#[test]
+	fn agent_summary_names_the_podman_versions_and_the_mode() {
+		let mut summary = AgentSummary::default();
+		assert_eq!((summary.podman_label(), summary.mode()), (None, None));
+		summary.podman_versions = vec!["5.4.0".into()];
+		summary.rootless = 2;
+		assert_eq!(summary.podman_label().as_deref(), Some("Podman 5.4.0"));
+		assert_eq!(summary.mode(), Some("rootless"));
+		summary.podman_versions = vec!["4.9.3".into(), "5.0.1".into(), "5.4.0".into()];
+		summary.rootful = 1;
+		assert_eq!(
+			summary.podman_label().as_deref(),
+			Some("Podman 4.9.3 to 5.4.0")
+		);
+		assert_eq!(summary.mode(), Some("mixed"));
+		summary.rootless = 0;
+		assert_eq!(summary.mode(), Some("rootful"));
+	}
+
+	#[test]
+	fn versions_sort_by_their_numbers() {
+		let mut versions = vec!["5.10.0", "4.9.3", "5.4.0"];
+		versions.sort_by_cached_key(|v| version_key(v));
+		assert_eq!(versions, ["4.9.3", "5.4.0", "5.10.0"]);
 	}
 }

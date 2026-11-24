@@ -73,6 +73,7 @@ enum Tab {
 	Networks,
 	Usage,
 	Logs,
+	Quadlet,
 	Advanced,
 }
 
@@ -87,6 +88,7 @@ impl Tab {
 			Self::Networks => "networks",
 			Self::Usage => "usage",
 			Self::Logs => "logs",
+			Self::Quadlet => "quadlet",
 			Self::Advanced => "advanced",
 		}
 	}
@@ -101,6 +103,7 @@ impl Tab {
 			Self::Networks => "Networks",
 			Self::Usage => "Usage",
 			Self::Logs => "Logs",
+			Self::Quadlet => "Quadlet",
 			Self::Advanced => "Advanced",
 		}
 	}
@@ -114,6 +117,7 @@ impl Tab {
 			Some("networks") => Self::Networks,
 			Some("usage") => Self::Usage,
 			Some("logs") => Self::Logs,
+			Some("quadlet") => Self::Quadlet,
 			Some("advanced") => Self::Advanced,
 			_ => Self::General,
 		}
@@ -142,13 +146,11 @@ fn visible_tabs(ctx: &TeamCtx) -> Vec<Tab> {
 	if ctx.perms.can(Action::Read, Resource::Scan) {
 		tabs.push(Tab::Security);
 	}
-	tabs.extend([
-		Tab::Links,
-		Tab::Networks,
-		Tab::Usage,
-		Tab::Logs,
-		Tab::Advanced,
-	]);
+	tabs.extend([Tab::Links, Tab::Networks, Tab::Usage, Tab::Logs]);
+	if crate::ui::pages::quadlet::tab_allowed(ctx, Resource::Model) {
+		tabs.push(Tab::Quadlet);
+	}
+	tabs.push(Tab::Advanced);
 	tabs
 }
 
@@ -613,6 +615,10 @@ async fn page(
 				model_id.0,
 			)
 			.await?
+		}
+		Tab::Quadlet => {
+			let view = crate::quadlet::model(&s, ctx.user.id, ctx.team.id, project, model_id).await;
+			crate::ui::pages::quadlet::tab(&ctx, project, view)?
 		}
 		Tab::Advanced => advanced_tab(&ctx, &model),
 	};

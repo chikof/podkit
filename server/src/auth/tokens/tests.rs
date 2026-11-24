@@ -662,9 +662,20 @@ fn api_tokens_gate_table() {
 		(&deployer, M::POST, format!("{app}/deployments"), None),
 		(&deployer, M::POST, format!("{app}/restart"), None),
 		(&deployer, M::POST, format!("{app}/stop"), None),
+		(&deployer, M::POST, format!("{app}/promote"), None),
+		(&read, M::POST, format!("{app}/promote"), Some(403)),
 		(&deployer, M::POST, format!("{p}/stacks/1/deploy"), None),
 		(&deployer, M::POST, format!("{p}/templates/x/deploy"), None),
 		(&deployer, M::POST, format!("{p}/databases"), Some(403)),
+		// Check now deploys what it finds; changing the settings is a write.
+		(&deployer, M::POST, format!("{app}/auto-update/check"), None),
+		(
+			&read,
+			M::POST,
+			format!("{app}/auto-update/check"),
+			Some(403),
+		),
+		(&deployer, M::PUT, format!("{app}/auto-update"), Some(403)),
 		(&deployer, M::PATCH, app.clone(), Some(403)),
 		(&deployer, M::DELETE, app.clone(), Some(403)),
 		(&all, M::DELETE, app, None),
@@ -672,6 +683,7 @@ fn api_tokens_gate_table() {
 		(&all, M::GET, "/teams/8/projects".into(), Some(404)),
 		(&all, M::GET, "/teams/x/projects".into(), Some(404)),
 		(&all, M::GET, "/auth/login".into(), Some(403)),
+		(&read, M::GET, "/me".into(), None),
 		(&all, M::POST, "/teams".into(), None),
 		(&read, M::POST, "/teams/7/members".into(), Some(403)),
 		(&all, M::POST, "/teams/7/members".into(), None),
@@ -692,6 +704,8 @@ fn api_tokens_gate_table() {
 		(M::GET, "/teams/7/servers", None),
 		(M::GET, "/teams/7/backup-targets", Some(403)),
 		(M::GET, "/teams", None),
+		(M::GET, "/me", None),
+		(M::GET, "/me/avatar", Some(403)),
 		(M::GET, "/templates", None),
 	] {
 		let got = super::gate::check(&limited, &method, path)
@@ -709,4 +723,34 @@ async fn api_tokens_new_resources_know_the_registry_permission(db: PgPool) {
 	let alice = user_id(&db, "alice").await;
 	let perms = granted(&db, UserId(alice), TeamId(team)).await.unwrap();
 	assert!(perms.can(crate::auth::permission::Action::Create, Resource::Registry));
+}
+
+#[sqlx::test]
+async fn api_tokens_me_names_the_account_and_the_token_s_limits(db: PgPool) {
+	let app = app(db).await;
+	let (session, team) = user_with_team(&app, "alice").await;
+	let p = project(&app, &session, team, "web").await;
+
+	let (s, me) = call(&app, "GET", "/api/v1/me", Some(&session), None).await;
+	assert_eq!(s, StatusCode::OK, "{me}");
+	assert!(me["email"].as_str().unwrap().contains("alice"), "{me}");
+	assert!(me["token"].is_null(), "{me}");
+
+	let token = make(
+		&app,
+		&session,
+		team,
+		json!({ "scopes": ["read", "deploy"], "project_ids": [p] }),
+	)
+	.await;
+	let (s, me) = call(&app, "GET", "/api/v1/me", Some(secret(&token)), None).await;
+	assert_eq!(s, StatusCode::OK, "{me}");
+	assert_eq!(me["token"]["team_id"], json!(team));
+	assert_eq!(me["token"]["scopes"], json!(["read", "deploy"]));
+	assert_eq!(me["token"]["project_ids"], json!([p]));
+	assert!(!me.to_string().contains(secret(&token)), "{me}");
+
+	// No credentials at all is `MissingToken`, a 400 like everywhere else in the API.
+	let (s, _) = call(&app, "GET", "/api/v1/me", None, None).await;
+	assert_eq!(s, StatusCode::BAD_REQUEST);
 }

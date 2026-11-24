@@ -4,7 +4,7 @@
 use maud::{Markup, html};
 use time::{OffsetDateTime, UtcOffset};
 
-use crate::projects::overview::{ResourceCard, ResourceLogo, ResourceStatus};
+use crate::projects::overview::{InFlight, ResourceCard, ResourceLogo, ResourceStatus};
 use crate::ui::components::{LogoSize, Priority, Tone, image_logo, logo};
 use crate::ui::status::Status;
 
@@ -89,6 +89,30 @@ pub fn status_badge(status: ResourceStatus, flip: bool) -> Markup {
 		span class="ui-badge" data-status=(status_key(label, tone)) data-flip[flip] {
 			span class="ui-dot" aria-hidden="true" {}
 			span { (label) }
+		}
+	}
+}
+
+/// The `data-status` key of a deployment on its way: queued waits, the rest are podkit's work.
+pub fn in_flight_key(d: &InFlight) -> &'static str {
+	crate::ui::pages::apps::chrome::deployment_shape(d.status).key()
+}
+
+/// "Building 9f3c2ab": a deployment on its way while the resource keeps its own status. A
+/// smaller line under the status badge, with its own shaped dot and the word.
+pub fn in_flight_badge(d: &InFlight) -> Markup {
+	let word = d.status.label();
+	html! {
+		span class="ui-res-next" data-status=(in_flight_key(d)) title="A new deployment is on its way" {
+			span class="ui-dot" aria-hidden="true" {}
+			span {
+				(word)
+				@if let Some(sha) = d.short_commit() {
+					" " code { (sha) }
+				} @else {
+					"\u{2026}"
+				}
+			}
 		}
 	}
 }
@@ -216,6 +240,25 @@ mod tests {
 			DatabaseStatus::Running
 		)));
 		assert!(!in_flight(ResourceStatus::NotDeployed));
+	}
+
+	#[test]
+	fn a_deployment_in_flight_shows_its_phase_and_short_commit() {
+		use crate::ids::DeploymentId;
+		let d = |status, commit: Option<&str>| InFlight {
+			id: DeploymentId(1),
+			status,
+			commit: commit.map(str::to_owned),
+		};
+		let html =
+			in_flight_badge(&d(DeploymentStatus::Building, Some("9f3c2abbbbbb"))).into_string();
+		assert!(html.contains("data-status=\"building\""), "{html}");
+		assert!(html.contains("Building <code>9f3c2ab</code>"), "{html}");
+		let html = in_flight_badge(&d(DeploymentStatus::Queued, None)).into_string();
+		assert!(html.contains("data-status=\"pending\""), "{html}");
+		assert!(html.contains("Queued\u{2026}"), "{html}");
+		let html = in_flight_badge(&d(DeploymentStatus::Deploying, Some("<x>"))).into_string();
+		assert!(html.contains("&lt;x&gt;"), "{html}");
 	}
 
 	#[test]

@@ -98,12 +98,24 @@ pub fn head(logo: &Markup, eyebrow: &Markup, name: &str, sub: &Markup, actions: 
 /// The row of figures under the head: a label and a value each. Values that are not known
 /// are an em dash, so the row never changes shape.
 pub fn stats(label: &str, items: &[(&str, String)]) -> Markup {
+	let items: Vec<(&str, String, Option<String>)> = items
+		.iter()
+		.map(|(name, value)| (*name, value.clone(), None))
+		.collect();
+	stats_with_sub(label, &items)
+}
+
+/// [`stats`] where a figure may carry a short line under its number ("2 failed").
+pub fn stats_with_sub(label: &str, items: &[(&str, String, Option<String>)]) -> Markup {
 	html! {
 		dl class="ui-stats" aria-label=(label) {
-			@for (name, value) in items {
+			@for (name, value, sub) in items {
 				div {
 					dt { (name) }
 					dd { (value) }
+					@if let Some(sub) = sub {
+						dd class="ui-stats-sub" { (sub) }
+					}
 				}
 			}
 		}
@@ -171,5 +183,20 @@ mod tests {
 		let html = stats("Live figures", &[("CPU", "<b>1</b>".to_owned())]).into_string();
 		assert!(html.contains("aria-label=\"Live figures\""), "{html}");
 		assert!(html.contains("&lt;b&gt;1&lt;/b&gt;"), "{html}");
+		assert!(!html.contains("ui-stats-sub"), "{html}");
+		let html = stats_with_sub(
+			"Glance",
+			&[
+				(
+					"Deploys",
+					"4".to_owned(),
+					Some("1 <i>failed</i>".to_owned()),
+				),
+				("Running", "2".to_owned(), None),
+			],
+		)
+		.into_string();
+		assert_eq!(html.matches("ui-stats-sub").count(), 1, "{html}");
+		assert!(html.contains("1 &lt;i&gt;failed&lt;/i&gt;"), "{html}");
 	}
 }

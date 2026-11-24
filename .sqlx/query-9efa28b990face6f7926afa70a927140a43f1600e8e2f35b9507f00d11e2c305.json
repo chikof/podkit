@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE team_invites SET token_hash = $3, expires_at = $4, invited_by = $5\n\t\tWHERE team_id = $1 AND id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Bytea",
+        "Timestamptz",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9efa28b990face6f7926afa70a927140a43f1600e8e2f35b9507f00d11e2c305"
+}

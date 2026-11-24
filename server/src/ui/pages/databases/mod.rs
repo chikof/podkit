@@ -37,6 +37,7 @@ mod header;
 mod logs;
 mod monitoring;
 mod networks_tab;
+mod quadlet_tab;
 
 mod security;
 mod terminal_tab;
@@ -57,6 +58,7 @@ pub fn router() -> Router<AppState> {
 		.merge(monitoring::router())
 		.merge(networks_tab::router())
 		.merge(security::router())
+		.merge(quadlet_tab::router())
 		.merge(advanced::router())
 }
 
@@ -191,11 +193,12 @@ pub(in crate::ui) enum Tab {
 	Security,
 	Logs,
 	Terminal,
+	Quadlet,
 	Advanced,
 }
 
 impl Tab {
-	const ALL: [Self; 9] = [
+	const ALL: [Self; 10] = [
 		Self::General,
 		Self::Connection,
 		Self::Backups,
@@ -204,6 +207,7 @@ impl Tab {
 		Self::Security,
 		Self::Logs,
 		Self::Terminal,
+		Self::Quadlet,
 		Self::Advanced,
 	];
 
@@ -217,6 +221,7 @@ impl Tab {
 			Self::Security => "Security",
 			Self::Logs => "Logs",
 			Self::Terminal => "Terminal",
+			Self::Quadlet => "Quadlet",
 			Self::Advanced => "Advanced",
 		}
 	}
@@ -232,6 +237,7 @@ impl Tab {
 			Self::Security => "/security",
 			Self::Logs => "/logs",
 			Self::Terminal => "/terminal",
+			Self::Quadlet => "/quadlet",
 			Self::Advanced => "/advanced",
 		}
 	}
@@ -246,6 +252,7 @@ impl Tab {
 			Self::Backups => can(Action::Read, Resource::Backup),
 			Self::Monitoring | Self::Networks => can(Action::Read, Resource::Database),
 			Self::Security => can(Action::Read, Resource::Scan),
+			Self::Quadlet => crate::ui::pages::quadlet::tab_allowed(ctx, Resource::Database),
 			Self::Advanced => {
 				can(Action::Update, Resource::Database) || can(Action::Delete, Resource::Database)
 			}

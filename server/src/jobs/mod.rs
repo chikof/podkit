@@ -32,6 +32,9 @@ pub enum JobKind {
 	Backup,
 	/// `target_id` is a backup id, not a database id.
 	Restore,
+	/// `target_id` is a restore drill id. Restores the drill's backup into a throwaway copy
+	/// of the database and counts its tables; the real database is never touched.
+	RestoreDrill,
 	/// `target_id` is a model file id.
 	ModelDownload,
 	/// `target_id` is a model id. Deploys the engine container and waits until it answers.
@@ -70,6 +73,11 @@ pub enum JobKind {
 	TailscaleStart,
 	/// `target_id` is an application id. Logs the node out and removes the sidecar.
 	TailscaleRemove,
+	/// `target_id` is an application move id. Copies the application to another server and
+	/// switches it over; waits for the backup, restore and deploy jobs it queues.
+	ApplicationMove,
+	/// `target_id` is a server drain id. Moves the server's applications one at a time.
+	ServerDrain,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -280,6 +288,8 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 			.execute(&state.db)
 			.await
 		}
+		// The drill row says how it ended; the database and its backup are untouched.
+		JobKind::RestoreDrill => crate::backups::drills::fail(state, target_id, failure).await,
 		// The volume keeps what was downloaded, so a retry resumes.
 		JobKind::ModelDownload => {
 			let message = match failure {
@@ -402,6 +412,14 @@ pub async fn fail_target(state: &AppState, kind: JobKind, target_id: i64, failur
 			.execute(&state.db)
 			.await
 		}
+		// A move cut off after its switch is put back on the old server.
+		JobKind::ApplicationMove => crate::moves::fail_move(state, target_id, failure)
+			.await
+			.map(|()| sqlx::postgres::PgQueryResult::default()),
+		// The report keeps what it said; the server stays draining.
+		JobKind::ServerDrain => crate::moves::fail_drain(state, target_id, failure)
+			.await
+			.map(|()| sqlx::postgres::PgQueryResult::default()),
 	};
 	if let Err(e) = result {
 		tracing::warn!(

@@ -569,6 +569,14 @@ async fn script(w: &mut World) {
 		"env_var.set",
 	)
 	.await;
+	w.step(
+		"env_vars/routes::bulk",
+		"POST",
+		&format!("{base}/env-vars/bulk"),
+		Some(json!({ "text": format!("BULK_KEY={SECRET}-bulk\n") })),
+		"env_var.bulk_set",
+	)
+	.await;
 	let vars = w.scene("GET", &format!("{base}/env-vars"), None).await;
 	w.step(
 		"env_vars/routes::remove",
@@ -640,6 +648,36 @@ async fn script(w: &mut World) {
 		&format!("{base}/restart"),
 		None,
 		"app.restart",
+	)
+	.await;
+	// The same image, promoted to the copy of the application in another environment.
+	let qa = id(&w
+		.scene(
+			"POST",
+			&format!("/teams/{t}/projects/{p}/environments"),
+			Some(json!({ "name": "QA", "slug": "qa" })),
+		)
+		.await);
+	w.scene(
+		"POST",
+		&format!("/teams/{t}/projects/{p}/applications"),
+		Some(json!({
+			"name": "Whoami", "slug": "whoami-qa", "server_id": local,
+			"image": "traefik/whoami:v1", "container_port": 80, "environment_id": qa,
+		})),
+	)
+	.await;
+	w.sql(
+		"UPDATE deployments SET status = 'running' WHERE id = $1",
+		&[dep],
+	)
+	.await;
+	w.step(
+		"applications/routes::promote",
+		"POST",
+		&format!("{base}/promote"),
+		Some(json!({ "environment_id": qa })),
+		"app.promote",
 	)
 	.await;
 	// The push webhook has no session: podkit itself is the actor.

@@ -1,0 +1,51 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT COUNT(*) AS \"total!\",\n\t\t\t\tCOUNT(*) FILTER (WHERE status = 'active') AS \"connected!\",\n\t\t\t\tCOUNT(*) FILTER (WHERE status = 'active' AND podman_rootless) AS \"rootless!\",\n\t\t\t\tCOUNT(*) FILTER (WHERE status = 'active' AND NOT podman_rootless) AS \"rootful!\",\n\t\t\t\tCOALESCE(\n\t\t\t\t\tARRAY_AGG(DISTINCT podman_version ORDER BY podman_version)\n\t\t\t\t\t\tFILTER (WHERE status = 'active' AND podman_version IS NOT NULL),\n\t\t\t\t\t'{}'\n\t\t\t\t) AS \"versions!: Vec<String>\"\n\t\t\tFROM servers\n\t\t\tWHERE team_id = $1\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "total!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "connected!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "rootless!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "rootful!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "versions!: Vec<String>",
+        "type_info": "VarcharArray",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "768b9ca28c67803ab36fd12abf1b49157a7865c693a31955be37bd20e2e590a0"
+}

@@ -203,11 +203,11 @@ async fn queue_or_fail(
 	Ok(())
 }
 
-/// The team's servers, for the create form's server select; needs
-/// `create database`.
+/// The team's servers that take new resources (not draining), for the create form's
+/// server select; needs `create database`.
 pub async fn servers_for_create(db: &PgPool, user: UserId, team: TeamId) -> AppResult<Vec<Server>> {
 	authorize(db, user, team, Action::Create, Resource::Database).await?;
-	Ok(servers::list_by_team(db, team).await?)
+	crate::moves::open_servers(db, servers::list_by_team(db, team).await?).await
 }
 
 /// The team's backup targets as (id, name), for the settings form; needs
@@ -239,6 +239,7 @@ pub async fn create(
 	let environment =
 		environments::service::resolve(&s.db, team, project, body.environment_id).await?;
 	let server = scope::server(&s.db, team, body.server_id).await?;
+	crate::moves::ensure_open(&s.db, &server).await?;
 
 	if body.name.trim().is_empty() || body.name.len() > 60 {
 		return Err(ServerError::Validation(

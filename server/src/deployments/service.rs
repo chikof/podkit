@@ -62,6 +62,15 @@ pub struct GateView {
 	pub detail: Option<String>,
 }
 
+/// Where a promoted deployment came from.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromotionOrigin {
+	/// The name of the source environment, kept after the source is deleted.
+	pub environment: String,
+	/// The source deployment and its application, while they exist.
+	pub deployment: Option<(ApplicationId, DeploymentId)>,
+}
+
 /// A deployment as the UI lists it: its row plus who started it and when.
 #[derive(Debug, Clone)]
 pub struct DeploymentView {
@@ -76,6 +85,8 @@ pub struct DeploymentView {
 	pub gate: Option<GateView>,
 	/// The deployment an automatic rollback replaced.
 	pub rollback_of: Option<DeploymentId>,
+	/// Set when it was promoted from another environment.
+	pub promoted_from: Option<PromotionOrigin>,
 	pub created_at: OffsetDateTime,
 	pub started_at: Option<OffsetDateTime>,
 	pub finished_at: Option<OffsetDateTime>,
@@ -146,6 +157,9 @@ struct Row {
 	health_state: Option<crate::health_gate::State>,
 	health_detail: Option<String>,
 	rollback_of: Option<i64>,
+	promoted_from: Option<i64>,
+	promoted_from_environment: Option<String>,
+	promoted_from_application: Option<i64>,
 }
 
 impl From<Row> for DeploymentView {
@@ -168,6 +182,15 @@ impl From<Row> for DeploymentView {
 				detail: r.health_detail,
 			}),
 			rollback_of: r.rollback_of.map(DeploymentId),
+			promoted_from: r
+				.promoted_from_environment
+				.map(|environment| PromotionOrigin {
+					environment,
+					deployment: r
+						.promoted_from_application
+						.zip(r.promoted_from)
+						.map(|(a, d)| (ApplicationId(a), DeploymentId(d))),
+				}),
 			created_at: r.created_at,
 			started_at: r.started_at,
 			finished_at: r.finished_at,
@@ -208,7 +231,7 @@ pub async fn list(
 	)
 	.await?;
 	let rows = sqlx::query_as::<_, Row>(
-		"SELECT d.id, d.status, d.commit_sha, d.image_tag, d.error_message, d.triggered_by, d.created_at, d.started_at, d.finished_at, h.state AS health_state, h.detail AS health_detail, h.rollback_of FROM deployments d LEFT JOIN deployment_health h ON h.deployment_id = d.id WHERE d.application_id = $1 ORDER BY d.id DESC LIMIT 50",
+		"SELECT d.id, d.status, d.commit_sha, d.image_tag, d.error_message, d.triggered_by, d.created_at, d.started_at, d.finished_at, h.state AS health_state, h.detail AS health_detail, h.rollback_of, d.promoted_from, d.promoted_from_environment, src.application_id AS promoted_from_application FROM deployments d LEFT JOIN deployment_health h ON h.deployment_id = d.id LEFT JOIN deployments src ON src.id = d.promoted_from WHERE d.application_id = $1 ORDER BY d.id DESC LIMIT 50",
 	)
 	.bind(app.id.0)
 	.fetch_all(db)
@@ -236,7 +259,7 @@ pub async fn get(
 	)
 	.await?;
 	sqlx::query_as::<_, Row>(
-		"SELECT d.id, d.status, d.commit_sha, d.image_tag, d.error_message, d.triggered_by, d.created_at, d.started_at, d.finished_at, h.state AS health_state, h.detail AS health_detail, h.rollback_of FROM deployments d LEFT JOIN deployment_health h ON h.deployment_id = d.id WHERE d.id = $1 AND d.application_id = $2",
+		"SELECT d.id, d.status, d.commit_sha, d.image_tag, d.error_message, d.triggered_by, d.created_at, d.started_at, d.finished_at, h.state AS health_state, h.detail AS health_detail, h.rollback_of, d.promoted_from, d.promoted_from_environment, src.application_id AS promoted_from_application FROM deployments d LEFT JOIN deployment_health h ON h.deployment_id = d.id LEFT JOIN deployments src ON src.id = d.promoted_from WHERE d.id = $1 AND d.application_id = $2",
 	)
 	.bind(id.0)
 	.bind(app.id.0)

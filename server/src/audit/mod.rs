@@ -438,6 +438,7 @@ fn past_tense(verb: &str) -> Option<&'static str> {
 		"rename" => "Renamed",
 		"reorder" => "Reordered",
 		"import" => "Imported",
+		"export" => "Exported",
 		"apply" => "Applied",
 		"bootstrap" => "Bootstrapped",
 		"migrate" => "Migrated",

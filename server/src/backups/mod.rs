@@ -2,6 +2,7 @@
 //! the Backup and Restore jobs that move dumps between a server's agent and
 //! the target bucket.
 
+pub mod drills;
 mod routes;
 pub mod s3;
 pub mod schedule;
@@ -12,7 +13,7 @@ use axum::http::Method;
 use crypto::age::{AgeError, SecretBox};
 use futures_util::StreamExt;
 use futures_util::stream::BoxStream;
-use proto::{DumpRequest, Event, RestoreRequest, Stream as LogStream, UploadRequest};
+use proto::{CountRequest, DumpRequest, Event, RestoreRequest, Stream as LogStream, UploadRequest};
 use serde::Serialize;
 use sqlx::{PgExecutor, PgPool};
 use time::OffsetDateTime;
@@ -399,10 +400,47 @@ pub(crate) async fn team_of(db: &PgPool, project: ProjectId) -> Result<TeamId, J
 	.ok_or_else(|| failed("project not found"))
 }
 
+/// A backup with everything needed to reach its dump and its database's server: what a
+/// Backup, Restore or restore drill job resolves before it touches the agent.
+pub(crate) struct Resolved {
+	pub backup: Backup,
+	pub database: Database,
+	pub target: BackupTarget,
+	pub secret: Zeroizing<String>,
+	pub team: TeamId,
+	pub client: AgentClient,
+}
+
 /// The job runs without a team context, so the server is resolved through
 /// the database's project.
 async fn prepare(state: &AppState, job: &Job) -> Result<Prepared, JobFailure> {
-	let backup = find_by_id(&state.db, BackupId(job.target_id))
+	let Resolved {
+		backup,
+		database,
+		target,
+		secret,
+		team,
+		client,
+	} = resolve(state, BackupId(job.target_id)).await?;
+	let container = database
+		.container_id
+		.clone()
+		.ok_or_else(|| failed("database has no container"))?;
+	Ok(Prepared {
+		backup,
+		database,
+		target,
+		secret,
+		team,
+		container,
+		client,
+	})
+}
+
+/// Resolves a backup, its database, target, secret, team and server agent. Missing pieces
+/// fail the job with a message safe to show.
+pub(crate) async fn resolve(state: &AppState, id: BackupId) -> Result<Resolved, JobFailure> {
+	let backup = find_by_id(&state.db, id)
 		.await
 		.map_err(|e| db_failure(&e))?
 		.ok_or_else(|| failed("backup not found"))?;
@@ -410,10 +448,6 @@ async fn prepare(state: &AppState, job: &Job) -> Result<Prepared, JobFailure> {
 		.await
 		.map_err(|e| db_failure(&e))?
 		.ok_or_else(|| failed("database not found"))?;
-	let container = database
-		.container_id
-		.clone()
-		.ok_or_else(|| failed("database has no container"))?;
 	let target_id = backup
 		.target_id
 		.ok_or_else(|| failed("the backup target was deleted"))?;
@@ -448,13 +482,12 @@ async fn prepare(state: &AppState, job: &Job) -> Result<Prepared, JobFailure> {
 		}
 	})?;
 
-	Ok(Prepared {
+	Ok(Resolved {
 		backup,
 		database,
 		target,
 		secret,
 		team,
-		container,
 		client,
 	})
 }
@@ -520,6 +553,7 @@ pub async fn run_backup(
 	mark_running(&state.db, p.backup.id)
 		.await
 		.map_err(|e| db_failure(&e))?;
+	count_source_tables(state, &p, cancel, log).await?;
 
 	let dump = DumpRequest {
 		backup_id: p.backup.id.0,
@@ -553,6 +587,56 @@ pub async fn run_backup(
 		.await;
 
 	enforce_retention(state, &p, log).await;
+	Ok(())
+}
+
+/// Records how many tables the database has as it is dumped, so a restore drill can compare
+/// the copy against it. Best effort: a count that fails (an older agent, an engine that
+/// cannot answer) is logged and the backup goes on without it.
+async fn count_source_tables(
+	state: &AppState,
+	p: &Prepared,
+	cancel: &CancellationToken,
+	log: &mut JobLog,
+) -> Result<(), JobFailure> {
+	let request = CountRequest {
+		container: p.container.clone(),
+		engine: p.database.engine(),
+	};
+	let tables = match call(&p.client, "/v1/backups/count", &request, cancel, log).await {
+		Ok(Event::TablesCounted { tables }) => i64::try_from(tables).ok(),
+		Ok(_) => None,
+		Err(JobFailure::Cancelled) => return Err(JobFailure::Cancelled),
+		Err(JobFailure::Failed(message)) => {
+			log.push(
+				LogStream::System,
+				&format!("could not count the tables before the dump: {message}"),
+			)
+			.await;
+			None
+		}
+	};
+	let Some(tables) = tables else {
+		return Ok(());
+	};
+	if let Err(e) = sqlx::query!(
+		"UPDATE backups SET source_tables = $2 WHERE id = $1",
+		p.backup.id as BackupId,
+		tables,
+	)
+	.execute(&state.db)
+	.await
+	{
+		warn!(
+			backup = p.backup.id.0,
+			"cannot record the source table count: {e}"
+		);
+	}
+	log.push(
+		LogStream::System,
+		&format!("the database has {tables} tables"),
+	)
+	.await;
 	Ok(())
 }
 

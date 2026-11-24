@@ -98,11 +98,30 @@ fn trigger_label(t: &Trigger) -> &'static str {
 }
 
 /// What a deployment says about itself in the timeline.
-fn title_of(d: &DeploymentView) -> &'static str {
+fn title_of(d: &DeploymentView) -> String {
+	if let Some(origin) = &d.promoted_from {
+		return format!("Promoted from {}", origin.environment);
+	}
 	match d.trigger {
 		Trigger::User => "Deployed by hand",
 		Trigger::Webhook => "Deployed by webhook",
 		Trigger::AutoRollback => "Rolled back automatically",
+	}
+	.to_owned()
+}
+
+/// Where a promoted deployment came from: the source deployment, linked while it exists, and
+/// its environment. Nothing for any other deployment.
+fn origin(team: TeamId, project: ProjectId, d: &DeploymentView) -> Markup {
+	let Some(origin) = &d.promoted_from else {
+		return html! {};
+	};
+	html! {
+		@if let Some((app, id)) = origin.deployment {
+			a href=(deployment_url(&app_url(team, project, app), id)) { "#" (id) } " in " (origin.environment)
+		} @else {
+			(origin.environment) " (since deleted)"
+		}
 	}
 }
 
@@ -142,6 +161,7 @@ fn rollback_button(id: DeploymentId) -> Markup {
 }
 
 fn timeline_row(
+	(team, project): (TeamId, ProjectId),
 	base: &str,
 	d: &DeploymentView,
 	selected: bool,
@@ -165,6 +185,9 @@ fn timeline_row(
 				}
 				@if let Some(sha) = &d.commit_sha {
 					p class="ui-tl-meta" { code { (short_sha(sha)) } }
+				}
+				@if d.promoted_from.is_some() {
+					p class="ui-tl-meta" { "From " (origin(team, project, d)) }
 				}
 				@if let Some(note) = &note {
 					p class="ui-tl-meta" { (note) }
@@ -209,7 +232,7 @@ fn table(
 		div id="deployments" {
 			(poll(&poll_url, active))
 			ol class="ui-timeline" aria-label="Deployments, newest first" {
-				@for d in rows { (timeline_row(&base, d, selected == Some(d.id), now, can_create, can_update)) }
+				@for d in rows { (timeline_row((ctx.team.id, app.project_id), &base, d, selected == Some(d.id), now, can_create, can_update)) }
 			}
 		}
 	}
@@ -421,6 +444,9 @@ fn status_card(
 					chrome::dot(shape, &word)
 				}))
 				(fact("Trigger", &html! { (trigger_label(&d.trigger)) }))
+				@if d.promoted_from.is_some() {
+					(fact("Promoted from", &origin(ctx.team.id, app.project_id, d)))
+				}
 				@if let Some(note) = health_note(d) {
 					(fact("Health", &html! { (note) }))
 				}

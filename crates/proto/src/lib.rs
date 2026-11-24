@@ -7,6 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 pub mod cidr;
+pub mod quadlet;
 
 /// `GET /v1/health` response.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,6 +20,10 @@ pub struct Health {
 	/// relies on it (see [`FEATURE_COMMIT_PIN`]). Absent from an older agent.
 	#[serde(default)]
 	pub features: Vec<String>,
+	/// Whether Podman runs rootless. Absent from an older agent, and when Podman does not
+	/// say.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub rootless: Option<bool>,
 }
 
 /// A [`Health::features`] entry: the agent checks out the exact `commit` of a [`Source::Git`]
@@ -550,6 +555,11 @@ pub struct DeploySpec {
 	/// Absent in older payloads.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub replicas: Option<Replicas>,
+	/// The control plane checks the image's tag and redeploys when it moves (image
+	/// auto-update); the container is labelled `podkit.autoupdate=registry` to say so.
+	/// Absent in older payloads.
+	#[serde(default, skip_serializing_if = "std::ops::Not::not")]
+	pub auto_update: bool,
 }
 
 /// How many copies of a service run, and how a deploy replaces them. The copies are
@@ -955,6 +965,43 @@ pub struct RegistryLoginResult {
 	pub message: String,
 }
 
+/// `POST /v1/image-digest` body: which manifest a tag names at its registry right now, the
+/// check behind image auto-update. The agent asks the registry itself (the same place its
+/// pulls go), so nothing is pulled.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageDigestRequest {
+	/// The tag to look up (`ghcr.io/me/app:latest`). A reference pinned by digest is refused.
+	pub reference: String,
+	/// Registry credentials, sent only to the image's own registry and the token service it
+	/// names.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub auth: Option<RegistryAuth>,
+	/// The image the application runs now, to report every digest it is known by.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub local: Option<String>,
+}
+
+impl std::fmt::Debug for ImageDigestRequest {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("ImageDigestRequest")
+			.field("reference", &self.reference)
+			.field("auth", &self.auth)
+			.field("local", &self.local)
+			.finish()
+	}
+}
+
+/// `POST /v1/image-digest` answer. A registry that cannot be asked is an error with a message.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageDigestResult {
+	/// `sha256:…` of the manifest (or the multi-platform index) the tag names.
+	pub digest: String,
+	/// The digests the local image is known by (an index and its platform manifest both
+	/// count); empty when there is no local image.
+	#[serde(default)]
+	pub local_digests: Vec<String>,
+}
+
 /// Git credentials.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -1260,6 +1307,12 @@ pub enum Event {
 	},
 	/// Terminal: success without payload.
 	Done,
+	/// Terminal: the user tables of a database were counted (`POST /v1/backups/count`), or a
+	/// restore drill restored the dump and counted what it found (`POST /v1/backups/drill`).
+	TablesCounted {
+		/// Tables (Postgres, `MySQL`) or collections (`MongoDB`), system ones left out.
+		tables: u64,
+	},
 	/// Terminal: a scheduled task's command ran to its end; zero is success.
 	Exited {
 		/// The command's exit code.
@@ -1284,6 +1337,7 @@ impl Event {
 				| Self::Done | Self::Exited { .. }
 				| Self::VolumeDumped { .. }
 				| Self::PartsUploaded { .. }
+				| Self::TablesCounted { .. }
 				| Self::Failed { .. }
 		)
 	}
@@ -1470,6 +1524,69 @@ impl Engine {
 			Self::Redis => None,
 		}
 	}
+
+	/// Shell command that prints the number of user tables (collections for `MongoDB`) as
+	/// the last line of its output. It only reads, and it runs inside the database
+	/// container with the credentials of the container's own environment. `None` for Redis,
+	/// which has no backups to compare against.
+	///
+	/// Sources: `pg_class` (<https://www.postgresql.org/docs/current/catalog-pg-class.html>),
+	/// `MySQL` `information_schema.TABLES`
+	/// (<https://dev.mysql.com/doc/refman/9.0/en/information-schema-tables-table.html>),
+	/// `MongoDB` `listDatabases` and `listCollections`
+	/// (<https://www.mongodb.com/docs/manual/reference/command/listDatabases/>).
+	#[must_use]
+	pub fn count_cmd(self) -> Option<&'static str> {
+		match self {
+			Self::Postgres => Some(
+				r#"PGOPTIONS='-c default_transaction_read_only=on' psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atq -c "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r', 'p') AND n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg_toast%'""#,
+			),
+			Self::Mysql => Some(
+				r#"mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N -B -e "SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE'" "$MYSQL_DATABASE""#,
+			),
+			Self::Mongodb => Some(
+				r#"mongosh --quiet -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval 'let n = 0; db.adminCommand({ listDatabases: 1, nameOnly: true }).databases.forEach((d) => { if (!["admin", "local", "config"].includes(d.name)) { n += db.getSiblingDB(d.name).getCollectionNames().filter((c) => !c.startsWith("system.")).length } }); print(n)'"#,
+			),
+			Self::Redis => None,
+		}
+	}
+
+	/// Shell command that exits 0 once the engine accepts connections from its final server
+	/// process. The official images run a temporary server while they initialise; it listens
+	/// on a socket only (Postgres, `MySQL`) or on `127.0.0.1` without `--bind_ip_all`
+	/// (`MongoDB`), so asking over TCP, or asking how it was started, tells the two apart.
+	/// `None` for Redis.
+	#[must_use]
+	pub fn ready_cmd(self) -> Option<&'static str> {
+		match self {
+			Self::Postgres => {
+				Some(r#"pg_isready -q -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB""#)
+			}
+			Self::Mysql => {
+				Some(r#"mysqladmin ping --silent -h 127.0.0.1 -uroot -p"$MYSQL_ROOT_PASSWORD""#)
+			}
+			Self::Mongodb => Some(
+				r#"mongosh --quiet --host 127.0.0.1 -u "$MONGO_INITDB_ROOT_USERNAME" -p "$MONGO_INITDB_ROOT_PASSWORD" --authenticationDatabase admin --eval 'const o = db.adminCommand({ getCmdLineOpts: 1 }); quit(o.parsed && o.parsed.net && o.parsed.net.bindIpAll ? 0 : 1)'"#,
+			),
+			Self::Redis => None,
+		}
+	}
+}
+
+/// Reads the output of [`Engine::count_cmd`]: the last non-empty line, a whole number.
+///
+/// # Errors
+/// A message that quotes (a bounded part of) what was printed instead.
+pub fn parse_table_count(output: &str) -> Result<u64, String> {
+	let line = output
+		.lines()
+		.map(str::trim)
+		.rfind(|l| !l.is_empty())
+		.ok_or_else(|| "the table count printed nothing".to_owned())?;
+	line.parse::<u64>().map_err(|_| {
+		let shown: String = line.chars().take(120).collect();
+		format!("the table count printed {shown:?}, not a number")
+	})
 }
 
 /// `POST /v1/backups/dump` body.
@@ -1499,6 +1616,42 @@ pub struct RestoreRequest {
 	pub container: String,
 	/// Engine of the database.
 	pub engine: Engine,
+	/// Presigned GET url of the gzip dump.
+	pub url: String,
+}
+
+/// `POST /v1/backups/count` body. Streams [`Event::TablesCounted`] or [`Event::Failed`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CountRequest {
+	/// Container to exec in; the command only reads.
+	pub container: String,
+	/// Engine of the database.
+	pub engine: Engine,
+}
+
+/// `POST /v1/backups/drill` body: restore a dump into a throwaway container of the
+/// database's engine and count what came back. The container is private to the drill: no
+/// network, no published port, no named volume, resource limits, and it is removed whatever
+/// happens. Streams [`Event::Log`], then [`Event::TablesCounted`] or [`Event::Failed`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DrillRequest {
+	/// Names the container `podkit-drill-{drill_id}`.
+	pub drill_id: i64,
+	/// Engine of the database.
+	pub engine: Engine,
+	/// The same image (engine and version) the database runs.
+	pub image: String,
+	/// The engine's environment, as the database gets it, so the dump's owners and users
+	/// exist in the copy.
+	pub env: Vec<(String, String)>,
+	/// Overrides the image command, as for the database.
+	pub command: Option<Vec<String>>,
+	/// Memory limit in bytes.
+	pub memory_bytes: i64,
+	/// CPU limit in cores.
+	pub cpu_cores: f64,
+	/// Seconds to wait for the engine to accept connections.
+	pub ready_timeout_s: u32,
 	/// Presigned GET url of the gzip dump.
 	pub url: String,
 }
@@ -1895,6 +2048,58 @@ pub struct ErrorBody {
 mod tests {
 	use super::*;
 
+	#[test]
+	fn table_count_reads_the_last_line() {
+		assert_eq!(parse_table_count("12\n"), Ok(12));
+		assert_eq!(parse_table_count("  0 \r\n\n"), Ok(0));
+		// mongosh and mysql can print a notice before the answer.
+		assert_eq!(parse_table_count("Warning: something\n7\n"), Ok(7));
+	}
+
+	#[test]
+	fn table_count_refuses_anything_else() {
+		assert!(parse_table_count("").unwrap_err().contains("nothing"));
+		assert!(parse_table_count("\n  \n").is_err());
+		let err = parse_table_count("ERROR: relation does not exist").unwrap_err();
+		assert!(err.contains("not a number"), "{err}");
+		assert!(parse_table_count("-1").is_err());
+		let long = "x".repeat(500);
+		assert!(parse_table_count(&long).unwrap_err().len() < 200);
+	}
+
+	#[test]
+	fn every_engine_with_backups_can_be_drilled() {
+		for engine in [Engine::Postgres, Engine::Mysql, Engine::Mongodb] {
+			assert!(engine.dump_cmd().is_some());
+			assert!(engine.count_cmd().is_some(), "{engine:?}");
+			assert!(engine.ready_cmd().is_some(), "{engine:?}");
+		}
+		assert_eq!(Engine::Redis.count_cmd(), None);
+		assert_eq!(Engine::Redis.ready_cmd(), None);
+	}
+
+	#[test]
+	fn the_source_count_only_reads() {
+		let postgres = Engine::Postgres.count_cmd().unwrap();
+		assert!(postgres.contains("default_transaction_read_only=on"));
+		for engine in [Engine::Postgres, Engine::Mysql, Engine::Mongodb] {
+			let cmd = engine.count_cmd().unwrap().to_ascii_lowercase();
+			for write in ["insert", "update ", "delete", "drop", "create"] {
+				assert!(!cmd.contains(write), "{engine:?} count mentions {write}");
+			}
+		}
+	}
+
+	#[test]
+	fn tables_counted_is_terminal_and_tagged() {
+		let event = Event::TablesCounted { tables: 3 };
+		assert!(event.is_terminal());
+		assert_eq!(
+			serde_json::to_string(&event).unwrap(),
+			r#"{"type":"tables_counted","tables":3}"#
+		);
+	}
+
 	const OLD_DEPLOY: &str = r#"{
 		"service": "app-1", "instance_id": 3,
 		"source": {"type": "image", "reference": "alpine:3", "pull": true},
@@ -1903,6 +2108,19 @@ mod tests {
 		"memory_bytes": null, "cpu_cores": null, "strategy": "rolling",
 		"ingress": {"http_port": 80, "https_port": 443, "acme_email": null}
 	}"#;
+
+	#[test]
+	fn health_from_an_older_agent_has_no_rootless() {
+		let old: Health =
+			serde_json::from_str(r#"{"version": "0.1.0", "podman_version": "5.4.0"}"#).unwrap();
+		assert_eq!(old.rootless, None);
+		assert!(!serde_json::to_string(&old).unwrap().contains("rootless"));
+		let new: Health = serde_json::from_str(
+			r#"{"version": "0.2.0", "podman_version": "5.4.0", "rootless": true}"#,
+		)
+		.unwrap();
+		assert_eq!(new.rootless, Some(true));
+	}
 
 	#[test]
 	fn image_source_without_auth_round_trips() {

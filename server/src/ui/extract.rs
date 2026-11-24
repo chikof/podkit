@@ -9,7 +9,7 @@ use axum::http::{Method, request::Parts};
 use axum::response::{IntoResponse, Redirect, Response};
 
 use super::{error, sse};
-use crate::auth::permission::{self, Permissions};
+use crate::auth::permission::{self, Action, Permissions, Resource as Perm};
 use crate::auth::{SessionToken, session, users};
 use crate::environments::{self, Environment};
 use crate::error::ServerError;
@@ -17,6 +17,7 @@ use crate::ids::{
 	ApplicationId, DatabaseId, EnvironmentId, ModelId, ProjectId, StackId, TeamId, UserId,
 };
 use crate::projects::{self, Project};
+use crate::servers::AgentSummary;
 use crate::state::AppState;
 use crate::teams::{self, Team};
 
@@ -104,6 +105,9 @@ pub struct TeamCtx {
 	pub scope: Option<ProjectScope>,
 	/// Events the user has not read yet, for the bell. Counted on page loads only.
 	pub unread: i64,
+	/// The team's servers at a glance, for the sidebar's agent card. Read on page loads
+	/// only, and only for someone who may read servers.
+	pub agents: Option<AgentSummary>,
 }
 
 /// A project page's place in the hierarchy: the project, its siblings, and the
@@ -313,6 +317,14 @@ impl FromRequestParts<AppState> for TeamCtx {
 			0
 		};
 
+		// One aggregate over the team's servers, from what the status sync stored: the
+		// shell never reaches an agent. A failure only hides the card.
+		let agents = if is_navigation(&parts.method) && perms.can(Action::Read, Perm::Server) {
+			crate::servers::agent_summary(&state.db, team_id).await.ok()
+		} else {
+			None
+		};
+
 		Ok(Self {
 			user,
 			team,
@@ -321,6 +333,7 @@ impl FromRequestParts<AppState> for TeamCtx {
 			path,
 			scope,
 			unread,
+			agents,
 		})
 	}
 }

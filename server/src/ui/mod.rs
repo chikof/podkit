@@ -109,6 +109,7 @@ pub fn router() -> Router<AppState> {
 		.merge(pages::infrastructure::router())
 		.merge(pages::git_providers::router())
 		.merge(pages::iac::router())
+		.merge(pages::quadlet::router())
 		.merge(pages::importers::router())
 		.merge(pages::canvas::router())
 		.merge(pages::settings::router())
@@ -250,7 +251,10 @@ fn provider_buttons(buttons: &[crate::sso::providers::Button], next: &str) -> Ma
 	}
 }
 
-async fn login_page(State(s): State<AppState>, Query(query): Query<LoginQuery>) -> Markup {
+async fn login_page(State(s): State<AppState>, Query(query): Query<LoginQuery>) -> Response {
+	// Where to go next can name something private: keep such a page out of caches and
+	// referrers.
+	let private = query.next.is_some();
 	// A failed lookup hides the link: better no link than one that 403s.
 	let can_register = auth::service::registration_allowed(&s.db, s.config.registration)
 		.await
@@ -298,7 +302,19 @@ async fn login_page(State(s): State<AppState>, Query(query): Query<LoginQuery>) 
 			p class="ui-auth-foot" { "Ask an owner to add you if you do not have an account yet." }
 		}
 	};
-	layout::auth_page("Sign in", Some(&signals), &card, Some(&layout::auth_meta()))
+	let page = layout::auth_page("Sign in", Some(&signals), &card, Some(&layout::auth_meta()));
+	if private {
+		(
+			[
+				(header::CACHE_CONTROL, "no-store"),
+				(header::REFERRER_POLICY, "no-referrer"),
+			],
+			page,
+		)
+			.into_response()
+	} else {
+		page.into_response()
+	}
 }
 
 #[derive(Deserialize)]

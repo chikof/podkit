@@ -1,5 +1,6 @@
 //! Scheduled backups: the 5-field UTC cron helpers and the loop that queues
-//! a backup for every database whose schedule is due.
+//! a backup for every database whose schedule is due, and then the due restore
+//! drills ([`super::drills::schedule`]).
 
 use std::cmp::Ordering;
 use std::time::Duration;
@@ -112,10 +113,11 @@ struct Due {
 	schedule: String,
 }
 
-/// Queues the due backups once a minute until `shutdown`.
+/// Queues the due backups and restore drills once a minute until `shutdown`.
 pub async fn run(state: AppState, shutdown: CancellationToken) {
 	loop {
 		sweep(&state).await;
+		super::drills::schedule::sweep(&state).await;
 		tokio::select! {
 			() = shutdown.cancelled() => return,
 			() = tokio::time::sleep(INTERVAL) => {}

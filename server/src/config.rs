@@ -87,6 +87,12 @@ pub struct ServerConfig {
 	#[config(env = "REGISTRATION", default = "first-user")]
 	pub registration: String,
 
+	/// The first-run setup token, for an automated install that creates the first account
+	/// itself. Unset, podkit makes a random one at every start while no account exists and
+	/// prints it to its log. At least 32 characters; ignored once an account exists.
+	#[config(env = "SETUP_TOKEN")]
+	pub setup_token: Option<String>,
+
 	/// Whether podkit may make requests to private network addresses (RFC 1918, `fc00::/7`,
 	/// CGNAT) on behalf of notification channels, importers, uptime checks, git providers,
 	/// identity providers and backup targets: `allow` or `deny`. Unset, the instance admin's

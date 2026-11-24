@@ -61,11 +61,15 @@ async fn check(state: &AppState, server: &Server) {
 		Ok(client) => client,
 		Err(e) => return mark_unreachable(state, server, &e.to_string()).await,
 	};
-	if let Err(e) = client.health().await {
-		return mark_unreachable(state, server, &e.to_string()).await;
-	}
+	let health = match client.health().await {
+		Ok(health) => health,
+		Err(e) => return mark_unreachable(state, server, &e.to_string()).await,
+	};
 	if let Err(e) = super::mark_active(&state.db, server.id).await {
 		tracing::warn!(server = %server.id, error = %e, "status sync could not mark server active");
+	}
+	if let Err(e) = super::record_podman(&state.db, server.id, &health).await {
+		tracing::warn!(server = %server.id, error = %e, "status sync could not store the Podman version");
 	}
 	if server.status == ServerStatus::Unreachable {
 		crate::notifications::hooks::server_recovered(state, server.id.0).await;
@@ -94,7 +98,8 @@ async fn mark_unreachable(state: &AppState, server: &Server, message: &str) {
 }
 
 /// Marks deployments `crashed` and databases `failed` when the container the
-/// row says is running is gone or dead.
+/// row says is running is gone or dead. An application being moved is left alone: for a
+/// while its live row's container is on the other server.
 async fn mark_crashed(
 	state: &AppState,
 	server: ServerId,
@@ -108,6 +113,9 @@ async fn mark_crashed(
 			FROM deployments d
 			JOIN applications a ON a.id = d.application_id
 			WHERE a.server_id = $1 AND d.status = 'running' AND d.container_id IS NOT NULL
+				-- A moving application's container is on the other server for a while.
+				AND NOT EXISTS (SELECT 1 FROM application_moves m
+					WHERE m.application_id = a.id AND m.status IN ('queued', 'running'))
 		"#,
 		server as ServerId
 	)

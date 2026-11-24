@@ -642,3 +642,20 @@ async fn throttle_begin_without_a_request_still_works(db: PgPool) {
 		.unwrap();
 	assert_eq!(unknown, 0);
 }
+
+#[test]
+fn setup_guesses_count_per_ipv4_address_and_per_ipv6_64() {
+	use super::setup_bucket;
+	assert_eq!(setup_bucket("203.0.113.7"), "203.0.113.7");
+	assert_eq!(setup_bucket("::ffff:203.0.113.7"), "203.0.113.7");
+	assert_eq!(
+		setup_bucket("2001:db8:1:2:aaaa:bbbb:cccc:dddd"),
+		setup_bucket("2001:db8:1:2::1")
+	);
+	assert_eq!(setup_bucket("2001:db8:1:2::1"), "2001:db8:1:2::/64");
+	assert_ne!(
+		setup_bucket("2001:db8:1:2::1"),
+		setup_bucket("2001:db8:1:3::1")
+	);
+	assert_eq!(setup_bucket("unknown"), "unknown");
+}

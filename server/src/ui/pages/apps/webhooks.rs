@@ -1,6 +1,7 @@
 //! The Webhooks tab: the URL a git provider (or, for an image application, a registry or CI
 //! job) calls to deploy, and rotating its
-//! secret.
+//! secret. An image application also has its Auto-update section here (`auto_update_card`),
+//! the pull side of the same thing, with the freeze windows that hold it.
 //!
 //! The secret is shown once, in the response to the request that created or rotated it, and
 //! never again: this page holds the URL and the instructions, not the secret. Rotating
@@ -17,6 +18,7 @@ use super::create::copy_row;
 use super::{Tab, app_url, close_dialog, closer, forbid_unless_allowed, load, origin, page};
 use crate::applications::SourceKind;
 use crate::applications::service;
+use crate::auth::permission::{Action, Resource};
 use crate::ids::{ApplicationId, ProjectId, TeamId};
 use crate::state::AppState;
 use crate::ui::components::{
@@ -80,6 +82,28 @@ async fn webhooks_page(
 			"Whatever calls this URL",
 		)
 	};
+	// An image application: auto-update, and the freezes that hold it.
+	let auto_update = if git {
+		None
+	} else {
+		let view =
+			crate::auto_update::service::get(&s, ctx.user.id, ctx.team.id, project.id, app.id)
+				.await
+				.map_err(|e| crate::ui::error::page(&ctx, &e))?;
+		let freezes =
+			crate::autodeploy::service::get(&s, ctx.user.id, ctx.team.id, project.id, app.id)
+				.await
+				.map_err(|e| crate::ui::error::page(&ctx, &e))?;
+		let can_edit = ctx.perms.can(Action::Update, Resource::Application);
+		Some(html! {
+			div class="flex flex-col gap-6" "data-signals"=(super::git_tab::page_signals().to_string()) {
+				(super::auto_update_card::section(&base, &view, can_edit, ctx.perms.can(Action::Create, Resource::Deployment)))
+				@if view.unavailable.is_none() {
+					(super::git_tab::freeze_card(&format!("{base}/git"), &freezes.freezes, freezes.frozen_now, can_edit))
+				}
+			}
+		})
+	};
 	let rotate_lead = format!(
 		"The current secret stops working at once. {caller} is refused until you give it the new one."
 	);
@@ -114,6 +138,7 @@ async fn webhooks_page(
 				))
 				(card_content(&secret_slot(None)))
 			}))
+			@if let Some(section) = &auto_update { (section) }
 			(dialog(
 				"webhook-rotate",
 				"Rotate the webhook secret?",

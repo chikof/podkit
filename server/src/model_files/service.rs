@@ -101,6 +101,7 @@ pub async fn create(
 ) -> AppResult<ModelFile> {
 	authorize(&s.db, user, team, Action::Create, Resource::ModelFile).await?;
 	let server = scope::server(&s.db, team, req.server_id).await?;
+	crate::moves::ensure_open(&s.db, &server).await?;
 
 	let repo = req.repo.trim().to_owned();
 	let revision = req.revision.unwrap_or_else(|| "main".to_owned());

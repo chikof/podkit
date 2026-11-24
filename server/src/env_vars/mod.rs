@@ -4,6 +4,8 @@ use crate::ids::{ApplicationId, EnvVarId};
 
 pub mod routes;
 pub mod service;
+#[cfg(test)]
+mod tests;
 
 pub use routes::router;
 

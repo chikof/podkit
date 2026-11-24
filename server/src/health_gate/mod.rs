@@ -284,6 +284,24 @@ pub async fn start_rollback(
 	Ok(())
 }
 
+/// The gate's verdict and its detail for each of `deployments` that has one.
+pub async fn verdicts(
+	db: impl PgExecutor<'_>,
+	deployments: &[DeploymentId],
+) -> Result<std::collections::HashMap<DeploymentId, (State, Option<String>)>, sqlx::Error> {
+	let ids: Vec<i64> = deployments.iter().map(|d| d.0).collect();
+	let rows: Vec<(i64, State, Option<String>)> = sqlx::query_as(
+		"SELECT deployment_id, state, detail FROM deployment_health WHERE deployment_id = ANY($1)",
+	)
+	.bind(ids)
+	.fetch_all(db)
+	.await?;
+	Ok(rows
+		.into_iter()
+		.map(|(id, state, detail)| (DeploymentId(id), (state, detail)))
+		.collect())
+}
+
 /// A deploy that ended without a verdict must not stay "waiting for health": its row goes, or
 /// for a rollback (whose row carries what it replaced) becomes unhealthy with `detail`.
 pub async fn settle_waiting(

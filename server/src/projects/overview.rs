@@ -16,7 +16,8 @@ use crate::databases::{self, DatabaseStatus, EngineKind as DbEngine};
 use crate::deployments::DeploymentStatus;
 use crate::environments::{self, Environment};
 use crate::error::{AppResult, ServerError};
-use crate::ids::{ApplicationId, EnvironmentId, ProjectId, TeamId, UserId};
+use crate::health_gate::State as GateState;
+use crate::ids::{ApplicationId, DeploymentId, EnvironmentId, ProjectId, TeamId, UserId};
 use crate::models::{self, EngineKind as ModelEngine, ModelStatus};
 use crate::stacks::{self, StackStatus};
 use crate::{scope, servers};
@@ -115,6 +116,42 @@ pub struct ResourceCard {
 	/// The newest CPU and memory sample of a running resource; `None` when it has none
 	/// recent (stopped, not yet sampled).
 	pub usage: Option<Usage>,
+	/// A deployment on its way while an earlier one sets `status`: an application that runs
+	/// while its next release builds. `None` when nothing is in flight, and for a first
+	/// deployment, whose own phase is already the status.
+	pub deployment: Option<InFlight>,
+}
+
+/// A deployment that is queued, building or deploying.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InFlight {
+	pub id: DeploymentId,
+	pub status: DeploymentStatus,
+	/// The commit it builds, once known.
+	pub commit: Option<String>,
+}
+
+impl InFlight {
+	/// `9f3c2ab`: the commit as people quote it.
+	#[must_use]
+	pub fn short_commit(&self) -> Option<&str> {
+		self.commit.as_deref().map(short_sha)
+	}
+}
+
+/// The first seven characters of a commit sha.
+#[must_use]
+pub fn short_sha(sha: &str) -> &str {
+	sha.get(..7).unwrap_or(sha)
+}
+
+/// Queued, building or deploying: a deployment that can still change by itself.
+#[must_use]
+pub const fn deployment_in_flight(status: DeploymentStatus) -> bool {
+	matches!(
+		status,
+		DeploymentStatus::Queued | DeploymentStatus::Building | DeploymentStatus::Deploying
+	)
 }
 
 /// One resource's latest sample from the metrics sampler.
@@ -434,24 +471,29 @@ pub async fn rename(
 
 struct Latest {
 	application: ApplicationId,
+	id: DeploymentId,
 	status: DeploymentStatus,
+	commit: Option<String>,
 	at: Option<OffsetDateTime>,
 }
 
-/// The newest deployment of each application of the environment.
+/// For each application of the environment, its newest settled deployment (what is live, or
+/// what last failed) and its newest one still in flight; either may be missing.
 async fn latest_deployments(
 	db: &PgPool,
 	environment: EnvironmentId,
 ) -> Result<Vec<Latest>, sqlx::Error> {
 	let rows = sqlx::query!(
 		r#"
-			SELECT DISTINCT ON (d.application_id)
+			SELECT DISTINCT ON (d.application_id, d.status IN ('queued', 'building', 'deploying'))
+				d.id AS "id: DeploymentId",
 				d.application_id AS "application_id: ApplicationId",
 				d.status AS "status!: DeploymentStatus",
+				d.commit_sha,
 				COALESCE(d.finished_at, d.started_at) AS at
 			FROM deployments d JOIN applications a ON a.id = d.application_id
 			WHERE a.environment_id = $1
-			ORDER BY d.application_id, d.id DESC
+			ORDER BY d.application_id, d.status IN ('queued', 'building', 'deploying'), d.id DESC
 		"#,
 		environment as EnvironmentId
 	)
@@ -461,10 +503,34 @@ async fn latest_deployments(
 		.into_iter()
 		.map(|r| Latest {
 			application: r.application_id,
+			id: r.id,
 			status: r.status,
+			commit: r.commit_sha,
 			at: r.at,
 		})
 		.collect())
+}
+
+/// What an application's card says, from its newest settled and newest in-flight
+/// deployments: the settled one is the status and the other rides along; with nothing settled
+/// yet, the first deployment's own phase is the status.
+fn application_state(
+	settled: Option<&Latest>,
+	flying: Option<&Latest>,
+) -> (ResourceStatus, Option<InFlight>, Option<OffsetDateTime>) {
+	match (settled, flying) {
+		(Some(live), flying) => (
+			ResourceStatus::Deployment(live.status),
+			flying.map(|f| InFlight {
+				id: f.id,
+				status: f.status,
+				commit: f.commit.clone(),
+			}),
+			live.at,
+		),
+		(None, Some(first)) => (ResourceStatus::Deployment(first.status), None, first.at),
+		(None, None) => (ResourceStatus::NotDeployed, None, None),
+	}
 }
 
 /// The stacks of an environment as resource cards: a template stack carries the template's own
@@ -493,6 +559,7 @@ async fn stack_cards(db: &PgPool, environment: EnvironmentId) -> AppResult<Vec<R
 			status: ResourceStatus::Stack(st.status),
 			changed_at: Some(st.updated_at),
 			usage: None,
+			deployment: None,
 			name: st.name,
 		});
 	}
@@ -528,7 +595,12 @@ pub async fn environment_view(
 			let Some(server) = servers.iter().find(|s| s.id == app.server_id) else {
 				continue;
 			};
-			let latest = latest.iter().find(|l| l.application == app.id);
+			let mine = |flying: bool| {
+				latest
+					.iter()
+					.find(|l| l.application == app.id && deployment_in_flight(l.status) == flying)
+			};
+			let (status, deployment, changed_at) = application_state(mine(false), mine(true));
 			// A git application shows its host's mark and repository; an image application
 			// the registry's logo for its image (else Docker's) and the image itself.
 			let (mark, logo_url, detail) = match (&app.repo_url, &app.image) {
@@ -551,11 +623,10 @@ pub async fn environment_view(
 				logo_url,
 				detail,
 				host: Some(applications::public_hostname(&app.slug, server)),
-				status: latest.map_or(ResourceStatus::NotDeployed, |l| {
-					ResourceStatus::Deployment(l.status)
-				}),
-				changed_at: latest.and_then(|l| l.at),
+				status,
+				changed_at,
 				usage: None,
+				deployment,
 				name: app.name,
 			});
 		}
@@ -572,6 +643,7 @@ pub async fn environment_view(
 				status: ResourceStatus::Database(d.status),
 				changed_at: None,
 				usage: None,
+				deployment: None,
 				name: d.name,
 			});
 		}
@@ -588,6 +660,7 @@ pub async fn environment_view(
 				status: ResourceStatus::Model(m.status),
 				changed_at: Some(m.updated_at),
 				usage: None,
+				deployment: None,
 				name: m.name,
 			});
 		}
@@ -603,6 +676,125 @@ pub async fn environment_view(
 		environment,
 		resources,
 	})
+}
+
+// --- deployments of an environment ----------------------------------------------------
+
+/// The deployments of an environment's applications over the last seven days.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct DeployWeek {
+	pub total: i64,
+	/// Failed or crashed, not counting the ones the health gate rolled back.
+	pub failed: i64,
+	/// Went live, failed its health watch, and the previous image was put back.
+	pub rolled_back: i64,
+}
+
+/// Reading deployments, with the applications they belong to: `read application` and
+/// `read deployment`.
+async fn allow_deployments(db: &PgPool, user: UserId, team: TeamId) -> AppResult<()> {
+	authorize(db, user, team, Action::Read, Resource::Application).await?;
+	authorize(db, user, team, Action::Read, Resource::Deployment).await
+}
+
+/// How many deployments the environment's applications had in the last seven days, and how
+/// many of them failed or were rolled back; needs `read application` and `read deployment`.
+/// An environment of another team counts nothing.
+pub async fn deploy_week(
+	db: &PgPool,
+	user: UserId,
+	team: TeamId,
+	environment: EnvironmentId,
+) -> AppResult<DeployWeek> {
+	allow_deployments(db, user, team).await?;
+	let row = sqlx::query!(
+		r#"
+			SELECT COUNT(*) AS "total!",
+				COUNT(*) FILTER (WHERE d.status IN ('failed', 'crashed')
+					AND h.state IS DISTINCT FROM 'rolled_back') AS "failed!",
+				COUNT(*) FILTER (WHERE h.state = 'rolled_back') AS "rolled_back!"
+			FROM deployments d
+			JOIN applications a ON a.id = d.application_id
+			JOIN projects p ON p.id = a.project_id
+			LEFT JOIN deployment_health h ON h.deployment_id = d.id
+			WHERE a.environment_id = $1 AND p.team_id = $2
+				AND d.created_at > now() - INTERVAL '7 days'
+		"#,
+		environment as EnvironmentId,
+		team as TeamId,
+	)
+	.fetch_one(db)
+	.await?;
+	Ok(DeployWeek {
+		total: row.total,
+		failed: row.failed,
+		rolled_back: row.rolled_back,
+	})
+}
+
+/// One deployment of an environment's application, for its activity feed.
+#[derive(Debug, Clone)]
+pub struct DeploymentRecord {
+	pub id: DeploymentId,
+	pub application: ApplicationId,
+	/// The application's name.
+	pub name: String,
+	pub status: DeploymentStatus,
+	pub commit: Option<String>,
+	pub error: Option<String>,
+	/// The health gate's verdict, when the application has a gate.
+	pub gate: Option<GateState>,
+	/// An automatic rollback started it.
+	pub rollback: bool,
+	pub created_at: OffsetDateTime,
+	pub finished_at: Option<OffsetDateTime>,
+}
+
+/// The environment's deployments that moved last, newest first, at most `limit`; needs `read
+/// application` and `read deployment`. "Moved" is when one finished, else when it was queued.
+pub async fn recent_deployments(
+	db: &PgPool,
+	user: UserId,
+	team: TeamId,
+	environment: EnvironmentId,
+	limit: i64,
+) -> AppResult<Vec<DeploymentRecord>> {
+	allow_deployments(db, user, team).await?;
+	let rows = sqlx::query!(
+		r#"
+			SELECT d.id AS "id: DeploymentId", d.application_id AS "application_id: ApplicationId",
+				a.name, d.status AS "status!: DeploymentStatus", d.commit_sha, d.error_message,
+				h.state AS "gate?: GateState", (h.rollback_of IS NOT NULL) AS "rollback!",
+				d.created_at, d.finished_at
+			FROM deployments d
+			JOIN applications a ON a.id = d.application_id
+			JOIN projects p ON p.id = a.project_id
+			LEFT JOIN deployment_health h ON h.deployment_id = d.id
+			WHERE a.environment_id = $1 AND p.team_id = $2
+			ORDER BY COALESCE(d.finished_at, d.created_at) DESC, d.id DESC
+			LIMIT $3
+		"#,
+		environment as EnvironmentId,
+		team as TeamId,
+		limit.clamp(1, 50),
+	)
+	.fetch_all(db)
+	.await?;
+	Ok(rows
+		.into_iter()
+		.map(|r| DeploymentRecord {
+			id: r.id,
+			application: r.application_id,
+			name: r.name,
+			status: r.status,
+			commit: r.commit_sha,
+			error: r.error_message,
+			gate: r.gate,
+			rollback: r.rollback,
+			created_at: r.created_at,
+			finished_at: r.finished_at,
+		})
+		.collect())
 }
 
 #[cfg(test)]
@@ -650,6 +842,42 @@ mod tests {
 			repo_label("ssh://git@host.example:2222/acme/api"),
 			"host.example/2222/acme/api"
 		);
+	}
+
+	#[test]
+	fn a_live_deployment_is_the_status_and_one_in_flight_rides_along() {
+		let at = OffsetDateTime::from_unix_timestamp(1_800_000_000).unwrap();
+		let latest = |id: i64, status| Latest {
+			application: ApplicationId(1),
+			id: DeploymentId(id),
+			status,
+			commit: Some("9f3c2abbbbbb".to_owned()),
+			at: Some(at),
+		};
+		let live = latest(1, DeploymentStatus::Running);
+		let next = latest(2, DeploymentStatus::Building);
+		let (status, flying, when) = application_state(Some(&live), Some(&next));
+		assert_eq!(
+			status,
+			ResourceStatus::Deployment(DeploymentStatus::Running)
+		);
+		let flying = flying.unwrap();
+		assert_eq!(flying.status, DeploymentStatus::Building);
+		assert_eq!(flying.short_commit(), Some("9f3c2ab"));
+		assert_eq!(when, Some(at));
+		// A first deployment's phase is the status itself, with nothing riding along.
+		let (status, flying, _) = application_state(None, Some(&next));
+		assert_eq!(
+			status,
+			ResourceStatus::Deployment(DeploymentStatus::Building)
+		);
+		assert_eq!(flying, None);
+		let (status, flying, when) = application_state(None, None);
+		assert_eq!(status, ResourceStatus::NotDeployed);
+		assert_eq!((flying, when), (None, None));
+		assert!(deployment_in_flight(DeploymentStatus::Queued));
+		assert!(!deployment_in_flight(DeploymentStatus::Crashed));
+		assert_eq!(short_sha("abc"), "abc");
 	}
 
 	#[test]

@@ -9,6 +9,8 @@
 //!   email nobody has (`e:<hash>`) behave the same, so the answer never says which exist.
 //! - **the client address** (`ip:<addr>`): [`IP_LIMIT`] failures across any accounts stop
 //!   spraying one password over many emails.
+//! - **a setup token from one address** (`s:<addr>`): wrong first-run setup tokens, held to
+//!   [`ACCOUNT_LIMIT`] like an account (see `auth::setup`).
 //! - **the client address for tokens** (`tip:<addr>`): wrong API tokens, kept apart so a
 //!   script with a revoked token cannot lock its owner out of the sign-in page.
 //!
@@ -75,12 +77,23 @@ pub enum Who {
 	User(UserId),
 	/// An email that matched no account.
 	Email(String),
+	/// A first-run setup token (`auth::setup`), from this client address. Counted per address
+	/// rather than for the whole instance, so a stranger's guesses cannot lock the operator out
+	/// of setting podkit up.
+	Setup(String),
 }
 
 impl Who {
 	/// For an email typed at sign-in: the account when there is one, else the email itself.
 	pub fn of_email(user: Option<UserId>, email: &str) -> Self {
 		user.map_or_else(|| Self::Email(email.trim().to_lowercase()), Self::User)
+	}
+
+	/// A guess at the setup token from the current request's address. An IPv6 address counts
+	/// by its /64, which one host usually has whole, so rotating addresses inside it buys no
+	/// extra guesses.
+	pub fn setup() -> Self {
+		Self::Setup(setup_bucket(&client()))
 	}
 
 	fn subject(&self) -> String {
@@ -94,14 +107,32 @@ impl Who {
 				}
 				subject
 			}
+			Self::Setup(ip) => format!("s:{ip}"),
 		}
 	}
 
 	const fn user(&self) -> Option<UserId> {
 		match self {
 			Self::User(id) => Some(*id),
-			Self::Email(_) => None,
+			Self::Email(_) | Self::Setup(_) => None,
 		}
+	}
+}
+
+/// The bucket a setup-token guess from `ip` counts in: the address itself for IPv4 (an
+/// IPv4-mapped IPv6 address counts as its IPv4), its /64 for IPv6, the text as it is otherwise.
+fn setup_bucket(ip: &str) -> String {
+	match ip.parse::<std::net::IpAddr>() {
+		Ok(std::net::IpAddr::V6(v6)) => {
+			if let Some(v4) = v6.to_ipv4_mapped() {
+				return v4.to_string();
+			}
+			let s = v6.segments();
+			let net = std::net::Ipv6Addr::new(s[0], s[1], s[2], s[3], 0, 0, 0, 0);
+			format!("{net}/64")
+		}
+		Ok(v4) => v4.to_string(),
+		Err(_) => ip.to_owned(),
 	}
 }
 

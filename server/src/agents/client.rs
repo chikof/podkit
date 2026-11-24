@@ -314,6 +314,20 @@ impl AgentClient {
 		Ok(resp.image_id)
 	}
 
+	/// Which digest an image tag names at its registry now, asked from this server (the place
+	/// its pulls come from), with the digests of the image it runs.
+	///
+	/// # Errors
+	/// `Validation` carrying the agent's message when the registry cannot be asked; see
+	/// [`AgentClient::health`] otherwise (an agent too old for the request is unavailable).
+	pub async fn image_digest(
+		&self,
+		req: &proto::ImageDigestRequest,
+	) -> Result<proto::ImageDigestResult, ServerError> {
+		self.json_within_messages(REQUEST_TIMEOUT, Method::POST, "/v1/image-digest", Some(req))
+			.await
+	}
+
 	/// Runs a scan (or a rescan from an SBOM). Takes minutes for a big image.
 	///
 	/// # Errors

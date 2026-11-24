@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tDELETE FROM team_invites i\n\t\t\tWHERE i.team_id = $1 AND (\n\t\t\t\ti.invited_by IS NULL\n\t\t\t\tOR NOT EXISTS (\n\t\t\t\t\tSELECT 1 FROM team_members tm\n\t\t\t\t\tJOIN role_permissions rp ON rp.role_id = tm.role_id\n\t\t\t\t\tJOIN permissions p ON p.id = rp.permission_id\n\t\t\t\t\tWHERE tm.team_id = i.team_id AND tm.user_id = i.invited_by\n\t\t\t\t\tAND p.action = 'create' AND p.resource = 'membership'\n\t\t\t\t)\n\t\t\t\tOR EXISTS (\n\t\t\t\t\tSELECT 1 FROM role_permissions rp\n\t\t\t\t\tWHERE rp.role_id = i.role_id\n\t\t\t\t\tAND rp.permission_id NOT IN (\n\t\t\t\t\t\tSELECT own.permission_id FROM team_members tm\n\t\t\t\t\t\tJOIN role_permissions own ON own.role_id = tm.role_id\n\t\t\t\t\t\tWHERE tm.team_id = i.team_id AND tm.user_id = i.invited_by\n\t\t\t\t\t)\n\t\t\t\t)\n\t\t\t)\n\t\t",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f70fde83c4a8e0b67dc7b5fbec33e29b5f90a8b2f05ea0287be62ae2e0620a36"
+}

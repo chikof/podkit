@@ -17,8 +17,8 @@ use crate::state::AppState;
 /// Concurrent running jobs allowed per server. Scans and cron runs do not count: scans have
 /// a lane of their own (one at a time per server, by lock key), and a run of a scheduled
 /// task is policed by its task's concurrency policy, so a deploy never waits for either and
-/// neither waits for a deploy. Nor does an environment clone or a preview: it only waits for the jobs it
-/// queues, which need the slots.
+/// neither waits for a deploy. Nor does an environment clone, a preview, an application move or a
+/// server drain: each mostly waits for the jobs it queues, which need the slots.
 const MAX_JOBS_PER_SERVER: i64 = 2;
 
 const INTERRUPTED: &str = "interrupted: podkit restarted";
@@ -102,9 +102,9 @@ async fn claim(db: &PgPool, max: i64) -> Result<Option<Job>, sqlx::Error> {
 			SELECT j.id FROM jobs j
 			WHERE j.status = 'queued' AND j.run_after <= NOW()
 				AND NOT EXISTS (SELECT 1 FROM jobs r WHERE r.status = 'running' AND r.lock_key = j.lock_key)
-				AND (j.kind IN ('image_scan', 'image_rescan', 'cron_run', 'environment_clone', 'preview')
+				AND (j.kind IN ('image_scan', 'image_rescan', 'cron_run', 'environment_clone', 'preview', 'application_move', 'server_drain')
 					OR (SELECT COUNT(*) FROM jobs r WHERE r.status = 'running' AND r.server_id = j.server_id
-						AND r.kind NOT IN ('image_scan', 'image_rescan', 'cron_run', 'environment_clone', 'preview')) < $1)
+						AND r.kind NOT IN ('image_scan', 'image_rescan', 'cron_run', 'environment_clone', 'preview', 'application_move', 'server_drain')) < $1)
 			ORDER BY j.id FOR UPDATE SKIP LOCKED LIMIT 1)
 		RETURNING id, kind, server_id, target_id, lock_key, status, error",
 	)
@@ -167,6 +167,7 @@ async fn dispatch(
 		| JobKind::DatabasePurge => crate::databases::run::run(state, job, token, log).await,
 		JobKind::Backup => crate::backups::run_backup(state, job, token, log).await,
 		JobKind::Restore => crate::backups::run_restore(state, job, token, log).await,
+		JobKind::RestoreDrill => crate::backups::drills::run(state, job, token, log).await,
 		JobKind::ServerBootstrap => crate::servers::bootstrap::run(state, job, token, log).await,
 		JobKind::ModelDownload => crate::model_files::run::run(state, job, token, log).await,
 		JobKind::ModelStart | JobKind::ModelStop | JobKind::ModelRemove => {
@@ -194,6 +195,8 @@ async fn dispatch(
 		JobKind::TailscaleStart | JobKind::TailscaleRemove => {
 			crate::tailscale::run::run(state, job, token, log).await
 		}
+		JobKind::ApplicationMove => crate::moves::run::run_move(state, job, token, log).await,
+		JobKind::ServerDrain => crate::moves::run::run_drain(state, job, token, log).await,
 	}
 }
 

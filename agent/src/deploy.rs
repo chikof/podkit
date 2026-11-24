@@ -677,6 +677,9 @@ fn traefik_labels(spec: &DeploySpec) -> Vec<(String, String)> {
 	merge_router_middlewares(labels)
 }
 
+/// The label of a container whose image podkit keeps up to date with its tag.
+pub const AUTO_UPDATE_LABEL: &str = "podkit.autoupdate";
+
 /// Two features (replica retries and access rules) each attach middlewares to a router with a
 /// `traefik.http.routers.<name>.middlewares` label; a repeated label key would make the last
 /// one win and silently drop the other. One label per key, the values chained in the order
@@ -705,6 +708,12 @@ fn container_spec(
 ) -> ContainerSpec {
 	let mut labels = vec![("podkit.service".to_string(), spec.service.clone())];
 	labels.extend(traefik_labels(spec));
+	// Says that podkit watches the image's tag. Not `io.containers.autoupdate`: podman's own
+	// `podman auto-update` would then list the container, fail it for having no systemd unit,
+	// and mark its service failed; podkit's check, not podman's timer, owns the redeploy.
+	if spec.auto_update {
+		labels.push((AUTO_UPDATE_LABEL.to_string(), "registry".to_string()));
+	}
 	// Where the container lives: the stack network alone when isolated,
 	// otherwise `podkit` first and the stack networks after it.
 	let attached = |skip: usize| {
@@ -771,6 +780,7 @@ fn container_spec(
 			.or_else(|| spec.entrypoint.clone()),
 		shm_bytes: spec.shm_bytes,
 		stop_timeout_s: spec.stop_timeout_s,
+		no_network: false,
 		options: {
 			let mut options = spec.options.clone();
 			if let Some(gate) = &spec.health {
@@ -1074,6 +1084,7 @@ mod tests {
 			attach: Vec::new(),
 			health: None,
 			replicas: None,
+			auto_update: false,
 		}
 	}
 
@@ -1504,6 +1515,27 @@ mod tests {
 			"podkit-app-1-9",
 			"podkit-app-1-9"
 		));
+	}
+
+	#[test]
+	fn auto_update_labels_the_container_for_podkit_and_not_for_podman() {
+		let has = |s: &DeploySpec| {
+			container_spec(s, "img", "n", &[])
+				.labels
+				.iter()
+				.any(|(k, v)| k == AUTO_UPDATE_LABEL && v == "registry")
+		};
+		let mut s = spec();
+		assert!(!has(&s));
+		s.auto_update = true;
+		assert!(has(&s));
+		assert!(
+			!container_spec(&s, "img", "n", &[])
+				.labels
+				.iter()
+				.any(|(k, _)| k.starts_with("io.containers.autoupdate")),
+			"podman's own auto-update must not act on podkit's containers"
+		);
 	}
 
 	#[test]

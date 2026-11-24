@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO team_invites (id, team_id, email, role_id, token_hash, invited_by, expires_at)\n\t\tVALUES ($1, $2, $3, $4, $5, $6, $7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Varchar",
+        "Int8",
+        "Bytea",
+        "Int8",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "68865fa6d2655bcea0adab789af65c103bbcf2000423385ecb9de827f9bbb85d"
+}

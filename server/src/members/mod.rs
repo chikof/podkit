@@ -1,5 +1,6 @@
 //! Team membership and roles. Which role a member holds decides what they may do.
 
+pub mod invites;
 mod routes;
 pub mod service;
 
@@ -85,12 +86,15 @@ pub async fn insert(
 	.await
 }
 
+/// Changes a member's role, then drops the team's open invites that no longer have a sender
+/// allowed to make them (see [`invites::prune`]): a lowered role takes its invites with it.
+/// Returns how many invites went.
 pub async fn set_role(
-	db: impl sqlx::PgExecutor<'_>,
+	db: &sqlx::PgPool,
 	team: TeamId,
 	user: UserId,
 	role: RoleId,
-) -> Result<(), sqlx::Error> {
+) -> Result<u64, sqlx::Error> {
 	sqlx::query!(
 		"UPDATE team_members SET role_id = $1 WHERE team_id = $2 AND user_id = $3",
 		role as RoleId,
@@ -99,7 +103,56 @@ pub async fn set_role(
 	)
 	.execute(db)
 	.await?;
-	Ok(())
+	invites::prune(db, team).await
+}
+
+/// Whether every permission of `role` is one `user` holds in `team` through their own role.
+/// podkit's roles have no ranking of their own, so this is the rule for handing roles out:
+/// nobody gives (or changes) more than they hold.
+pub async fn role_within(
+	db: impl sqlx::PgExecutor<'_>,
+	user: UserId,
+	team: TeamId,
+	role: RoleId,
+) -> Result<bool, sqlx::Error> {
+	let wider = sqlx::query_scalar!(
+		r#"
+			SELECT EXISTS (
+				SELECT 1 FROM role_permissions rp
+				WHERE rp.role_id = $1
+				AND rp.permission_id NOT IN (
+					SELECT own.permission_id FROM team_members tm
+					JOIN role_permissions own ON own.role_id = tm.role_id
+					WHERE tm.team_id = $2 AND tm.user_id = $3
+				)
+			) AS "exists!"
+		"#,
+		role as RoleId,
+		team as TeamId,
+		user as UserId
+	)
+	.fetch_one(db)
+	.await?;
+	Ok(!wider)
+}
+
+/// Refuses handing out `role` when it can do anything `user` cannot do in `team`.
+///
+/// # Errors
+/// `Validation` with a sentence for the person.
+pub async fn ensure_within(
+	db: impl sqlx::PgExecutor<'_>,
+	user: UserId,
+	team: TeamId,
+	role: RoleId,
+) -> Result<(), ServerError> {
+	if role_within(db, user, team, role).await? {
+		Ok(())
+	} else {
+		Err(ServerError::Validation(
+			"You can't give someone a role that can do more than yours.".to_owned(),
+		))
+	}
 }
 
 pub async fn list_details(

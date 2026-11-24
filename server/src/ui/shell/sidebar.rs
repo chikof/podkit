@@ -9,6 +9,7 @@
 use maud::{Markup, html};
 
 use super::nav::{self, NavItem};
+use crate::servers::AgentSummary;
 use crate::ui::components::{
 	MENU_ITEM, MarkSize, dropdown_menu, icon, kbd, menu_label, menu_link, menu_separator,
 	team_mark, user_avatar,
@@ -167,6 +168,68 @@ fn collapse_toggle(collapsed: bool) -> Markup {
 	}
 }
 
+/// The colour of the card's dot: every server answers, some do, none does, or there is none.
+fn agent_dot(summary: &AgentSummary) -> &'static str {
+	match (summary.connected, summary.total) {
+		(_, 0) => "ui-dot ui-dot-neutral",
+		(c, t) if c >= t => "ui-dot ui-dot-success",
+		(0, _) => "ui-dot ui-dot-danger",
+		_ => "ui-dot ui-dot-warning",
+	}
+}
+
+/// "2 of 3 servers connected", or "1 server connected" when they all are.
+fn agent_count(summary: &AgentSummary) -> String {
+	let noun = if summary.total == 1 {
+		"server"
+	} else {
+		"servers"
+	};
+	if summary.total == 0 {
+		"No servers yet".to_owned()
+	} else if summary.connected >= summary.total {
+		format!("{} {noun} connected", summary.total)
+	} else {
+		format!(
+			"{} of {} {noun} connected",
+			summary.connected, summary.total
+		)
+	}
+}
+
+/// The agent card at the foot of the sidebar: the Podman the team's agents run and how
+/// many servers answer, as a link to the servers page. Only for someone who may read
+/// servers (`ctx.agents` is `None` otherwise). Folded to the rail it is the dot alone, with
+/// the figures in its tooltip; on a small screen it is not shown.
+fn agent_card(ctx: &TeamCtx) -> Markup {
+	let Some(summary) = &ctx.agents else {
+		return html! {};
+	};
+	let podman = match (summary.podman_label(), summary.mode()) {
+		(Some(version), Some(mode)) => Some(format!("{version} · {mode}")),
+		(Some(version), None) => Some(version),
+		(None, Some(mode)) => Some(format!("Podman · {mode}")),
+		(None, None) => None,
+	};
+	let count = agent_count(summary);
+	html! {
+		a class="ui-agent-card" href={ "/teams/" (ctx.team.id) "/servers" } interestfor="agent-card-tip" {
+			span class=(agent_dot(summary)) aria-hidden="true" {}
+			span class="ui-agent-text" {
+				span class="ui-agent-title" { "podkit agent" }
+				@if let Some(podman) = &podman {
+					span class="ui-agent-line" { (podman) }
+				}
+				span class="ui-agent-line" { (count) }
+			}
+		}
+		div id="agent-card-tip" popover="hint" class="ui-tip ui-tip-side" {
+			@if let Some(podman) = &podman { (podman) " · " }
+			(count)
+		}
+	}
+}
+
 /// The sidebar. Above 760 px it is the left column (or the icon rail, when the user folded
 /// it); below, the strip across the top. The places come in headed groups: Build (the daily
 /// places), Infrastructure (what the team runs on), Observe and Admin, which ends with
@@ -197,6 +260,7 @@ pub fn aside(ctx: &TeamCtx) -> Markup {
 			}
 			div class="ui-chrome-foot" {
 				(collapse_toggle(collapsed))
+				(agent_card(ctx))
 				(user_menu(ctx))
 			}
 		}

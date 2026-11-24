@@ -1,4 +1,5 @@
-//! The stdio side of podkit's MCP server.
+//! The `podkit` command line. Most of it ([`commands`]) works over the JSON API with an
+//! API token; this file is the stdio side of podkit's MCP server.
 //!
 //! An MCP client (Claude Desktop, Claude Code, Hermes) starts `podkit mcp` and talks to
 //! it over stdin and stdout, one JSON-RPC message per line, as the spec's stdio transport
@@ -9,7 +10,13 @@
 
 use std::io;
 
+pub mod api;
+pub mod args;
+pub mod commands;
+pub mod config;
+pub mod dotenv;
 pub mod import;
+pub mod sse;
 
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncWrite, AsyncWriteExt};

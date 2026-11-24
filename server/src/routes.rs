@@ -10,11 +10,11 @@ use crate::billing;
 use crate::error::AppResult;
 use crate::state::AppState;
 use crate::{
-	applications, audit, auth, avatars, backups, catalog, cron, databases, deployments, domains,
-	env_vars, environments, git_providers, iac, importers, links, log_search, logos, mcp,
-	mcp_servers, members, metrics, model_files, models, networks, notifications, projects, quotas,
-	registries, scanning, servers, ssh_keys, stacks, tailscale, teams, templates, terminal, ui,
-	uptime, volume_backups, volumes, webhooks,
+	applications, audit, auth, auto_update, avatars, backups, catalog, cron, databases,
+	deployments, domains, env_vars, environments, git_providers, iac, importers, links, log_search,
+	logos, mcp, mcp_servers, members, metrics, model_files, models, moves, networks, notifications,
+	projects, quadlet, quotas, registries, scanning, servers, ssh_keys, stacks, tailscale, teams,
+	templates, terminal, ui, uptime, volume_backups, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -39,6 +39,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 	let api = Router::new()
 		.nest("/auth", auth::router())
 		.merge(avatars::api_router())
+		.merge(auth::me_router())
 		.nest("/teams", teams::router())
 		.nest("/teams/{team_id}", members::router())
 		.nest("/teams/{team_id}/audit", audit::router())
@@ -47,7 +48,11 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			"/teams/{team_id}/projects/{project_id}/environments",
 			environments::router(),
 		)
-		.nest("/teams/{team_id}/projects/{project_id}", iac::router())
+		.nest(
+			"/teams/{team_id}/projects/{project_id}",
+			iac::router().merge(quadlet::routes::router()),
+		)
+		.nest("/teams/{team_id}/quadlet", quadlet::routes::team_router())
 		.nest(
 			"/teams/{team_id}/projects/{project_id}/cron",
 			cron::router(),
@@ -76,6 +81,16 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			metrics::router(),
 		)
 		.nest(&format!("{APP}/metrics"), metrics::application_router())
+		.nest(&format!("{APP}/move"), moves::app_router())
+		.nest(&format!("{APP}/moves"), moves::history_router())
+		.nest(
+			"/teams/{team_id}/servers/{server_id}/drain",
+			moves::server_router(),
+		)
+		.nest(
+			"/teams/{team_id}/servers/{server_id}/undrain",
+			moves::undrain_router(),
+		)
 		.nest(
 			&format!("{DB}/{{database_id}}/metrics"),
 			metrics::database_router(),
@@ -93,6 +108,7 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			applications::router(),
 		)
 		.nest(&format!("{APP}/deployments"), deployments::router())
+		.nest(&format!("{APP}/auto-update"), auto_update::router())
 		.nest(&format!("{APP}/env-vars"), env_vars::router())
 		.nest(&format!("{APP}/domains"), domains::router())
 		.nest(&format!("{APP}/volumes"), volumes::router())
@@ -130,6 +146,10 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 			model_files::token::router(),
 		)
 		.nest(&format!("{DB}/{{database_id}}/backups"), backups::router())
+		.nest(
+			&format!("{DB}/{{database_id}}/drills"),
+			backups::drills::router(),
+		)
 		.nest("/teams/{team_id}/security", scanning::routes::router())
 		.nest("/webhooks", webhooks::router())
 		// Inside the token gate, so a `pk_` token is already resolved: a team that is not the

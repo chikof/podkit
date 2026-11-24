@@ -1,0 +1,174 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT\n\t\t\t\tid AS \"id!: RestoreDrillId\", database_id AS \"database_id!: DatabaseId\",\n\t\t\t\tbackup_id AS \"backup_id: BackupId\", backup_taken_at,\n\t\t\t\tstatus AS \"status!: DrillStatus\", tables_found, source_tables, error,\n\t\t\t\ttriggered_by AS \"triggered_by: UserId\", created_at, started_at, finished_at,\n\t\t\t\tduration_ms\n\t\t\tFROM restore_drills\n\t\t\tWHERE database_id = $1 AND ($2::BIGINT IS NULL OR id < $2)\n\t\t\tORDER BY id DESC\n\t\t\tLIMIT $3\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: RestoreDrillId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "database_id!: DatabaseId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "database_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "backup_id: BackupId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "backup_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "backup_taken_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "backup_taken_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "status!: DrillStatus",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "tables_found",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "tables_found"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "source_tables",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "source_tables"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "error",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "error"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "triggered_by: UserId",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "triggered_by"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "created_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "started_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "started_at"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "finished_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "finished_at"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "duration_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "restore_drills",
+            "name": "duration_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "b79d31e30175acfbd3219ad638b49ae630e3b1ac5a5a0758f1d44ef1c316cc76"
+}

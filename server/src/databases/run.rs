@@ -99,19 +99,7 @@ async fn provision(
 		.await
 		.map_err(|e| db_failure(&e))?;
 
-	let mut spec = deploy_spec(state, job, database).await?;
-	spec.attach = networks::attach::for_resource(
-		&state.db,
-		networks::attach::Home {
-			kind: networks::ResourceKind::Database,
-			id: database.id.0,
-			environment: database.environment_id,
-			server: database.server_id,
-		},
-		&spec.network_aliases,
-	)
-	.await
-	.map_err(|e| db_failure(&e))?;
+	let spec = full_spec(state, job.id.0, database).await?;
 	let mut events = client
 		.stream(Method::POST, "/v1/deploy", Some(&spec))
 		.await
@@ -162,6 +150,7 @@ async fn provision(
 				| Event::Exited { .. }
 				| Event::VolumeDumped { .. }
 				| Event::PartsUploaded { .. }
+				| Event::TablesCounted { .. }
 				| Event::Built { .. }
 				| Event::Done,
 			)) => {}
@@ -177,14 +166,47 @@ async fn provision(
 	}
 }
 
+/// What provisioning sends the agent: [`deploy_spec`] on the environment's network and the
+/// networks the database was attached to. The Quadlet view uses it too (`instance_id` 0), so
+/// the units match what runs.
+pub(crate) async fn full_spec(
+	state: &AppState,
+	instance_id: i64,
+	database: &Database,
+) -> Result<DeploySpec, JobFailure> {
+	let mut spec = spec_with_env(state, instance_id, database).await?;
+	spec.attach = networks::attach::for_resource(
+		&state.db,
+		networks::attach::Home {
+			kind: networks::ResourceKind::Database,
+			id: database.id.0,
+			environment: database.environment_id,
+			server: database.server_id,
+		},
+		&spec.network_aliases,
+	)
+	.await
+	.map_err(|e| db_failure(&e))?;
+	Ok(spec)
+}
+
 /// The agent's deploy request: the engine's, with the shared variables of the environment
-/// under the engine's own.
+/// under the engine's own. Provisioning goes through [`full_spec`]; the tests read this.
+#[cfg(test)]
 pub(crate) async fn deploy_spec(
 	state: &AppState,
 	job: &Job,
 	database: &Database,
 ) -> Result<DeploySpec, JobFailure> {
-	let mut spec = build_spec(state, job, database)?;
+	spec_with_env(state, job.id.0, database).await
+}
+
+async fn spec_with_env(
+	state: &AppState,
+	instance_id: i64,
+	database: &Database,
+) -> Result<DeploySpec, JobFailure> {
+	let mut spec = build_spec(state, instance_id, database)?;
 	spec.env = crate::shared_env::resolve::inherited_env(
 		state,
 		database.project_id,
@@ -199,7 +221,11 @@ pub(crate) async fn deploy_spec(
 	Ok(spec)
 }
 
-fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<DeploySpec, JobFailure> {
+fn build_spec(
+	state: &AppState,
+	instance_id: i64,
+	database: &Database,
+) -> Result<DeploySpec, JobFailure> {
 	let credentials = databases::decrypt_credentials(&state.secrets, database).map_err(|e| {
 		tracing::error!(database = database.id.0, "{e}");
 		failed("failed to read database credentials")
@@ -220,7 +246,7 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 	Ok(DeploySpec {
 		network_aliases: vec![format!("podkit-{service}")],
 		service,
-		instance_id: job.id.0,
+		instance_id,
 		source: Source::Image {
 			reference: engine.image(&database.version),
 			// Picks up patch releases of the major tag.
@@ -253,6 +279,7 @@ fn build_spec(state: &AppState, job: &Job, database: &Database) -> Result<Deploy
 		attach: Vec::new(),
 		health: None,
 		replicas: None,
+		auto_update: false,
 		ingress: Ingress {
 			http_port: state.config.ingress_port,
 			https_port: state.config.https_port,

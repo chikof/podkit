@@ -183,6 +183,7 @@ async fn deploy_route_passes_the_gpu_through() {
 		attach: Vec::new(),
 		health: None,
 		replicas: None,
+		auto_update: false,
 	};
 	let body = reqwest::Client::new()
 		.post(format!("http://{addr}/v1/deploy"))

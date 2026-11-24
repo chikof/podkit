@@ -1,5 +1,6 @@
 //! A server's Overview: status and facts (with the hardware the agent reported), the live
-//! bootstrap log, re-run, host key reset (behind a confirm) and delete (behind a confirm).
+//! bootstrap log, re-run, host key reset (behind a confirm), drain (`super::drain`) and delete
+//! (behind a confirm).
 
 use axum::Router;
 use axum::extract::{Path, Query, State};
@@ -17,6 +18,7 @@ use crate::auth::permission::{Action, Resource};
 use crate::error::ServerError;
 use crate::ids::{ServerId, TeamId};
 use crate::jobs::{Job, JobStatus};
+use crate::metrics::forecast::{self, DiskForecast};
 use crate::servers::service;
 use crate::servers::{Server, host_key_fingerprint};
 use crate::state::AppState;
@@ -87,10 +89,13 @@ struct HwCell {
 	key: &'static str,
 	value: String,
 	sub: String,
+	/// A second line under `sub`, when the cell has one.
+	note: Option<String>,
 }
 
-/// The cells of the strip, from what the agent last reported. Empty until it has.
-fn hardware_cells(server: &Server) -> Vec<HwCell> {
+/// The cells of the strip, from what the agent last reported. Empty until it has. The disk
+/// cell carries the `forecast`, when there is one.
+fn hardware_cells(server: &Server, forecast: Option<DiskForecast>) -> Vec<HwCell> {
 	let Some(hw) = server.hardware.as_ref().map(|h| &h.0) else {
 		return Vec::new();
 	};
@@ -101,6 +106,7 @@ fn hardware_cells(server: &Server) -> Vec<HwCell> {
 			key: "CPU",
 			value: hw.cpu.model.clone(),
 			sub: format!("{} threads", hw.cpu.threads),
+			note: None,
 		});
 	}
 	if hw.memory.total_mb > 0 {
@@ -109,6 +115,7 @@ fn hardware_cells(server: &Server) -> Vec<HwCell> {
 			key: "RAM",
 			value: human_mb(hw.memory.total_mb),
 			sub: format!("{} available", human_mb(hw.memory.available_mb)),
+			note: None,
 		});
 	}
 	for gpu in &hw.gpus {
@@ -120,6 +127,7 @@ fn hardware_cells(server: &Server) -> Vec<HwCell> {
 				Some(used) => format!("{} VRAM · {} in use", human_mb(gpu.vram_mb), human_mb(used)),
 				None => format!("{} VRAM", human_mb(gpu.vram_mb)),
 			},
+			note: None,
 		});
 	}
 	if let Some(disk) = hw.disks.iter().max_by_key(|d| d.total_mb) {
@@ -128,14 +136,15 @@ fn hardware_cells(server: &Server) -> Vec<HwCell> {
 			key: "Disk",
 			value: human_mb(disk.total_mb),
 			sub: format!("{} free", human_mb(disk.free_mb)),
+			note: forecast.map(DiskForecast::label),
 		});
 	}
 	cells
 }
 
 /// The hardware strip: hairline cells, no cards.
-fn hardware_strip(server: &Server) -> Markup {
-	let cells = hardware_cells(server);
+fn hardware_strip(server: &Server, forecast: Option<DiskForecast>) -> Markup {
+	let cells = hardware_cells(server, forecast);
 	html! {
 		@if cells.is_empty() {
 			p class="ui-lede" { "Hardware not reported yet." }
@@ -148,6 +157,9 @@ fn hardware_strip(server: &Server) -> Markup {
 							p class="ui-hw-k" { (c.key) }
 							p class="ui-hw-v" title=(c.value) { (c.value) }
 							p class="ui-hw-s" { (c.sub) }
+							@if let Some(note) = &c.note {
+								p class="ui-hw-s" { (note) }
+							}
 						}
 					}
 				}
@@ -157,7 +169,12 @@ fn hardware_strip(server: &Server) -> Markup {
 }
 
 /// Status, message, hardware and facts of one server; patched in place by the poll.
-fn status_region(ctx: &TeamCtx, server: &Server, job: Option<&Job>) -> Markup {
+fn status_region(
+	ctx: &TeamCtx,
+	server: &Server,
+	job: Option<&Job>,
+	forecast: Option<DiskForecast>,
+) -> Markup {
 	let fingerprint = server.host_key.as_deref().and_then(host_key_fingerprint);
 	let url = format!("{}/status", detail_url(ctx.team.id, server.id));
 	let polling = server.status.in_flight() || job_in_flight(job);
@@ -172,7 +189,7 @@ fn status_region(ctx: &TeamCtx, server: &Server, job: Option<&Job>) -> Markup {
 			@if let Some(message) = &server.status_message {
 				p class="ui-err" { (message) }
 			}
-			(hardware_strip(server))
+			(hardware_strip(server, forecast))
 			dl class="ui-facts" {
 				(fact("Address", &html! { (host_port(server)) }))
 				@if let Some(user) = &server.ssh_user {
@@ -201,6 +218,7 @@ fn actions(ctx: &TeamCtx, server: &Server, can_update: bool, can_delete: bool) -
 	let base = detail_url(ctx.team.id, server.id);
 	let rerun = format!("@post('{base}/bootstrap')");
 	html! {
+		(super::drain::open_button(ctx, server))
 		@if can_update {
 			button type="button" class=(BUTTON_OUTLINE) "data-on:click"=(rerun) "data-indicator:_busy" "data-attr:disabled"="$_busy" { (icon("refresh-cw")) "Re-run bootstrap" }
 			(dialog_open_button(RESET_DIALOG, BUTTON_OUTLINE, &html! { (icon("key-round")) "Reset host key" }))
@@ -282,6 +300,26 @@ pub(in crate::ui) fn header(
 	}
 }
 
+/// When the server's disk fills at its recent rate, from the stored samples. `None` before
+/// the agent reported a disk (there is no figure to put it beside) or when the read fails;
+/// the caller has already checked `read server`.
+async fn disk_forecast(s: &AppState, server: &Server) -> Option<DiskForecast> {
+	let has_disk = server
+		.hardware
+		.as_ref()
+		.is_some_and(|h| !h.disks.is_empty());
+	if !has_disk {
+		return None;
+	}
+	match forecast::disk(&s.db, server.id, time::OffsetDateTime::now_utc()).await {
+		Ok(forecast) => Some(forecast),
+		Err(e) => {
+			tracing::warn!(server = %server.id, error = %e, "could not read the disk forecast");
+			None
+		}
+	}
+}
+
 async fn detail(
 	State(s): State<AppState>,
 	ctx: TeamCtx,
@@ -302,13 +340,21 @@ async fn detail(
 		None
 	};
 
+	let draining_since = crate::moves::draining_since(&s.db, server.id)
+		.await
+		.map_err(|e| error::page(&ctx, &ServerError::from(e)))?;
+	let latest_drain = crate::moves::latest_drain(&s.db, server.id)
+		.await
+		.map_err(|e| error::page(&ctx, &ServerError::from(e)))?;
+
 	let mut crumbs = crumbs(&ctx);
 	crumbs.push((server.name.as_str(), None));
 	let body = html! {
 		div class="ui-page-body" data-signals="{confirm: '', _busy: false, _error: '', _delete_error: ''}" {
 			(header(ctx.team.id, server, ServerTab::Overview, &actions(&ctx, server, can_update, can_delete)))
 			(form_error())
-			(status_region(&ctx, server, found.bootstrap.as_ref()))
+			(status_region(&ctx, server, found.bootstrap.as_ref(), disk_forecast(&s, server).await))
+			(super::drain::section(&ctx, server, draining_since, latest_drain.as_ref()))
 			@if let Some(settings) = scan_settings {
 				(security::settings_card(&ctx, server.id, settings))
 			}
@@ -325,6 +371,7 @@ async fn detail(
 			}
 			@if can_update { (reset_dialog(&ctx, server)) }
 			@if can_delete { (delete_dialog(&ctx, server)) }
+			(super::drain::dialog_for(&ctx, server))
 		}
 	};
 	Ok(app_page(&ctx, &server.name, &crumbs, &body))
@@ -337,12 +384,16 @@ async fn status(
 	Path((_, id)): Path<(TeamId, ServerId)>,
 ) -> Response {
 	match service::get(&s.db, ctx.user.id, ctx.team.id, id).await {
-		Ok(found) => sse::patch(&status_region(
-			&ctx,
-			&found.server,
-			found.bootstrap.as_ref(),
-		))
-		.into_response(),
+		Ok(found) => {
+			let forecast = disk_forecast(&s, &found.server).await;
+			sse::patch(&status_region(
+				&ctx,
+				&found.server,
+				found.bootstrap.as_ref(),
+				forecast,
+			))
+			.into_response()
+		}
 		Err(e) => error::action(&e),
 	}
 }

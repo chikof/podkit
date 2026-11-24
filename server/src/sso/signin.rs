@@ -378,6 +378,11 @@ pub async fn resolve(
 /// Makes the account of a person who has no password: its password is random and nobody
 /// is told it. Follows the registration policy's atomic rule for a first-user instance.
 async fn create_account(s: &AppState, name: &str, email: &str) -> AppResult<UserId> {
+	// The first account is the instance administrator, and only the setup token makes it
+	// (`auth::setup`): a provider cannot present one.
+	if !users::any(&s.db).await? {
+		return Err(ServerError::RegistrationClosed);
+	}
 	let unknown = crypto::hash(Zeroizing::new(crypto::generate_token(32)))
 		.await
 		.map_err(|e| {

@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT drill_schedule AS schedule, drill_next_run_at AS next_run_at\n\t\tFROM databases WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "schedule",
+        "type_info": "Varchar",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "drill_schedule"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "next_run_at",
+        "type_info": "Timestamptz",
+        "origin": {
+          "Table": {
+            "table": "databases",
+            "name": "drill_next_run_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "a67f450ba1765919dcbee27515268b272c14de7832ea570d580c11bc2c21cee4"
+}

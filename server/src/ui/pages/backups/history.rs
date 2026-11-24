@@ -386,6 +386,9 @@ async fn backups_page(
 	let can_restore = ctx.perms.can(Action::Update, Resource::Database);
 	let can_delete = ctx.perms.can(Action::Delete, Resource::Backup);
 	let schedule = schedule_card(&s, &ctx, &d).await?;
+	let drills = super::drills::overview_of(&s, &ctx, project.id, d.database.id)
+		.await
+		.map_err(|e| error::page(&ctx, &e))?;
 
 	let content = html! {
 		div class="ui-two ui-two-wide" {
@@ -394,6 +397,7 @@ async fn backups_page(
 			@if can_restore { (restore_dialog(&base, &d.database.name)) }
 			@if can_delete { (delete_dialog(&base)) }
 		}
+		(super::drills::block(&ctx, project.id, d.database.id, &drills))
 	};
 	Ok(page(&s, &ctx, &project, &d, Tab::Backups, &content).await)
 }

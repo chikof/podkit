@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n\t\t\tSELECT COUNT(*) AS \"count!\", MIN(at) AS oldest\n\t\t\tFROM team_invite_sends WHERE team_id = $1 AND at > NOW() - INTERVAL '1 hour'\n\t\t",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "oldest",
+        "type_info": "Timestamptz",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "6a6c26411c124c885d5ba73715b64f2104d1ce4341aa6a2d68038a3e1535eb12"
+}

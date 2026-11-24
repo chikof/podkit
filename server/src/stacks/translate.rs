@@ -275,6 +275,7 @@ fn translate(stack: i64, s: &Service, settings: &Settings<'_>) -> Result<DeployS
 		attach: Vec::new(),
 		health: None,
 		replicas: None,
+		auto_update: false,
 	})
 }
 

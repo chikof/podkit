@@ -62,6 +62,8 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/backups/dump", post(backup_dump))
 		.route("/v1/backups/upload", post(backup_upload))
 		.route("/v1/backups/restore", post(backup_restore))
+		.route("/v1/backups/count", post(backup_count))
+		.route("/v1/backups/drill", post(backup_drill))
 		.route("/v1/cron/run", post(cron_run))
 		.route("/v1/volume-backups/dump", post(volume_dump))
 		.route("/v1/volume-backups/upload", post(volume_upload))
@@ -70,6 +72,7 @@ pub fn router(ctx: Arc<Ctx>) -> Router {
 		.route("/v1/probes", post(probe_route))
 		.route("/v1/ingress/ensure", post(ensure_ingress))
 		.route("/v1/registry-login", post(registry_login_route))
+		.route("/v1/image-digest", post(image_digest_route))
 		.route("/v1/scan", post(scan_route))
 		.route("/v1/scan/resolve", post(scan_resolve_route))
 		.route("/v1/gateway/config", put(gateway_config))
@@ -271,6 +274,8 @@ async fn health(State(ctx): State<Arc<Ctx>>) -> Result<Json<Health>, ApiError> {
 		version: env!("CARGO_PKG_VERSION").to_string(),
 		podman_version,
 		features: vec![proto::FEATURE_COMMIT_PIN.to_owned()],
+		// Best effort: a host where `/info` fails still answers healthy.
+		rootless: ctx.podman().rootless().await.ok(),
 	}))
 }
 
@@ -840,6 +845,39 @@ async fn registry_login_route(
 	Ok(Json(crate::registry::check(&ctx.http, &req).await))
 }
 
+/// Which manifest an image tag names at its registry now, and the digests of the image the
+/// application runs, for image auto-update. Nothing is pulled.
+async fn image_digest_route(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::ImageDigestRequest>,
+) -> Result<Json<proto::ImageDigestResult>, ApiError> {
+	if req.reference.len() > 512 || req.local.as_ref().is_some_and(|l| l.len() > 512) {
+		return Err(ApiError::new(
+			StatusCode::BAD_REQUEST,
+			"image reference too long",
+		));
+	}
+	let digest = crate::registry::remote_digest(&ctx.http, &req)
+		.await
+		.map_err(|m| ApiError::new(StatusCode::BAD_GATEWAY, m))?;
+	let mut local_digests = Vec::new();
+	if let Some(local) = req.local.as_deref() {
+		// The running image may be gone from the store; that only means nothing is known.
+		if let Ok(Some(image)) = ctx.podman().inspect_image(local).await {
+			local_digests = crate::registry::digests_of(&image.repo_digests.unwrap_or_default());
+		}
+		for d in crate::registry::digests_of(std::slice::from_ref(&local.to_owned())) {
+			if !local_digests.contains(&d) {
+				local_digests.push(d);
+			}
+		}
+	}
+	Ok(Json(proto::ImageDigestResult {
+		digest,
+		local_digests,
+	}))
+}
+
 async fn scan_resolve_route(
 	State(ctx): State<Arc<Ctx>>,
 	Json(req): Json<proto::ScanResolveRequest>,
@@ -888,6 +926,20 @@ async fn backup_upload(State(ctx): State<Arc<Ctx>>, Json(req): Json<UploadReques
 
 async fn backup_restore(State(ctx): State<Arc<Ctx>>, Json(req): Json<RestoreRequest>) -> Response {
 	ndjson(move |tx| backup::restore(ctx, req, tx))
+}
+
+async fn backup_count(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::CountRequest>,
+) -> Response {
+	ndjson(move |tx| crate::drill::count(ctx, req, tx))
+}
+
+async fn backup_drill(
+	State(ctx): State<Arc<Ctx>>,
+	Json(req): Json<proto::DrillRequest>,
+) -> Response {
+	ndjson(move |tx| crate::drill::drill(ctx, req, tx))
 }
 
 async fn cron_run(State(ctx): State<Arc<Ctx>>, Json(req): Json<proto::CronRunRequest>) -> Response {

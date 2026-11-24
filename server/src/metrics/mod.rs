@@ -13,6 +13,7 @@
 pub mod collect;
 pub mod events;
 pub mod ext;
+pub mod forecast;
 pub mod http;
 pub mod overview;
 mod routes;

@@ -133,6 +133,9 @@ pub struct ContainerSpec {
 	pub stop_timeout_s: Option<u32>,
 	/// Networks joined after creation, with their DNS aliases.
 	pub extra_networks: Vec<(String, Vec<String>)>,
+	/// No network at all, loopback only (`--network none`); `network` and
+	/// `extra_networks` must then be empty.
+	pub no_network: bool,
 	/// Settings only compose stacks use. `restart`, `isolated`, `net_aliases`
 	/// and `files` are the deployer's business, not applied here.
 	pub options: proto::ContainerOptions,
@@ -233,6 +236,20 @@ impl Podman {
 	/// Podman is unreachable.
 	pub async fn version(&self) -> Result<String, PodmanError> {
 		Ok(self.docker.version().await?.version.unwrap_or_default())
+	}
+
+	/// Whether Podman runs rootless, from the security options its `/info` lists.
+	///
+	/// # Errors
+	/// Podman is unreachable.
+	pub async fn rootless(&self) -> Result<bool, PodmanError> {
+		let options = self
+			.docker
+			.info()
+			.await?
+			.security_options
+			.unwrap_or_default();
+		Ok(lists_rootless(&options))
 	}
 
 	/// Podman's storage root (images and volumes live below it), when it says.
@@ -737,6 +754,7 @@ impl Podman {
 						binds: (!spec.binds.is_empty()).then_some(spec.binds),
 						memory: spec.memory_bytes,
 						nano_cpus,
+						network_mode: spec.no_network.then(|| "none".to_string()),
 						readonly_rootfs: o.read_only.then_some(true),
 						init: o.init.then_some(true),
 						tmpfs: (!o.tmpfs.is_empty()).then(|| {
@@ -1171,6 +1189,14 @@ fn current_uid() -> u32 {
 	unsafe { getuid() }
 }
 
+/// Whether `/info`'s security options mark a rootless Podman: it lists `name=rootless`
+/// (alone or with more `key=value` pairs, comma separated).
+fn lists_rootless(options: &[String]) -> bool {
+	options
+		.iter()
+		.any(|o| o.split(',').any(|kv| kv.trim() == "name=rootless"))
+}
+
 #[cfg(test)]
 mod tests {
 	use super::*;
@@ -1312,5 +1338,20 @@ mod tests {
 				"{input}"
 			);
 		}
+	}
+
+	#[test]
+	fn rootless_is_read_from_the_security_options() {
+		let opts = |o: &[&str]| o.iter().map(|s| (*s).to_string()).collect::<Vec<_>>();
+		assert!(lists_rootless(&opts(&[
+			"name=seccomp,profile=default",
+			"name=rootless"
+		])));
+		assert!(lists_rootless(&opts(&["name=seccomp,name=rootless"])));
+		assert!(!lists_rootless(&opts(&[
+			"name=seccomp,profile=default",
+			"name=selinux"
+		])));
+		assert!(!lists_rootless(&[]));
 	}
 }

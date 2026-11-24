@@ -116,3 +116,9 @@ missing_docs = "warn"
 opt-level = 3
 [profile.dev.package.rsa]
 opt-level = 3
+# Every password check is an Argon2id hash of 64 MiB: seconds each unoptimized, which makes
+# the sign-in and throttle tests crawl.
+[profile.dev.package.argon2]
+opt-level = 3
+[profile.dev.package.blake2]
+opt-level = 3
