@@ -13,10 +13,9 @@
 mod routes;
 pub mod service;
 
-use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, Mutex};
 
-use axum::extract::{ConnectInfo, Request};
+use axum::extract::Request;
 use axum::http::header;
 use axum::middleware::Next;
 use axum::response::Response;
@@ -104,39 +103,12 @@ pub async fn log(
 
 const MAX_USER_AGENT: usize = 300;
 
-/// Whether `peer` is a reverse proxy we should believe about the client's address: one on
-/// this machine or this private network (Traefik in front of podkit).
-fn is_proxy(peer: IpAddr) -> bool {
-	match peer {
-		IpAddr::V4(v4) => v4.is_loopback() || v4.is_private() || v4.is_link_local(),
-		IpAddr::V6(v6) => v6.is_loopback() || v6.is_unique_local() || v6.is_unicast_link_local(),
-	}
-}
-
 fn client_ip(req: &Request) -> Option<String> {
-	let peer = req
-		.extensions()
-		.get::<ConnectInfo<SocketAddr>>()
-		.map(|c| c.0.ip());
+	let peer = crate::client_ip::peer_of(req.extensions());
 	client_addr(peer, req.headers()).map(|ip| ip.to_string())
 }
 
-/// The address of whoever made a request: the socket's peer, or when that is a proxy on this
-/// machine or network (Traefik in front of podkit), the first `X-Forwarded-For` entry.
-pub fn client_addr(peer: Option<IpAddr>, headers: &axum::http::HeaderMap) -> Option<IpAddr> {
-	let forwarded = || {
-		headers
-			.get("x-forwarded-for")
-			.and_then(|v| v.to_str().ok())
-			.and_then(|v| v.split(',').next())
-			.and_then(|v| v.trim().parse::<IpAddr>().ok())
-	};
-	// Without a socket (in-process tests) there is nobody to distrust.
-	match peer {
-		Some(peer) if !is_proxy(peer) => Some(peer),
-		_ => forwarded().or(peer),
-	}
-}
+pub use crate::client_ip::client_addr;
 
 fn user_agent(req: &Request) -> Option<String> {
 	let raw = req.headers().get(header::USER_AGENT)?.to_str().ok()?;

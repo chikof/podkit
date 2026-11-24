@@ -33,6 +33,12 @@ Container-to-host traffic (aardvark-dns on the bridge gateway, `host.containers.
 * The ranges you set for SSH are *added to* the sources of every SSH session that is open when
   you apply (read from `/proc/net/tcp*`). podkit's own connection is one of those sessions, so a
   typo in the ranges cannot cut it off.
+* **The SSH sources are frozen at apply time.** The addresses of the sessions open at that moment
+  are written into the ruleset and saved with it when you confirm. They stay allowed until the
+  next apply, even if that session has ended, and whoever was connected then (an old address of
+  yours, or someone else's) is included. The *Preview* lists exactly these sources ("SSH stays
+  open for the sessions open now, from ..."), and the SSH card says the same. To drop one, end the
+  session you do not want and apply again. With SSH open to anywhere this does not matter.
 * A new ruleset is applied with a **confirm window of 60 s**, like `iptables-apply`. podkit
   reaches the server again over a **new** SSH connection; only if that works does it confirm. If it
   does not, podkit asks the helper to revert at once, and the helper reverts by itself after 60 s
@@ -158,6 +164,9 @@ podkit-firewall`).
 ## Protocol
 
 One JSON request line in, one JSON answer line out, per connection (`crates/firewall/src/protocol.rs`):
-`status`, `preview`, `apply` (with `confirm_secs`), `confirm`, `rollback`, `disable`. The agent
+`status`, `preview`, `apply` (with `confirm_secs`), `confirm`, `rollback`, `disable`.
+`confirm_secs` is optional (60); the helper **refuses** a value below 10 with an error and applies
+nothing, so there is no way to apply a change that cannot be reverted. It lowers a value above 600 to
+600. The agent
 carries the line to the socket without reading it (`POST /v1/firewall`); the helper validates
 every request itself and trusts nobody, the agent included beyond the uid check.

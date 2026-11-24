@@ -480,7 +480,10 @@ pub(crate) async fn build_spec(
 		options.mcp_bridge = Some(proto::McpBridge {
 			port: container_port,
 			path: mcp.path.clone(),
-			command: mcp.args(),
+			command: mcp.args(&state.secrets).map_err(|e| {
+				tracing::error!(application = application.id.0, "{e}");
+				failed("failed to read the MCP command")
+			})?,
 		});
 	}
 	// Internal-only takes the application off the ingress, the way an MCP server is.

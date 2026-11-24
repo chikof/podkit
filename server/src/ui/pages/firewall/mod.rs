@@ -222,7 +222,7 @@ fn ssh_form(base: &str, can_update: bool) -> Markup {
 				textarea id="fw-ssh" class=(TEXTAREA) rows="2" spellcheck="false" disabled[!can_update]
 					aria-describedby="fw-ssh-help" "data-bind:fw_ssh" {}
 				small id="fw-ssh-help" class="text-xs text-muted-foreground" {
-					"One per line or separated by commas. Empty means anywhere. Sessions open when you apply are kept, so you cannot lock yourself out with a typo."
+					"One per line or separated by commas. Empty means anywhere. The source of every SSH session open when you apply is allowed too, so a typo cannot lock you out; it stays allowed until the next apply, and the preview lists those sources."
 				}
 			}
 			@if can_update {
@@ -245,7 +245,7 @@ pub(in crate::ui) fn diff_view(p: &PreviewInfo) -> Markup {
 			}
 			@if !p.keep_sources.is_empty() {
 				p class="text-sm text-muted-foreground" {
-					"SSH stays open for the sessions open now, from " (p.keep_sources.join(", ")) "."
+					"SSH stays open for the sessions open now, from " (p.keep_sources.join(", ")) ". Those sources are written into the ruleset and stay allowed until the next apply."
 				}
 			}
 			pre class="ui-fw-diff" tabindex="0" aria-label="Changes to the firewall ruleset" {

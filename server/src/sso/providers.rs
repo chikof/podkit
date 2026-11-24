@@ -319,6 +319,9 @@ pub struct Input {
 	pub scopes: String,
 	pub jit: bool,
 	pub allow_unverified_email: bool,
+	/// A team provider: the email domains it may create accounts for, one per line; see
+	/// [`super::domains`]. Ignored for an instance provider.
+	pub domains: String,
 	pub group_claim: String,
 	/// `group = Role name`, one per line.
 	pub group_roles: String,
@@ -519,6 +522,8 @@ pub async fn create(
 ) -> AppResult<Provider> {
 	manage(&s.db, user, scope).await?;
 	let c = clean(&s.db, scope, input).await?;
+	let unverified = input.allow_unverified_email && scope.team().is_none();
+	super::domains::parse(&input.domains)?;
 	if input.client_secret.trim().is_empty() {
 		return Err(bad("Enter the client secret the provider gave you."));
 	}
@@ -537,7 +542,7 @@ pub async fn create(
 		seal(s, input.client_secret.trim())?,
 		c.scopes,
 		input.jit,
-		input.allow_unverified_email,
+		unverified,
 		c.group_claim,
 		json!(c.group_roles),
 		input.enabled
@@ -545,6 +550,7 @@ pub async fn create(
 	.execute(&s.db)
 	.await
 	.map_err(taken)?;
+	let domains = super::domains::set(s, user, scope, id, &input.domains).await?;
 	log(
 		s,
 		user,
@@ -557,7 +563,8 @@ pub async fn create(
 			.set("issuer", c.issuer.clone().unwrap_or_default())
 			.set("client_id", c.client_id.clone())
 			.secret("client_secret")
-			.set("jit", input.jit),
+			.set("jit", input.jit)
+			.set("domains", super::domains::text(&domains)),
 	)
 	.await;
 	find(&s.db, user, scope, id).await
@@ -581,6 +588,8 @@ pub async fn update(
 		return Err(bad("A provider keeps its kind. Add a new one instead."));
 	}
 	let new_secret = input.client_secret.trim();
+	let unverified = input.allow_unverified_email && scope.team().is_none();
+	super::domains::parse(&input.domains)?;
 	sqlx::query!(
 		"UPDATE auth_providers SET slug = $2, name = $3, issuer = $4, client_id = $5,
 			client_secret = COALESCE($6, client_secret), scopes = $7, jit = $8,
@@ -598,7 +607,7 @@ pub async fn update(
 		},
 		c.scopes,
 		input.jit,
-		input.allow_unverified_email,
+		unverified,
 		c.group_claim,
 		json!(c.group_roles),
 		input.enabled
@@ -606,6 +615,8 @@ pub async fn update(
 	.execute(&s.db)
 	.await
 	.map_err(taken)?;
+	let before_domains = super::domains::text(&super::domains::list(&s.db, id).await?);
+	let domains = super::domains::set(s, user, scope, id, &input.domains).await?;
 	let mut diff = Diff::new()
 		.changed("name", before.name.clone(), c.name.clone())
 		.changed("slug", before.slug.clone(), c.slug.clone())
@@ -616,7 +627,8 @@ pub async fn update(
 		)
 		.changed("client_id", before.client_id.clone(), c.client_id.clone())
 		.changed("jit", before.jit, input.jit)
-		.changed("enabled", before.enabled, input.enabled);
+		.changed("enabled", before.enabled, input.enabled)
+		.changed("domains", before_domains, super::domains::text(&domains));
 	if !new_secret.is_empty() {
 		diff = diff.secret("client_secret");
 	}

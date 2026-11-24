@@ -330,7 +330,10 @@ pub async fn resolve(
 	let email = identity
 		.email
 		.as_deref()
-		.filter(|_| identity.email_verified || provider.allow_unverified_email)
+		.filter(|_| {
+			// A team administrator's provider cannot vouch for an unverified email.
+			identity.email_verified || (provider.allow_unverified_email && provider.team.is_none())
+		})
 		.ok_or_else(|| {
 			refused("The provider did not give a verified email address, so podkit cannot tell which account is yours.")
 		})?;
@@ -347,6 +350,12 @@ pub async fn resolve(
 	if !provider.jit {
 		return Err(ServerError::Validation(format!(
 			"No account uses {email}, and {} does not create accounts. Ask an administrator.",
+			provider.name
+		)));
+	}
+	if !super::domains::allows_new_account(&s.db, provider.id, provider.team, &email).await? {
+		return Err(refused(&format!(
+			"{} cannot create an account for {email}: its email domain is not approved for this provider. Ask an administrator.",
 			provider.name
 		)));
 	}

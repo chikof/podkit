@@ -5,6 +5,7 @@
 //! session, a new account, or a request to prove the password before linking. `oidc` and
 //! `github` speak the two protocols.
 
+pub mod domains;
 pub mod github;
 pub mod oidc;
 pub mod providers;

@@ -15,8 +15,9 @@ use crate::render::{delete_script, render};
 pub const DEFAULT_CONFIRM_SECS: u64 = 60;
 /// Longest wait a caller may ask for.
 pub const MAX_CONFIRM_SECS: u64 = 600;
-/// Shortest wait; below this a human cannot confirm.
-pub const MIN_CONFIRM_SECS: u64 = 5;
+/// Shortest wait a caller may ask for: below this a human cannot confirm, and `0` would apply
+/// for good with nothing to revert to.
+pub const MIN_CONFIRM_SECS: u64 = 10;
 /// SSH session sources kept at most.
 const MAX_KEEP: usize = 16;
 
@@ -63,11 +64,16 @@ pub struct Engine<H: Host> {
 	next_token: u64,
 }
 
-fn clamp_confirm(secs: Option<u64>) -> u64 {
+/// The confirm window of a request: the default, or what was asked up to the maximum.
+/// A window below [`MIN_CONFIRM_SECS`] is refused rather than raised, so a caller never gets
+/// a change that cannot be reverted.
+fn clamp_confirm(secs: Option<u64>) -> Result<u64, String> {
 	match secs {
-		None => DEFAULT_CONFIRM_SECS,
-		Some(0) => 0,
-		Some(s) => s.clamp(MIN_CONFIRM_SECS, MAX_CONFIRM_SECS),
+		None => Ok(DEFAULT_CONFIRM_SECS),
+		Some(s) if s < MIN_CONFIRM_SECS => Err(format!(
+			"confirm_secs must be at least {MIN_CONFIRM_SECS}: a change with no time to confirm it cannot be reverted"
+		)),
+		Some(s) => Ok(s.min(MAX_CONFIRM_SECS)),
 	}
 }
 
@@ -130,7 +136,7 @@ impl<H: Host> Engine<H> {
 			Request::Apply {
 				policy,
 				confirm_secs,
-			} => self.apply(&policy, clamp_confirm(confirm_secs), now),
+			} => clamp_confirm(confirm_secs).and_then(|secs| self.apply(&policy, secs, now)),
 			Request::Confirm { token } => self.confirm(token).map(|()| Response::Done),
 			Request::Rollback => self.rollback().map(|()| Response::Done),
 			Request::Disable => self.disable().map(|()| Response::Done),
@@ -326,7 +332,8 @@ mod tests {
 		let host = Fake::default();
 		let mut e = Engine::new(host.clone());
 		let t0 = Instant::now();
-		e.handle(apply(policy_with(1000), Some(0)), t0);
+		let first_token = token(&e.handle(apply(policy_with(1000), Some(60)), t0));
+		e.handle(Request::Confirm { token: first_token }, t0);
 		let first = applied(&host)[0].clone();
 		e.handle(apply(policy_with(2000), Some(30)), t0);
 		assert!(e.tick(t0 + Duration::from_secs(31)));
@@ -397,7 +404,9 @@ mod tests {
 		assert_eq!(applied(&host), vec![delete_script().to_owned()]);
 
 		let mut e = Engine::new(host.clone());
-		e.handle(apply(policy_with(7), Some(0)), Instant::now());
+		let t0 = Instant::now();
+		let t = token(&e.handle(apply(policy_with(7), Some(60)), t0));
+		e.handle(Request::Confirm { token: t }, t0);
 		let script = applied(&host).last().unwrap().clone();
 		Engine::new(host.clone()).restore().unwrap();
 		assert_eq!(applied(&host).last().unwrap(), &script);
@@ -424,9 +433,23 @@ mod tests {
 
 	#[test]
 	fn confirm_window_is_clamped() {
-		assert_eq!(clamp_confirm(None), 60);
-		assert_eq!(clamp_confirm(Some(0)), 0);
-		assert_eq!(clamp_confirm(Some(1)), MIN_CONFIRM_SECS);
-		assert_eq!(clamp_confirm(Some(99_999)), MAX_CONFIRM_SECS);
+		assert_eq!(clamp_confirm(None), Ok(60));
+		assert_eq!(clamp_confirm(Some(10)), Ok(10));
+		assert_eq!(clamp_confirm(Some(99_999)), Ok(MAX_CONFIRM_SECS));
+	}
+
+	#[test]
+	fn sec_cleanup_a_confirm_window_below_the_minimum_is_refused_and_nothing_is_applied() {
+		for secs in [0, 1, 9] {
+			let host = Fake::default();
+			let mut e = Engine::new(host.clone());
+			let r = e.handle(apply(policy_with(5432), Some(secs)), Instant::now());
+			assert!(
+				matches!(&r, Response::Error { message } if message.contains("confirm_secs")),
+				"confirm_secs {secs}: {r:?}"
+			);
+			assert!(applied(&host).is_empty(), "nothing may be applied: {r:?}");
+			assert!(host.0.lock().unwrap().saved.is_none());
+		}
 	}
 }
