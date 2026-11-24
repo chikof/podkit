@@ -15,6 +15,7 @@ use serde::Deserialize;
 
 use super::Identity;
 use super::oidc::{Failure, Pkce, form_body, read_json};
+use crate::net::outbound::Outbound;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
 /// GitHub refuses API calls with no `User-Agent`.
@@ -76,7 +77,7 @@ struct TokenAnswer {
 /// Trades the code for an access token. GitHub answers 200 with an `error` field when
 /// the code is bad.
 pub async fn exchange(
-	http: &reqwest::Client,
+	http: &Outbound,
 	ep: &Endpoints,
 	client_id: &str,
 	client_secret: &str,
@@ -85,7 +86,9 @@ pub async fn exchange(
 	verifier: &str,
 ) -> Result<String, Failure> {
 	let response = http
-		.post(format!("{}/login/oauth/access_token", ep.web))
+		.post(&format!("{}/login/oauth/access_token", ep.web))
+		.await
+		.map_err(|d| format!("cannot reach GitHub: {d} ({})", d.reason()))?
 		.header("accept", "application/json")
 		.timeout(TIMEOUT)
 		.header("content-type", "application/x-www-form-urlencoded")
@@ -132,13 +135,15 @@ struct Email {
 }
 
 async fn api<T: for<'de> Deserialize<'de>>(
-	http: &reqwest::Client,
+	http: &Outbound,
 	ep: &Endpoints,
 	token: &str,
 	path: &str,
 ) -> Result<T, Failure> {
 	let response = http
-		.get(format!("{}{path}", ep.api))
+		.get(&format!("{}{path}", ep.api))
+		.await
+		.map_err(|d| format!("cannot reach the GitHub API: {d} ({})", d.reason()))?
 		.bearer_auth(token)
 		.header("accept", "application/vnd.github+json")
 		.header("x-github-api-version", "2022-11-28")
@@ -159,11 +164,7 @@ async fn api<T: for<'de> Deserialize<'de>>(
 /// Who the access token belongs to: the numeric id (which does not change when the person
 /// renames themselves) and their primary email, which counts as verified only when
 /// GitHub says so.
-pub async fn identity(
-	http: &reqwest::Client,
-	ep: &Endpoints,
-	token: &str,
-) -> Result<Identity, Failure> {
+pub async fn identity(http: &Outbound, ep: &Endpoints, token: &str) -> Result<Identity, Failure> {
 	let user: User = api(http, ep, token, "/user").await?;
 	let emails: Vec<Email> = api(http, ep, token, "/user/emails").await?;
 	let primary = emails

@@ -198,6 +198,11 @@ pub async fn create_token(
 			"The access token is required.".to_owned(),
 		));
 	}
+	// Resolved now, so a typo or an address podkit will not use is refused when it is typed.
+	s.outbound
+		.vet_url(&base_url)
+		.await
+		.map_err(|_| crate::net::outbound::refused())?;
 	let credentials = Credentials::Token {
 		token: token.to_owned(),
 	};
@@ -205,7 +210,7 @@ pub async fn create_token(
 		kind: new.kind,
 		base_url: &base_url,
 		credentials: &credentials,
-		http: &s.http,
+		http: s.outbound.vetted_client(),
 	}
 	.test()
 	.await?;
@@ -304,7 +309,7 @@ pub async fn test(
 	authorize(&s.db, user, team, Action::Update, Resource::GitProvider).await?;
 	let p = scope::git_provider(&s.db, team, id).await?;
 	let (kind, credentials) = open(s, &p)?;
-	let identity = target(s, &p, kind, &credentials).test().await?;
+	let identity = target(s, &p, kind, &credentials).await?.test().await?;
 	audit::log(
 		&s.db,
 		user,
@@ -317,18 +322,32 @@ pub async fn test(
 	Ok(identity)
 }
 
-fn target<'a>(
+/// The client for a stored provider. Its address is vetted on the way: it was fine when the
+/// provider was saved, and what a name points at can change.
+async fn target<'a>(
 	s: &'a AppState,
 	p: &'a GitProvider,
 	kind: Kind,
 	credentials: &'a Credentials,
-) -> Target<'a> {
-	Target {
+) -> AppResult<Target<'a>> {
+	vet_base_url(s, &p.base_url).await?;
+	Ok(Target {
 		kind,
 		base_url: &p.base_url,
 		credentials,
-		http: &s.http,
-	}
+		// No redirects, resolves through the outbound policy.
+		http: s.outbound.vetted_client(),
+	})
+}
+
+/// Refuses a provider address podkit does not send requests to (`net::outbound`). An address
+/// written as an IP is judged here; a name is judged by the resolver the connection uses.
+pub(super) async fn vet_base_url(s: &AppState, base_url: &str) -> AppResult<()> {
+	let url = url::Url::parse(base_url).map_err(|_| crate::net::outbound::refused())?;
+	s.outbound
+		.vet(&url)
+		.await
+		.map_err(|_| crate::net::outbound::refused())
 }
 
 /// One page of the repositories a provider offers, matching `query`; needs `read git_provider`.
@@ -343,7 +362,10 @@ pub async fn repos(
 	authorize(&s.db, user, team, Action::Read, Resource::GitProvider).await?;
 	let p = scope::git_provider(&s.db, team, id).await?;
 	let (kind, credentials) = open(s, &p)?;
-	target(s, &p, kind, &credentials).repos(query, page).await
+	target(s, &p, kind, &credentials)
+		.await?
+		.repos(query, page)
+		.await
 }
 
 /// The branches of one repository, the default first; needs `read git_provider`.
@@ -362,7 +384,10 @@ pub async fn branches(
 	}
 	let p = scope::git_provider(&s.db, team, id).await?;
 	let (kind, credentials) = open(s, &p)?;
-	target(s, &p, kind, &credentials).branches(repo).await
+	target(s, &p, kind, &credentials)
+		.await?
+		.branches(repo)
+		.await
 }
 
 /// Deletes a provider; needs `delete git_provider`. One an application still clones through
@@ -428,7 +453,10 @@ pub async fn resolve_repo(
 	}
 	let p = scope::git_provider(&s.db, team, id).await?;
 	let (kind, credentials) = open(s, &p)?;
-	let access = target(s, &p, kind, &credentials).clone_access(repo).await?;
+	let access = target(s, &p, kind, &credentials)
+		.await?
+		.clone_access(repo)
+		.await?;
 	Ok(Resolved {
 		provider: p.id,
 		repo: repo.to_owned(),
@@ -447,7 +475,10 @@ pub async fn clone_access(
 		.await?
 		.ok_or(ServerError::GitProviderNotFound)?;
 	let (kind, credentials) = open(s, &p)?;
-	target(s, &p, kind, &credentials).clone_access(repo).await
+	target(s, &p, kind, &credentials)
+		.await?
+		.clone_access(repo)
+		.await
 }
 
 /// What happened to an application's push webhook.
@@ -500,6 +531,7 @@ pub async fn after_app_created(s: &AppState, app: &Application, secret: &str) ->
 		};
 		let url = format!("{public}/webhooks/deploy/{}", app.id);
 		let id = target(s, &p, kind, &credentials)
+			.await?
 			.create_hook(repo, &url, secret)
 			.await?;
 		if let Some(id) = id {
@@ -530,6 +562,7 @@ pub async fn before_app_removed(s: &AppState, app: &Application) {
 			.ok_or(ServerError::GitProviderNotFound)?;
 		let (kind, credentials) = open(s, &p)?;
 		target(s, &p, kind, &credentials)
+			.await?
 			.delete_hook(repo, hook)
 			.await
 	}
@@ -559,7 +592,7 @@ pub async fn ci(
 		.await?
 		.ok_or(ServerError::GitProviderNotFound)?;
 	let (kind, credentials) = open(s, &p)?;
-	target(s, &p, kind, &credentials).ci(repo, sha).await
+	target(s, &p, kind, &credentials).await?.ci(repo, sha).await
 }
 
 /// The files a push changed, asked through the provider. No team check, like [`ci`].
@@ -576,6 +609,7 @@ pub async fn changed_files(
 		.ok_or(ServerError::GitProviderNotFound)?;
 	let (kind, credentials) = open(s, &p)?;
 	target(s, &p, kind, &credentials)
+		.await?
 		.changed_files(repo, before, after, commits)
 		.await
 }
@@ -593,6 +627,7 @@ pub async fn post_status(
 		.ok_or(ServerError::GitProviderNotFound)?;
 	let (kind, credentials) = open(s, &p)?;
 	target(s, &p, kind, &credentials)
+		.await?
 		.post_status(repo, sha, post)
 		.await
 }
@@ -610,6 +645,7 @@ pub async fn pull_request(
 		.ok_or(ServerError::GitProviderNotFound)?;
 	let (kind, credentials) = open(s, &p)?;
 	target(s, &p, kind, &credentials)
+		.await?
 		.pull_request(repo, number)
 		.await
 }
@@ -627,6 +663,7 @@ pub async fn can_write(
 		.ok_or(ServerError::GitProviderNotFound)?;
 	let (kind, credentials) = open(s, &p)?;
 	target(s, &p, kind, &credentials)
+		.await?
 		.can_write(repo, login, user_id)
 		.await
 }
@@ -646,6 +683,7 @@ pub async fn upsert_comment(
 		.ok_or(ServerError::GitProviderNotFound)?;
 	let (kind, credentials) = open(s, &p)?;
 	target(s, &p, kind, &credentials)
+		.await?
 		.upsert_comment(repo, number, existing, body)
 		.await
 }
@@ -677,7 +715,7 @@ pub async fn refresh_hook(s: &AppState, app: &Application) {
 			.secrets
 			.decrypt(sealed)
 			.map_err(|_| ServerError::Internal)?;
-		let target = target(s, &p, kind, &credentials);
+		let target = target(s, &p, kind, &credentials).await?;
 		let url = format!("{public}/webhooks/deploy/{}", app.id);
 		// The new one first: a failure leaves the old one working.
 		if let Some(id) = target.create_hook(repo, &url, &secret).await? {

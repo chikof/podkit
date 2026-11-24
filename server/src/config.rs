@@ -81,6 +81,14 @@ pub struct ServerConfig {
 	#[config(env = "REGISTRATION", default = "first-user")]
 	pub registration: String,
 
+	/// Whether podkit may make requests to private network addresses (RFC 1918, `fc00::/7`,
+	/// CGNAT) on behalf of notification channels, importers, uptime checks, git providers,
+	/// identity providers and backup targets: `allow` or `deny`. Unset, the instance admin's
+	/// setting decides, and without one `first-user` and `closed` instances allow it (a
+	/// homelab) while `open` ones deny it. Loopback, link-local and metadata addresses are
+	/// never reachable.
+	#[config(env = "OUTBOUND_PRIVATE")]
+	pub outbound_private: Option<String>,
 	/// Seconds between the samples of each active server's CPU, memory, disk,
 	/// network and containers (`/v1/stats`). At least 5.
 	#[config(env = "METRICS_INTERVAL_SECS", default = 30)]

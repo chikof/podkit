@@ -22,6 +22,7 @@ use super::http::Client;
 use super::{Credentials, Imported, Level, Options, Snapshot, Source};
 use super::{caprover, coolify, dokploy};
 use crate::iac::doc::{self, ProjectDoc};
+use crate::net::outbound::Outbound;
 use crate::tests::{
 	PgPool, app, call, count, db_test, member_role, revoke_permission, user_with_team,
 };
@@ -659,7 +660,10 @@ async fn imported_from_stub(source: Source, text: &str) -> (Imported, Arc<Stub>)
 		credentials: creds(source, &url),
 		server: "main".to_owned(),
 	};
-	(super::service::read(&request).await.unwrap(), stub)
+	(
+		super::service::read(&outbound(), &request).await.unwrap(),
+		stub,
+	)
 }
 
 #[tokio::test]
@@ -701,17 +705,86 @@ async fn a_refused_credential_is_an_error_that_does_not_echo_it() {
 			url,
 			token: "tok-in-error-body".to_owned(),
 		};
-		let message = match Client::connect(source, &wrong).await {
+		let message = match Client::connect(&outbound(), source, &wrong).await {
 			Err(e) => e.to_string(),
 			Ok(client) => client.get("/anything").await.unwrap_err().to_string(),
 		};
 		assert!(message.starts_with(source.label()), "{message}");
 		assert!(!message.contains("tok-in-error-body"), "{message}");
 		assert!(
-			message.contains("Wrong password") || message.contains("401"),
+			message.contains("could not read from that address"),
 			"{message}"
 		);
+		assert!(!message.contains("Wrong password"), "{message}");
 	}
+}
+
+/// What a person can learn from a failed import is the same whatever the address did: a
+/// closed port, a web server that answers 401, one that answers 404, one that is not the
+/// platform, an address the policy refuses. (SEC-03.)
+#[tokio::test]
+async fn every_failed_import_reads_the_same_whatever_the_address_did() {
+	let out = outbound();
+	let (refusing, _) = serve(Source::Coolify, COOLIFY).await;
+	let mut messages = Vec::new();
+	for url in [
+		// a closed port, an unreachable host, the metadata address, loopback by name
+		"http://127.0.0.1:9".to_owned(),
+		"http://169.254.169.254".to_owned(),
+		"http://localhost:9".to_owned(),
+		"http://[::1]:9".to_owned(),
+		// a server that answers: 401 (wrong credential), 404 (not this platform's path)
+		refusing.clone(),
+		format!("{refusing}/not-the-prefix"),
+	] {
+		let creds = Credentials {
+			url,
+			token: "wrong-token".to_owned(),
+		};
+		let err = match Client::connect(&out, Source::Coolify, &creds).await {
+			Err(e) => e,
+			Ok(client) => client.get("/api/v1/projects").await.unwrap_err(),
+		};
+		messages.push(err.to_string());
+	}
+	// The policy itself, with loopback no longer allowed in the stub's favour.
+	let strict = Outbound::new(false, Vec::new()).unwrap();
+	let creds = Credentials {
+		url: refusing,
+		token: "right-token".to_owned(),
+	};
+	let err = match Client::connect(&strict, Source::Coolify, &creds).await {
+		Err(e) => e,
+		Ok(client) => client.get("/api/v1/projects").await.unwrap_err(),
+	};
+	messages.push(err.to_string());
+	for m in &messages {
+		assert_eq!(m, &messages[0], "an oracle: {m}");
+	}
+	assert!(messages[0].contains("could not read from that address"));
+}
+
+/// The address is vetted when the import connects: with the policy on, a loopback stub is not
+/// read, and nothing reaches it.
+#[tokio::test]
+async fn an_import_does_not_reach_a_forbidden_address() {
+	let _ = rustls::crypto::ring::default_provider().install_default();
+	let (url, stub) = serve(Source::Coolify, COOLIFY).await;
+	let strict = Outbound::new(true, Vec::new()).unwrap();
+	let request = super::service::Request {
+		source: Source::Coolify,
+		credentials: creds(Source::Coolify, &url),
+		server: "main".to_owned(),
+	};
+	assert!(super::service::read(&strict, &request).await.is_err());
+	assert_eq!(stub.requests.load(Ordering::Relaxed), 0);
+}
+
+fn outbound() -> Outbound {
+	let _ = rustls::crypto::ring::default_provider().install_default();
+	let out = Outbound::new(false, Vec::new()).unwrap();
+	out.loopback_ok(true);
+	out
 }
 
 #[tokio::test]
@@ -721,23 +794,34 @@ async fn an_unreachable_or_wrong_address_is_a_clear_error() {
 		url: "http://127.0.0.1:9".into(),
 		token: "t".into(),
 	};
-	let err = Client::connect(Source::Coolify, &unreachable)
+	let err = Client::connect(&outbound(), Source::Coolify, &unreachable)
 		.await
 		.unwrap()
 		.get("/api/v1/projects")
 		.await
 		.unwrap_err();
-	assert!(err.to_string().contains("could not connect"), "{err}");
+	assert!(
+		err.to_string().contains("could not read from that address"),
+		"{err}"
+	);
 	let bad = Credentials {
 		url: "ftp://x".into(),
 		token: "t".into(),
 	};
-	assert!(Client::connect(Source::Dokploy, &bad).await.is_err());
+	assert!(
+		Client::connect(&outbound(), Source::Dokploy, &bad)
+			.await
+			.is_err()
+	);
 	let blank = Credentials {
 		url: "http://127.0.0.1:9".into(),
 		token: " ".into(),
 	};
-	assert!(Client::connect(Source::Dokploy, &blank).await.is_err());
+	assert!(
+		Client::connect(&outbound(), Source::Dokploy, &blank)
+			.await
+			.is_err()
+	);
 }
 
 // ----- planning and applying against a team

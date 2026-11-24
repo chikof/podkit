@@ -1,7 +1,6 @@
 //! Runs the checks that are due. Called on every turn of the jobs dispatcher's loop, like the
 //! notification delivery pass: there is no service of its own, one pass at a time.
 
-use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::time::Duration;
 
@@ -11,6 +10,7 @@ use time::OffsetDateTime;
 use super::probe::{self, HttpSpec, Outcome};
 use super::{CHECK_COLUMNS, Check, Kind, State, Step, advance};
 use crate::ids::UptimeIncidentId;
+use crate::net::outbound::Outbound;
 use crate::notifications::event::{Event, EventKind, clip};
 use crate::notifications::hooks;
 use crate::state::AppState;
@@ -29,17 +29,6 @@ const RECONCILE_EVERY: i64 = 60;
 
 static RUNNING: AtomicBool = AtomicBool::new(false);
 static LAST_RECONCILE: AtomicI64 = AtomicI64::new(0);
-
-fn client() -> &'static reqwest::Client {
-	static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-	CLIENT.get_or_init(|| {
-		reqwest::Client::builder()
-			.user_agent(concat!("podkit-uptime/", env!("CARGO_PKG_VERSION")))
-			.redirect(reqwest::redirect::Policy::limited(5))
-			.build()
-			.unwrap_or_default()
-	})
-}
 
 /// Runs one pass in the background unless one is already running.
 pub fn wake(state: &AppState) {
@@ -89,6 +78,7 @@ pub async fn tick(state: &AppState, now: OffsetDateTime) -> Result<usize, sqlx::
 
 /// What a check finds when it runs: the probe, and a look at the certificate when one is due.
 pub async fn probe(
+	outbound: &Outbound,
 	check: &Check,
 	now: OffsetDateTime,
 ) -> (Outcome, Option<Result<OffsetDateTime, String>>) {
@@ -97,7 +87,7 @@ pub async fn probe(
 		Kind::Tcp => {
 			let host = check.host.as_deref().unwrap_or_default();
 			let port = u16::try_from(check.port.unwrap_or(0)).unwrap_or(0);
-			(probe::tcp(host, port, timeout).await, None)
+			(probe::tcp(outbound, host, port, timeout).await, None)
 		}
 		Kind::Http => {
 			let url = check.url.clone().unwrap_or_default();
@@ -108,7 +98,7 @@ pub async fn probe(
 				keyword: check.keyword.clone(),
 				timeout,
 			};
-			let outcome = probe::http(client(), &spec).await;
+			let outcome = probe::http(outbound, &spec).await;
 			let tls = match (check.tls_warn_days, url::Url::parse(&url)) {
 				(Some(_), Ok(parsed))
 					if parsed.scheme() == "https"
@@ -118,7 +108,7 @@ pub async fn probe(
 				{
 					let host = parsed.host_str().unwrap_or_default().to_owned();
 					let port = parsed.port_or_known_default().unwrap_or(443);
-					Some(probe::tls_expiry(&host, port, timeout).await)
+					Some(probe::tls_expiry(outbound, &host, port, timeout).await)
 				}
 				_ => None,
 			};
@@ -128,7 +118,7 @@ pub async fn probe(
 }
 
 async fn run_one(state: &AppState, check: Check, now: OffsetDateTime) {
-	let (outcome, tls) = probe(&check, now).await;
+	let (outcome, tls) = probe(&state.outbound, &check, now).await;
 	if let Err(e) = record(state, &check, &outcome, tls, OffsetDateTime::now_utc()).await {
 		tracing::warn!(check = %check.id, "cannot store an uptime result: {e}");
 	}

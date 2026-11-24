@@ -9,6 +9,18 @@ use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
 use url::Url;
 
 use super::BackupTarget;
+use crate::net::outbound::{Denied, Outbound};
+
+/// The policy refused the endpoint. Said like a request that failed, so it is no way to learn
+/// what is on the network.
+#[allow(clippy::needless_pass_by_value)]
+fn denied(d: Denied) -> S3Error {
+	tracing::warn!(
+		reason = d.reason(),
+		"backup storage: the endpoint was refused"
+	);
+	S3Error::Request("storage cannot be reached".to_owned())
+}
 
 /// Long enough for a large dump to transfer on a slow link.
 const SIGNATURE_TTL: Duration = Duration::from_hours(1);
@@ -87,14 +99,16 @@ pub fn presign(
 /// # Errors
 /// [`S3Error`] when the request cannot be sent or storage refuses it.
 pub async fn delete(
-	http: &reqwest::Client,
+	http: &Outbound,
 	target: &BackupTarget,
 	secret: &str,
 	key: &str,
 ) -> Result<(), S3Error> {
 	let url = presign(target, secret, Method::Delete, key)?;
 	let response = http
-		.delete(url)
+		.request(reqwest::Method::DELETE, url.as_str())
+		.await
+		.map_err(denied)?
 		.send()
 		.await
 		.map_err(|e| S3Error::Request(e.without_url().to_string()))?;
@@ -110,14 +124,12 @@ pub async fn delete(
 ///
 /// # Errors
 /// [`S3Error`] when the request cannot be sent or storage refuses it.
-pub async fn probe(
-	http: &reqwest::Client,
-	target: &BackupTarget,
-	secret: &str,
-) -> Result<(), S3Error> {
+pub async fn probe(http: &Outbound, target: &BackupTarget, secret: &str) -> Result<(), S3Error> {
 	let url = presign(target, secret, Method::Get, ".podkit-connection-test")?;
 	let response = http
-		.get(url)
+		.request(reqwest::Method::GET, url.as_str())
+		.await
+		.map_err(denied)?
 		.timeout(Duration::from_secs(10))
 		.send()
 		.await
@@ -156,12 +168,12 @@ fn actions(target: &BackupTarget, secret: &str) -> Result<(Bucket, Credentials),
 
 async fn body_text(response: reqwest::Response) -> Result<String, S3Error> {
 	let status = response.status();
-	let body = response
-		.text()
+	// An answer to a multipart request is a small XML document.
+	let body = crate::net::outbound::read_capped(response, 1 << 20)
 		.await
-		.map_err(|e| S3Error::Request(e.without_url().to_string()))?;
+		.map_err(|_| S3Error::Request("storage answer could not be read".to_owned()))?;
 	if status.is_success() {
-		Ok(body)
+		Ok(String::from_utf8_lossy(&body).into_owned())
 	} else {
 		Err(S3Error::Status(status))
 	}
@@ -173,7 +185,7 @@ async fn body_text(response: reqwest::Response) -> Result<String, S3Error> {
 /// [`S3Error`] when the request cannot be sent, storage refuses it or answers
 /// something that is not an upload id.
 pub async fn create_multipart(
-	http: &reqwest::Client,
+	http: &Outbound,
 	target: &BackupTarget,
 	secret: &str,
 	key: &str,
@@ -183,7 +195,9 @@ pub async fn create_multipart(
 		.create_multipart_upload(Some(&credentials), key)
 		.sign(SIGNATURE_TTL);
 	let response = http
-		.post(url)
+		.request(reqwest::Method::POST, url.as_str())
+		.await
+		.map_err(denied)?
 		.timeout(MULTIPART_TIMEOUT)
 		.send()
 		.await
@@ -221,7 +235,7 @@ pub fn part_urls(
 /// [`S3Error`] when the request cannot be sent or storage refuses it. S3 may
 /// answer 200 and report the failure in the body, which counts as a refusal.
 pub async fn complete_multipart(
-	http: &reqwest::Client,
+	http: &Outbound,
 	target: &BackupTarget,
 	secret: &str,
 	key: &str,
@@ -237,7 +251,9 @@ pub async fn complete_multipart(
 	);
 	let url = action.clone().sign(SIGNATURE_TTL);
 	let response = http
-		.post(url)
+		.request(reqwest::Method::POST, url.as_str())
+		.await
+		.map_err(denied)?
 		.timeout(MULTIPART_TIMEOUT)
 		.body(action.body())
 		.send()
@@ -255,7 +271,7 @@ pub async fn complete_multipart(
 /// # Errors
 /// [`S3Error`] when the request cannot be sent or storage refuses it.
 pub async fn abort_multipart(
-	http: &reqwest::Client,
+	http: &Outbound,
 	target: &BackupTarget,
 	secret: &str,
 	key: &str,
@@ -266,7 +282,9 @@ pub async fn abort_multipart(
 		.abort_multipart_upload(Some(&credentials), key, upload_id)
 		.sign(SIGNATURE_TTL);
 	let response = http
-		.delete(url)
+		.request(reqwest::Method::DELETE, url.as_str())
+		.await
+		.map_err(denied)?
 		.timeout(Duration::from_secs(30))
 		.send()
 		.await

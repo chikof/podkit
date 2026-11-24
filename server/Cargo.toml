@@ -37,6 +37,7 @@ bcrypt.workspace = true
 hmac.workspace = true
 getrandom.workspace = true
 proto.workspace = true
+outbound.workspace = true
 podkit-billing = { path = "../crates/billing" }
 podkit-cloud = { path = "../crates/cloud", optional = true }
 hyper.workspace = true
@@ -78,6 +79,7 @@ workspace = true
 encre-css.workspace = true
 
 [dev-dependencies]
+outbound = { workspace = true, features = ["test-util"] }
 # Live model-download test runs the real agent in process.
 agent = { path = "../agent" }
 jsonschema = { version = "=0.61.2", default-features = false }

@@ -12,8 +12,13 @@ use rustls::crypto::{CryptoProvider, ring};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{ClientConfig, DigitallySignedStruct, SignatureScheme};
 use time::{Date, Month, OffsetDateTime, PrimitiveDateTime, Time};
-use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
+
+use crate::net::outbound::{ConnectError, Outbound};
+
+/// A redirect is followed this many times.
+const MAX_REDIRECTS: usize = 3;
+const USER_AGENT: &str = concat!("podkit-uptime/", env!("CARGO_PKG_VERSION"));
 
 /// The most of a response body read to look for a keyword.
 const BODY_LIMIT: usize = 1024 * 1024;
@@ -63,16 +68,55 @@ pub struct HttpSpec {
 
 /// Sends the request and judges the answer: the status must be the expected one and, when a
 /// keyword is set, the first megabyte of the body must contain it.
-pub async fn http(client: &reqwest::Client, spec: &HttpSpec) -> Outcome {
+///
+/// The address goes through the outbound policy. A redirect is followed here, by hand, at most
+/// [`MAX_REDIRECTS`] times, and each hop is vetted like the first request: a public address that
+/// redirects to the metadata address is refused at the second request.
+pub async fn http(outbound: &Outbound, spec: &HttpSpec) -> Outcome {
 	let started = Instant::now();
-	let request = if spec.head {
-		client.head(&spec.url)
+	let method = if spec.head {
+		reqwest::Method::HEAD
 	} else {
-		client.get(&spec.url)
+		reqwest::Method::GET
 	};
-	let response = match request.timeout(spec.timeout).send().await {
-		Ok(r) => r,
-		Err(e) => return Outcome::bad(None, describe(&e, spec.timeout)),
+	let Ok(mut url) = url::Url::parse(&spec.url) else {
+		return Outcome::bad(None, "the request failed");
+	};
+	let mut hops = 0;
+	let response = loop {
+		let request = match outbound.request_url(method.clone(), url.clone()).await {
+			Ok(r) => r,
+			Err(denied) => {
+				tracing::debug!(reason = denied.reason(), "uptime: the address was refused");
+				return Outcome::bad(None, format!("cannot connect: {denied}"));
+			}
+		};
+		let response = match request
+			.header(reqwest::header::USER_AGENT, USER_AGENT)
+			.timeout(spec.timeout)
+			.send()
+			.await
+		{
+			Ok(r) => r,
+			Err(e) => return Outcome::bad(None, describe(&e, spec.timeout)),
+		};
+		let next = response
+			.status()
+			.is_redirection()
+			.then(|| response.headers().get(reqwest::header::LOCATION))
+			.flatten()
+			.and_then(|v| v.to_str().ok())
+			.and_then(|l| url.join(l).ok());
+		match next {
+			Some(next) => {
+				hops += 1;
+				if hops > MAX_REDIRECTS {
+					return Outcome::bad(None, "too many redirects");
+				}
+				url = next;
+			}
+			None => break response,
+		}
 	};
 	let status = response.status().as_u16();
 	if spec.expected_status == 0 && status >= 400 {
@@ -133,13 +177,21 @@ fn describe(e: &reqwest::Error, timeout: Duration) -> String {
 	}
 }
 
-/// Opens a TCP connection and closes it again.
-pub async fn tcp(host: &str, port: u16, timeout: Duration) -> Outcome {
+/// Opens a TCP connection and closes it again. The address goes through the outbound policy.
+pub async fn tcp(outbound: &Outbound, host: &str, port: u16, timeout: Duration) -> Outcome {
 	let started = Instant::now();
-	match tokio::time::timeout(timeout, TcpStream::connect((host, port))).await {
-		Ok(Ok(_)) => Outcome::good(started, None),
-		Ok(Err(e)) => Outcome::bad(None, format!("cannot connect: {}", io_reason(&e))),
-		Err(_) => Outcome::bad(None, format!("no answer within {} s", timeout.as_secs())),
+	match outbound.connect(host, port, timeout).await {
+		Ok(_) => Outcome::good(started, None),
+		Err(ConnectError::Denied(denied)) => {
+			tracing::debug!(reason = denied.reason(), "uptime: the address was refused");
+			Outcome::bad(None, format!("cannot connect: {denied}"))
+		}
+		Err(ConnectError::Io(e)) if e.kind() == std::io::ErrorKind::TimedOut => {
+			Outcome::bad(None, format!("no answer within {} s", timeout.as_secs()))
+		}
+		Err(ConnectError::Io(e)) => {
+			Outcome::bad(None, format!("cannot connect: {}", io_reason(&e)))
+		}
 	}
 }
 
@@ -198,6 +250,7 @@ impl ServerCertVerifier for AcceptAny {
 /// # Errors
 /// A short phrase: the host does not answer, does not speak TLS or sent something unreadable.
 pub async fn tls_expiry(
+	outbound: &Outbound,
 	host: &str,
 	port: u16,
 	timeout: Duration,
@@ -211,9 +264,13 @@ pub async fn tls_expiry(
 		.with_no_client_auth();
 	let name = ServerName::try_from(host.to_owned()).map_err(|_| "invalid host name".to_owned())?;
 	let connect = async {
-		let tcp = TcpStream::connect((host, port))
+		let tcp = outbound
+			.connect(host, port, timeout)
 			.await
-			.map_err(|e| io_reason(&e))?;
+			.map_err(|e| match e {
+				ConnectError::Denied(d) => d.to_string(),
+				ConnectError::Io(e) => io_reason(&e),
+			})?;
 		TlsConnector::from(Arc::new(config))
 			.connect(name, tcp)
 			.await

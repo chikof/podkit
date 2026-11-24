@@ -23,6 +23,7 @@ use super::{
 	runner,
 };
 use crate::ids::{TeamId, UptimeCheckId, UserId};
+use crate::net::outbound::Outbound;
 use crate::notifications::channel::{ChannelFields, ChannelKind};
 use crate::notifications::event::{EventKind, Severity};
 use crate::notifications::service::{self as notify, RuleInput};
@@ -46,6 +47,20 @@ async fn web() -> Web {
 			get(|| async { (StatusCode::SERVICE_UNAVAILABLE, "maintenance") }),
 		)
 		.route("/missing", get(|| async { StatusCode::NOT_FOUND }))
+		.route(
+			"/to-ok",
+			get(|| async { axum::response::Redirect::temporary("/ok") }),
+		)
+		.route(
+			"/to-metadata",
+			get(|| async {
+				axum::response::Redirect::temporary("http://169.254.169.254/latest/meta-data/")
+			}),
+		)
+		.route(
+			"/loop",
+			get(|| async { axum::response::Redirect::temporary("/loop") }),
+		)
 		.route(
 			"/slow",
 			get(|| async {
@@ -76,9 +91,11 @@ fn install_crypto() {
 	let _ = rustls::crypto::ring::default_provider().install_default();
 }
 
-fn client() -> reqwest::Client {
+fn client() -> Outbound {
 	install_crypto();
-	reqwest::Client::new()
+	let out = Outbound::new(false, Vec::new()).unwrap();
+	out.loopback_ok(true);
+	out
 }
 
 fn spec(url: String) -> HttpSpec {
@@ -327,6 +344,75 @@ async fn uptime_http_check_judges_status_keyword_and_timeout() {
 }
 
 #[tokio::test]
+async fn uptime_http_check_follows_a_few_redirects_and_vets_every_hop() {
+	let web = web().await;
+	let client = client();
+	// A redirect to a page of the same site is followed ...
+	let followed = probe::http(&client, &spec(format!("{}/to-ok", web.base))).await;
+	assert!(followed.ok, "{followed:?}");
+	// ... a loop is cut ...
+	let looped = probe::http(&client, &spec(format!("{}/loop", web.base))).await;
+	assert_eq!(looped.error.as_deref(), Some("too many redirects"));
+	// ... and a redirect to the metadata address is refused at the hop, however fine the
+	// first address was.
+	let hop = probe::http(&client, &spec(format!("{}/to-metadata", web.base))).await;
+	assert!(!hop.ok);
+	assert!(
+		hop.error
+			.as_deref()
+			.unwrap_or_default()
+			.contains("cannot connect"),
+		"{hop:?}"
+	);
+}
+
+#[tokio::test]
+async fn uptime_probes_go_through_the_outbound_policy() {
+	install_crypto();
+	// The ordinary test policy lets 127.0.0.1 through for the stubs; this one does not.
+	let strict = Outbound::new(true, Vec::new()).unwrap();
+	let web = web().await;
+	let refused = probe::http(&strict, &spec(format!("{}/ok", web.base))).await;
+	assert!(!refused.ok);
+	assert_eq!(
+		refused.error.as_deref(),
+		Some("cannot connect: that address cannot be reached from here")
+	);
+	assert_eq!(refused.status_code, None, "nothing was requested");
+	for url in [
+		"http://169.254.169.254/latest/meta-data/",
+		"http://[::ffff:127.0.0.1]:8080/",
+		"http://0.0.0.0/",
+	] {
+		let out = probe::http(&strict, &spec(url.to_owned())).await;
+		assert!(!out.ok, "{url}");
+		assert!(
+			out.error
+				.as_deref()
+				.unwrap_or_default()
+				.contains("cannot connect"),
+			"{url}: {out:?}"
+		);
+	}
+	// A TCP check and a certificate look are held to it too.
+	let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+	let port = listener.local_addr().unwrap().port();
+	let tcp = probe::tcp(&strict, "127.0.0.1", port, Duration::from_secs(2)).await;
+	assert!(!tcp.ok);
+	assert!(
+		tokio::time::timeout(Duration::from_millis(200), listener.accept())
+			.await
+			.is_err(),
+		"the port was connected to"
+	);
+	assert!(
+		probe::tls_expiry(&strict, "127.0.0.1", port, Duration::from_secs(2))
+			.await
+			.is_err()
+	);
+}
+
+#[tokio::test]
 async fn uptime_errors_never_carry_the_address() {
 	let web = web().await;
 	let client = client();
@@ -349,10 +435,10 @@ async fn uptime_errors_never_carry_the_address() {
 async fn uptime_tcp_check_connects_or_does_not() {
 	let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
 	let port = listener.local_addr().unwrap().port();
-	let open = probe::tcp("127.0.0.1", port, Duration::from_secs(2)).await;
+	let open = probe::tcp(&client(), "127.0.0.1", port, Duration::from_secs(2)).await;
 	assert!(open.ok, "{open:?}");
 	drop(listener);
-	let closed = probe::tcp("127.0.0.1", port, Duration::from_secs(2)).await;
+	let closed = probe::tcp(&client(), "127.0.0.1", port, Duration::from_secs(2)).await;
 	assert!(!closed.ok);
 	assert_eq!(
 		closed.error.as_deref(),
@@ -438,20 +524,20 @@ async fn tls_stub() -> u16 {
 #[tokio::test]
 async fn uptime_tls_expiry_is_read_from_a_live_handshake() {
 	let port = tls_stub().await;
-	let at = probe::tls_expiry("localhost", port, Duration::from_secs(5))
+	let at = probe::tls_expiry(&client(), "localhost", port, Duration::from_secs(5))
 		.await
 		.unwrap();
 	assert_eq!(at, datetime!(2030-01-01 00:00 UTC));
 	// Not TLS at all.
 	let web = web().await;
 	let plain: u16 = web.base.rsplit(':').next().unwrap().parse().unwrap();
-	let err = probe::tls_expiry("127.0.0.1", plain, Duration::from_secs(2))
+	let err = probe::tls_expiry(&client(), "127.0.0.1", plain, Duration::from_secs(2))
 		.await
 		.unwrap_err();
 	assert!(!err.contains("127.0.0.1"), "{err}");
 	// Nothing there.
 	assert!(
-		probe::tls_expiry("127.0.0.1", 1, Duration::from_secs(2))
+		probe::tls_expiry(&client(), "127.0.0.1", 1, Duration::from_secs(2))
 			.await
 			.is_err()
 	);

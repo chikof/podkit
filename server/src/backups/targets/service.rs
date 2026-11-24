@@ -166,21 +166,21 @@ pub async fn test(
 		secret_access_key: Vec::new(),
 		created_at: time::OffsetDateTime::now_utc(),
 	};
-	s3::probe(&s.http, &target, &body.secret_access_key)
+	s3::probe(&s.outbound, &target, &body.secret_access_key)
 		.await
 		.map_err(|e| match e {
-			s3::S3Error::Status(status) if status == reqwest::StatusCode::FORBIDDEN => {
-				ServerError::Validation(
-					"the storage refused the access key or secret key".to_owned(),
-				)
-			}
 			s3::S3Error::Bucket(_) => {
 				ServerError::Validation("the bucket does not exist".to_owned())
 			}
-			s3::S3Error::Request(_) => ServerError::Validation(
-				"podkit could not reach the storage. Check the endpoint and try again.".to_owned(),
-			),
-			other => ServerError::Validation(other.to_string()),
+			// Whatever the storage answered stays with podkit: for a person it would be a way
+			// to look at whatever the endpoint points at. One message for every failure.
+			other => {
+				tracing::warn!("backup target test failed: {other}");
+				ServerError::Validation(
+					"podkit could not use that storage. Check the endpoint, the bucket and the keys, and that the endpoint is an address podkit may reach (private networks need the setting in Settings → Registration; loopback never works)."
+						.to_owned(),
+				)
+			}
 		})
 }
 

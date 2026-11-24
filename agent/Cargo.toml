@@ -16,6 +16,7 @@ path = "src/main.rs"
 
 [dependencies]
 proto.workspace = true
+outbound.workspace = true
 tokio.workspace = true
 axum.workspace = true
 bollard.workspace = true
@@ -37,6 +38,7 @@ rustls.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+outbound = { workspace = true, features = ["test-util"] }
 reqwest = { workspace = true, features = ["json"] }
 
 [lints]

@@ -93,6 +93,7 @@ pub async fn create_channel(
 	authorize(&s.db, user, team, Action::Create, Resource::Notification).await?;
 	let name = name_of(name)?;
 	let built = build(kind, fields)?;
+	vet_built(s, &built).await?;
 	let sealed = built
 		.secret
 		.as_ref()
@@ -165,6 +166,7 @@ pub async fn update_channel(
 			to: or_keep(&fields.to, old.to.as_deref()),
 		};
 		let built = build(current.kind, &merged)?;
+		vet_built(s, &built).await?;
 		let sealed = built
 			.secret
 			.as_ref()
@@ -205,6 +207,26 @@ pub async fn update_channel(
 	)
 	.await;
 	Ok(updated)
+}
+
+/// Refuses a channel whose address podkit would not send to: see `net::outbound`. It is
+/// checked again at every send, because a name can start to point somewhere else.
+async fn vet_built(s: &AppState, built: &super::channel::Built) -> AppResult<()> {
+	let urls = [
+		built
+			.secret
+			.as_ref()
+			.and_then(|secret| secret.url.as_deref()),
+		built.config.api_base.as_deref(),
+		built.config.server.as_deref(),
+	];
+	for url in urls.into_iter().flatten() {
+		s.outbound
+			.vet_url(url)
+			.await
+			.map_err(|_| crate::net::outbound::refused())?;
+	}
+	Ok(())
 }
 
 fn or_keep(given: &str, stored: Option<&str>) -> String {
@@ -340,6 +362,10 @@ pub async fn save_smtp(
 		.ok()
 		.filter(|p| *p > 0)
 		.ok_or_else(|| invalid("SMTP port"))?;
+	s.outbound
+		.resolve(host, port)
+		.await
+		.map_err(|_| crate::net::outbound::refused())?;
 	let security = Security::parse(&input.security).ok_or_else(|| invalid("security"))?;
 	let from = input.from_addr.trim();
 	if from.parse::<lettre::message::Mailbox>().is_err() || from.chars().any(char::is_control) {

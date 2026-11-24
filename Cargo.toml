@@ -7,6 +7,7 @@ members = [
 	"crates/cloud",
 	"crates/crypto",
 	"crates/firewall",
+	"crates/outbound",
 	"crates/proto",
 	"server",
 ]
@@ -94,6 +95,7 @@ tower-http = { version = "=0.6.11", default-features = false, features = ["compr
 
 crypto = { path = "./crates/crypto" }
 proto = { path = "./crates/proto" }
+outbound = { path = "./crates/outbound" }
 
 
 [workspace.lints.clippy]

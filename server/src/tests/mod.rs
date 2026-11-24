@@ -43,6 +43,20 @@ pub async fn app_with_registration(db: PgPool, registration: Registration) -> Ro
 	crate::routes::routes(state).await.unwrap()
 }
 
+/// A resolver for tests: every name is 127.0.0.1.
+struct Loopback;
+
+impl outbound::Lookup for Loopback {
+	fn lookup<'a>(
+		&'a self,
+		_host: &'a str,
+	) -> std::pin::Pin<
+		Box<dyn std::future::Future<Output = std::io::Result<Vec<std::net::IpAddr>>> + Send + 'a>,
+	> {
+		Box::pin(async { Ok(vec![std::net::IpAddr::from([127, 0, 0, 1])]) })
+	}
+}
+
 /// A full `AppState` over `db` with a throwaway data dir and no live agent.
 pub fn state(db: PgPool) -> AppState {
 	let _ = rustls::crypto::ring::default_provider().install_default();
@@ -57,6 +71,15 @@ pub fn state(db: PgPool) -> AppState {
 		jobs: Arc::new(Jobs::new()),
 		logs: Arc::new(LogHub::new(log_dir)),
 		http: reqwest::Client::new(),
+		outbound: {
+			// The stubs of the tests listen on 127.0.0.1: allow it, and let every name the
+			// tests make up (`hooks.example.com`) resolve there too, where nothing listens, so
+			// nothing reaches the real network. A test of the policy itself turns this off.
+			let outbound =
+				outbound::Outbound::with_lookup(false, Vec::new(), Arc::new(Loopback)).unwrap();
+			outbound.loopback_ok(true);
+			outbound
+		},
 		shutdown: tokio_util::sync::CancellationToken::new(),
 		#[cfg(feature = "cloud")]
 		billing: crate::billing::Billing::cloud(),
@@ -71,6 +94,7 @@ pub fn state(db: PgPool) -> AppState {
 			local_agent_socket,
 			data_dir,
 			registration: Registration::Open,
+			outbound_private: None,
 			public_url: None,
 		}),
 	}

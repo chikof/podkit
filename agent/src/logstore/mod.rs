@@ -382,6 +382,7 @@ mod tests {
 			authorization: None,
 			tenant: None,
 			labels: Vec::new(),
+			allow_private: false,
 		});
 		assert!(store.set_config(bad).is_err());
 		assert_eq!(

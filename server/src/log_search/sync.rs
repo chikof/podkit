@@ -79,6 +79,7 @@ async fn config_for(s: &AppState, server: &Server) -> Option<LogConfig> {
 					("team".to_owned(), slug),
 					("server".to_owned(), server.name.clone()),
 				],
+				allow_private: s.outbound.allow_private(),
 			})
 		}
 	};

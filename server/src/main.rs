@@ -59,6 +59,7 @@ mod members;
 mod metrics;
 mod model_files;
 mod models;
+mod net;
 mod networks;
 mod notifications;
 mod previews;
@@ -89,6 +90,8 @@ mod volumes;
 mod webhooks;
 
 #[cfg(test)]
+mod sec_regression;
+#[cfg(test)]
 mod tests;
 
 /// Worker threads of the async runtime: one per core up to four. The server is
@@ -107,6 +110,7 @@ fn main() -> AppResult<()> {
 	runtime.build()?.block_on(run())
 }
 
+#[allow(clippy::too_many_lines)]
 async fn run() -> AppResult<()> {
 	if let Some(code) = templates::import::cli() {
 		std::process::exit(code);
@@ -148,6 +152,7 @@ async fn run() -> AppResult<()> {
 
 	let shutdown = CancellationToken::new();
 	let state = AppState {
+		outbound: outbound_policy(&db, &runtime_config, &config).await?,
 		db,
 		secrets,
 		agents: Arc::new(AgentPool::new(runtime_config.local_agent_socket.clone())),
@@ -225,6 +230,27 @@ async fn run() -> AppResult<()> {
 	Ok(())
 }
 
+/// The policy for requests to addresses people type, from the setting and the listen address.
+async fn outbound_policy(
+	db: &sqlx::PgPool,
+	runtime: &state::Config,
+	config: &ServerConfig,
+) -> AppResult<outbound::Outbound> {
+	let policy = net::outbound::resolve(db, runtime.registration, runtime.outbound_private).await?;
+	info!(
+		allow_private = policy.allow_private,
+		source = ?policy.source,
+		"outbound requests to private addresses"
+	);
+	net::outbound::build(
+		policy.allow_private,
+		&config.host,
+		u16::try_from(config.port).unwrap_or(8080),
+		&[],
+	)
+	.map_err(|_| ServerError::Internal)
+}
+
 fn resolve_config(config: &ServerConfig) -> AppResult<Config> {
 	let home = || dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"));
 	let data_dir = config.data_dir.as_ref().map_or_else(
@@ -252,6 +278,13 @@ fn resolve_config(config: &ServerConfig) -> AppResult<Config> {
 		.map_err(ServerError::Validation)?;
 	Ok(Config {
 		registration,
+		outbound_private: config
+			.outbound_private
+			.as_deref()
+			.filter(|v| !v.trim().is_empty())
+			.map(net::outbound::parse)
+			.transpose()
+			.map_err(ServerError::Validation)?,
 		ingress_port: u16::try_from(config.ingress_port).unwrap_or(80),
 		https_port: u16::try_from(config.https_port).unwrap_or(443),
 		acme_email: config.acme_email.clone(),
