@@ -1,0 +1,25 @@
+//! Projects and what lives in them: the projects tiles, an environment's resource rows and
+//! the create-resource picker page. Applications and databases have their own areas.
+
+use axum::Router;
+
+use podkit_core::state::AppState;
+
+// The application pages reuse the resource status line and relative times.
+mod activity;
+pub(crate) mod cards;
+mod clone;
+#[cfg(test)]
+mod clone_tests;
+mod environment;
+mod list;
+mod picker;
+#[cfg(test)]
+mod tests;
+
+pub fn router() -> Router<AppState> {
+	Router::new()
+		.merge(list::router())
+		.merge(environment::router())
+		.merge(clone::router())
+}

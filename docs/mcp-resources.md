@@ -66,7 +66,7 @@ An MCP server cannot be removed while applications are linked to it.
 
 ```
 devenv shell -- cargo test --workspace --all-features -- mcp_resource
-devenv shell -- cargo test -p server --all-features -- --ignored mcp_resource_live
+devenv shell -- cargo test -p podkit-core --all-features -- --ignored mcp_resource_live
 ```
 
-The ignored live test needs Podman and the network; see `server/src/mcp_servers/tests.rs`.
+The ignored live test needs Podman and the network; see `crates/core/src/mcp_servers/tests.rs`.

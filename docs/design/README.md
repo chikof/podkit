@@ -4,9 +4,9 @@ The spec for the web UI. Every page card follows it; `/_ui` shows each piece in 
 state and both color schemes. Where this file and the code disagree, fix the one that is
 wrong in the same change.
 
-Code: tokens in `server/src/ui/theme.css`, platform-feature rules in
-`server/src/ui/components.css`, components in `server/src/ui/components/` (one file each).
-Assets are vendored in `server/static/` and listed in `NOTICE`.
+Code: tokens in `crates/ui/src/theme.css`, platform-feature rules in
+`crates/ui/src/components.css`, components in `crates/ui/src/components/` (one file each).
+Assets are vendored in `crates/ui/static/` and listed in `NOTICE`.
 
 **Current look: Warm dark** (page D of the "Podkit PaaS dashboard" design). A warm
 brown-black neutral (`#141210` page, `#1E1B18` panels, `#2E2A25` hairlines) with one teal
@@ -103,7 +103,7 @@ class, or when `light` is chosen.
 
 ## Components
 
-Each is a function or constant set in `server/src/ui/components/<name>.rs`, shown on
+Each is a function or constant set in `crates/ui/src/components/<name>.rs`, shown on
 `/_ui`. Datastar attributes cannot pass through a maud function, so any element that
 carries them (inputs with `data-bind`, buttons with `data-on:click`) is written in the page
 with the class constants (`BUTTON`, `INPUT`, `LABEL`, `TEXTAREA`, `SELECT`, `MENU_ITEM`, …)
@@ -283,10 +283,10 @@ Three-button group (system, light, dark) in the header; a form posting to `/them
 
 ## App shell
 
-Code: `server/src/ui/shell/` (`nav`, `sidebar`, `header`, `palette`, `prefs`), entered through
+Code: `crates/ui/src/shell/` (`nav`, `sidebar`, `header`, `palette`, `prefs`), entered through
 `layout::app_page(ctx, title, crumbs, body)`; rules in the "App shell" part of `components.css`;
 the palette's key handling is section 5 of `podkit.js`. Pages live in
-`server/src/ui/pages/<area>/` (one `router()` per area, merged in `ui/mod.rs`).
+`crates/ui/src/pages/<area>/` (one `router()` per area, merged in `lib.rs`).
 
 - **Sidebar:** team switcher on top (a menu), the nav (Projects, Templates, Models; then an
   **Infrastructure** section with Overview, Servers, Networks, Keys, Registries, Git providers,
@@ -316,7 +316,7 @@ the palette's key handling is section 5 of `podkit.js`. Pages live in
 
 ## Projects and environments
 
-Code: `server/src/ui/pages/projects/{list,environment,picker,cards}.rs`; service reads in
+Code: `crates/ui/src/pages/projects/{list,environment,picker,cards}.rs`; service reads in
 `projects::overview`; rules at the end of `components.css`.
 
 - **Projects grid** (`/teams/{t}/projects`, an Explore surface): one logo card per project: name
@@ -412,7 +412,7 @@ Baseline widely available features need no fallback. Newer ones degrade as above
 ## Adding to the system
 
 1. Look for an existing component; extend it before adding one.
-2. New components go in a NEW file under `server/src/ui/components/`, with render tests
+2. New components go in a NEW file under `crates/ui/src/components/`, with render tests
    (aria attributes, escaping), a section in `/_ui` (`gallery.rs`) and an entry here.
 3. Classes: whole string literals; a utility encre-css knows or a `.ui-*` rule in
    `components.css`. `build.rs` fails the build on an unknown class.

@@ -1,27 +1,27 @@
 podkit bundles the third-party assets below. They are served from this
 server's own origin; nothing is loaded from a CDN.
 
-Inter, JetBrains Mono and Sora (server/static/fonts/)
+Inter, JetBrains Mono and Sora (crates/ui/static/fonts/)
   Latin subsets of the variable fonts, as published by Fontsource 5.3.0.
   Inter: Copyright 2016 The Inter Project Authors.
   JetBrains Mono: Copyright 2020 The JetBrains Mono Project Authors.
   Sora: Copyright 2019 The Sora Project Authors.
-  SIL Open Font License 1.1: server/static/LICENSE-fonts-OFL.txt
+  SIL Open Font License 1.1: crates/ui/static/LICENSE-fonts-OFL.txt
   https://github.com/rsms/inter
   https://github.com/JetBrains/JetBrainsMono
   https://github.com/sora-xor/sora-font
 
-Lucide icons (server/static/icons.svg)
+Lucide icons (crates/ui/static/icons.svg)
   Copyright (c) 2026 Lucide Icons and Contributors.
-  ISC License: server/static/LICENSE-lucide.txt
+  ISC License: crates/ui/static/LICENSE-lucide.txt
   https://lucide.dev
 
-Simple Icons (server/static/logos.svg)
+Simple Icons (crates/ui/static/logos.svg)
   Released under CC0-1.0: https://github.com/simple-icons/simple-icons
   The marks are trademarks of their owners and appear only to identify
   the software they stand for.
 
-Datastar (server/static/datastar-1.0.5.js)
+Datastar (crates/ui/static/datastar-1.0.5.js)
   MIT License. https://data-star.dev
 
 Parts of the UI components are adapted from Topcoat UI (MIT):
@@ -29,11 +29,11 @@ Parts of the UI components are adapted from Topcoat UI (MIT):
 
 podkit includes third-party material under the following terms.
 
-== Dokploy templates (server/templates/*, `upstream` in each template.toml) ==
+== Dokploy templates (crates/core/templates/*, `upstream` in each template.toml) ==
 
 Templates marked `upstream = "Dokploy/templates@6313a2e ..."` are converted from the blueprints of
 https://github.com/Dokploy/templates. Each one's path in that repository is in its template.toml
-and in server/templates/IMPORT_REPORT.md.
+and in crates/core/templates/IMPORT_REPORT.md.
 
 MIT License
 
@@ -57,12 +57,12 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-== Logos (server/static/logos, templates' own logo files) ==
+== Logos (crates/core/static/logos, templates' own logo files) ==
 
 105 SVG files come from https://github.com/homarr-labs/dashboard-icons at d4b500dc40a8e1043b1581cabb7208892cf35472 (Apache License 2.0,
 https://www.apache.org/licenses/LICENSE-2.0). 17 come from https://github.com/simple-icons/simple-icons
 at 17cd4ee07612198a1d8777a060d4100423762a8b (CC0 1.0 Universal, https://creativecommons.org/publicdomain/zero/1.0/). Each file's origin is
-in server/static/logos/SOURCES.tsv; Simple Icons files had a neutral `fill` added.
+in crates/core/static/logos/SOURCES.tsv; Simple Icons files had a neutral `fill` added.
 
 The logo files that ship inside imported templates were published by the Dokploy/templates
 repository (MIT, above). The logos remain trademarks of their owners and appear only to

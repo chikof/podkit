@@ -4,7 +4,7 @@ podkit's `colibri` engine runs `localhost/podkit-colibri:cpu` (or `:cuda` when t
 uses a GPU). [colibri](https://github.com/JustVugg/colibri) ships no official image, so
 for now **building it is a manual step on each server that will run colibri models**.
 Publishing it to a registry is not done yet; when it is, change the two image names in
-`server/src/models/engines.rs` and set `pull: true` there.
+`crates/core/src/models/engines.rs` and set `pull: true` there.
 
 The image is built from `Containerfile` here, which pins colibri to the commit the engine
 spike measured (`0a5504a1dc64f86fcd0fe7db298b0448c730e7e6`, banner `v2.1.0`) and builds the

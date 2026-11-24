@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Resolves every recipe of server/catalog/models.toml against the Hugging Face
+# Resolves every recipe of crates/core/catalog/models.toml against the Hugging Face
 # API (file lists and byte sizes only, never the weights) and checks that the
 # pinned revision, total_bytes and memory estimates are what HF reports.
 #

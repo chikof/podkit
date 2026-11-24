@@ -63,7 +63,7 @@ jobs:
       - name: install sqlx-cli
         run: cargo install sqlx-cli --no-default-features --features postgres,rustls --locked
       - name: run migrations
-        run: sqlx migrate run --source server/migrations
+        run: sqlx migrate run --source crates/core/migrations
       - name: cargo test
         run: cargo test --workspace --all-features
 

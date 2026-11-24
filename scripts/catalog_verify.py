@@ -9,11 +9,11 @@ import urllib.error
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CATALOG = os.path.join(ROOT, "server", "catalog", "models.toml")
+CATALOG = os.path.join(ROOT, "crates", "core", "catalog", "models.toml")
 ENDPOINT = os.environ.get("HF_ENDPOINT", "https://huggingface.co").rstrip("/")
 TOKEN = os.environ.get("HF_TOKEN")
 MIB = 1 << 20
-# Must match server/src/models/service.rs::estimate and catalog::CONTEXT.
+# Must match crates/core/src/models/service.rs::estimate and catalog::CONTEXT.
 CONTEXT = 8192
 KV_KB_PER_TOKEN = 128
 BASE_OVERHEAD_MB = 512

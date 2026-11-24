@@ -6,7 +6,7 @@
 
 - [ ] `cargo fmt --all` / `cargo clippy --workspace --all-targets --all-features`
 - [ ] `cargo test --workspace` passes
-- [ ] Migrations added under `server/migrations` with matching `.down.sql` (if schema touched)
+- [ ] Migrations added under `crates/core/migrations` with matching `.down.sql` (if schema touched)
 
 ## Testing
 

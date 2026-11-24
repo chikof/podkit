@@ -2,7 +2,7 @@
 """Generates the canvas mockups from one small data model.
 
 It is also the reference for the server side of the real feature (I2): a layered layout, edge routing and group frames,
-all computed from the resource graph with no client-side measuring. Port it to Rust in `server/src/ui/canvas_layout.rs`.
+all computed from the resource graph with no client-side measuring. Port it to Rust in `crates/ui/src/canvas_layout.rs`.
 
 	python3 design/canvas/tools/build.py          # writes canvas.html, canvas-wire.html, canvas-empty.html, canvas-states.html
 """

@@ -41,8 +41,8 @@ every problem at once.
 
 ## Tests
 
-- `cargo test -p server --all-features -- stacks::` (the corpus subset is in `server/src/stacks/fixtures/dokploy`)
+- `cargo test -p podkit-core --all-features -- stacks::` (the corpus subset is in `crates/core/src/stacks/fixtures/dokploy`)
 - `cargo test -p agent -- stack`
 - All 433 fully supported Dokploy templates:
-  `PODKIT_COMPOSE_CORPUS=<checkout of Dokploy/templates> cargo test -p server --all-features -- --ignored every_fully_supported`
-- Live (real podman, ports 8088/8443): `cargo test -p server --all-features -- --ignored stack_live`
+  `PODKIT_COMPOSE_CORPUS=<checkout of Dokploy/templates> cargo test -p podkit-core --all-features -- --ignored every_fully_supported`
+- Live (real podman, ports 8088/8443): `cargo test -p podkit-core --all-features -- --ignored stack_live`

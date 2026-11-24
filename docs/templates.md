@@ -1,13 +1,13 @@
 # Templates
 
-One-click services. A template is a folder under `server/templates/<id>/` that
-`server/build.rs` embeds in the binary, so nothing is fetched at run time.
+One-click services. A template is a folder under `crates/core/templates/<id>/` that
+`crates/core/build.rs` embeds in the binary, so nothing is fetched at run time.
 
 ```
 template.toml        id, name, description, category, tags, version, logo, links,
                      variables, [config] env / domains / mounts, requires, reveal, gateway
 docker-compose.yml   the subset of docs/stacks.md
-logo.svg | logo.png  SVG, or PNG of at most 64 KiB; or `logo = "@name"` for a file of server/static/logos
+logo.svg | logo.png  SVG, or PNG of at most 64 KiB; or `logo = "@name"` for a file of crates/core/static/logos
 ```
 
 `template.toml` keeps the shape of Dokploy's blueprints (MIT) so they import
@@ -58,9 +58,9 @@ describe (variables, services, translation warnings); no generated value.
 `scripts/templates-import` fetches Dokploy/templates, homarr-labs/dashboard-icons
 and simple-icons at pinned revisions, converts every blueprint, keeps those that
 pass the compose parser and translation, vendors the registry logos of
-`scripts/logos.txt`, and writes `server/templates/IMPORT_REPORT.md` (counts,
+`scripts/logos.txt`, and writes `crates/core/templates/IMPORT_REPORT.md` (counts,
 what was skipped and why, each template's upstream path), `NOTICE` and
-`server/static/logos/SOURCES.tsv`. Hand-written templates (no `upstream`) are kept
+`crates/core/static/logos/SOURCES.tsv`. Hand-written templates (no `upstream`) are kept
 and win over a blueprint of the same id. Images of hand-written templates are
 checked with `podman manifest inspect`; `--verify-images=all` checks every image
 (Docker Hub rate-limits anonymous reads, so it is not the default).
@@ -74,8 +74,8 @@ guesses a registry logo from an image reference.
 
 ## Tests
 
-- `cargo test -p server --all-features -- templates::`
-- `grep '^| imported' server/templates/IMPORT_REPORT.md`
+- `cargo test -p podkit-core --all-features -- templates::`
+- `grep '^| imported' crates/core/templates/IMPORT_REPORT.md`
 - Live (podman, ports 18090/18091, under 1 GB of images):
-  `cargo test -p server --all-features -- --ignored template_live`
+  `cargo test -p podkit-core --all-features -- --ignored template_live`
   (gotify as an application, it-tools as a one-service stack, umami with postgres)

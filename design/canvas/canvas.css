@@ -1,6 +1,6 @@
 /* == canvas == project canvas (D1). Loaded after the Quiet sheets in ../finalists/02-quiet-linear/.
    Quiet tokens only: no colour, radius, spacing or duration is invented here. Component dimensions (node size, port size) are the only literals.
-   In podkit this whole file becomes ONE block at the END of server/src/ui/components.css. */
+   In podkit this whole file becomes ONE block at the END of crates/ui/src/components.css. */
 
 @property --tx{syntax:"<length>";inherits:true;initial-value:0px}
 @property --ty{syntax:"<length>";inherits:true;initial-value:0px}

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Rebuilds the vendored UI assets under server/static from npm tarballs.
+"""Rebuilds the vendored UI assets under crates/ui/static from npm tarballs.
 
     npm pack @fontsource-variable/inter @fontsource-variable/jetbrains-mono \
         @fontsource-variable/sora lucide-static simple-icons   # in an empty directory
     scripts/vendor-ui-assets.py <that directory>
 
 Writes:
-  server/static/fonts/{inter,jetbrains-mono,sora}-latin-wght-normal.woff2   (OFL-1.1)
-  server/static/icons.svg   sprite of the Lucide icons listed in ICONS   (ISC)
-  server/static/logos.svg   sprite of the brand marks listed in LOGOS    (CC0)
+  crates/ui/static/fonts/{inter,jetbrains-mono,sora}-latin-wght-normal.woff2   (OFL-1.1)
+  crates/ui/static/icons.svg   sprite of the Lucide icons listed in ICONS   (ISC)
+  crates/ui/static/logos.svg   sprite of the brand marks listed in LOGOS    (CC0)
 
 Nothing here runs at build time: the outputs are committed, so building podkit
 needs no network. Add a name to a list, rerun, commit the result.
@@ -21,7 +21,7 @@ import tarfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-STATIC = ROOT / "server" / "static"
+STATIC = ROOT / "crates" / "ui" / "static"
 
 ICONS = """
 activity archive arrow-left arrow-right arrow-up-right bell book-open bot box boxes brain

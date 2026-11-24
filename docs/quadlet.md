@@ -124,7 +124,7 @@ podkit does none of this for containers started from the units:
 - `crates/proto/src/quadlet.rs`: the generator, a pure function of a `DeploySpec`, and the
   README. Unit-tested (`cargo test -p proto quadlet`). It lives in `proto` so the agent can
   use it too.
-- `server/src/quadlet/`: builds each resource's spec through its deploy path
+- `crates/core/src/quadlet/`: builds each resource's spec through its deploy path
   (`deployments::run::current_spec`, `databases::run::full_spec`, `models::run::full_spec`,
   `stacks::run::plan`), the API, and the archive.
-- `server/src/ui/pages/quadlet.rs`: the tab body and the export page and card.
+- `crates/ui/src/pages/quadlet.rs`: the tab body and the export page and card.

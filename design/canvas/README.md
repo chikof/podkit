@@ -10,8 +10,8 @@ This folder is the design hand-off for **I2** (the build card). Everything here 
 | `canvas-wire.html` | Opens in the middle of a wiring gesture: `storefront-api` dropped on `postgres-16`, confirm popover open. Same page as `canvas.html`, staged. `?stage=drag` (mid-drag, valid), `?stage=invalid` (refused), `?stage=confirm` (default). |
 | `canvas-empty.html` | The empty project. At 390 px it is the same page; the canvas never shows on a phone. |
 | `canvas-states.html` | Every node, link and level-of-detail state, drawn by the real CSS. The reference for I2's visual tests. |
-| `canvas.css` | The one new CSS block, `/* == canvas == */`, to append to `server/src/ui/components/…/components.css` (see §11). |
-| `canvas-demo.js` | Behaviour prototype. The reference for `server/static/canvas.js`. Not shipped. |
+| `canvas.css` | The one new CSS block, `/* == canvas == */`, to append to `crates/ui/src/components/…/components.css` (see §11). |
+| `canvas-demo.js` | Behaviour prototype. The reference for `crates/ui/static/canvas.js`. Not shipped. |
 | `tools/build.py` | Generates the four pages from one data model. It also contains the **server-side layout** (layers, bands, frames, edge routing) that I2 ports to Rust. `python3 design/canvas/tools/build.py` |
 | `screenshots/` | Dark and light, 1440 and 390 px (Chromium); Firefox in `screenshots/firefox/`. |
 
@@ -301,11 +301,11 @@ Screenshots: `canvas-{dark,light}-390.png` (the list), `canvas-wire-{dark,light}
 
 | Piece | Where | Why |
 |---|---|---|
-| Layout (layers, bands, frames, node `x`/`y`, edge paths and label points) | **Server**, a pure function `layout(&Graph) -> Layout` in `server/src/ui/canvas_layout.rs`, ported from `tools/build.py` | Deterministic, unit-testable with plain structs, zero client measuring, identical on first paint and after every patch |
-| Frames, edges, labels, nodes | **Server**, maud components in a new `server/src/ui/components/canvas.rs` | Datastar patches replace parts of this markup |
+| Layout (layers, bands, frames, node `x`/`y`, edge paths and label points) | **Server**, a pure function `layout(&Graph) -> Layout` in `crates/ui/src/canvas_layout.rs`, ported from `tools/build.py` | Deterministic, unit-testable with plain structs, zero client measuring, identical on first paint and after every patch |
+| Frames, edges, labels, nodes | **Server**, maud components in a new `crates/ui/src/components/canvas.rs` | Datastar patches replace parts of this markup |
 | Edges and arrowheads | **One server-rendered `<svg>`** (paths) | as asked |
 | Nodes | HTML `<li>` (not SVG `<g>`) positioned in the same transformed world | A node is text, a link, a menu button and badges: HTML gives a real focus ring, wrapping control, `:hover`/`:has()`, the existing `.badge`, `.btn`, and translation for free. SVG `<foreignObject>` is the usual workaround and costs more than it saves (focus and popover quirks in Firefox). The edge layer stays SVG, which is where SVG earns its keep |
-| Pan, zoom, LOD, drag, click-click, keyboard focus along edges, hover highlight | `server/static/canvas.js` | the only things HTML cannot do |
+| Pan, zoom, LOD, drag, click-click, keyboard focus along edges, hover highlight | `crates/ui/static/canvas.js` | the only things HTML cannot do |
 | Everything that changes data | **Datastar actions**, server-validated | the canvas has no write path of its own |
 
 The viewport element `#cv-view` is **never replaced** by a patch; it owns the pan/zoom custom properties. Patches target `#cv-world` (or single `#n-<id>`, `#e-<id>`), and Datastar's morph keeps the node that has focus.
@@ -356,7 +356,7 @@ The prototype itself is 23.8 KB raw (8.1 KB gzip) because it also stands in for 
 
 `canvas.css` is a single block, 17.9 KB raw. Append it to `components.css` as `/* == canvas == */` **at the end**, never reordering existing blocks; the `ui-*` classes in maud map 1:1 (`cv-*` → `ui-cv-*`). It does **not** ship the `states sheet` rules (the `.cv-sheet`, `.cv-cell`, `.cv-spec` block near the end, ~1.3 KB). Every colour, radius, space, font and duration is an existing token; the literals that remain are component dimensions: node 208 × 92, handles 12 px, the label pill's 20 px, the 24 px icon tile, grid 24 px. `@property --tx --ty --z` and `color-mix()` are Baseline.
 
-Utilities used from maud stay as full string literals under `server/src/ui` so the scanner picks them up.
+Utilities used from maud stay as full string literals under `crates/ui/src` so the scanner picks them up.
 
 ### 11.5 Tests I2 should add
 

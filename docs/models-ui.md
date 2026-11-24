@@ -1,7 +1,7 @@
 # Models UI
 
 The web pages for running models, built like the rest of the UI: server-rendered maud,
-Datastar over SSE, no JavaScript build. Handlers in `server/src/ui/models/` only call the
+Datastar over SSE, no JavaScript build. Handlers in `crates/ui/src/models/` only call the
 `catalog`, `model_files`, `models` and `links` services, which authorize, scope and validate.
 
 | Page | Path |
@@ -60,7 +60,7 @@ application's next deploy.
 
 ## Tests and smoke
 
-- `cargo test -p server --all-features -- ui::models`
+- `cargo test -p podkit-ui --all-features -- pages::models`
 - `scripts/ui-smoke.sh models` checks the pages. `PODKIT_SMOKE_MODEL=qwen3-4b scripts/ui-smoke.sh models`
   also downloads that model (a recipe of at most 4 GB), starts it, chats and removes everything again
   (`PODKIT_SMOKE_KEEP=1` leaves the model).

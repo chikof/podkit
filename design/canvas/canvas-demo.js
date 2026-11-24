@@ -1,4 +1,4 @@
-/* canvas-demo.js: behaviour prototype for the project canvas (D1). It is the reference for server/static/canvas.js (I2).
+/* canvas-demo.js: behaviour prototype for the project canvas (D1). It is the reference for crates/ui/static/canvas.js (I2).
    In podkit the server renders the world (frames, edges, nodes, labels) and validates every wire; this file only does pan, zoom,
    level of detail, keyboard focus along edges, and the connect gesture (drag, click-click, or menu). Anything that changes data
    is a Datastar action; here ask() and commit() stand in for the preview GET and the wire POST. ?still=1 skips animation. */

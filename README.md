@@ -64,22 +64,22 @@ rootless), and (for applications using the `nixpacks` build strategy) the
 The server also serves the web UI at <http://localhost:8080/>. It is plain
 HTML rendered by the server, made interactive with
 [Datastar](https://data-star.dev), so there is no separate front-end build.
-Templates use Tailwind utility classes in `class="..."`; `server/build.rs`
+Templates use Tailwind utility classes in `class="..."`; `crates/ui/build.rs`
 runs [encre-css](https://crates.io/crates/encre-css) at compile time to emit
 only the CSS those classes need. The design system (tokens, components, the
 rules for using them) is specified in [`docs/design/README.md`](docs/design/README.md).
-Shared components live in `server/src/ui/components/`, one file each; their
+Shared components live in `crates/ui/src/components/`, one file each; their
 colors (`bg-primary`, `text-muted-foreground`, ...) are the `--name` variables
-in `server/src/ui/theme.css`, which has light and dark values, follows the
+in `crates/ui/src/theme.css`, which has light and dark values, follows the
 system setting unless the user picked a theme (a cookie the server renders as a
 class on `<html>`), and makes a variable added there usable as a color.
-`server/src/ui/components.css` holds what utilities can't express (dialogs,
+`crates/ui/src/components.css` holds what utilities can't express (dialogs,
 popovers, anchor positioning, view transitions, container queries). Fonts,
-icons and the one small `podkit.js` are vendored in `server/static/`, so the UI
+icons and the one small `podkit.js` are vendored in `crates/ui/static/`, so the UI
 loads nothing from another origin. In a debug build (or with
 `PODKIT_UI_GALLERY=1`) a signed-in user can open `/_ui` to see every component.
 
-Write each class out in full inside a string literal under `server/src/ui`.
+Write each class out in full inside a string literal under `crates/ui/src`.
 The build fails when a class in a `class` attribute, or in a `&str` constant in
 `components/`, is neither a utility nor a `.ui-*` rule in `components.css`.
 It never sees maud's `.class` shorthand or class names built at

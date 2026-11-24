@@ -83,7 +83,7 @@ moves among valid targets, `Enter` opens the popover, `Esc` closes it and focus 
 
 ## Live test
 
-`server/src/networks/tests/canvas_live.rs`, ignored. It creates an app and a Postgres in one
+`crates/core/src/networks/tests/canvas_live.rs`, ignored. It creates an app and a Postgres in one
 environment on a real Podman and runs `projects::graph::wire::wire`, the function the canvas
 POST calls. It checks that `DATABASE_URL` is absent before, is stored as an ordinary
 variable by the wire, is present in the redeployed container, names the Postgres, and that
@@ -92,5 +92,5 @@ is gone. Run with:
 
 ```text
 PODKIT_LIVE_PODMAN_SOCKET=/path/podman.sock \
-  cargo test -p server --all-features -- --ignored canvas_live
+  cargo test -p podkit-core --all-features -- --ignored canvas_live
 ```

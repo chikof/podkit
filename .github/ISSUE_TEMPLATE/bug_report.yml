@@ -43,7 +43,7 @@ body:
       options:
         - server (server/)
         - agent (agent/)
-        - web UI (server/src/ui)
+        - web UI (crates/ui/src)
         - deploy/build pipeline (nixpacks, podman)
         - other/unsure
     validations:

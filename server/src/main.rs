@@ -11,94 +11,20 @@ use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use crate::agents::AgentPool;
-use crate::config::ServerConfig;
-use crate::error::{AppResult, ServerError};
-use crate::jobs::worker::{self, Jobs};
-use crate::logs::LogHub;
-use crate::routes::routes;
-use crate::state::{AppState, Config};
+use podkit_core::agents::AgentPool;
+use podkit_core::config::ServerConfig;
+use podkit_core::error::{AppResult, ServerError};
+use podkit_core::jobs::worker::{self, Jobs};
+use podkit_core::logs::LogHub;
+use podkit_core::state::{self, AppState, Config};
+use podkit_core::{
+	auth, auto_update, autodeploy, backups, client_ip, db, maintenance, mcp_servers, metrics, net,
+	registries, servers, ssh_keys, templates, volume_backups,
+};
 
-mod access_rules;
-mod agents;
-mod applications;
-mod audit;
-mod auth;
-mod auto_update;
-mod autodeploy;
-mod avatars;
-mod backups;
-mod billing;
-mod builds;
-mod catalog;
-mod change;
-mod client_ip;
-mod config;
-mod cron;
-mod databases;
-mod db;
-mod deployments;
-mod domains;
-mod env_vars;
-mod environments;
-mod error;
-mod firewall;
-mod git_providers;
-mod health_gate;
-mod iac;
-mod ids;
-mod importers;
-mod infrastructure;
-mod jobs;
-mod links;
-mod log_search;
-mod logos;
-mod logs;
-mod maintenance;
+use podkit_ui::routes;
+
 mod malloc;
-mod mcp;
-mod mcp_servers;
-mod members;
-mod metrics;
-mod model_files;
-mod models;
-mod moves;
-mod net;
-mod networks;
-mod notifications;
-mod previews;
-mod projects;
-mod quadlet;
-mod quotas;
-mod registries;
-mod replicas;
-mod routes;
-mod scanning;
-mod scope;
-mod search;
-mod servers;
-mod shared_env;
-mod ssh_keys;
-mod sso;
-mod stacks;
-mod state;
-mod tailscale;
-mod teams;
-mod templates;
-mod terminal;
-mod throttle;
-mod two_factor;
-mod ui;
-mod uptime;
-mod validate;
-mod volume_backups;
-mod volumes;
-mod webhooks;
-
-#[cfg(test)]
-mod sec_regression;
-#[cfg(test)]
-mod tests;
 
 /// Worker threads of the async runtime: one per core up to four. The server is
 /// I/O-bound (Postgres, the agents' sockets, HTTP), so more only cost stacks and
@@ -167,12 +93,12 @@ async fn run() -> AppResult<()> {
 		agents: Arc::new(AgentPool::new(runtime_config.local_agent_socket.clone())),
 		jobs: Arc::new(Jobs::new()),
 		logs: Arc::new(LogHub::new(log_dir)),
-		http: crate::state::Http::default(),
+		http: state::Http::default(),
 		setup: Arc::new(setup),
 		shutdown: shutdown.clone(),
 		config: Arc::new(runtime_config),
 		#[cfg(feature = "cloud")]
-		billing: billing::Billing::cloud(),
+		billing: podkit_core::billing::Billing::cloud(),
 	};
 
 	// Keys the 0041 migration moved into the vault have no public key yet; only this process

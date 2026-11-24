@@ -1,8 +1,8 @@
 # Model catalog
 
-`server/catalog/models.toml` is the curated list of models and the **recipes**
+`crates/core/catalog/models.toml` is the curated list of models and the **recipes**
 (engine x quantization x files) that run them. It is embedded into the server
-with `include_str!`; `server/src/catalog/` holds the types, the pure
+with `include_str!`; `crates/core/src/catalog/` holds the types, the pure
 `fit`/`suggest` functions and the routes.
 
 ## API

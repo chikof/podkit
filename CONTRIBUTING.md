@@ -13,6 +13,21 @@ reachable Podman socket (`systemctl --user enable --now podman.socket` for
 rootless), and (for `nixpacks`-strategy builds) the `nixpacks` CLI on the
 agent's `PATH`. See `.env.example` for required environment variables.
 
+## Layout
+
+The control plane is three crates, each a layer over the one before:
+
+- `crates/core` (`podkit-core`): config, state, the database and its migrations, every
+  domain's service and JSON API routes, jobs and the agent client. Its tests run against
+  the API alone.
+- `crates/ui` (`podkit-ui`): the web UI (`src/pages`, `src/components`, the stylesheets,
+  `static/`). Its tests run against the whole router; a test of another crate's code that
+  signs in through the pages or reads them lives here, under `src/tests`.
+- `server`: `main.rs`, the binary.
+
+`podkit_core::tests` (the `testing` feature) holds what the tests of both share. A
+`#[db_test]` in `podkit-ui` names the migrations: `#[db_test(migrator = "podkit_core::db::MIGRATOR")]`.
+
 ## Before opening a PR
 
 ```sh
@@ -26,7 +41,7 @@ Pre-commit hooks (rustfmt, nixfmt) run automatically via `devenv`'s
 
 ## Database changes
 
-Migrations live in `server/migrations`. Every `NNNN_name.up.sql`
+Migrations live in `crates/core/migrations`. Every `NNNN_name.up.sql`
 needs a matching `.down.sql`. Add/update the `sqlx` query cache after
 schema or query changes:
 

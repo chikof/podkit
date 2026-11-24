@@ -1,4 +1,4 @@
-# Logos vendored into server/static/logos/ by `scripts/templates-import`.
+# Logos vendored into crates/core/static/logos/ by `scripts/templates-import`.
 # <registry name> <source> <name in that source>
 # di = homarr-labs/dashboard-icons svg/<name>.svg (Apache-2.0)
 # si = simple-icons icons/<name>.svg (CC0-1.0)

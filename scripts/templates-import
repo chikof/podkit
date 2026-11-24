@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Rebuilds server/templates (imported part), server/static/logos, NOTICE and
-# server/templates/IMPORT_REPORT.md from pinned revisions of
+# Rebuilds crates/core/templates (imported part), crates/core/static/logos, NOTICE and
+# crates/core/templates/IMPORT_REPORT.md from pinned revisions of
 #   Dokploy/templates                (MIT)         blueprints
 #   homarr-labs/dashboard-icons      (Apache-2.0)  svg/
 #   simple-icons/simple-icons        (CC0-1.0)     icons/
@@ -46,5 +46,5 @@ SQLX_OFFLINE=true cargo run -q -p server -- templates-import \
 	--dokploy "$cache/dokploy/blueprints" --dokploy-rev "$DOKPLOY_REV" \
 	--dashboard-icons "$cache/dashboard-icons/svg" --dashboard-icons-rev "$DASHBOARD_ICONS_REV" \
 	--simple-icons "$cache/simple-icons/icons" --simple-icons-rev "$SIMPLE_ICONS_REV" \
-	--out server/templates --static server/static/logos \
+	--out crates/core/templates --static crates/core/static/logos \
 	--logos scripts/logos.txt --notice NOTICE "$@"

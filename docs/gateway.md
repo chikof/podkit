@@ -144,5 +144,5 @@ Qwen3-4B (the first model tried) answers `max_tokens: 8` with an empty `content`
 - `devenv shell -- cargo test -p agent -- gateway`: stub engine in axum for both APIs; 401/403/404;
   streaming first byte arrives before the slow engine finishes; usage from streaming and non-streaming
   OpenAI and Anthropic responses; `stream_options` only added when allowed; credentials stripped.
-- `devenv shell -- cargo test -p server --all-features -- links`: link rules, the table pushed to a
+- `devenv shell -- cargo test -p podkit-core --all-features -- links`: link rules, the table pushed to a
   fake agent, deploy env with the five variables and without them after unlinking, usage added into `model_usage`.

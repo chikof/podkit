@@ -5,10 +5,12 @@ members = [
 	"cli",
 	"crates/billing",
 	"crates/cloud",
+	"crates/core",
 	"crates/crypto",
 	"crates/firewall",
 	"crates/outbound",
 	"crates/proto",
+	"crates/ui",
 	"server",
 ]
 

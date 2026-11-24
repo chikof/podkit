@@ -21,7 +21,7 @@ plan, apply. The importers only read the source (every request is a `GET`; CapRo
   `--server NAME` picks the podkit server (default: the team's only server), `--deploy` deploys what
   was made, `--json` prints the raw answer. Without `--apply` nothing is made.
 - **API:** `POST /api/v1/teams/{team}/importers/{coolify|dokploy|caprover}/plan` and `…/apply`
-  (see `server/src/importers/routes.rs`).
+  (see `crates/core/src/importers/routes.rs`).
 
 ## What is read
 
@@ -57,6 +57,6 @@ container, which podkit's backup restore (podkit-made backups only) does not off
 ## Tests
 
 `cargo test --workspace --all-features -- importers` runs the mapping against recorded fixtures in
-`server/tests/fixtures/importers/`. They are hand-recorded to the shapes in each source's OpenAPI
+`crates/core/tests/fixtures/importers/`. They are hand-recorded to the shapes in each source's OpenAPI
 schema and controllers, with invented names and secrets; no real instance was available. Live
 verification against a real instance is a manual step.

@@ -9,8 +9,8 @@ offering plugs a payment provider in through one trait; the self-hosted build ne
 |---|---|
 | The contract: `BillingProvider`, `NoopBilling`, the request and answer types | `crates/billing` (`podkit-billing`, no dependency besides `thiserror`) |
 | A stand-in for the private crate: `provider()` returns `NoopBilling` | `crates/cloud` (`podkit-cloud`) |
-| The server's hooks, built only with the `cloud` Cargo feature | `server/src/billing` |
-| Quotas, metering, CSV export | `server/src/quotas` |
+| The server's hooks, built only with the `cloud` Cargo feature | `crates/core/src/billing` |
+| Quotas, metering, CSV export | `crates/core/src/quotas` |
 
 `cloud` is **off by default** (`cargo build -p server --features cloud` turns it on). Without it every
 hook is an empty function, so a self-hosted server pays nothing.
@@ -33,7 +33,7 @@ webhook are written to the audit log as the system, not as a user.
    `pub fn provider() -> std::sync::Arc<dyn podkit_billing::BillingProvider>`. It depends on
    `podkit-billing` (path or git) and holds all payment code and credentials.
 2. In the private build tree, replace the `crates/cloud` directory with that crate (or point the
-   `podkit-cloud` path dependency in `server/Cargo.toml` at it, using a `[patch]` section).
+   `podkit-cloud` path dependency in `crates/core/Cargo.toml` at it, using a `[patch]` section).
 3. Build with `--features cloud`. `main` calls `provider()` once at start-up.
 
 The trait is the whole contract: do not reach into server internals from the overlay. Open source

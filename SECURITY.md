@@ -29,7 +29,7 @@ prioritized over other work.
 - Secrets at rest go through `crates/crypto` (age encryption); plaintext
   secrets in the database or logs are a bug.
 - Remote hosts are reached over SSH tunnels with pinned host keys to the
-  agent's unix socket. Issues in `server/src/agents` (tunnels, host key
+  agent's unix socket. Issues in `crates/core/src/agents` (tunnels, host key
   pinning) or the agent's unix socket API are in scope.
 - Dependency vulnerabilities: Renovate keeps deps current; a report is
   still useful if a vulnerable version is in use before Renovate catches
