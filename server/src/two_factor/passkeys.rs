@@ -155,7 +155,7 @@ pub async fn finish_enroll(
 		PasskeyId::generate().0,
 		user.0,
 		name,
-		passkey.cred_id().as_ref(),
+		passkey.cred_id().as_slice(),
 		serde_json::to_value(&passkey).map_err(|_| ServerError::Internal)?
 	)
 	.execute(db)

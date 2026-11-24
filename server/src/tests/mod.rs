@@ -90,7 +90,7 @@ pub fn state(db: PgPool) -> AppState {
 		agents: Arc::new(AgentPool::new(local_agent_socket.clone())),
 		jobs: Arc::new(Jobs::new()),
 		logs: Arc::new(LogHub::new(log_dir)),
-		http: reqwest::Client::new(),
+		http: reqwest::Client::new().into(),
 		outbound: {
 			// The stubs of the tests listen on 127.0.0.1: allow it, and let every name the
 			// tests make up (`hooks.example.com`) resolve there too, where nothing listens, so

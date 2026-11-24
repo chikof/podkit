@@ -1,7 +1,7 @@
 //! Shared state handed to every route handler.
 
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use crypto::age::SecretBox;
 use sqlx::PgPool;
@@ -9,6 +9,28 @@ use sqlx::PgPool;
 use crate::agents::AgentPool;
 use crate::jobs::worker::Jobs;
 use crate::logs::LogHub;
+
+/// The HTTP client of [`AppState`], built when something first uses it.
+///
+/// `reqwest::Client::new()` loads the platform's root certificates, about 1 MB of heap that a
+/// server with no outbound traffic (no importer, no webhook, no registry) never needs. Clones
+/// share the one client.
+#[derive(Clone, Default)]
+pub struct Http(Arc<OnceLock<reqwest::Client>>);
+
+impl std::ops::Deref for Http {
+	type Target = reqwest::Client;
+
+	fn deref(&self) -> &reqwest::Client {
+		self.0.get_or_init(reqwest::Client::new)
+	}
+}
+
+impl From<reqwest::Client> for Http {
+	fn from(client: reqwest::Client) -> Self {
+		Self(Arc::new(OnceLock::from(client)))
+	}
+}
 
 /// Who may sign up through `POST /auth/register` and `/register`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -77,7 +99,8 @@ pub struct AppState {
 	pub agents: Arc<AgentPool>,
 	pub jobs: Arc<Jobs>,
 	pub logs: Arc<LogHub>,
-	pub http: reqwest::Client,
+	/// The shared HTTP client; built on the first outbound request (see [`Http`]).
+	pub http: Http,
 	/// Every request to an address a person typed goes through this: see `net::outbound`.
 	pub outbound: outbound::Outbound,
 	/// Cancelled on SIGINT/SIGTERM; long-lived streams end on it so graceful shutdown can drain.

@@ -252,7 +252,7 @@ fn sign(b: &Behaviour, claims: &Value) -> String {
 	if b.signer == Signer::Shared {
 		let mut header = Header::new(Algorithm::HS256);
 		header.kid = Some(KID.to_owned());
-		let key = EncodingKey::from_secret(CLIENT_SECRET.as_bytes()).unwrap();
+		let key = EncodingKey::from_secret(CLIENT_SECRET.as_bytes());
 		return jsonwebtoken::encode(&header, claims, &key).unwrap();
 	}
 	// RS256 by hand: the signature of `header.claims` under the key (RFC 7518 §3.3).

@@ -54,6 +54,7 @@ mod log_search;
 mod logos;
 mod logs;
 mod maintenance;
+mod malloc;
 mod mcp;
 mod mcp_servers;
 mod members;
@@ -104,6 +105,7 @@ fn worker_threads() -> usize {
 }
 
 fn main() -> AppResult<()> {
+	malloc::tune();
 	let mut runtime = tokio::runtime::Builder::new_multi_thread();
 	runtime.enable_all();
 	if std::env::var_os("TOKIO_WORKER_THREADS").is_none() {
@@ -160,7 +162,7 @@ async fn run() -> AppResult<()> {
 		agents: Arc::new(AgentPool::new(runtime_config.local_agent_socket.clone())),
 		jobs: Arc::new(Jobs::new()),
 		logs: Arc::new(LogHub::new(log_dir)),
-		http: reqwest::Client::new(),
+		http: crate::state::Http::default(),
 		shutdown: shutdown.clone(),
 		config: Arc::new(runtime_config),
 		#[cfg(feature = "cloud")]

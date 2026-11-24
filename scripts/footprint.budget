@@ -5,7 +5,12 @@
 #             when a change makes podkit lighter; raise it only with a reason.
 server_cap_kb=61440
 agent_cap_kb=25600
-# Wave B (SSO, passkeys, importers, log search, terminal, replicas...) took the server from 12.4 MB to
-# 18.8 MB idle (measured by INT-B, WAVE_B_REPORT.md); raised so CI passes, to be brought back down.
-server_baseline_kb=15872
+# Server: wave B took it from 12.4 MB to 18.8 MB idle; the F7 trims (OpenSSL gone, malloc arenas,
+# lazy HTTP client) won back 3 MB: 15.4-15.8 MB in three runs. The remainder over 12.4 MB is code
+# pages, not state (docs/footprint.md, "Wave B"): wave A had already reached 14.7 MB and B1-B12 add
+# routes and parsers (+1.2 MB). Still 5 threads and 9 sockets. The baseline is the lowest value whose
+# limit (baseline + 20 % = 16.3 MB) still clears the worst of those runs by 3 %, so the old 18.8 MB
+# fails. It sits below the measured RSS on purpose; raise it only with a reason.
+server_baseline_kb=13568
+# Agent: 9.1-9.4 MB measured (7.8 MB before wave B: the B6 log collector costs ~0.9 MB). Limit 9.6 MB.
 agent_baseline_kb=8192
