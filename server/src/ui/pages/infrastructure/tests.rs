@@ -189,7 +189,7 @@ async fn a_project_reader_sees_only_the_project_step_and_no_overview(db: PgPool)
 	assert_not_contains(&body, "What runs where");
 	// And the sidebar lists no Infrastructure section for them.
 	let (_, _, projects) = get_html(&app, &format!("/teams/{team}/projects"), Some(&cookie)).await;
-	assert_not_contains(&projects, "ui-nav-heading");
+	assert_not_contains(&projects, "id=\"nav-infrastructure\"");
 }
 
 #[db_test]

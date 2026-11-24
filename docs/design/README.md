@@ -8,6 +8,17 @@ Code: tokens in `server/src/ui/theme.css`, platform-feature rules in
 `server/src/ui/components.css`, components in `server/src/ui/components/` (one file each).
 Assets are vendored in `server/static/` and listed in `NOTICE`.
 
+**Current look: Warm dark** (page D of the "Podkit PaaS dashboard" design). A warm
+brown-black neutral (`#141210` page, `#1E1B18` panels, `#2E2A25` hairlines) with one teal
+signal (`#4FD1B5`, text `#6FE0C8`); Inter for text, JetBrains Mono for code-like values and
+Sora for display type (brand, page and section titles, the big numbers of stat cards). The
+sidebar groups its places under Build, Infrastructure, Observe and Admin; figures under a
+head are stat cards (`.ui-stats`); a project's resources are service cards (`.ui-res`);
+the environments of a project are chips. The light scheme is the same system on a warm
+paper white with a darker teal, since the design has no light page of its own. The token
+values in `theme.css` are the reference; the older Quiet numbers further down are kept
+where they still hold.
+
 ## Principles
 
 1. **Quiet and dense enough to work in.** podkit is an operator's tool for a homelab:
@@ -67,10 +78,10 @@ on `accent` for anything small.
 
 | Token | Value | Notes |
 |---|---|---|
-| `--radius` | `0.625rem` (10px) | cards `rounded-xl`, controls `rounded-md`, badges `rounded-full`, tiles `rounded-lg` |
+| `--radius` | `--r-lg` 12px (cards), `--r-md` 8px (controls, chips), `--r-sm` 5px | cards `rounded-xl`, controls `rounded-md`, badges `rounded-full`, tiles `rounded-lg` |
 | Spacing | Tailwind's 4px scale | inside a card `px-6`/`py-6`, between its blocks `gap-5`, form fields `gap-2` (label to control) and `gap-4` (field to field), sections of a page `gap-6` or `gap-10` |
-| Font | Hanken Grotesk (`--font-sans`), Spline Sans Mono (`--font-mono`) | variable woff2, `font-display: swap`; mono for ids, hashes, branches, log lines, keys |
-| Type scale | `text-xs` 12 · `text-sm` 14 (default for UI) · `text-base` 16 (card titles) · `text-lg` 18 (dialog titles, section headings) · `text-2xl` 24 (page title) | weights 400, 500 (labels, buttons), 600 (titles); never bold above 600 |
+| Font | Inter (`--font-sans`), JetBrains Mono (`--font-mono`), Sora (`--font-display`) | variable woff2 (latin subset), `font-display: swap`; mono for ids, hashes, branches, log lines, keys; display for the brand, page titles, card and section titles, stat numbers |
+| Type scale | `--fs-xs` 12 · `--fs-sm` 13 · `--fs-md` 14 (default for UI) · `--fs-lg` 15 · `--fs-xl` 17 (card, dialog and section titles) · `--fs-3xl` 28 (page title) · 26 (stat numbers) | weights 400, 500 (labels, buttons), 600 (titles); never bold above 600 |
 | Shadows | `--shadow-xs` controls, `--shadow-sm` raised cards, `--shadow-md` menus, `--shadow-lg` dialogs and toasts | in dark the border does most of the work |
 | Motion | `--duration-fast` 120ms, `--duration-base` 200ms, `--ease-out` | see Motion |
 | Widths | page content `max-w-4xl` (forms, detail) to `max-w-7xl` (lists, gallery); dialogs 32rem, wide 48rem | |

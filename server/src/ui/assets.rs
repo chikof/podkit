@@ -29,12 +29,17 @@ static XTERM_JS: &str = include_str!("../../static/xterm.js");
 static XTERM_FIT_JS: &str = include_str!("../../static/xterm-fit.js");
 static XTERM_CSS: &str = include_str!("../../static/xterm.css");
 static PASSKEY_JS: &str = include_str!("../../static/passkey.js");
-static HANKEN_GROTESK: &[u8] = include_bytes!("../../static/fonts/hanken-grotesk-var.woff2");
-static SPLINE_SANS_MONO: &[u8] = include_bytes!("../../static/fonts/spline-sans-mono-var.woff2");
+// Inter, JetBrains Mono and Sora, the latin subsets of the variable fonts as
+// published by Fontsource 5.3.0 (OFL, see LICENSE-fonts-OFL.txt).
+static INTER: &[u8] = include_bytes!("../../static/fonts/inter-latin-wght-normal.woff2");
+static JETBRAINS_MONO: &[u8] =
+	include_bytes!("../../static/fonts/jetbrains-mono-latin-wght-normal.woff2");
+static SORA: &[u8] = include_bytes!("../../static/fonts/sora-latin-wght-normal.woff2");
 
 /// The `?v=` of the font URLs below and in `theme.css`'s `@font-face`; bump with the files.
-pub static FONT_SANS_HREF: &str = "/static/fonts/hanken-grotesk-var.woff2?v=1";
-pub static FONT_MONO_HREF: &str = "/static/fonts/spline-sans-mono-var.woff2?v=1";
+pub static FONT_SANS_HREF: &str = "/static/fonts/inter-latin-wght-normal.woff2?v=1";
+pub static FONT_MONO_HREF: &str = "/static/fonts/jetbrains-mono-latin-wght-normal.woff2?v=1";
+pub static FONT_DISPLAY_HREF: &str = "/static/fonts/sora-latin-wght-normal.woff2?v=1";
 
 fn hashed(path: &str, body: &str) -> String {
 	let hash = Sha256::digest(body.as_bytes());
@@ -108,8 +113,12 @@ pub fn router() -> Router<AppState> {
 		.route("/static/xterm-fit.js", get(xterm_fit_js))
 		.route("/static/xterm.css", get(xterm_css))
 		.route("/static/passkey.js", get(passkey_js))
-		.route("/static/fonts/hanken-grotesk-var.woff2", get(sans))
-		.route("/static/fonts/spline-sans-mono-var.woff2", get(mono))
+		.route("/static/fonts/inter-latin-wght-normal.woff2", get(sans))
+		.route(
+			"/static/fonts/jetbrains-mono-latin-wght-normal.woff2",
+			get(mono),
+		)
+		.route("/static/fonts/sora-latin-wght-normal.woff2", get(display))
 }
 
 async fn icons() -> impl IntoResponse {
@@ -218,24 +227,26 @@ fn script(body: &'static str) -> impl IntoResponse {
 	)
 }
 
-async fn sans() -> impl IntoResponse {
+fn font(body: &'static [u8]) -> impl IntoResponse {
 	(
 		[
 			(header::CONTENT_TYPE, "font/woff2"),
 			(header::CACHE_CONTROL, IMMUTABLE),
 		],
-		HANKEN_GROTESK,
+		body,
 	)
 }
 
+async fn sans() -> impl IntoResponse {
+	font(INTER)
+}
+
 async fn mono() -> impl IntoResponse {
-	(
-		[
-			(header::CONTENT_TYPE, "font/woff2"),
-			(header::CACHE_CONTROL, IMMUTABLE),
-		],
-		SPLINE_SANS_MONO,
-	)
+	font(JETBRAINS_MONO)
+}
+
+async fn display() -> impl IntoResponse {
+	font(SORA)
 }
 
 #[cfg(test)]

@@ -86,6 +86,56 @@ pub fn infra_items(ctx: &TeamCtx) -> Vec<NavItem> {
 	items
 }
 
+/// One headed list of the sidebar.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NavGroup {
+	/// The visible heading ("Build").
+	pub label: &'static str,
+	/// The heading's id, which names the list for assistive tech.
+	pub id: &'static str,
+	pub items: Vec<NavItem>,
+}
+
+/// Where an Infrastructure page sits in the sidebar: what the team runs on, what it
+/// watches, or what guards and connects it. The palette and the tab bar keep the one
+/// Infrastructure list; only the sidebar splits it.
+fn sidebar_section(href: &str, base: &str) -> &'static str {
+	match href.strip_prefix(base).unwrap_or(href) {
+		"/logs" | "/uptime" => "observe",
+		"/security" | "/keys" | "/git-providers" => "admin",
+		_ => "infrastructure",
+	}
+}
+
+/// The sidebar, as the design groups it: Build (the daily places), Infrastructure,
+/// Observe (logs and uptime) and Admin (security, keys, git providers and Settings). The
+/// same items as [`places`] plus the one Settings entry; a group with nothing in it is
+/// left out.
+pub fn sidebar_groups(ctx: &TeamCtx) -> Vec<NavGroup> {
+	let base = format!("/teams/{}", ctx.team.id);
+	let mut infra = Vec::new();
+	let mut observe = Vec::new();
+	let mut admin = Vec::new();
+	for item in infra_items(ctx) {
+		match sidebar_section(&item.href, &base) {
+			"observe" => observe.push(item),
+			"admin" => admin.push(item),
+			_ => infra.push(item),
+		}
+	}
+	admin.push(settings_entry(ctx));
+	[
+		("Build", "nav-build", main_items(ctx)),
+		("Infrastructure", "nav-infrastructure", infra),
+		("Observe", "nav-observe", observe),
+		("Admin", "nav-admin", admin),
+	]
+	.into_iter()
+	.filter(|(_, _, items)| !items.is_empty())
+	.map(|(label, id, items)| NavGroup { label, id, items })
+	.collect()
+}
+
 /// Every place the palette offers: the daily ones, then the Infrastructure pages.
 pub fn places(ctx: &TeamCtx) -> Vec<NavItem> {
 	let mut items = main_items(ctx);

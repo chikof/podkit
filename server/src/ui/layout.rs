@@ -2,7 +2,9 @@
 
 use maud::{DOCTYPE, Markup, html};
 
-use super::assets::{FONT_MONO_HREF, FONT_SANS_HREF, PAGE_JS_HREF, PODKIT_JS_HREF};
+use super::assets::{
+	FONT_DISPLAY_HREF, FONT_MONO_HREF, FONT_SANS_HREF, PAGE_JS_HREF, PODKIT_JS_HREF,
+};
 use super::components::{BUTTON_OUTLINE, icon, toast, toast_region, toast_region_with};
 use super::extract::TeamCtx;
 use super::{APP_CSS_HREF, DATASTAR_PATH, shell, theme};
@@ -32,6 +34,7 @@ pub fn document_with_head(title: &str, head: &Markup, body: &Markup) -> Markup {
 				title { (title) " · podkit" }
 				link rel="preload" href=(FONT_SANS_HREF) "as"="font" type="font/woff2" crossorigin;
 				link rel="preload" href=(FONT_MONO_HREF) "as"="font" type="font/woff2" crossorigin;
+				link rel="preload" href=(FONT_DISPLAY_HREF) "as"="font" type="font/woff2" crossorigin;
 				link rel="stylesheet" href=(*APP_CSS_HREF);
 				(head)
 				script type="module" src=(DATASTAR_PATH) {}

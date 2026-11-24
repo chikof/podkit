@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Rebuilds the vendored UI assets under server/static from npm tarballs.
 
-    npm pack @fontsource-variable/hanken-grotesk @fontsource-variable/spline-sans-mono \
-        lucide-static simple-icons                # in an empty directory
+    npm pack @fontsource-variable/inter @fontsource-variable/jetbrains-mono \
+        @fontsource-variable/sora lucide-static simple-icons   # in an empty directory
     scripts/vendor-ui-assets.py <that directory>
 
 Writes:
-  server/static/fonts/hanken-grotesk-var.woff2, spline-sans-mono-var.woff2   (OFL-1.1)
+  server/static/fonts/{inter,jetbrains-mono,sora}-latin-wght-normal.woff2   (OFL-1.1)
   server/static/icons.svg   sprite of the Lucide icons listed in ICONS   (ISC)
   server/static/logos.svg   sprite of the brand marks listed in LOGOS    (CC0)
 
@@ -75,14 +75,11 @@ def main() -> None:
     pkgs = unpack(Path(sys.argv[1]))
     (STATIC / "fonts").mkdir(parents=True, exist_ok=True)
     # Latin subset only: Cyrillic, Greek and CJK names fall back to the system font.
-    shutil.copy(
-        pkgs["hanken-grotesk"] / "files/hanken-grotesk-latin-wght-normal.woff2",
-        STATIC / "fonts" / "hanken-grotesk-var.woff2",
-    )
-    shutil.copy(
-        pkgs["spline-sans-mono"] / "files/spline-sans-mono-latin-wght-normal.woff2",
-        STATIC / "fonts" / "spline-sans-mono-var.woff2",
-    )
+    for family in ("inter", "jetbrains-mono", "sora"):
+        # npm names a scoped package's tarball `fontsource-variable-<family>-<version>.tgz`.
+        pkg = pkgs.get(family) or pkgs[f"fontsource-variable-{family}"]
+        file = f"{family}-latin-wght-normal.woff2"
+        shutil.copy(pkg / "files" / file, STATIC / "fonts" / file)
 
     lucide = pkgs["lucide-static"]
     symbols = []

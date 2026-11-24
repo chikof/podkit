@@ -180,6 +180,27 @@ fn summary_line(view: &EnvironmentView) -> String {
 	line
 }
 
+/// The environment as stat cards: how many resources it has, how many run, how many are
+/// on their way and how many need a look. The same counts as [`summary_line`].
+fn summary_stats(view: &EnvironmentView) -> Markup {
+	let count = |keys: &[&str]| {
+		view.resources
+			.iter()
+			.filter(|c| keys.contains(&status_data(c.status)))
+			.count()
+			.to_string()
+	};
+	crate::ui::pages::apps::chrome::stats(
+		&format!("{} at a glance", view.environment.name),
+		&[
+			("Resources", view.resources.len().to_string()),
+			("Running", count(&["running"])),
+			("In progress", count(&["building", "deploying", "pending"])),
+			("Failed", count(&["failed"])),
+		],
+	)
+}
+
 // --- the list ------------------------------------------------------------------------
 
 fn resource_href(team: TeamId, project: ProjectId, card: &ResourceCard) -> String {
@@ -682,6 +703,7 @@ async fn render(
 					}
 				}
 			}
+			@if !view.resources.is_empty() { (summary_stats(&view)) }
 			(tab_row(ctx, &view, &previews))
 			(filter_bar(&view, ctx, filter))
 			(grid(s, ctx, &view, filter, now, None, &badges))

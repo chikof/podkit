@@ -91,19 +91,19 @@ code { font-size: 0.92em; }
 .ui-button {
 	position: relative; display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center;
 	gap: var(--s-3); height: var(--ctl-h); padding-inline: var(--s-4);
-	border: var(--bw) solid var(--input); border-radius: var(--r-md);
-	background-color: var(--secondary); color: var(--foreground); box-shadow: var(--sh-1);
+	border: var(--bw) solid var(--border-emphasis); border-radius: var(--r-md);
+	background-color: var(--card); color: var(--foreground); box-shadow: var(--sh-1);
 	font-size: var(--fs-sm); font-weight: var(--fw-medium); white-space: nowrap; cursor: pointer;
 	user-select: none; touch-action: manipulation; text-decoration: none;
 	transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease),
 		color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
-.ui-button:hover { background-color: var(--accent); border-color: var(--muted-foreground); }
+.ui-button:hover { background-color: var(--accent); border-color: var(--input); }
 .ui-button:active { transform: scale(var(--press-scale)); }
 .ui-button:disabled, .ui-button[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
 
-.ui-button-secondary, .ui-button-outline { background-color: var(--secondary); }
-.ui-button-default { border-color: var(--primary); background-color: var(--primary); color: var(--primary-foreground); }
+.ui-button-secondary, .ui-button-outline { background-color: var(--card); }
+.ui-button-default { border-color: var(--primary); background-color: var(--primary); color: var(--primary-foreground); box-shadow: none; }
 .ui-button-default:hover { border-color: var(--primary-hover); background-color: var(--primary-hover); }
 .ui-button-ghost, .ui-button-link { border-color: transparent; background-color: transparent; box-shadow: none; color: var(--muted-foreground); }
 .ui-button-ghost:hover { border-color: transparent; background-color: var(--secondary); color: var(--foreground); }
@@ -140,12 +140,12 @@ code { font-size: 0.92em; }
 .ui-field {
 	width: 100%; min-width: 0; height: var(--ctl-h); padding-inline: var(--s-3);
 	border: var(--bw) solid var(--input); border-radius: var(--r-md);
-	background-color: var(--secondary); color: var(--foreground); font-size: var(--fs-md); outline: none;
+	background-color: var(--card); color: var(--foreground); font-size: var(--fs-md); outline: none;
 	transition: border-color var(--dur-1) var(--ease), box-shadow var(--dur-1) var(--ease);
 }
 .ui-field::placeholder { color: var(--subtle-foreground); }
 .ui-field:hover { border-color: var(--subtle-foreground); }
-.ui-field:focus-visible { border-color: var(--primary); outline: 2px solid var(--ring); outline-offset: -1px; }
+.ui-field:focus-visible { border-color: var(--primary); outline: 3px solid color-mix(in oklab, var(--primary) 28%, transparent); outline-offset: 0; }
 .ui-field:disabled { opacity: 0.5; cursor: not-allowed; }
 .ui-field[readonly] { background-color: var(--muted); }
 textarea.ui-field, .ui-textarea { height: auto; min-height: 5.5em; padding-block: var(--s-3); line-height: 1.5; resize: vertical; }
@@ -226,10 +226,10 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 
 /* A card adapts to the width it is given, not to the viewport. */
 .ui-card { container-type: inline-size; container-name: ui-card; min-width: 0; border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--card); color: var(--card-foreground); }
-.ui-card-h { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); min-height: 48px; padding: var(--s-3) var(--card-pad); border-bottom: var(--bw) solid var(--border); }
+.ui-card-h { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); min-height: 56px; padding: var(--s-3) var(--card-pad); border-bottom: var(--bw) solid var(--border); }
 .ui-card-h > div { min-width: 0; }
-.ui-card-title { font-size: var(--fs-lg); font-weight: var(--fw-bold); line-height: var(--lh-heading); }
-.ui-card-sub { font-size: var(--fs-xs); color: var(--muted-foreground); }
+.ui-card-title { font-family: var(--font-display); font-size: var(--fs-xl); font-weight: var(--fw-bold); line-height: var(--lh-heading); letter-spacing: -0.01em; }
+.ui-card-sub { margin-top: var(--s-1); font-size: var(--fs-xs); color: var(--muted-foreground); }
 .ui-card-b { display: grid; gap: var(--s-4); padding: var(--card-pad); }
 .ui-card-f { display: flex; align-items: center; justify-content: flex-end; gap: var(--s-3); padding: var(--s-3) var(--card-pad); border-top: var(--bw) solid var(--border); }
 .ui-card-action { display: flex; align-items: center; gap: var(--s-3); flex-shrink: 0; }
@@ -247,26 +247,26 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 
 /* The logo card: one service or resource, clickable as a whole. A tile with no border that
    gains a hairline and a wash on hover. */
-.ui-link-card { position: relative; border-color: transparent; transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease); }
-.ui-link-card:hover { border-color: var(--border); background-color: var(--secondary); }
+.ui-link-card { position: relative; transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease); }
+.ui-link-card:hover { border-color: var(--border-emphasis); background-color: color-mix(in oklab, var(--card) 70%, var(--accent)); }
 .ui-link-card:has(a:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
 .ui-link-card a:focus-visible { outline: none; }
 /* The link's own box stretches over the card, so the whole card is the hit area. */
 .ui-link-card-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .ui-link-card-body { display: flex; flex-direction: column; gap: var(--s-4); }
 @container ui-card (min-width: 20rem) { .ui-link-card-body { flex-direction: row; align-items: center; gap: var(--s-5); } }
-.ui-card-grid { display: grid; gap: var(--s-3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
+.ui-card-grid { display: grid; gap: var(--s-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr)); }
 
 /* ---- Table ------------------------------------------------------------------------------- */
 
 .ui-table-wrap { container-type: inline-size; max-inline-size: 100%; overflow: auto; border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--card); }
 .ui-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
-.ui-table thead th { position: sticky; inset-block-start: 0; z-index: 1; padding: var(--s-3) var(--card-pad); border-bottom: var(--bw) solid var(--border); background-color: var(--card); color: var(--muted-foreground); font-size: var(--fs-xs); font-weight: var(--fw-medium); text-align: start; white-space: nowrap; }
-.ui-table td, .ui-table tbody th { padding: var(--s-3) var(--card-pad); border-bottom: var(--bw) solid var(--border); text-align: start; vertical-align: middle; }
+.ui-table thead th { position: sticky; inset-block-start: 0; z-index: 1; padding: var(--s-4) var(--card-pad) var(--s-3); border-bottom: var(--bw) solid var(--border); background-color: var(--card); color: var(--muted-foreground); font-size: var(--fs-xs); font-weight: var(--fw-medium); text-align: start; white-space: nowrap; }
+.ui-table td, .ui-table tbody th { padding: var(--s-4) var(--card-pad); border-bottom: var(--bw) solid var(--border); text-align: start; vertical-align: middle; }
 .ui-table tbody th { font-weight: var(--fw-medium); }
 .ui-table tbody tr:last-child > * { border-bottom: 0; }
 .ui-table tbody tr { transition: background-color var(--dur-1) var(--ease); }
-.ui-table tbody tr:hover > * { background-color: var(--secondary); }
+.ui-table tbody tr:hover > * { background-color: color-mix(in oklab, var(--card) 60%, var(--accent)); }
 .ui-table td small { display: block; font-size: var(--fs-xs); color: var(--muted-foreground); }
 .ui-table .ui-table-act { width: 1%; text-align: right; white-space: nowrap; }
 .ui-table tr[data-status="failed"] > :first-child { color: var(--destructive); }
@@ -295,9 +295,9 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 [data-status="pending"] { --st: var(--muted-foreground); --st-soft: var(--muted-strong); }
 [data-status="unreachable"] { --st: var(--warning); --st-soft: var(--warning-soft); }
 
-.ui-badge { display: inline-flex; align-items: center; gap: var(--s-3); color: var(--muted-foreground); font-size: var(--fs-sm); white-space: nowrap; }
+.ui-badge { display: inline-flex; align-items: center; gap: 6px; min-height: 22px; padding: 1px 9px 1px 8px; border-radius: var(--r-pill); background-color: var(--st-soft, var(--muted-strong)); color: var(--st, var(--muted-foreground)); font-size: var(--fs-xs); font-weight: var(--fw-medium); line-height: 1.4; white-space: nowrap; }
 .ui-badge[data-status="failed"] { color: var(--destructive); }
-.ui-badge > .ui-dot, .ui-dot[data-status] { width: 8px; height: 8px; border-radius: 50%; background-color: var(--st); }
+.ui-badge > .ui-dot, .ui-dot[data-status] { width: 7px; height: 7px; border-radius: 50%; background-color: var(--st); }
 [data-status="failed"] > .ui-dot { border-radius: 1px; rotate: 45deg; }
 [data-status="stopped"] > .ui-dot { background-color: transparent; box-shadow: inset 0 0 0 2px var(--st); }
 [data-status="pending"] > .ui-dot { background-color: transparent; border: 2px dashed var(--st); }
@@ -318,7 +318,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 @media (prefers-reduced-motion: no-preference) { .ui-dot-progress { animation: ui-dot-pulse 1.2s var(--ease) infinite; } }
 
 /* A label for a fact, not a state: a soft pill in one tone. */
-.ui-tag { display: inline-flex; align-items: center; gap: var(--s-2); height: 22px; padding-inline: var(--s-3); border-radius: var(--r-pill); background-color: var(--st-soft, var(--muted-strong)); color: var(--st, var(--muted-foreground)); font-size: var(--fs-xs); font-weight: var(--fw-medium); white-space: nowrap; }
+.ui-tag { display: inline-flex; align-items: center; gap: var(--s-2); height: 22px; padding-inline: 9px; border-radius: var(--r-pill); background-color: var(--st-soft, var(--muted-strong)); color: var(--st, var(--muted-foreground)); font-size: var(--fs-xs); font-weight: var(--fw-medium); white-space: nowrap; }
 .ui-tag-neutral { --st: var(--muted-foreground); --st-soft: var(--muted-strong); }
 .ui-tag-progress { --st: var(--info); --st-soft: var(--info-soft); }
 .ui-tag-success { --st: var(--success); --st-soft: var(--success-soft); }
@@ -326,9 +326,10 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-tag-danger { --st: var(--destructive); --st-soft: var(--destructive-soft); }
 
 /* Filter chip (a link, or a toggle button with aria-pressed). */
-.ui-chip { display: inline-flex; align-items: center; gap: var(--s-2); height: var(--ctl-h); padding-inline: var(--s-3); border: var(--bw) solid transparent; border-radius: var(--r-pill); background-color: var(--secondary); color: var(--muted-foreground); font-size: var(--fs-sm); text-decoration: none; white-space: nowrap; cursor: pointer; transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.ui-chip { display: inline-flex; align-items: center; gap: var(--s-2); height: 34px; padding-inline: 14px; border: var(--bw) solid var(--border-emphasis); border-radius: var(--r-md); background-color: transparent; color: var(--muted-foreground); font-size: var(--fs-sm); text-decoration: none; white-space: nowrap; cursor: pointer; transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
 .ui-chip:hover { background-color: var(--accent); color: var(--foreground); }
-.ui-chip[aria-current="true"], .ui-chip[aria-pressed="true"] { background-color: var(--accent); color: var(--foreground); }
+.ui-chip[aria-current="true"], .ui-chip[aria-current="page"], .ui-chip[aria-pressed="true"] { border-color: var(--primary-border); background-color: var(--primary-soft); color: var(--primary-text); }
+.ui-chip[aria-current="true"] .ui-chip-n, .ui-chip[aria-current="page"] .ui-chip-n, .ui-chip[aria-pressed="true"] .ui-chip-n { color: inherit; }
 .ui-chip-n { font-size: var(--fs-xs); color: var(--muted-foreground); }
 .ui-kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding-inline: var(--s-2); border: var(--bw) solid var(--border-emphasis); border-radius: var(--r-sm); background-color: var(--secondary); color: var(--muted-foreground); font-family: var(--font-mono); font-size: var(--fs-xs); }
 
@@ -340,9 +341,9 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 
 /* ---- Tabs -------------------------------------------------------------------------------- */
 
-.ui-tabs { display: flex; gap: var(--s-5); margin-bottom: var(--s-3); border-bottom: var(--bw) solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.ui-tabs { display: flex; gap: 18px; margin-bottom: var(--s-3); border-bottom: var(--bw) solid var(--border); overflow-x: auto; scrollbar-width: none; }
 .ui-tabs > input { position: absolute; opacity: 0; width: 1px; height: 1px; }
-.ui-tab { display: inline-flex; align-items: center; gap: var(--s-3); margin-bottom: -1px; padding: var(--s-3) 0; border-bottom: 2px solid transparent; color: var(--muted-foreground); font-size: var(--fs-sm); font-weight: var(--fw-medium); text-decoration: none; white-space: nowrap; cursor: pointer; transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.ui-tab { display: inline-flex; align-items: center; gap: var(--s-3); margin-bottom: -1px; padding: var(--s-4) 0; border-bottom: 2px solid transparent; color: var(--muted-foreground); font-size: var(--fs-sm); font-weight: var(--fw-medium); text-decoration: none; white-space: nowrap; cursor: pointer; transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
 .ui-tab:hover { color: var(--foreground); }
 .ui-tab[aria-current="page"], .ui-tab-on, .ui-tabs > input:checked + .ui-tab { color: var(--foreground); border-bottom-color: var(--primary); }
 .ui-tabs > input:focus-visible + .ui-tab { outline: 2px solid var(--ring); outline-offset: 2px; }
@@ -382,7 +383,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 
 .ui-dialog-head { display: flex; align-items: flex-start; gap: var(--s-4); padding: var(--s-5) var(--s-5) 0; }
 .ui-dialog-head > div:first-child { flex: 1; min-width: 0; }
-.ui-dialog-title { font-size: var(--fs-xl); font-weight: var(--fw-bold); line-height: var(--lh-heading); }
+.ui-dialog-title { font-family: var(--font-display); font-size: var(--fs-xl); font-weight: var(--fw-bold); line-height: var(--lh-heading); }
 .ui-dialog-desc { margin-top: var(--s-2); font-size: var(--fs-sm); color: var(--muted-foreground); }
 .ui-dialog-body { display: grid; gap: var(--s-4); padding: var(--s-5); font-size: var(--fs-md); }
 .ui-dialog-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s-3); padding: var(--s-4) var(--s-5); background-color: var(--secondary); }
@@ -455,13 +456,13 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 
 .ui-empty { display: grid; justify-items: start; gap: var(--s-3); padding: var(--s-8) var(--s-7); border: var(--bw) dashed var(--input); border-radius: var(--r-lg); }
 .ui-empty-ic { display: grid; place-items: center; width: 44px; height: 44px; border: var(--bw) dashed var(--input); border-radius: var(--r-lg); font-size: 20px; color: var(--muted-foreground); }
-.ui-empty-title { font-size: var(--fs-xl); font-weight: var(--fw-bold); }
+.ui-empty-title { font-family: var(--font-display); font-size: var(--fs-xl); font-weight: var(--fw-bold); }
 .ui-empty-text { max-width: 60ch; color: var(--muted-foreground); }
 .ui-empty-act { display: flex; flex-wrap: wrap; gap: var(--s-3); margin-top: var(--s-3); }
 
 /* ---- Log viewer and charts --------------------------------------------------------------- */
 
-.ui-log { height: 24rem; overflow: auto; padding: var(--s-3) 0; border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--log); color: var(--foreground); font-family: var(--font-mono); font-size: var(--fs-sm); line-height: 1.6; outline: none; }
+.ui-log { height: 24rem; overflow: auto; padding: var(--s-3) 0; border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--log); color: var(--foreground); font-family: var(--font-mono); font-size: var(--fs-sm); line-height: 1.7; outline: none; }
 .ui-log:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .ui-log-line { padding: 0 var(--s-4); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ui-log-line:hover { background-color: var(--secondary); }
@@ -571,18 +572,21 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-vt-header { view-transition-name: ui-header; }
 
 .ui-sidebar {
-	position: sticky; inset-block-start: 0; display: flex; flex-direction: column; gap: var(--s-5);
-	height: 100dvh; padding: var(--s-4) var(--s-3); overflow: auto;
-	border-inline-end: var(--bw) solid var(--border); background-color: var(--background);
+	position: sticky; inset-block-start: 0; display: flex; flex-direction: column; gap: 18px;
+	height: 100dvh; padding: 22px 14px 14px; overflow: auto; scrollbar-width: thin;
+	border-inline-end: var(--bw) solid var(--border); background-color: var(--sidebar);
 }
 
+/* The brand: "pk" on the teal tile, then the name in the display face. */
 .ui-brand {
-	display: flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-3); border-radius: var(--r-md);
-	color: var(--foreground); font-size: var(--fs-lg); font-weight: var(--fw-bold); letter-spacing: -0.02em; text-decoration: none;
+	display: flex; align-items: center; gap: 10px; padding: 0 6px; border-radius: var(--r-md);
+	color: var(--foreground); font-family: var(--font-display); font-size: 19px; font-weight: var(--fw-bold); letter-spacing: -0.01em; text-decoration: none;
 }
-.ui-brand-mark { display: grid; }
+.ui-brand-mark {
+	display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: var(--r-md);
+	background-color: var(--primary); color: var(--primary-foreground); font-size: 15px; font-weight: var(--fw-bold); line-height: 1; letter-spacing: 0;
+}
 .ui-brand-name { letter-spacing: inherit; }
-.ui-brand-svg { width: 20px; height: 20px; color: var(--primary-text); }
 .ui-brand:focus-visible, .ui-nav-link:focus-visible, .ui-team-trigger:focus-visible, .ui-user-trigger:focus-visible,
 .ui-search:focus-visible, .ui-crumb-switch:focus-visible, .ui-crumb-link:focus-visible, .ui-palette-close:focus-visible {
 	outline: 2px solid var(--ring); outline-offset: 2px;
@@ -595,11 +599,13 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 	font: inherit; font-size: var(--fs-md); text-align: start; cursor: pointer;
 	transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
-.ui-team-trigger { min-height: var(--ctl-h); border-color: var(--input); background-color: var(--secondary); }
+.ui-team-trigger { min-height: 46px; padding: 6px 10px 6px 8px; border-color: var(--border-emphasis); border-radius: 10px; background-color: color-mix(in oklab, var(--card) 70%, var(--sidebar)); }
 .ui-team-trigger:hover, .ui-user-trigger:hover, .ui-team-trigger[aria-expanded="true"], .ui-user-trigger[aria-expanded="true"] { background-color: var(--accent); }
 .ui-team-trigger:active, .ui-user-trigger:active { transform: scale(var(--press-scale)); }
-.ui-team-name, .ui-user-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--fw-medium); }
-.ui-user-name { color: var(--muted-foreground); font-weight: var(--fw-regular); }
+.ui-team-name, .ui-user-name { display: grid; min-width: 0; flex: 1; overflow: hidden; line-height: 1.3; }
+.ui-team-title, .ui-user-title, .ui-team-sub, .ui-user-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-team-title, .ui-user-title { font-size: var(--fs-sm); font-weight: var(--fw-bold); }
+.ui-team-sub, .ui-user-sub { font-size: var(--fs-xs); color: var(--muted-foreground); }
 .ui-team-chev { display: inline-flex; color: var(--subtle-foreground); }
 
 /* The team's tile: its initial on the accent. */
@@ -612,21 +618,23 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-menu-item[aria-current="true"] { font-weight: var(--fw-medium); }
 
 /* The places. Current: a wash, and the icon takes the accent. */
-.ui-nav-list { display: flex; flex-direction: column; gap: 1px; margin: 0; padding: 0; list-style: none; }
+.ui-nav-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .ui-nav-link {
-	display: flex; align-items: center; gap: var(--s-3); height: 28px; padding-inline: var(--s-3); border-radius: var(--r-md);
-	color: var(--muted-foreground); font-size: var(--fs-md); text-decoration: none;
+	display: flex; align-items: center; gap: var(--s-3); height: 34px; padding-inline: 12px; border-radius: var(--r-md);
+	color: var(--muted-foreground); font-size: var(--fs-md); font-weight: var(--fw-medium); text-decoration: none;
 	transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
 .ui-nav-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-nav-link .ui-icon { color: var(--subtle-foreground); transition: color var(--dur-1) var(--ease); }
-.ui-nav-link:hover { background-color: var(--secondary); color: var(--foreground); }
+.ui-nav-link:hover { background-color: color-mix(in oklab, var(--accent) 60%, transparent); color: var(--foreground); }
 .ui-nav-link:active { background-color: var(--accent); transform: scale(var(--press-scale)); }
-.ui-nav-link[aria-current="page"] { background-color: var(--accent); color: var(--foreground); }
+.ui-nav-link[aria-current="page"] { background-color: var(--accent); color: var(--foreground); font-weight: var(--fw-bold); }
 .ui-nav-link[aria-current="page"] .ui-icon { color: var(--primary-text); }
 
 .ui-chrome-foot { display: flex; align-items: center; margin-top: auto; }
-.ui-chrome-foot .ui-avatar { width: 22px; height: 22px; border-radius: var(--r-sm); background-color: var(--accent); font-size: var(--fs-xs); }
+.ui-chrome-foot .ui-avatar { width: 30px; height: 30px; border-radius: 50%; background-color: var(--accent); font-size: var(--fs-xs); }
+/* The account sits at the foot in a card, like the design's agent card. */
+.ui-chrome-foot .ui-user-trigger { min-height: 52px; padding: var(--s-3) 10px; border-color: var(--border); border-radius: 10px; background-color: color-mix(in oklab, var(--card) 70%, var(--sidebar)); }
 
 /* The tab bar is for small screens only. */
 .ui-tabbar { display: none; }
@@ -637,25 +645,25 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
    page never shows through unblurred text. */
 .ui-bar {
 	position: sticky; inset-block-start: 0; z-index: 5; display: flex; align-items: center; gap: var(--s-4);
-	height: 44px; padding-inline: var(--s-6); background-color: var(--background);
+	height: var(--bar-h); padding-inline: var(--page-pad); border-block-end: var(--bw) solid var(--border); background-color: var(--background);
 }
 @supports (backdrop-filter: blur(1px)) {
 	.ui-bar { background-color: color-mix(in oklab, var(--background) 88%, transparent); backdrop-filter: blur(8px); }
 }
-.ui-bar-actions { display: flex; flex: none; align-items: center; gap: var(--s-2); margin-inline-start: auto; }
+.ui-bar-actions { display: flex; flex: none; align-items: center; gap: var(--s-3); margin-inline-start: auto; }
 .ui-bar-bare { padding-inline: var(--s-6); }
 .ui-bar-user { color: var(--muted-foreground); font-size: var(--fs-sm); margin-inline-end: var(--s-3); }
 
-.ui-crumbs { min-width: 0; flex: 1; font-size: var(--fs-sm); color: var(--muted-foreground); }
+.ui-crumbs { min-width: 0; flex: 1; font-size: var(--fs-md); color: var(--muted-foreground); }
 .ui-crumbs > ol { gap: var(--s-1); }
 .ui-crumb { display: inline-flex; min-width: 0; align-items: center; }
 /* The slash is generated with an empty alternative text, so it is not read out. */
-.ui-crumb + .ui-crumb::before { content: "/" / ""; padding-inline: var(--s-2); color: var(--subtle-foreground); }
+.ui-crumb + .ui-crumb::before { content: "/" / ""; padding-inline: 10px; color: color-mix(in oklab, var(--subtle-foreground) 70%, transparent); }
 .ui-crumb-more + .ui-crumb::before { content: none; }
 .ui-crumb-link, .ui-crumb-current { min-width: 0; max-width: 14rem; overflow: hidden; border-radius: var(--r-sm); text-overflow: ellipsis; white-space: nowrap; }
 .ui-crumb-link { color: var(--muted-foreground); text-decoration: none; transition: color var(--dur-1) var(--ease); }
 .ui-crumb-link:hover { color: var(--foreground); }
-.ui-crumb-current { max-width: 22rem; color: var(--foreground); }
+.ui-crumb-current { max-width: 22rem; color: var(--foreground); font-weight: var(--fw-medium); }
 
 /* A switcher is the chevrons beside a crumb: project, environment, team. */
 .ui-crumb-switch {
@@ -669,12 +677,12 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-crumb-more { display: none; }
 
 .ui-search {
-	display: flex; flex: none; align-items: center; gap: var(--s-3); min-width: 210px; height: var(--ctl-h); padding-inline: var(--s-3);
-	border: var(--bw) solid var(--input); border-radius: var(--r-md); background-color: var(--card); color: var(--muted-foreground);
+	display: flex; flex: none; align-items: center; gap: 10px; min-width: 286px; height: 42px; padding-inline: 14px 10px;
+	border: var(--bw) solid var(--border-emphasis); border-radius: 10px; background-color: var(--card); color: var(--muted-foreground);
 	font: inherit; font-size: var(--fs-sm); cursor: pointer;
 	transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
-.ui-search:hover { border-color: var(--subtle-foreground); color: var(--foreground); }
+.ui-search:hover { border-color: var(--input); color: var(--foreground); }
 .ui-search:active { transform: scale(var(--press-scale)); }
 .ui-search-label { flex: 1; text-align: start; }
 
@@ -728,11 +736,11 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-form-actions { display: flex; gap: var(--s-3); }
 .ui-page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--s-4); }
 .ui-page-title { display: grid; gap: var(--s-2); min-width: 0; }
-.ui-page-title h1 { font-size: var(--fs-2xl); font-weight: var(--fw-bold); letter-spacing: -0.012em; line-height: 1.1; }
+.ui-page-title h1 { font-family: var(--font-display); font-size: var(--fs-3xl); font-weight: var(--fw-bold); letter-spacing: -0.02em; line-height: 1.1; }
 .ui-eyebrow { font-size: var(--fs-sm); color: var(--subtle-foreground); }
 .ui-lede { color: var(--muted-foreground); }
 .ui-page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
-.ui-sec-h { font-size: var(--fs-lg); font-weight: var(--fw-bold); }
+.ui-sec-h { font-family: var(--font-display); font-size: var(--fs-xl); font-weight: var(--fw-bold); letter-spacing: -0.01em; }
 .ui-count { margin-inline-start: var(--s-1); font-size: var(--fs-xs); font-weight: var(--fw-regular); color: var(--muted-foreground); }
 
 /* The first stop for the keyboard: jumps past the sidebar to the page. Hidden until focused. */
@@ -763,6 +771,10 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 
 	.ui-bar { position: static; height: auto; min-height: 44px; padding: var(--s-2) var(--s-4); backdrop-filter: none; background-color: var(--background); }
 	.ui-crumbs { overflow-x: auto; scrollbar-width: none; }
+	.ui-crumbs { font-size: var(--fs-sm); }
+	.ui-crumbs .ui-crumb-mark { display: none; }
+	.ui-crumb + .ui-crumb::before { padding-inline: var(--s-1); }
+	.ui-bar-actions { gap: 0; }
 	.ui-crumb-link, .ui-crumb-current { max-width: 9rem; }
 	.ui-crumb-more { display: inline-flex; }
 	.ui-crumb-mid { display: none; }
@@ -1202,57 +1214,66 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-res-tabrow::after { content: ""; position: absolute; inset-inline: 0; inset-block-end: 0; block-size: var(--bw); background-color: var(--border); }
 .ui-res-tabrow > :first-child { position: relative; z-index: 1; flex: 1 1 auto; min-width: 0; }
 .ui-res-tabrow .ui-tabs { margin-bottom: 0; }
+/* The environments as the design's chips: outlined, the current one in the teal wash. */
+.ui-res-tabrow::after { content: none; }
+.ui-res-tabrow .ui-tabs { gap: var(--s-3); padding: 2px; border-bottom: 0; }
+.ui-res-tabrow .ui-tab { min-height: 34px; margin-bottom: 0; padding: 0 14px; border: var(--bw) solid var(--border-emphasis); border-radius: var(--r-md); font-size: var(--fs-sm); }
+.ui-res-tabrow .ui-tab:hover { background-color: var(--accent); }
+.ui-res-tabrow .ui-tab[aria-current="page"] { border-color: var(--primary-border); background-color: var(--primary-soft); color: var(--primary-text); }
+.ui-res-tabrow .ui-tab[aria-current="page"] .ui-tab-n { color: inherit; }
 .ui-res-search { position: relative; flex: 1 1 12rem; min-width: 0; }
 .ui-res-search .ui-field { padding-inline-start: 2.25rem; }
 .ui-res-search-ic { position: absolute; inset-block: 0; inset-inline-start: var(--s-4); display: grid; place-items: center; pointer-events: none; color: var(--muted-foreground); }
 .ui-res-type { inline-size: 11rem; }
 .ui-res-region { display: grid; gap: var(--s-3); min-width: 0; }
 .ui-res-count { font-size: var(--fs-sm); color: var(--muted-foreground); }
-.ui-res-list { display: grid; margin: 0; padding: 0; list-style: none; border-block-start: var(--bw) solid var(--border); }
-.ui-res { position: relative; display: grid; align-items: center; column-gap: var(--s-4); row-gap: var(--s-2); grid-template-columns: 2.5rem minmax(0, 1.4fr) minmax(0, 1.2fr) 9rem 8.5rem; min-height: 4.25rem; padding: var(--s-3) var(--s-4); border-block-end: var(--bw) solid var(--border); transition: background-color var(--dur-1) var(--ease); }
-.ui-res:hover { background-color: var(--card); }
-.ui-res:has(.ui-res-link:focus-visible), .ui-res:has(.ui-res-newlink:focus-visible) { outline: 2px solid var(--ring); outline-offset: -2px; border-radius: var(--r-sm); }
-.ui-res-logo { display: grid; place-items: center; }
-.ui-res-main { display: grid; gap: var(--s-1); min-width: 0; }
+/* The resources as the design's service cards: two or more to a row, each a panel with the
+   logo, name and status on top, where it answers and when it last changed under a hairline,
+   and the live figures at the foot. */
+.ui-res-list { display: grid; gap: var(--s-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 21rem), 1fr)); margin: 0; padding: 0; list-style: none; }
+.ui-res {
+	position: relative; display: grid; align-content: start; align-items: start; column-gap: var(--s-4); row-gap: var(--s-4);
+	grid-template-columns: 2.25rem minmax(0, 1fr) auto; grid-template-areas: "logo main status" "meta meta meta" "metrics metrics metrics";
+	min-height: 9.5rem; padding: 18px; border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--card);
+	transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
+}
+.ui-res:hover { border-color: var(--border-emphasis); background-color: color-mix(in oklab, var(--card) 70%, var(--accent)); }
+.ui-res:has(.ui-res-link:focus-visible), .ui-res:has(.ui-res-newlink:focus-visible) { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ui-res-logo { grid-area: logo; display: grid; place-items: center; }
+.ui-res-main { grid-area: main; display: grid; gap: var(--s-1); min-width: 0; }
 .ui-res-kind { display: inline-flex; align-items: center; gap: var(--s-2); font-size: var(--fs-xs); color: var(--subtle-foreground); }
-.ui-res-name { font-size: var(--fs-md); font-weight: var(--fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-res-name { font-size: var(--fs-lg); font-weight: var(--fw-bold); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-res-link { color: inherit; text-decoration: none; transition: color var(--dur-3) var(--ease); }
 .ui-res-link::after { content: ""; position: absolute; inset: 0; }
 .ui-res-link:focus-visible { outline: none; }
 .ui-res[data-status="failed"] .ui-res-link { color: var(--destructive); }
 .ui-res-sub { font-size: var(--fs-sm); color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ui-res-meta { display: grid; gap: var(--s-1); min-width: 0; font-size: var(--fs-sm); }
+.ui-res-meta { grid-area: meta; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2) var(--s-4); min-width: 0; padding-block-start: var(--s-4); border-block-start: var(--bw) solid var(--border); font-size: var(--fs-sm); }
 .ui-res-url { position: relative; z-index: 1; display: inline-flex; align-items: center; gap: var(--s-2); max-inline-size: 100%; color: var(--muted-foreground); text-decoration: none; }
 .ui-res-url > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-res-url:hover { color: var(--foreground); text-decoration: underline; }
 .ui-res-when { font-size: var(--fs-xs); color: var(--subtle-foreground); }
-.ui-res-status { justify-self: start; }
+.ui-res-status { grid-area: status; justify-self: end; }
 .ui-res-status .ui-badge .ui-dot { transition: background-color var(--dur-3) var(--ease), box-shadow var(--dur-3) var(--ease), border-radius var(--dur-3) var(--ease); }
-.ui-res-metrics { display: flex; justify-content: flex-end; gap: var(--s-5); margin: 0; font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted-foreground); opacity: 0; transition: opacity var(--dur-2) var(--ease); }
+.ui-res-metrics { grid-area: metrics; display: flex; justify-content: flex-start; gap: var(--s-5); margin: 0; font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--muted-foreground); }
+.ui-res-metrics:empty { display: none; }
 .ui-res-metrics > div { display: flex; gap: var(--s-2); }
-.ui-res-metrics dt { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.ui-res:hover .ui-res-metrics, .ui-res:focus-within .ui-res-metrics { opacity: 1; }
-@media (hover: none) { .ui-res-metrics { opacity: 1; } }
-.ui-res-new { grid-template-columns: minmax(0, 1fr); min-height: 3.5rem; padding: 0; }
-.ui-res-newlink { display: flex; align-items: center; gap: var(--s-3); min-height: 3.5rem; padding: var(--s-3) var(--s-4); color: var(--subtle-foreground); text-decoration: none; transition: color var(--dur-1) var(--ease); }
+.ui-res-metrics dt { color: var(--subtle-foreground); }
+.ui-res-new { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; padding: 0; border-style: dashed; border-color: var(--border-emphasis); background-color: transparent; }
+.ui-res-newlink { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: var(--s-2); min-height: 9.5rem; height: 100%; padding: 18px; text-align: center; color: var(--subtle-foreground); text-decoration: none; transition: color var(--dur-1) var(--ease); }
 .ui-res-newlink:hover, .ui-res-newlink:focus-visible { color: var(--primary-text); outline: none; }
 .ui-res-newt { font-weight: var(--fw-medium); }
-.ui-res-news { font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-res-news { font-size: var(--fs-xs); }
 
 /* While the filter is fetching, skeleton rows with the geometry of the rows they stand in
    for; they only show if the answer takes longer than a blink. */
-.ui-res-skel { border-block-start: var(--bw) solid var(--border); animation: ui-vt-in var(--dur-2) var(--ease-out) 150ms both; }
+.ui-res-skel { animation: ui-vt-in var(--dur-2) var(--ease-out) 150ms both; }
 .ui-res-skel .ui-skeleton-row { min-height: 4.25rem; padding-inline: var(--s-4); }
 
 /* Narrow: each row stacks. Logo, name and status on top; URL, last deploy and the figures
    underneath (there is no hover on a phone, so the figures stay). */
 @media (max-width: 900px) {
-	.ui-res { grid-template-columns: 2.5rem minmax(0, 1fr) auto; padding-inline: var(--s-4); }
-	.ui-res-status { grid-column: 3; grid-row: 1; }
-	.ui-res-meta { grid-column: 2 / -1; grid-row: 2; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); }
-	.ui-res-metrics { grid-column: 2 / -1; grid-row: 3; justify-content: flex-start; opacity: 1; }
-	.ui-res-metrics dt { position: static; inline-size: auto; block-size: auto; clip-path: none; color: var(--subtle-foreground); }
-	.ui-res-news { display: none; }
+	.ui-res { padding: var(--s-4); }
 	.ui-res-none { display: none; }
 	.ui-res-newt { white-space: nowrap; }
 	.ui-res-type { inline-size: 100%; }
@@ -1316,7 +1337,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--s-5); }
 .ui-head-logo { flex-shrink: 0; }
 .ui-head > .ui-head-id { display: grid; grid-template-columns: minmax(0, 1fr); flex: 1 1 15rem; align-items: start; gap: var(--s-2); min-width: 0; }
-.ui-head > .ui-head-id h1 { margin: 0; font-size: var(--fs-2xl); font-weight: var(--fw-bold); line-height: 1.2; overflow-wrap: anywhere; }
+.ui-head > .ui-head-id h1 { margin: 0; font-family: var(--font-display); font-size: var(--fs-3xl); font-weight: var(--fw-bold); line-height: 1.15; letter-spacing: -0.02em; overflow-wrap: anywhere; }
 .ui-eyebrow { display: flex; align-items: center; gap: var(--s-2); margin: 0; color: var(--subtle-foreground); font-size: var(--fs-xs); }
 .ui-head-sub { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); color: var(--muted-foreground); font-size: var(--fs-sm); }
 .ui-head-url { display: inline-flex; min-width: 0; align-items: center; gap: var(--s-2); color: var(--primary-text); text-decoration: none; }
@@ -1326,9 +1347,11 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-head > .ui-app-actions { margin-inline-start: auto; }
 
 /* The row of live figures under the head. */
-.ui-stats { display: flex; flex-wrap: wrap; gap: var(--s-4) var(--s-8); margin: 0; padding-block: var(--s-4); border-block: var(--bw) solid var(--border); }
-.ui-stats dt { color: var(--subtle-foreground); font-size: var(--fs-xs); }
-.ui-stats dd { margin: 0; font-family: var(--font-mono); font-size: var(--fs-lg); font-weight: var(--fw-medium); overflow-wrap: anywhere; }
+/* The figures under a head, as the design's stat cards: a label over a big number. */
+.ui-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: var(--s-4); margin: 0; }
+.ui-stats > div { display: grid; align-content: start; gap: var(--s-2); min-width: 0; padding: 18px; border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--card); }
+.ui-stats dt { color: var(--muted-foreground); font-size: var(--fs-sm); }
+.ui-stats dd { margin: 0; font-family: var(--font-display); font-size: 26px; font-weight: var(--fw-bold); line-height: 1.15; letter-spacing: -0.01em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 
 /* The deployments: the history on the left, the log of the one being read on the right. */
 .ui-dep { display: grid; grid-template-columns: minmax(16rem, 0.8fr) minmax(0, 1.6fr); gap: var(--s-6); align-items: start; }
@@ -1387,9 +1410,9 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 }
 
 @media (max-width: 760px) {
-	.ui-head-id h1 { font-size: var(--fs-2xl); }
+	.ui-head-id h1 { font-size: var(--fs-2xl); font-family: var(--font-display); }
 	.ui-head > .ui-app-actions { flex-basis: 100%; margin-inline-start: 0; }
-	.ui-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3) var(--s-5); }
+	.ui-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3); }
 	.ui-logbar-search { max-width: none; flex-basis: 100%; }
 	.ui-log-line:has(> .ui-log-ts) { grid-template-columns: 5ch minmax(0, 1fr); }
 	.ui-log-ts { display: none; }
@@ -1463,9 +1486,8 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-tpl-layout { display: grid; gap: var(--s-4); }
 .ui-tpl-search { display: block; }
 .ui-tpl-cats { display: flex; flex-wrap: wrap; gap: var(--s-1); }
-.ui-tpl-cats .ui-chip { background-color: transparent; }
-.ui-tpl-cats .ui-chip:hover { background-color: var(--accent); }
-.ui-tpl-cats .ui-chip[aria-current="page"] { background-color: var(--accent); color: var(--foreground); }
+.ui-tpl-cats .ui-chip:not([aria-current]) { background-color: transparent; }
+.ui-tpl-cats .ui-chip:not([aria-current]):hover { background-color: var(--accent); }
 .ui-tpl-cats .ui-chip:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .ui-tpl-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 25rem), 1fr)); gap: 0 var(--s-6); margin: 0; padding: 0; list-style: none; }
 .ui-tpl-row { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) auto; align-items: center; gap: var(--s-4); padding: var(--s-3) var(--s-2); border: 0; border-bottom: var(--bw) solid var(--border); border-radius: 0; }
@@ -1709,9 +1731,9 @@ code.font-mono { font-size: 0.92em; }
 
 /* == infrastructure ============================================================================ */
 /* The sidebar's Infrastructure group: a small heading over its own list. */
-.ui-nav { display: flex; flex-direction: column; gap: var(--s-4); }
-.ui-nav-group { display: grid; gap: var(--s-1); }
-.ui-nav-heading { margin: 0; padding-inline: var(--s-3); color: var(--subtle-foreground); font-size: var(--fs-xs); font-weight: var(--fw-medium); letter-spacing: 0.04em; text-transform: uppercase; }
+.ui-nav { display: flex; flex-direction: column; gap: 16px; }
+.ui-nav-group { display: grid; gap: 6px; }
+.ui-nav-heading { margin: 0; padding-inline: 12px; color: var(--subtle-foreground); font-size: 11px; font-weight: var(--fw-bold); letter-spacing: var(--tracking-label); text-transform: uppercase; }
 
 /* The overview: one section per server, then the table. */
 .ui-infra { display: grid; gap: var(--s-6); min-width: 0; }
@@ -2032,8 +2054,8 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-file { max-width: 100%; color: var(--muted-foreground); font: inherit; font-size: var(--fs-sm); }
 .ui-file::file-selector-button {
 	height: var(--ctl-h); margin-inline-end: var(--s-3); padding-inline: var(--s-4);
-	border: var(--bw) solid var(--input); border-radius: var(--r-md);
-	background-color: var(--secondary); color: var(--foreground); box-shadow: var(--sh-1);
+	border: var(--bw) solid var(--border-emphasis); border-radius: var(--r-md);
+	background-color: var(--card); color: var(--foreground); box-shadow: var(--sh-1);
 	font: inherit; font-size: var(--fs-sm); font-weight: var(--fw-medium); cursor: pointer;
 	transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease);
 }
@@ -2060,13 +2082,13 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
    server and by `[` or the toggle in page.js). Labels give way by max-width and opacity so the
    change animates with the grid column; below 760 px the strip and tab bar are unchanged. */
 .ui-sidebar .ui-nav-link, .ui-side-toggle, .ui-sidebar .ui-team-trigger, .ui-sidebar .ui-user-trigger, .ui-sidebar .ui-brand { gap: 0; }
-.ui-sidebar .ui-nav-label, .ui-side-toggle .ui-nav-label, .ui-sidebar .ui-brand-name, .ui-sidebar .ui-team-name, .ui-sidebar .ui-user-name { margin-inline-start: var(--s-3); max-width: 14rem; }
+.ui-sidebar .ui-nav-label, .ui-side-toggle .ui-nav-label, .ui-sidebar .ui-brand-name, .ui-sidebar .ui-team-name, .ui-sidebar .ui-user-name { margin-inline-start: 10px; max-width: 14rem; }
 .ui-sidebar .ui-team-name, .ui-sidebar .ui-user-name { margin-inline-end: var(--s-3); }
 .ui-sidebar { overflow-x: hidden; }
 .ui-chrome-foot { flex-direction: column; align-items: stretch; gap: var(--s-2); }
 .ui-side-toggle {
-	display: flex; align-items: center; height: 28px; padding-inline: var(--s-3); border: 0; border-radius: var(--r-md);
-	background: none; color: var(--muted-foreground); font: inherit; font-size: var(--fs-md); text-align: start; cursor: pointer;
+	display: flex; align-items: center; height: 34px; padding-inline: 12px; border: 0; border-radius: var(--r-md);
+	background: none; color: var(--muted-foreground); font: inherit; font-size: var(--fs-sm); text-align: start; cursor: pointer;
 	transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
 .ui-side-toggle .ui-icon { color: var(--subtle-foreground); }

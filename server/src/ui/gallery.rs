@@ -841,8 +841,12 @@ mod tests {
 			assert_not_contains(&login, external);
 		}
 		assert_contains(&login, "rel=\"preload\"");
-		assert_contains(&login, "/static/fonts/hanken-grotesk-var.woff2");
-		assert_contains(&login, "/static/fonts/spline-sans-mono-var.woff2");
+		assert_contains(&login, "/static/fonts/inter-latin-wght-normal.woff2");
+		assert_contains(
+			&login,
+			"/static/fonts/jetbrains-mono-latin-wght-normal.woff2",
+		);
+		assert_contains(&login, "/static/fonts/sora-latin-wght-normal.woff2");
 		assert_contains(&login, "/static/page.js");
 		assert_contains(&login, "id=\"toasts\"");
 	}
@@ -861,8 +865,12 @@ mod tests {
 			("/static/xterm.js", "text/javascript"),
 			("/static/xterm-fit.js", "text/javascript"),
 			("/static/xterm.css", "text/css"),
-			("/static/fonts/hanken-grotesk-var.woff2", "font/woff2"),
-			("/static/fonts/spline-sans-mono-var.woff2", "font/woff2"),
+			("/static/fonts/inter-latin-wght-normal.woff2", "font/woff2"),
+			(
+				"/static/fonts/jetbrains-mono-latin-wght-normal.woff2",
+				"font/woff2",
+			),
+			("/static/fonts/sora-latin-wght-normal.woff2", "font/woff2"),
 		] {
 			let resp = tower::ServiceExt::oneshot(
 				app.clone(),

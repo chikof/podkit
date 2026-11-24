@@ -232,7 +232,7 @@ mod tests {
 			r.headers().get("content-encoding").is_none(),
 			"json stays plain"
 		);
-		let r = get("/static/fonts/hanken-grotesk-var.woff2").await;
+		let r = get("/static/fonts/inter-latin-wght-normal.woff2").await;
 		assert!(
 			r.headers().get("content-encoding").is_none(),
 			"fonts stay plain"

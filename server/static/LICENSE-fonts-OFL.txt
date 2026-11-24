@@ -1,5 +1,6 @@
-Hanken Grotesk: Copyright 2022 The Hanken Grotesk Project Authors (https://github.com/marcologous/hanken-design-system)
-Spline Sans Mono: Copyright 2020 The Spline Sans Project Authors (https://github.com/SorkinType/SplineSans)
+Inter: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
+JetBrains Mono: Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+Sora: Copyright 2019 The Sora Project Authors (https://github.com/sora-xor/sora-font)
 
 These Font Software files are licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

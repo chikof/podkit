@@ -1,5 +1,7 @@
-/* Design tokens for the web UI: "Quiet" (design/finalists/02-quiet-linear). The spec
-   lives in design/finalists/02-quiet-linear/README.md and IMPLEMENTATION.md.
+/* Design tokens for the web UI: "Warm dark", page D of the Podkit PaaS dashboard design
+   (the Design artifact "Podkit PaaS dashboard", project/options/ember). A warm, brown-black
+   neutral with one teal signal. The design has no light page of its own; the light scheme
+   here is the same system on a warm paper white, with the teal darkened to read on it.
 
    Components use only these semantic colors (`bg-primary`, `text-muted-foreground`,
    `border-border`, ...), so restyling means editing the values below. `build.rs`
@@ -7,102 +9,115 @@
    there becomes `bg-name`, `text-name`, ... with no other edit. Keep that block
    free of anything but color tokens, one per line.
 
-   The names are shadcn/ui's (MIT); the values are Quiet's, in oklch, generated from
-   its `tokens.css`. Each color is written once as `light-dark(<light>, <dark>)` and
-   follows the used color scheme:
+   The names are shadcn/ui's (MIT); the values are the design's hex colors in oklch.
+   Each color is written once as `light-dark(<light>, <dark>)` and follows the used color scheme:
 
      - no class on <html>: the system setting (`color-scheme: light dark`),
      - class="dark" or class="light": the user's choice. The server writes the class from
        the `theme` cookie, so the first paint is already right.
 
-   Mapping from Quiet's names (IMPLEMENTATION.md section 1): background = bg,
-   foreground = text, card/popover = surface, primary = accent (the brand signal; its
-   text-sized twin is `primary-text`), secondary/muted = surface-2, muted-foreground = text-2,
-   subtle-foreground = text-3, accent = surface-3 (shadcn's `accent` is a hover wash),
-   destructive = err, success = ok, warning = warn, input = border-ui (the control
-   border, 3:1), ring = focus, border-emphasis = border-strong, log = log-bg.
-   `design/finalists/02-quiet-linear/contrast.py` audits this file. */
+   Mapping from the design: background = page (#141210), card = panel (#1E1B18), popover =
+   raised panel (#24211D), sidebar = the left column (#181613), primary = teal (#4FD1B5)
+   with `primary-text` its text-sized twin (#6FE0C8), `primary-soft` and `primary-border`
+   the selected chip (#13302A, #2C6B5D), muted-foreground = secondary text (#A39B90),
+   accent = the hover and current-item wash (#2A2621), border = hairline (#2E2A25),
+   border-emphasis = control outline (#3A352F), input = the field border (3:1 against the
+   page). Status text uses the lighter tints (#5FD497, #F0B95A, #F58A83) so it reads at
+   12 px. */
 
 @font-face {
-	font-family: "Hanken Grotesk";
+	font-family: "Inter";
 	font-style: normal;
 	font-weight: 100 900;
 	font-display: swap;
-	src: url("/static/fonts/hanken-grotesk-var.woff2?v=1") format("woff2");
+	src: url("/static/fonts/inter-latin-wght-normal.woff2?v=1") format("woff2");
 }
 
 @font-face {
-	font-family: "Spline Sans Mono";
+	font-family: "JetBrains Mono";
 	font-style: normal;
-	font-weight: 300 700;
+	font-weight: 100 800;
 	font-display: swap;
-	src: url("/static/fonts/spline-sans-mono-var.woff2?v=1") format("woff2");
+	src: url("/static/fonts/jetbrains-mono-latin-wght-normal.woff2?v=1") format("woff2");
+}
+
+@font-face {
+	font-family: "Sora";
+	font-style: normal;
+	font-weight: 100 800;
+	font-display: swap;
+	src: url("/static/fonts/sora-latin-wght-normal.woff2?v=1") format("woff2");
 }
 
 :root {
-	--background: light-dark(oklch(0.988 0.001 0), oklch(0.172 0.003 0));
-	--foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
-	--card: light-dark(oklch(1 0 0), oklch(0.195 0.004 264.5));
-	--card-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
-	--popover: light-dark(oklch(1 0 0), oklch(0.195 0.004 264.5));
-	--popover-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
-	--primary: light-dark(oklch(0.509 0.105 235.2), oklch(0.741 0.104 234));
-	--primary-foreground: light-dark(oklch(1 0 0), oklch(0.183 0.026 234.6));
-	--secondary: light-dark(oklch(0.968 0.003 0), oklch(0.222 0.006 271.1));
-	--secondary-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
-	--muted: light-dark(oklch(0.968 0.003 0), oklch(0.222 0.006 271.1));
-	--muted-foreground: light-dark(oklch(0.462 0.016 276.7), oklch(0.72 0.01 279.6));
-	--accent: light-dark(oklch(0.941 0.005 286.3), oklch(0.257 0.008 274.7));
-	--accent-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
-	--destructive: light-dark(oklch(0.501 0.178 28.4), oklch(0.688 0.164 22.3));
-	--destructive-foreground: light-dark(oklch(1 0 0), oklch(0.172 0.003 0));
-	--success: light-dark(oklch(0.496 0.107 158.1), oklch(0.735 0.136 159.3));
-	--warning: light-dark(oklch(0.508 0.108 73.3), oklch(0.773 0.14 78.6));
-	--info: light-dark(oklch(0.515 0.188 260.8), oklch(0.729 0.14 258.1));
-	--border: light-dark(oklch(0.932 0.005 286.3), oklch(0.261 0.008 274.7));
-	--input: light-dark(oklch(0.624 0.009 278.5), oklch(0.529 0.009 278.5));
-	--ring: light-dark(oklch(0.509 0.105 235.2), oklch(0.787 0.09 232.6));
-	--chart-1: light-dark(oklch(0.509 0.105 235.2), oklch(0.741 0.104 234));
-	--chart-2: light-dark(oklch(0.496 0.107 158.1), oklch(0.735 0.136 159.3));
-	--chart-3: light-dark(oklch(0.578 0.125 69.8), oklch(0.773 0.14 78.6));
-	--chart-4: light-dark(oklch(0.514 0.177 292.1), oklch(0.747 0.121 297.6));
-	--chart-5: light-dark(oklch(0.542 0.186 27.4), oklch(0.688 0.164 22.3));
-	--chart-6: light-dark(oklch(0.539 0.091 187.9), oklch(0.789 0.104 186.7));
-	--sidebar: light-dark(oklch(1 0 0), oklch(0.195 0.004 264.5));
-	--sidebar-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
-	--sidebar-primary: light-dark(oklch(0.509 0.105 235.2), oklch(0.741 0.104 234));
-	--sidebar-primary-foreground: light-dark(oklch(1 0 0), oklch(0.183 0.026 234.6));
-	--sidebar-accent: light-dark(oklch(0.941 0.005 286.3), oklch(0.257 0.008 274.7));
-	--sidebar-accent-foreground: light-dark(oklch(0.227 0.008 274.6), oklch(0.932 0.003 0));
-	--sidebar-border: light-dark(oklch(0.932 0.005 286.3), oklch(0.261 0.008 274.7));
-	--sidebar-ring: light-dark(oklch(0.509 0.105 235.2), oklch(0.787 0.09 232.6));
-	--primary-text: light-dark(oklch(0.509 0.105 235.2), oklch(0.787 0.09 232.6));
-	--primary-hover: light-dark(oklch(0.442 0.091 235.3), oklch(0.795 0.087 233.9));
-	--primary-soft: light-dark(oklch(0.946 0.02 229), oklch(0.257 0.029 231.2));
-	--success-soft: light-dark(oklch(0.942 0.028 162.1), oklch(0.248 0.031 163.6));
-	--warning-soft: light-dark(oklch(0.945 0.039 87.6), oklch(0.256 0.032 86.2));
-	--destructive-soft: light-dark(oklch(0.928 0.03 22.8), oklch(0.235 0.036 20.1));
-	--info-soft: light-dark(oklch(0.935 0.025 261.1), oklch(0.25 0.051 262.5));
-	--muted-strong: light-dark(oklch(0.941 0.005 286.3), oklch(0.257 0.008 274.7));
-	--subtle-foreground: light-dark(oklch(0.527 0.019 278.2), oklch(0.656 0.016 281.8));
-	--border-emphasis: light-dark(oklch(0.841 0.011 280.4), oklch(0.349 0.011 271.1));
-	--log: light-dark(oklch(0.968 0.003 0), oklch(0.154 0.003 0));
-	--overlay: light-dark(oklch(0.202 0.016 273.9 / 35%), oklch(0.122 0.006 261.6 / 60%));
-	--grid: light-dark(oklch(0.944 0.005 286.3), oklch(0.236 0.008 274.6));
-	--skeleton-a: light-dark(oklch(0.944 0.005 286.3), oklch(0.222 0.006 271.1));
-	--skeleton-b: light-dark(oklch(0.908 0.008 286.2), oklch(0.273 0.007 274.7));
+	--background: light-dark(oklch(0.971 0.005 78.3), oklch(0.184 0.005 67.5));
+	--foreground: light-dark(oklch(0.224 0.007 67.4), oklch(0.933 0.011 76.6));
+	--card: light-dark(oklch(1 0 0), oklch(0.224 0.007 67.4));
+	--card-foreground: light-dark(oklch(0.224 0.007 67.4), oklch(0.933 0.011 76.6));
+	--popover: light-dark(oklch(1 0 0), oklch(0.250 0.009 75.2));
+	--popover-foreground: light-dark(oklch(0.224 0.007 67.4), oklch(0.933 0.011 76.6));
+	--primary: light-dark(oklch(0.519 0.095 175.6), oklch(0.782 0.121 176.1));
+	--primary-foreground: light-dark(oklch(1 0 0), oklch(0.184 0.005 67.5));
+	--secondary: light-dark(oklch(0.953 0.007 80.7), oklch(0.250 0.009 75.2));
+	--secondary-foreground: light-dark(oklch(0.224 0.007 67.4), oklch(0.933 0.011 76.6));
+	--muted: light-dark(oklch(0.953 0.007 80.7), oklch(0.250 0.009 75.2));
+	--muted-foreground: light-dark(oklch(0.483 0.020 75.9), oklch(0.693 0.018 76.1));
+	--accent: light-dark(oklch(0.932 0.009 78.3), oklch(0.271 0.011 73.5));
+	--accent-foreground: light-dark(oklch(0.224 0.007 67.4), oklch(0.933 0.011 76.6));
+	--destructive: light-dark(oklch(0.521 0.173 27.8), oklch(0.747 0.131 24.6));
+	--destructive-foreground: light-dark(oklch(1 0 0), oklch(0.184 0.005 67.5));
+	--success: light-dark(oklch(0.490 0.116 155.0), oklch(0.786 0.139 158.0));
+	--warning: light-dark(oklch(0.508 0.108 73.3), oklch(0.818 0.129 78.9));
+	--info: light-dark(oklch(0.549 0.169 256.3), oklch(0.769 0.097 251.9));
+	--border: light-dark(oklch(0.918 0.011 76.6), oklch(0.288 0.011 73.5));
+	--input: light-dark(oklch(0.644 0.021 75.2), oklch(0.514 0.020 76.0));
+	--ring: light-dark(oklch(0.519 0.095 175.6), oklch(0.834 0.110 177.7));
+	--chart-1: light-dark(oklch(0.519 0.095 175.6), oklch(0.782 0.121 176.1));
+	--chart-2: light-dark(oklch(0.530 0.124 155.3), oklch(0.702 0.143 156.7));
+	--chart-3: light-dark(oklch(0.619 0.125 76.5), oklch(0.756 0.136 76.8));
+	--chart-4: light-dark(oklch(0.594 0.157 254.1), oklch(0.758 0.129 249.6));
+	--chart-5: light-dark(oklch(0.571 0.169 27.3), oklch(0.637 0.183 26.7));
+	--chart-6: light-dark(oklch(0.575 0.095 194.8), oklch(0.765 0.110 188.4));
+	--sidebar: light-dark(oklch(0.985 0.003 84.6), oklch(0.201 0.007 78.2));
+	--sidebar-foreground: light-dark(oklch(0.224 0.007 67.4), oklch(0.933 0.011 76.6));
+	--sidebar-primary: light-dark(oklch(0.519 0.095 175.6), oklch(0.782 0.121 176.1));
+	--sidebar-primary-foreground: light-dark(oklch(1 0 0), oklch(0.184 0.005 67.5));
+	--sidebar-accent: light-dark(oklch(0.932 0.009 78.3), oklch(0.271 0.011 73.5));
+	--sidebar-accent-foreground: light-dark(oklch(0.224 0.007 67.4), oklch(0.933 0.011 76.6));
+	--sidebar-border: light-dark(oklch(0.918 0.011 76.6), oklch(0.288 0.011 73.5));
+	--sidebar-ring: light-dark(oklch(0.519 0.095 175.6), oklch(0.834 0.110 177.7));
+	--primary-text: light-dark(oklch(0.482 0.088 175.7), oklch(0.834 0.110 177.7));
+	--primary-hover: light-dark(oklch(0.438 0.080 174.6), oklch(0.834 0.110 177.7));
+	--primary-soft: light-dark(oklch(0.954 0.021 175.0), oklch(0.285 0.037 178.2));
+	--primary-border: light-dark(oklch(0.853 0.058 178.4), oklch(0.482 0.069 176.4));
+	--success-soft: light-dark(oklch(0.952 0.013 167.2), oklch(0.277 0.033 154.6));
+	--warning-soft: light-dark(oklch(0.959 0.024 79.7), oklch(0.290 0.035 76.9));
+	--destructive-soft: light-dark(oklch(0.955 0.017 21.8), oklch(0.259 0.040 27.5));
+	--info-soft: light-dark(oklch(0.958 0.015 251.2), oklch(0.284 0.022 245.8));
+	--muted-strong: light-dark(oklch(0.932 0.009 78.3), oklch(0.271 0.011 73.5));
+	--subtle-foreground: light-dark(oklch(0.529 0.022 75.1), oklch(0.624 0.019 76.0));
+	--border-emphasis: light-dark(oklch(0.867 0.016 77.1), oklch(0.332 0.012 72.4));
+	--log: light-dark(oklch(0.953 0.007 80.7), oklch(0.165 0.005 67.4));
+	--overlay: light-dark(oklch(0.224 0.007 67.4 / 35%), oklch(0.141 0.003 69.4 / 65%));
+	--grid: light-dark(oklch(0.942 0.009 78.3), oklch(0.237 0.009 75.2));
+	--skeleton-a: light-dark(oklch(0.953 0.007 80.7), oklch(0.250 0.009 75.2));
+	--skeleton-b: light-dark(oklch(0.867 0.016 77.1), oklch(0.304 0.013 72.4));
+
 }
 
-/* Non-color tokens: type, spacing, radius, size, elevation and motion (README 2.3 to 2.6). */
+/* Non-color tokens: type, spacing, radius, size, elevation and motion. Inter for text,
+   JetBrains Mono for ids, hashes, branches, log lines and keys, Sora for the
+   display type (brand, page titles, section titles, big numbers). */
 :root {
-	--font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
-	--font-mono: "Spline Sans Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+	--font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+	--font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+	--font-display: "Sora", "Inter", ui-sans-serif, system-ui, sans-serif;
 
-	--fs-xs: 11.5px;
-	--fs-sm: 12.5px;
-	--fs-md: 13.5px;
+	--fs-xs: 12px;
+	--fs-sm: 13px;
+	--fs-md: 14px;
 	--fs-lg: 15px;
-	--fs-xl: 18px;
+	--fs-xl: 17px;
 	--fs-2xl: 22px;
 	--fs-3xl: 28px;
 	--fs-4xl: 38px;
@@ -111,7 +126,7 @@
 	--fw-regular: 400;
 	--fw-medium: 500;
 	--fw-bold: 600;
-	--tracking-label: 0;
+	--tracking-label: 0.06em;
 
 	--s-1: 2px;
 	--s-2: 4px;
@@ -122,24 +137,25 @@
 	--s-7: 32px;
 	--s-8: 48px;
 
-	--r-sm: 4px;
-	--r-md: 6px;
-	--r-lg: 8px;
+	--r-sm: 5px;
+	--r-md: 8px;
+	--r-lg: 12px;
 	--r-pill: 999px;
 
-	--nav-w: 232px;
-	--ctl-h: 30px;
-	--page-max: 1080px;
+	--nav-w: 244px;
+	--bar-h: 70px;
+	--ctl-h: 36px;
+	--page-max: 1200px;
 	--page-pad: var(--s-7);
 	--page-gap: var(--s-6);
-	--card-pad: var(--s-5);
+	--card-pad: 18px;
 	--bw: 1px;
 	--icon-sw: 1.75;
 	--press-scale: 0.98;
 
-	--sh-1: 0 1px 0 oklch(1 0 0 / 2%) inset;
-	--sh-2: 0 4px 16px oklch(0 0 0 / 30%);
-	--sh-3: 0 16px 48px oklch(0 0 0 / 55%), 0 0 0 1px var(--border-emphasis);
+	--sh-1: none;
+	--sh-2: 0 6px 20px oklch(0 0 0 / 35%);
+	--sh-3: 0 18px 50px oklch(0 0 0 / 60%), 0 0 0 1px var(--border-emphasis);
 
 	--dur-1: 90ms;
 	--dur-2: 160ms;
@@ -171,16 +187,16 @@
    the system setting, and the two explicit classes. */
 @media (prefers-color-scheme: light) {
 	:root:not(.dark) {
-		--sh-1: none;
-		--sh-2: 0 4px 16px oklch(0.2 0.02 270 / 8%);
-		--sh-3: 0 16px 48px oklch(0.2 0.02 270 / 18%), 0 0 0 1px var(--border);
+		--sh-1: 0 1px 2px oklch(0.2 0.02 265 / 5%);
+		--sh-2: 0 6px 20px oklch(0.2 0.02 265 / 8%);
+		--sh-3: 0 18px 50px oklch(0.2 0.02 265 / 16%), 0 0 0 1px var(--border);
 	}
 }
 
 :root.light {
-	--sh-1: none;
-	--sh-2: 0 4px 16px oklch(0.2 0.02 270 / 8%);
-	--sh-3: 0 16px 48px oklch(0.2 0.02 270 / 18%), 0 0 0 1px var(--border);
+	--sh-1: 0 1px 2px oklch(0.2 0.02 265 / 5%);
+	--sh-2: 0 6px 20px oklch(0.2 0.02 265 / 8%);
+	--sh-3: 0 18px 50px oklch(0.2 0.02 265 / 16%), 0 0 0 1px var(--border);
 }
 
 /* No class: follow the system. A class always wins. */
@@ -208,8 +224,8 @@ body {
 	font-family: var(--font-sans);
 	font-size: var(--fs-md);
 	line-height: var(--lh-body);
-	letter-spacing: -0.003em;
-	font-feature-settings: "calt", "kern";
+	letter-spacing: -0.006em;
+	font-feature-settings: "calt", "kern", "cv11";
 	text-wrap: pretty;
 	/* Not a class: encre-css 0.21.1 names this utility `antialised`. */
 	-webkit-font-smoothing: antialiased;
@@ -219,7 +235,7 @@ body {
 h1,
 h2,
 h3 {
-	letter-spacing: -0.012em;
+	letter-spacing: -0.015em;
 }
 
 ::selection {

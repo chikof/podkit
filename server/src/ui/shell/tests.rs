@@ -153,11 +153,19 @@ async fn the_sidebar_lists_the_places_and_marks_the_current_one(db: PgPool) {
 			&format!("<span class=\"ui-nav-label\">{label}</span>"),
 		);
 	}
-	// The Infrastructure section has its own heading and list.
-	assert_contains(
-		&body,
-		"<p class=\"ui-nav-heading\" id=\"nav-infrastructure\">Infrastructure</p>",
-	);
+	// The places come in four headed groups, each its own list.
+	for (id, label) in [
+		("nav-build", "Build"),
+		("nav-infrastructure", "Infrastructure"),
+		("nav-observe", "Observe"),
+		("nav-admin", "Admin"),
+	] {
+		assert_contains(
+			&body,
+			&format!("<p class=\"ui-nav-heading\" id=\"{id}\">{label}</p>"),
+		);
+		assert_contains(&body, &format!("aria-labelledby=\"{id}\""));
+	}
 	// The one current link of the sidebar is the page itself; the tab bar, which has no room
 	// for the section's pages, marks "Infrastructure" instead.
 	let current =
@@ -240,8 +248,14 @@ async fn a_link_the_role_may_not_use_is_not_rendered(db: PgPool) {
 			&format!("<span class=\"ui-nav-label\">{hidden}</span>"),
 		);
 	}
-	// With nothing to read there is no Infrastructure section at all.
-	assert_not_contains(&body, "ui-nav-heading");
+	// With nothing to read there is no Infrastructure, Observe or Admin place but Settings:
+	// the Build group and the Admin group (Settings alone) are all the sidebar has.
+	assert_not_contains(&body, "id=\"nav-infrastructure\"");
+	assert_not_contains(&body, "id=\"nav-observe\"");
+	assert_contains(
+		&body,
+		"<p class=\"ui-nav-heading\" id=\"nav-build\">Build</p>",
+	);
 	assert_not_contains(&body, "<span class=\"ui-nav-label\">Infrastructure</span>");
 	// The palette offers no action the role may not take either.
 	for hidden in ["Create project", "Add server", "Add S3 destination"] {

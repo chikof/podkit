@@ -19,21 +19,15 @@ use crate::ui::theme::{self, Theme};
 const TEAM_TRIGGER: &str = "ui-team-trigger";
 const USER_TRIGGER: &str = "ui-user-trigger";
 
-/// The podkit mark: a capsule split in two with a dot, drawn with `currentColor`.
+/// The podkit mark: "pk" on a teal tile. Decoration: the name beside it is the text.
 fn brand_mark() -> Markup {
-	html! {
-		svg class="ui-brand-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false" {
-			rect x="2.5" y="6.5" width="19" height="11" rx="5.5" fill="none" stroke="currentColor" stroke-width="2" {}
-			path d="M12 6.5v11" stroke="currentColor" stroke-width="2" {}
-			circle cx="7.2" cy="12" r="1.6" fill="currentColor" {}
-		}
-	}
+	html! { span class="ui-brand-mark" aria-hidden="true" { "pk" } }
 }
 
 fn brand_in(href: &str) -> Markup {
 	html! {
 		a class="ui-brand" href=(href) {
-			span class="ui-brand-mark" { (brand_mark()) }
+			(brand_mark())
 			span class="ui-brand-name" { "podkit" }
 		}
 	}
@@ -64,11 +58,15 @@ fn link(item: &NavItem, current: bool, tip: Option<&str>) -> Markup {
 	}
 }
 
-/// The team's name as a button that lists the user's teams.
+/// The team's name as a button that lists the user's teams. Under the name, the team's
+/// slug, so two teams with one name still tell apart.
 fn team_menu(ctx: &TeamCtx) -> Markup {
 	let trigger = html! {
 		(team_mark(&ctx.team, MarkSize::Medium))
-		span class="ui-team-name" { (ctx.team.name) }
+		span class="ui-team-name" {
+			span class="ui-team-title" { (ctx.team.name) }
+			span class="ui-team-sub" { "Workspace · " (ctx.team.slug) }
+		}
 		span class="ui-team-chev" { (icon("chevrons-up-down")) }
 	};
 	dropdown_menu(
@@ -104,7 +102,11 @@ fn user_menu(ctx: &TeamCtx) -> Markup {
 	let current = theme::current();
 	let trigger = html! {
 		(user_avatar(&ctx.user.name, ctx.user.id, ctx.user.avatar.as_deref()))
-		span class="ui-user-name" { (ctx.user.name) }
+		span class="ui-user-name" {
+			span class="ui-user-title" { (ctx.user.name) }
+			span class="ui-user-sub" { "Account and theme" }
+		}
+		span class="ui-team-chev" { (icon("chevrons-up-down")) }
 	};
 	let theme_item = |choice: Theme, label: &str, icon_name: &str| {
 		html! {
@@ -166,40 +168,31 @@ fn collapse_toggle(collapsed: bool) -> Markup {
 }
 
 /// The sidebar. Above 760 px it is the left column (or the icon rail, when the user folded
-/// it); below, the strip across the top. The daily places come first, then the
-/// Infrastructure section (what the team runs on), then Settings. Every link carries a rail
-/// tooltip that only opens while the sidebar is folded to icons.
+/// it); below, the strip across the top. The places come in headed groups: Build (the daily
+/// places), Infrastructure (what the team runs on), Observe and Admin, which ends with
+/// Settings. Every link carries a rail tooltip that only opens while the sidebar is folded
+/// to icons.
 pub fn aside(ctx: &TeamCtx) -> Markup {
-	let main = nav::main_items(ctx);
-	let infra = nav::infra_items(ctx);
-	let settings = nav::settings_entry(ctx);
+	let groups = nav::sidebar_groups(ctx);
 	let current = nav::sidebar_current(ctx);
 	let collapsed = super::sidebar_collapsed();
 	let is_current = |item: &NavItem| current.as_deref() == Some(item.href.as_str());
+	let mut tip = 0..;
 	html! {
 		aside id="side" class="ui-sidebar ui-vt-chrome" aria-label="Application" {
 			(side_brand(ctx))
 			(team_menu(ctx))
 			nav class="ui-nav" aria-label="Primary" {
-				@if !main.is_empty() {
-					ul class="ui-nav-list" {
-						@for (i, item) in main.iter().enumerate() {
-							(link(item, is_current(item), Some(&format!("nav-tip-{i}"))))
-						}
-					}
-				}
-				@if !infra.is_empty() {
+				@for group in &groups {
 					div class="ui-nav-group" {
-						p class="ui-nav-heading" id="nav-infrastructure" { "Infrastructure" }
-						ul class="ui-nav-list" aria-labelledby="nav-infrastructure" {
-							@for (i, item) in infra.iter().enumerate() {
-								(link(item, is_current(item), Some(&format!("nav-tip-infra-{i}"))))
+						p class="ui-nav-heading" id=(group.id) { (group.label) }
+						ul class="ui-nav-list" aria-labelledby=(group.id) {
+							@for item in &group.items {
+								@let n = tip.next().unwrap_or_default();
+								(link(item, is_current(item), Some(&format!("nav-tip-{n}"))))
 							}
 						}
 					}
-				}
-				ul class="ui-nav-list" {
-					(link(&settings, is_current(&settings), Some("nav-tip-settings")))
 				}
 			}
 			div class="ui-chrome-foot" {
