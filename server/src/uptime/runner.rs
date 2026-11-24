@@ -30,15 +30,24 @@ const RECONCILE_EVERY: i64 = 60;
 static RUNNING: AtomicBool = AtomicBool::new(false);
 static LAST_RECONCILE: AtomicI64 = AtomicI64::new(0);
 
-fn client() -> &'static reqwest::Client {
+/// The HTTP client of the probes. A check that skips verification gets a client of its own
+/// that takes any certificate, so one self-signed service never loosens the rest.
+pub(crate) fn client(skip_verify: bool) -> &'static reqwest::Client {
 	static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
-	CLIENT.get_or_init(|| {
+	static LENIENT: OnceLock<reqwest::Client> = OnceLock::new();
+	let build = |lenient: bool| {
 		reqwest::Client::builder()
 			.user_agent(concat!("podkit-uptime/", env!("CARGO_PKG_VERSION")))
 			.redirect(reqwest::redirect::Policy::limited(5))
+			.tls_danger_accept_invalid_certs(lenient)
 			.build()
 			.unwrap_or_default()
-	})
+	};
+	if skip_verify {
+		LENIENT.get_or_init(|| build(true))
+	} else {
+		CLIENT.get_or_init(|| build(false))
+	}
 }
 
 /// Runs one pass in the background unless one is already running.
@@ -108,7 +117,7 @@ pub async fn probe(
 				keyword: check.keyword.clone(),
 				timeout,
 			};
-			let outcome = probe::http(client(), &spec).await;
+			let outcome = probe::http(client(check.tls_skip_verify), &spec).await;
 			let tls = match (check.tls_warn_days, url::Url::parse(&url)) {
 				(Some(_), Ok(parsed))
 					if parsed.scheme() == "https"

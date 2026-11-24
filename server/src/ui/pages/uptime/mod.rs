@@ -57,6 +57,15 @@ pub fn state_badge(state: CheckState) -> Markup {
 	}
 }
 
+/// The warning on a check that takes any certificate: text, so it never rests on color.
+pub fn tls_skip_badge() -> Markup {
+	html! {
+		span title="This check does not verify the server's certificate." {
+			(badge(Tone::Warning, "Certificate not verified"))
+		}
+	}
+}
+
 fn check_row(team: TeamId, check: &Check, days: &[DayStat], now: OffsetDateTime) -> Markup {
 	let href = format!("{}/{}", list_url(team), check.id);
 	html! {
@@ -65,6 +74,7 @@ fn check_row(team: TeamId, check: &Check, days: &[DayStat], now: OffsetDateTime)
 				h2 class="ui-probe-name" { a href=(href) { (check.name) } }
 				@if !check.enabled { (badge(Tone::Neutral, "Paused")) }
 				@if check.status_visible { (badge(Tone::Progress, "On the status page")) }
+				@if check.tls_skip_verify { (tls_skip_badge()) }
 				(state_badge(check.state()))
 			}
 			p class="ui-probe-meta" {

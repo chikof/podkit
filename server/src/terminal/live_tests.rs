@@ -29,8 +29,8 @@ use crate::tests::{call, state, user_with_team};
 const IMAGE: &str = "docker.io/library/busybox:latest";
 
 fn socket() -> String {
-	std::env::var("PODKIT_LIVE_PODMAN_SOCKET")
-		.expect("set PODKIT_LIVE_PODMAN_SOCKET to the socket of a Podman service of its own")
+	// Only reached once the test has found the variable set (see `live_podman_socket`).
+	std::env::var("PODKIT_LIVE_PODMAN_SOCKET").unwrap_or_default()
 }
 
 fn podman(args: &[&str]) -> std::process::Output {
@@ -76,7 +76,9 @@ async fn read_until(
 #[ignore = "runs a real container in the Podman named by PODKIT_LIVE_PODMAN_SOCKET, pulls busybox"]
 async fn terminal_live_echo_hi_comes_back_through_the_websocket(db: PgPool) {
 	let state = state(db.clone());
-	let socket = socket();
+	let Some(socket) = crate::tests::live_podman_socket("terminal_live") else {
+		return;
+	};
 	let podman_agent =
 		agent::podman::Podman::connect(&socket).expect("connect to the private podman.sock");
 	let data_dir = tempfile::tempdir().unwrap().keep();

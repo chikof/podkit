@@ -19,13 +19,14 @@ An agent can do exactly what its token can: the token's scopes, its team and its
 | `restart`, `stop` | `deploy` | Restart or stop a resource |
 | `set_env_var` | `write` | Set an application variable. **Write-only**: stored encrypted, never shown again |
 | `create_from_template` | `deploy` | Deploy a template into a project |
+| `run_cron_task` | `deploy` | Run a scheduled task now (it is queued, and the task's own concurrency setting still applies). Audited as `cron.run` by **MCP** |
 | `delete_resource` | `delete` | Delete a resource. Needs `confirm`: the resource's exact name |
 
 A refused call comes back as a tool error naming the missing scope (`403`), or `404` for another team's or another project's resources. Secrets are never returned, whatever the token: database passwords, deploy keys, tokens and `user:password@` in URLs are masked (`•••`), even for a `read:sensitive` or `root` token.
 
 The project tree is also offered as MCP **resources** (`podkit://projects`, `podkit://projects/{id}/resources`, `podkit://projects/{id}/{kind}/{id}`), and there is one **prompt**, `diagnose_failing_deploy`, which walks the agent through the deployment error, the logs and the scan, and tells it to change nothing until you agree.
 
-Not yet available: `run_cron_task` (it arrives with scheduled tasks, roadmap A6).
+Running a task executes its command, so the API asks the `deploy` scope for it (`POST …/cron/{task}/run`), over MCP and over plain HTTP alike.
 
 ## Make a token
 
@@ -50,15 +51,22 @@ claude mcp add --transport http podkit https://podkit.example.com/mcp \
   --header "Authorization: Bearer pk_1a2b3c4d_…"
 ```
 
-**Hermes** (`~/.hermes/config.yaml`)
+`--header` (`-H`) and `--env` (`-e`) take several values, so give them after the name, and keep the `--` before a stdio command. The default scope is this project only; add `--scope user` to have it everywhere. Check it with `claude mcp list`.
+
+**Hermes** (`~/.hermes/config.yaml`; with profiles, the active profile's `config.yaml`)
+
+Keep the token out of the config file: put `PODKIT_TOKEN=pk_…` in `~/.hermes/.env` and refer to it. (Hermes refuses to connect a remote server whose `url` or `headers` name a variable that is not set, rather than send the placeholder.)
 
 ```yaml
 mcp_servers:
   podkit:
     url: https://podkit.example.com/mcp
     headers:
-      Authorization: "Bearer pk_1a2b3c4d_…"
+      Authorization: "Bearer ${PODKIT_TOKEN}"
+    trust: untrusted   # optional: ask before any tool that changes something
 ```
+
+Start a new session or run `/reload-mcp`. The tools show up as `mcp_podkit_list_projects`, `mcp_podkit_deploy` and so on. The token's scopes still decide what works; `trust: untrusted` adds a question to you before every tool that is not read-only.
 
 ### stdio (`podkit mcp`)
 
@@ -93,7 +101,7 @@ claude mcp add podkit --env PODKIT_URL=https://podkit.example.com \
   --env PODKIT_TOKEN=pk_1a2b3c4d_… -- /usr/local/bin/podkit mcp
 ```
 
-**Hermes**
+**Hermes** (`~/.hermes/config.yaml`, with `PODKIT_TOKEN=pk_…` in `~/.hermes/.env`)
 
 ```yaml
 mcp_servers:
@@ -102,7 +110,7 @@ mcp_servers:
     args: [mcp]
     env:
       PODKIT_URL: https://podkit.example.com
-      PODKIT_TOKEN: pk_1a2b3c4d_…
+      PODKIT_TOKEN: "${PODKIT_TOKEN}"
 ```
 
 The token sits in the client's config file, so give that file the same care as a password, and use a token you can revoke.

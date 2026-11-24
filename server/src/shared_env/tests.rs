@@ -668,3 +668,195 @@ async fn shared_env_pages_escape_names_and_have_one_h1(db: PgPool) {
 	let (_, body) = f.get(&format!("/teams/{}/settings", f.team)).await;
 	assert_contains(&body, "Shared variables");
 }
+
+// --- F5: every builder of a deploy spec uses the resolver -------------------------------------
+
+/// A running job, as the builders of a spec want one.
+fn job(f: &Fixture) -> crate::jobs::Job {
+	crate::jobs::Job {
+		id: crate::ids::JobId(41),
+		kind: crate::jobs::JobKind::DatabaseProvision,
+		server_id: crate::ids::ServerId(f.server),
+		target_id: 0,
+		lock_key: String::new(),
+		status: crate::jobs::JobStatus::Running,
+		error: None,
+	}
+}
+
+fn env_map(env: Vec<(String, String)>) -> BTreeMap<String, String> {
+	env.into_iter().collect()
+}
+
+#[db_test]
+async fn followups_shared_env_a_database_gets_the_shared_variables_and_keeps_its_own(db: PgPool) {
+	use crate::databases::{self, Credentials, EngineKind, NewDatabase, engines};
+	let f = Fixture::new(&db).await;
+	f.set(f.project_scope(), "STRIPE_KEY", "sk_test_123").await;
+	f.set(f.team_scope(), "TZ", "Europe/Berlin").await;
+
+	let credentials = Credentials::generate();
+	let own = engines::spec(EngineKind::Postgres.into()).env(&credentials);
+	assert!(!own.is_empty());
+	// A shared variable of the same name as one the engine needs must not win.
+	f.set(f.env_scope("production").await, &own[0].0, "hijacked")
+		.await;
+
+	let environment = f.env("production").await;
+	let database = databases::insert(
+		&db,
+		NewDatabase {
+			id: crate::ids::DatabaseId::generate(),
+			project_id: f.project_id(),
+			environment_id: environment,
+			server_id: crate::ids::ServerId(f.server),
+			name: "orders".to_owned(),
+			engine: EngineKind::Postgres,
+			version: "17".to_owned(),
+			credentials: f
+				.state
+				.secrets
+				.encrypt(&serde_json::to_string(&credentials).unwrap())
+				.unwrap(),
+			public_port: None,
+			memory_limit_mb: None,
+			cpu_limit: None,
+		},
+	)
+	.await
+	.unwrap();
+
+	let spec = databases::run::deploy_spec(&f.state, &job(&f), &database)
+		.await
+		.unwrap_or_else(|e| panic!("deploy_spec: {e:?}"));
+	let env = env_map(spec.env);
+	assert_eq!(env["STRIPE_KEY"], "sk_test_123");
+	assert_eq!(env["TZ"], "Europe/Berlin");
+	for (key, value) in &own {
+		assert_eq!(&env[key], value, "the engine's own {key} wins");
+	}
+	assert_ne!(env[&own[0].0], "hijacked");
+}
+
+#[db_test]
+async fn followups_shared_env_a_model_engine_gets_the_shared_variables_and_keeps_its_own(
+	db: PgPool,
+) {
+	let f = Fixture::new(&db).await;
+	let (_, model) =
+		crate::tests::seed_model(&db, f.team, f.project, "Llama", "running", Some("c1")).await;
+	let model = crate::models::find_by_id(&db, crate::ids::ModelId(model))
+		.await
+		.unwrap()
+		.unwrap();
+	let ingress = || proto::Ingress {
+		http_port: 80,
+		https_port: 443,
+		acme_email: None,
+	};
+	let spec = |f: &Fixture| {
+		let (state, model) = (f.state.clone(), model.clone());
+		async move {
+			crate::models::run::deploy_spec(&state, &model, "files", None, ingress(), 7)
+				.await
+				.unwrap_or_else(|e| panic!("deploy_spec: {e:?}"))
+		}
+	};
+
+	let before = env_map(spec(&f).await.env);
+	f.set(f.project_scope(), "HF_TOKEN_FOR_CACHE", "hf_abc")
+		.await;
+	// The engine's own variables, set shared too, still come from the engine.
+	for key in before.keys() {
+		f.set(f.team_scope(), key, "hijacked").await;
+	}
+	let after = env_map(spec(&f).await.env);
+	assert_eq!(after["HF_TOKEN_FOR_CACHE"], "hf_abc");
+	for (key, value) in &before {
+		assert_eq!(&after[key], value, "the engine's own {key} wins");
+	}
+	assert_eq!(after.len(), before.len() + 1);
+}
+
+#[db_test]
+async fn followups_shared_env_a_standalone_cron_container_gets_the_shared_variables(db: PgPool) {
+	use crate::cron::store::{NewTask, insert_task};
+	use crate::cron::{Concurrency, Kind};
+	let f = Fixture::new(&db).await;
+	f.set(f.project_scope(), "STRIPE_KEY", "sk_test_123").await;
+	let task = insert_task(
+		&db,
+		&NewTask {
+			project_id: f.project_id(),
+			environment_id: f.env("production").await,
+			server_id: crate::ids::ServerId(f.server),
+			application_id: None,
+			name: "sweep".to_owned(),
+			kind: Kind::Container,
+			image: Some("docker.io/library/busybox:latest".to_owned()),
+			command: "env".to_owned(),
+			schedule: "0 3 * * *".to_owned(),
+			timezone: "UTC".to_owned(),
+			timeout_s: 60,
+			concurrency: Concurrency::Skip,
+			max_retries: 0,
+			retry_backoff_s: 30,
+			enabled: true,
+			next_run_at: None,
+		},
+	)
+	.await
+	.unwrap();
+	let request = crate::cron::run::build_request(&f.state, &task, crate::ids::CronRunId(1))
+		.await
+		.unwrap_or_else(|e| panic!("build_request: {e:?}"));
+	let proto::CronTarget::Container { env, .. } = request.target else {
+		panic!("a container task asks for a container");
+	};
+	assert_eq!(env_map(env)["STRIPE_KEY"], "sk_test_123");
+}
+
+#[test]
+fn followups_shared_env_every_builder_of_a_spec_calls_the_resolver() {
+	// The ones that make a `DeploySpec` for a user's workload. The Tailscale sidecar's is
+	// podkit's own (its auth key and state path), so it has nothing to inherit. Previews and
+	// clones deploy through the application builder, which is listed.
+	for (name, source) in [
+		("deployments/run.rs", include_str!("../deployments/run.rs")),
+		("stacks/run.rs", include_str!("../stacks/run.rs")),
+		("databases/run.rs", include_str!("../databases/run.rs")),
+		("models/run.rs", include_str!("../models/run.rs")),
+		("cron/run.rs", include_str!("../cron/run.rs")),
+	] {
+		assert!(
+			source.contains("shared_env::resolve::"),
+			"{name} does not use the shared variable resolver"
+		);
+	}
+	// A builder of a `DeploySpec` that is not listed above is a new one: add it, or say why.
+	let mut builders = Vec::new();
+	for (name, source) in [
+		("deployments/run.rs", include_str!("../deployments/run.rs")),
+		(
+			"stacks/translate.rs",
+			include_str!("../stacks/translate.rs"),
+		),
+		("databases/run.rs", include_str!("../databases/run.rs")),
+		("models/run.rs", include_str!("../models/run.rs")),
+		("tailscale/spec.rs", include_str!("../tailscale/spec.rs")),
+	] {
+		if source.contains("DeploySpec {") {
+			builders.push(name);
+		}
+	}
+	assert_eq!(
+		builders,
+		[
+			"deployments/run.rs",
+			"stacks/translate.rs",
+			"databases/run.rs",
+			"models/run.rs",
+			"tailscale/spec.rs"
+		]
+	);
+}

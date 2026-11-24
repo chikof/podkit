@@ -23,10 +23,13 @@ use tokio_util::sync::CancellationToken;
 use super::{CloneStatus, EnvironmentClone, Kind, Step, StepStatus, find_by_id, save_report};
 use crate::applications::{self, Application};
 use crate::backups::{self, BackupStatus};
+use crate::cron::{self, CronTask};
 use crate::databases::{self, Database, DatabaseStatus};
 use crate::deployments;
 use crate::error::AppResult;
-use crate::ids::{ApplicationId, BackupTargetId, CloneId, DatabaseId, ModelId, StackId, UserId};
+use crate::ids::{
+	ApplicationId, BackupTargetId, CloneId, CronTaskId, DatabaseId, ModelId, StackId, UserId,
+};
 use crate::jobs::{self, Job, JobFailure, JobKind, JobStatus};
 use crate::logs::JobLog;
 use crate::models::{self, Model};
@@ -60,6 +63,8 @@ pub enum Work {
 	DeployApp(Application),
 	DeployStack(Stack),
 	StartModel(Model),
+	/// Switch on a scheduled task that is on in the source.
+	EnableCron(CronTask),
 }
 
 impl Work {
@@ -73,6 +78,7 @@ impl Work {
 			Self::DeployApp(a) => format!("Deploy {}", a.name),
 			Self::DeployStack(s) => format!("Deploy stack {}", s.name),
 			Self::StartModel(m) => format!("Start model {}", m.name),
+			Self::EnableCron(t) => format!("Switch on scheduled task {}", t.name),
 		})
 	}
 }
@@ -86,6 +92,16 @@ fn failed(e: impl std::fmt::Display) -> JobFailure {
 	JobFailure::Failed(e.to_string())
 }
 
+/// The copy of a scheduled task, when its source is switched on: that one is switched on with
+/// the deploy, a paused one stays paused.
+async fn enabled_in_source(s: &AppState, pair: &super::Pair) -> AppResult<Option<CronTask>> {
+	let (old, new) = (
+		cron::store::task_by_id(&s.db, CronTaskId(pair.source)).await?,
+		cron::store::task_by_id(&s.db, CronTaskId(pair.id)).await?,
+	);
+	Ok(old.filter(|o| o.enabled).and(new))
+}
+
 /// The steps of `clone`, in the order they run: databases first, then data, then deploys.
 ///
 /// # Errors
@@ -95,6 +111,7 @@ pub async fn work_list(s: &AppState, clone: &EnvironmentClone) -> AppResult<Vec<
 	let mut work = Vec::new();
 	let mut database_pairs = Vec::new();
 	let (mut apps, mut stack_list, mut model_list) = (Vec::new(), Vec::new(), Vec::new());
+	let mut cron_list = Vec::new();
 	for p in &clone.pairs.0 {
 		match p.kind {
 			Kind::Application => {
@@ -121,6 +138,7 @@ pub async fn work_list(s: &AppState, clone: &EnvironmentClone) -> AppResult<Vec<
 					stack_list.push((old, new));
 				}
 			}
+			Kind::Cron => cron_list.extend(enabled_in_source(s, p).await?),
 			Kind::Model => {
 				if let Some(new) = models::find_by_id(&s.db, ModelId(p.id)).await? {
 					model_list.push(new);
@@ -179,6 +197,7 @@ pub async fn work_list(s: &AppState, clone: &EnvironmentClone) -> AppResult<Vec<
 				.map(|(_, new)| Work::DeployStack(new)),
 		);
 		work.extend(model_list.into_iter().map(Work::StartModel));
+		work.extend(cron_list.into_iter().map(Work::EnableCron));
 	}
 	Ok(work)
 }
@@ -483,6 +502,24 @@ async fn copy_volume(
 	}
 }
 
+/// Resumes a copied task: the next run is the next slot of its schedule.
+pub(crate) async fn enable_cron(state: &AppState, task: &CronTask) -> Result<(), String> {
+	let mut task = cron::store::task_by_id(&state.db, task.id)
+		.await
+		.map_err(|e| sql(&e))?
+		.ok_or_else(|| "the task is gone".to_owned())?;
+	task.enabled = true;
+	task.next_run_at = Some(cron::schedule::next_after(
+		&task.schedule,
+		&task.timezone,
+		time::OffsetDateTime::now_utc(),
+	)?);
+	cron::store::update_task(&state.db, &task)
+		.await
+		.map_err(|e| sql(&e))?;
+	Ok(())
+}
+
 async fn execute(
 	state: &AppState,
 	cancel: &CancellationToken,
@@ -518,6 +555,10 @@ async fn execute(
 		Work::DeployStack(stack) => match stacks::service::start_deploy(state, stack).await {
 			Ok(_) => Outcome::Done(Some("deploy queued".to_owned())),
 			Err(e) => Outcome::Failed(e.to_string()),
+		},
+		Work::EnableCron(task) => match enable_cron(state, task).await {
+			Ok(()) => Outcome::Done(Some("switched on".to_owned())),
+			Err(m) => Outcome::Failed(m),
 		},
 		Work::StartModel(model) => match models::enqueue(state, JobKind::ModelStart, model).await {
 			Ok(()) => Outcome::Done(Some("start queued".to_owned())),

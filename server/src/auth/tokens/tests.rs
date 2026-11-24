@@ -482,7 +482,7 @@ async fn api_tokens_follow_the_users_rbac_even_with_root(db: PgPool) {
 		None,
 	)
 	.await;
-	assert_eq!(s, StatusCode::FORBIDDEN);
+	assert_eq!(s, StatusCode::NOT_FOUND);
 }
 
 #[sqlx::test]
@@ -590,7 +590,7 @@ async fn api_tokens_creation_is_validated_and_tokens_are_private_to_their_user(d
 	// Someone outside the team can neither list, make nor revoke.
 	let (bob, _) = user_with_team(&app, "bob").await;
 	let (s, _) = call(&app, "GET", &tokens(team), Some(&bob), None).await;
-	assert_eq!(s, StatusCode::FORBIDDEN);
+	assert_eq!(s, StatusCode::NOT_FOUND);
 	let (s, _) = call(
 		&app,
 		"DELETE",
@@ -599,7 +599,7 @@ async fn api_tokens_creation_is_validated_and_tokens_are_private_to_their_user(d
 		None,
 	)
 	.await;
-	assert_eq!(s, StatusCode::FORBIDDEN);
+	assert_eq!(s, StatusCode::NOT_FOUND);
 	// A teammate does not see, and cannot revoke, someone else's token.
 	let bob_id = user_id(&db, "bob").await;
 	join_as_project_reader(&db, team, bob_id, 9001).await;

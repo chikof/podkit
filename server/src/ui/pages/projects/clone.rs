@@ -86,6 +86,7 @@ const fn kind_icon(kind: Kind) -> &'static str {
 		Kind::Database => "database",
 		Kind::Stack => "layers",
 		Kind::Model => "brain",
+		Kind::Cron => "clock",
 	}
 }
 

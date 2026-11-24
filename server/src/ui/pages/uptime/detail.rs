@@ -227,7 +227,7 @@ async fn page(
 			header class="ui-page-head" {
 				div class="ui-page-title" {
 					h1 { (check.name) }
-					p class="ui-lede" { (state_badge(check.state())) @if !check.enabled { " " (badge(Tone::Neutral, "Paused")) } }
+					p class="ui-lede" { (state_badge(check.state())) @if !check.enabled { " " (badge(Tone::Neutral, "Paused")) } @if check.tls_skip_verify { " " (super::tls_skip_badge()) } }
 				}
 				div class="flex flex-wrap gap-2" {
 					@if can_edit {

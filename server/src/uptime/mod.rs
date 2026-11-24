@@ -130,6 +130,7 @@ pub fn advance(state: State, fails: i32, oks: i32, ok: bool) -> (State, i32, i32
 
 /// One check, as stored.
 #[derive(Debug, Clone, sqlx::FromRow)]
+#[allow(clippy::struct_excessive_bools, reason = "a row of `uptime_checks`")]
 pub struct Check {
 	pub id: UptimeCheckId,
 	pub team_id: TeamId,
@@ -146,6 +147,8 @@ pub struct Check {
 	pub timeout_secs: i32,
 	pub interval_secs: i32,
 	pub tls_warn_days: Option<i32>,
+	/// Do not verify the certificate: for a service with a self-signed one.
+	pub tls_skip_verify: bool,
 	pub enabled: bool,
 	pub status_visible: bool,
 	pub status_name: Option<String>,
@@ -164,7 +167,7 @@ pub struct Check {
 pub const CHECK_COLUMNS: &str = "id, team_id, application_id, auto_key, name, kind, url, method, \
 	expected_status, keyword, host, port, timeout_secs, interval_secs, tls_warn_days, enabled, \
 	status_visible, status_name, state, state_since, fail_streak, ok_streak, last_checked_at, \
-	last_latency_ms, last_error, tls_expires_at, tls_checked_at, tls_warned";
+	last_latency_ms, last_error, tls_expires_at, tls_checked_at, tls_warned, tls_skip_verify";
 
 impl Check {
 	pub fn kind(&self) -> Kind {

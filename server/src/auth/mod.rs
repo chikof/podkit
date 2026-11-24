@@ -19,6 +19,7 @@ pub mod permission;
 mod routes;
 pub mod service;
 pub mod session;
+pub mod team_gate;
 pub mod tokens;
 
 pub use events::record_everywhere;

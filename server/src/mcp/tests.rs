@@ -147,7 +147,7 @@ async fn send(
 	)
 }
 
-const ALL_TOOLS: [&str; 13] = [
+const ALL_TOOLS: [&str; 14] = [
 	"list_projects",
 	"list_resources",
 	"get_resource",
@@ -160,6 +160,7 @@ const ALL_TOOLS: [&str; 13] = [
 	"stop",
 	"set_env_var",
 	"create_from_template",
+	"run_cron_task",
 	"delete_resource",
 ];
 
@@ -816,4 +817,132 @@ async fn mcp_resources_and_prompt(db: PgPool) {
 		)
 		.await;
 	assert_eq!(bad["error"]["code"], -32602);
+}
+
+// --- F5: run_cron_task ------------------------------------------------------------------------
+
+impl World {
+	/// A paused one-shot task in the project's first environment; returns its id.
+	async fn cron_task(&self) -> i64 {
+		use crate::cron::store::{NewTask, insert_task};
+		use crate::cron::{Concurrency, Kind};
+		let environment = crate::environments::first(&self.db, crate::ids::ProjectId(self.project))
+			.await
+			.unwrap()
+			.unwrap();
+		insert_task(
+			&self.db,
+			&NewTask {
+				project_id: crate::ids::ProjectId(self.project),
+				environment_id: environment,
+				server_id: crate::ids::ServerId(crate::tests::server_id(&self.db, self.team).await),
+				application_id: None,
+				name: "sweep".to_owned(),
+				kind: Kind::Container,
+				image: Some("docker.io/library/busybox:latest".to_owned()),
+				command: "true".to_owned(),
+				schedule: "0 3 * * *".to_owned(),
+				timezone: "UTC".to_owned(),
+				timeout_s: 60,
+				concurrency: Concurrency::Skip,
+				max_retries: 0,
+				retry_backoff_s: 30,
+				enabled: false,
+				next_run_at: None,
+			},
+		)
+		.await
+		.unwrap()
+		.id
+		.0
+	}
+
+	async fn cron_runs(&self, task: i64) -> i64 {
+		sqlx::query_scalar("SELECT count(*) FROM cron_runs WHERE task_id = $1")
+			.bind(task)
+			.fetch_one(&self.db)
+			.await
+			.unwrap()
+	}
+}
+
+#[sqlx::test]
+async fn followups_mcp_run_cron_task_queues_a_run_needs_deploy_and_is_audited_as_mcp(db: PgPool) {
+	let w = world(db).await;
+	let task = w.cron_task().await;
+	let args = json!({ "project_id": w.project, "task_id": task });
+
+	// The tool is listed, with a schema that asks for both ids.
+	let token = w.token(&["read", "deploy"]).await;
+	let body = w.rpc(&token, "tools/list", json!({})).await;
+	let listed = body["result"]["tools"]
+		.as_array()
+		.unwrap()
+		.iter()
+		.find(|t| t["name"] == "run_cron_task")
+		.expect("run_cron_task is listed")
+		.clone();
+	assert_eq!(
+		listed["inputSchema"]["required"],
+		json!(["project_id", "task_id"])
+	);
+
+	// Scope: read and write are not enough, deploy is.
+	for scopes in [&["read"][..], &["read", "write"][..]] {
+		let token = w.token(scopes).await;
+		let err = w
+			.tool(&token, "run_cron_task", args.clone())
+			.await
+			.unwrap_err();
+		assert!(
+			err.starts_with("403") && err.contains("deploy"),
+			"{scopes:?}: {err}"
+		);
+	}
+	assert_eq!(w.cron_runs(task).await, 0, "a refused call starts nothing");
+
+	let before = w.events().await;
+	let out = w
+		.tool(&token, "run_cron_task", args.clone())
+		.await
+		.unwrap_or_else(|e| panic!("run_cron_task: {e}"));
+	assert!(out.contains("queued"), "{out}");
+	assert_eq!(w.cron_runs(task).await, 1);
+	let trigger: String = sqlx::query_scalar("SELECT trigger FROM cron_runs WHERE task_id = $1")
+		.bind(task)
+		.fetch_one(&w.db)
+		.await
+		.unwrap();
+	assert_eq!(trigger, "manual");
+
+	// One audit event, as `mcp`, with the token that acted.
+	let (kind, action, has_token) = w.last_event().await;
+	assert_eq!((kind.as_str(), action.as_str()), ("mcp", "cron.run"));
+	assert!(has_token);
+	assert_eq!(w.events().await, before + 1);
+
+	// The task's own concurrency policy still applies: a second call while it waits is turned away.
+	let again = w.tool(&token, "run_cron_task", args).await;
+	assert!(again.is_err(), "{again:?}");
+	assert_eq!(w.cron_runs(task).await, 1);
+
+	// A task that is not there, or an id that is not a number, is told so.
+	let missing = w
+		.tool(
+			&token,
+			"run_cron_task",
+			json!({ "project_id": w.project, "task_id": 987_654 }),
+		)
+		.await
+		.unwrap_err();
+	assert!(missing.contains("404"), "{missing}");
+	let bad = w
+		.tool(
+			&token,
+			"run_cron_task",
+			json!({ "project_id": w.project, "task_id": "x" }),
+		)
+		.await
+		.unwrap_err();
+	assert!(bad.contains("task_id"), "{bad}");
 }

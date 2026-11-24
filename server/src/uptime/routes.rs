@@ -26,6 +26,10 @@ pub fn router() -> Router<AppState> {
 
 /// A check as the API shows it. The target is in here: only members of the team read it.
 #[derive(Serialize)]
+#[allow(
+	clippy::struct_excessive_bools,
+	reason = "the JSON the API has always had"
+)]
 struct CheckResponse {
 	id: UptimeCheckId,
 	name: String,
@@ -37,6 +41,7 @@ struct CheckResponse {
 	timeout_secs: i32,
 	interval_secs: i32,
 	tls_warn_days: Option<i32>,
+	tls_skip_verify: bool,
 	enabled: bool,
 	auto: bool,
 	status_visible: bool,
@@ -69,6 +74,7 @@ fn response(c: &Check, days: &[DayStat]) -> CheckResponse {
 		timeout_secs: c.timeout_secs,
 		interval_secs: c.interval_secs,
 		tls_warn_days: c.tls_warn_days,
+		tls_skip_verify: c.tls_skip_verify,
 		enabled: c.enabled,
 		auto: c.auto_key.is_some(),
 		status_visible: c.status_visible,

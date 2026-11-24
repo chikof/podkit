@@ -996,9 +996,9 @@ async fn other_teams_get_not_found_everywhere(db: PgPool) {
 		.await;
 		assert_eq!(status, StatusCode::NOT_FOUND, "{rest}");
 	}
-	// Alice's team path is Forbidden for a stranger, not a leak either.
+	// Alice's team path is a 404 for a stranger: the team is not there for him.
 	let (status, _) = call(&s.app, "GET", &s.path(&format!("/{id}")), Some(&bob), None).await;
-	assert_eq!(status, StatusCode::FORBIDDEN);
+	assert_eq!(status, StatusCode::NOT_FOUND);
 
 	// Bob cannot serve Alice's files, and sees none of her models.
 	let (status, _) = call(

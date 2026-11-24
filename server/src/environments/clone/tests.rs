@@ -1159,6 +1159,7 @@ fn clone_env_plan_of_an_empty_environment_is_just_the_environment() {
 		databases: Vec::new(),
 		stacks: Vec::new(),
 		models: Vec::new(),
+		cron: Vec::new(),
 		shared: Vec::new(),
 		env_networks: Vec::new(),
 	};
@@ -1168,4 +1169,172 @@ fn clone_env_plan_of_an_empty_environment_is_just_the_environment() {
 		plan.notes,
 		["The environment is empty, so only the environment is made."]
 	);
+}
+
+// --- F5: scheduled tasks ----------------------------------------------------------------------
+
+impl Fx {
+	/// A task in the source environment: `nightly` runs in the storefront and is on, `sweep`
+	/// is a one-shot container that is paused.
+	async fn seed_cron(&self) -> (crate::cron::CronTask, crate::cron::CronTask) {
+		use crate::cron::store::{NewTask, insert_task};
+		use crate::cron::{Concurrency, Kind as CronKind};
+		let task = |name: &str, kind, app, image: Option<&str>, enabled| NewTask {
+			project_id: self.project_id(),
+			environment_id: self.source,
+			server_id: ServerId(self.server),
+			application_id: app,
+			name: name.to_owned(),
+			kind,
+			image: image.map(str::to_owned),
+			command: "echo hi".to_owned(),
+			schedule: "0 3 * * *".to_owned(),
+			timezone: "Europe/Berlin".to_owned(),
+			timeout_s: 120,
+			concurrency: Concurrency::Queue,
+			max_retries: 2,
+			retry_backoff_s: 30,
+			enabled,
+			next_run_at: enabled
+				.then(|| time::OffsetDateTime::now_utc() + time::Duration::hours(1)),
+		};
+		let nightly = insert_task(
+			&self.db,
+			&task(
+				"nightly",
+				CronKind::Exec,
+				Some(ApplicationId(5001)),
+				None,
+				true,
+			),
+		)
+		.await
+		.unwrap();
+		let sweep = insert_task(
+			&self.db,
+			&task(
+				"sweep",
+				CronKind::Container,
+				None,
+				Some("docker.io/library/busybox:latest"),
+				false,
+			),
+		)
+		.await
+		.unwrap();
+		(nightly, sweep)
+	}
+}
+
+#[db_test]
+async fn followups_clone_copies_scheduled_tasks_paused_and_aimed_at_the_cloned_app(db: PgPool) {
+	let f = Fx::new(db).await;
+	let (nightly, sweep) = f.seed_cron().await;
+
+	// The plan names them.
+	let plan = f.preview(&input("Staging", "staging")).await.unwrap();
+	let tasks: Vec<_> = plan.items.iter().filter(|i| i.kind == Kind::Cron).collect();
+	assert_eq!(tasks.len(), 2, "{:?}", plan.items);
+	assert_eq!(tasks[0].name, "nightly");
+	assert!(tasks[0].notes[0].contains("paused"), "{:?}", tasks[0].notes);
+
+	let clone = f.clone(input("Staging", "staging")).await.unwrap();
+	let env = clone.environment_id.unwrap();
+	let copied = crate::cron::store::list_tasks(&f.db, f.project_id(), Some(env), None)
+		.await
+		.unwrap();
+	assert_eq!(copied.len(), 2);
+	let by = |name: &str| copied.iter().find(|t| t.name == name).unwrap();
+
+	let new_nightly = by("nightly");
+	assert_eq!(
+		new_nightly.application_id,
+		Some(Fx::cloned_app(&clone)),
+		"the task runs in the clone of its application, not in the source's"
+	);
+	assert_eq!(new_nightly.command, nightly.command);
+	assert_eq!(new_nightly.schedule, nightly.schedule);
+	assert_eq!(new_nightly.timezone, nightly.timezone);
+	assert_eq!(new_nightly.timeout_s, nightly.timeout_s);
+	assert_eq!(new_nightly.max_retries, nightly.max_retries);
+	assert_eq!(new_nightly.concurrency, nightly.concurrency);
+	assert_ne!(new_nightly.id, nightly.id);
+	assert!(
+		!new_nightly.enabled && new_nightly.next_run_at.is_none(),
+		"a copy never runs by itself"
+	);
+	let new_sweep = by("sweep");
+	assert_eq!(new_sweep.application_id, None);
+	assert_eq!(new_sweep.image, sweep.image);
+	assert!(!new_sweep.enabled);
+	assert!(
+		clone
+			.pairs
+			.0
+			.iter()
+			.any(|p| p.kind == Kind::Cron && p.source == nightly.id.0 && p.id == new_nightly.id.0)
+	);
+
+	// The source is as it was, and without `deploy` no step switches anything on.
+	let source = crate::cron::store::task_by_id(&f.db, nightly.id)
+		.await
+		.unwrap()
+		.unwrap();
+	assert!(source.enabled);
+	assert!(
+		!clone
+			.report
+			.0
+			.iter()
+			.any(|s| s.label.contains("scheduled task")),
+		"{:?}",
+		clone.report.0
+	);
+}
+
+#[db_test]
+async fn followups_clone_deploy_switches_on_only_the_tasks_that_were_on(db: PgPool) {
+	let f = Fx::new(db).await;
+	let (nightly, _) = f.seed_cron().await;
+	let mut i = input("Staging", "staging");
+	i.options.deploy = true;
+	let clone = f.clone(i).await.unwrap();
+
+	let labels: Vec<&str> = clone.report.0.iter().map(|s| s.label.as_str()).collect();
+	assert!(
+		labels.contains(&"Switch on scheduled task nightly"),
+		"{labels:?}"
+	);
+	assert!(
+		!labels.iter().any(|l| l.contains("sweep")),
+		"a paused source task stays paused: {labels:?}"
+	);
+
+	// Running the step switches the copy on, with its next run set.
+	let work = run::work_list(&f.state, &clone).await.unwrap();
+	let Some(run::Work::EnableCron(task)) =
+		work.iter().find(|w| matches!(w, run::Work::EnableCron(_)))
+	else {
+		panic!("no cron step in {work:?}");
+	};
+	assert!(!task.enabled);
+	run::enable_cron(&f.state, task).await.unwrap();
+	let on = crate::cron::store::task_by_id(&f.db, task.id)
+		.await
+		.unwrap()
+		.unwrap();
+	assert!(on.enabled);
+	assert!(on.next_run_at.unwrap() > time::OffsetDateTime::now_utc());
+	assert_ne!(on.id, nightly.id);
+}
+
+#[db_test]
+async fn followups_clone_needs_the_cron_permissions_for_a_source_that_has_tasks(db: PgPool) {
+	let f = Fx::new(db).await;
+	f.seed_cron().await;
+	let role = member_role(&f.db, f.team, "alice").await;
+
+	revoke_permission(&f.db, role, "create", "cron").await;
+	let err = f.clone(input("Staging", "staging")).await.unwrap_err();
+	assert!(matches!(err, ServerError::Forbidden), "{err:?}");
 }

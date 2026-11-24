@@ -208,6 +208,7 @@ fn http_input(name: &str, url: &str) -> CheckInput {
 		timeout_secs: 2,
 		interval_secs: 30,
 		tls_warn_days: None,
+		tls_skip_verify: false,
 		enabled: true,
 		status_visible: false,
 		status_name: String::new(),
@@ -403,10 +404,9 @@ fn uptime_both_time_formats_of_a_certificate_are_read() {
 	);
 }
 
-/// A TLS server with the 2030 certificate on a free port.
-async fn tls_stub() -> u16 {
+/// A TLS server with the 2030 certificate, which is not signed by anybody the client trusts.
+fn tls_acceptor() -> tokio_rustls::TlsAcceptor {
 	use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-	use tokio::io::AsyncWriteExt;
 	install_crypto();
 	let config = rustls::ServerConfig::builder_with_provider(Arc::new(
 		rustls::crypto::ring::default_provider(),
@@ -419,7 +419,13 @@ async fn tls_stub() -> u16 {
 		PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(der(KEY_2030))),
 	)
 	.unwrap();
-	let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(config));
+	tokio_rustls::TlsAcceptor::from(Arc::new(config))
+}
+
+/// A TLS server with the 2030 certificate on a free port.
+async fn tls_stub() -> u16 {
+	use tokio::io::AsyncWriteExt;
+	let acceptor = tls_acceptor();
 	let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
 	let port = listener.local_addr().unwrap().port();
 	tokio::spawn(async move {
@@ -429,6 +435,39 @@ async fn tls_stub() -> u16 {
 				if let Ok(mut tls) = acceptor.accept(tcp).await {
 					let _ = tls.shutdown().await;
 				}
+			});
+		}
+	});
+	port
+}
+
+/// An HTTPS server (self-signed certificate) that answers every request `200 secure`.
+async fn https_stub() -> u16 {
+	use tokio::io::{AsyncReadExt, AsyncWriteExt};
+	let acceptor = tls_acceptor();
+	let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+	let port = listener.local_addr().unwrap().port();
+	tokio::spawn(async move {
+		while let Ok((tcp, _)) = listener.accept().await {
+			let acceptor = acceptor.clone();
+			tokio::spawn(async move {
+				let Ok(mut tls) = acceptor.accept(tcp).await else {
+					return;
+				};
+				let mut seen = Vec::new();
+				let mut buf = [0u8; 1024];
+				while !seen.windows(4).any(|w| w == b"\r\n\r\n") {
+					match tls.read(&mut buf).await {
+						Ok(0) | Err(_) => return,
+						Ok(n) => seen.extend_from_slice(&buf[..n]),
+					}
+				}
+				let _ = tls
+					.write_all(
+						b"HTTP/1.1 200 OK\r\ncontent-length: 6\r\nconnection: close\r\n\r\nsecure",
+					)
+					.await;
+				let _ = tls.shutdown().await;
 			});
 		}
 	});
@@ -1287,4 +1326,96 @@ async fn uptime_live_whoami_goes_down_and_up_with_the_app(db: PgPool) {
 	assert_eq!(down_events, 1);
 	assert!(up_again, "starting it again brings the check back");
 	assert_eq!(up_events, 1);
+}
+
+// --- F5: skip TLS verification ----------------------------------------------------------------
+
+#[tokio::test]
+async fn followups_uptime_skip_verify_reaches_a_self_signed_service() {
+	let port = https_stub().await;
+	let url = format!("https://localhost:{port}/");
+	install_crypto();
+
+	let strict = probe::http(runner::client(false), &spec(url.clone())).await;
+	assert!(
+		!strict.ok,
+		"a certificate nobody signed is refused: {strict:?}"
+	);
+	assert!(
+		strict
+			.error
+			.as_deref()
+			.unwrap_or_default()
+			.contains("cannot connect"),
+		"{strict:?}"
+	);
+	assert!(
+		!strict
+			.error
+			.as_deref()
+			.unwrap_or_default()
+			.contains("localhost"),
+		"the address stays out of the error"
+	);
+
+	let lenient = probe::http(runner::client(true), &spec(url)).await;
+	assert!(lenient.ok, "{lenient:?}");
+	assert_eq!(lenient.status_code, Some(200));
+}
+
+#[sqlx::test]
+async fn followups_uptime_skip_verify_is_kept_for_https_audited_and_used_by_the_probe(db: PgPool) {
+	let w = world(db).await;
+	let port = https_stub().await;
+	let url = format!("https://localhost:{port}/");
+
+	// Off unless asked for.
+	let strict = w.check("strict", &url).await;
+	assert!(!strict.tls_skip_verify);
+	let (outcome, _) = runner::probe(&strict, OffsetDateTime::now_utc()).await;
+	assert!(!outcome.ok, "{outcome:?}");
+
+	let mut input = http_input("lenient", &url);
+	input.tls_skip_verify = true;
+	let lenient = service::create(&w.s, w.user, w.team, &input).await.unwrap();
+	assert!(lenient.tls_skip_verify);
+	let (outcome, _) = runner::probe(&lenient, OffsetDateTime::now_utc()).await;
+	assert!(outcome.ok, "{outcome:?}");
+
+	// A plain-HTTP address has nothing to verify: the flag is not kept.
+	let mut plain = http_input("plain", "http://example.com/");
+	plain.tls_skip_verify = true;
+	let plain = service::create(&w.s, w.user, w.team, &plain).await.unwrap();
+	assert!(!plain.tls_skip_verify);
+
+	// Turning it off again is an update, and both changes are in the audit log.
+	input.tls_skip_verify = false;
+	let off = service::update(&w.s, w.user, w.team, lenient.id, &input)
+		.await
+		.unwrap();
+	assert!(!off.tls_skip_verify);
+	let logged: i64 = sqlx::query_scalar(
+		"SELECT COUNT(*) FROM audit_events WHERE action LIKE 'uptime_check.%' AND diff::text LIKE '%tls_skip_verify%'",
+	)
+	.fetch_one(w.db())
+	.await
+	.unwrap();
+	assert!(
+		logged >= 2,
+		"create and update both name the setting: {logged}"
+	);
+
+	// The API says so too.
+	let (s, shown) = call(
+		&w.app,
+		"POST",
+		&format!("{}/checks", api(w.team.0)),
+		Some(&w.token),
+		Some(json!({
+			"name": "api", "kind": "http", "url": "https://nas.local/", "tls_skip_verify": true,
+		})),
+	)
+	.await;
+	assert_eq!(s, StatusCode::CREATED, "{shown}");
+	assert_eq!(shown["tls_skip_verify"], true);
 }

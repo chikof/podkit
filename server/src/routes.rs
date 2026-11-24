@@ -132,6 +132,12 @@ pub async fn routes(state: AppState) -> AppResult<Router> {
 		.nest(&format!("{DB}/{{database_id}}/backups"), backups::router())
 		.nest("/teams/{team_id}/security", scanning::routes::router())
 		.nest("/webhooks", webhooks::router())
+		// Inside the token gate, so a `pk_` token is already resolved: a team that is not the
+		// caller's is a 404 before any handler or extractor runs.
+		.layer(axum::middleware::from_fn_with_state(
+			state.clone(),
+			auth::team_gate::gate,
+		))
 		// Last, so it wraps every route above: a `pk_` token is resolved and limited here.
 		.layer(axum::middleware::from_fn_with_state(
 			state.clone(),

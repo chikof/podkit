@@ -116,7 +116,8 @@ async fn start(
 			.or_else(|| servers::gpu_vendors(server).first().copied())
 			.unwrap_or(GpuVendor::Nvidia)
 	});
-	let mut spec = build_spec(
+	let mut spec = deploy_spec(
+		state,
 		model,
 		&file.volume_name,
 		vendor,
@@ -126,7 +127,8 @@ async fn start(
 			acme_email: state.config.acme_email.clone(),
 		},
 		job.id.0,
-	);
+	)
+	.await?;
 	spec.attach = networks::attach::for_resource(
 		&state.db,
 		networks::attach::Home {
@@ -213,6 +215,31 @@ async fn deploy(
 /// The format a model path points at, for the engines that care.
 fn format_of(model_path: &str) -> Format {
 	engines::format_of_path(model_path).unwrap_or(Format::Safetensors)
+}
+
+/// The agent's deploy request for `model`, with the shared variables of its environment
+/// under the engine's own.
+pub(crate) async fn deploy_spec(
+	state: &AppState,
+	model: &Model,
+	files_volume: &str,
+	vendor: Option<GpuVendor>,
+	ingress: Ingress,
+	instance_id: i64,
+) -> Result<DeploySpec, JobFailure> {
+	let mut spec = build_spec(model, files_volume, vendor, ingress, instance_id);
+	spec.env = crate::shared_env::resolve::inherited_env(
+		state,
+		model.project_id,
+		model.environment_id,
+		spec.env,
+	)
+	.await
+	.map_err(|e| {
+		warn!(model = model.id.0, "shared variables: {e}");
+		failed(e.to_string())
+	})?;
+	Ok(spec)
 }
 
 /// The agent's deploy request for `model`. The container has an internal alias

@@ -50,3 +50,12 @@ pub async fn check_id(db: &PgPool, name: &str) -> i64 {
 		.await
 		.unwrap()
 }
+
+/// Whether the check with `id` skips TLS verification.
+pub async fn skips_tls_verification(db: &PgPool, id: i64) -> bool {
+	sqlx::query_scalar("SELECT tls_skip_verify FROM uptime_checks WHERE id = $1")
+		.bind(id)
+		.fetch_one(db)
+		.await
+		.unwrap()
+}

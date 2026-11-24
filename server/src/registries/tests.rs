@@ -115,9 +115,9 @@ async fn registries_of_another_team_are_404_and_permissions_apply(db: PgPool) {
 	}
 	let (_, theirs) = call(&app, "GET", &url(b_team), Some(&bob), None).await;
 	assert_eq!(theirs.as_array().unwrap().len(), 0);
-	// Not a member at all: refused. A project reader may not read or save registries.
+	// Not a member at all: not found. A project reader may not read or save registries.
 	let (s, _) = call(&app, "GET", &url(a_team), Some(&bob), None).await;
-	assert_eq!(s, StatusCode::FORBIDDEN);
+	assert_eq!(s, StatusCode::NOT_FOUND);
 	join_as_project_reader(&db, a_team, user_id(&db, "bob").await, 9100).await;
 	let (s, _) = call(&app, "GET", &url(a_team), Some(&bob), None).await;
 	assert_eq!(s, StatusCode::FORBIDDEN);

@@ -459,14 +459,17 @@ async fn avatars_a_team_picture_needs_update_team(db: PgPool) {
 	add_member(&db, team, "dan").await;
 	let uri = format!("/api/v1/teams/{team}/avatar");
 
-	// A stranger and a read-only member are both refused, and nothing is stored.
-	for token in [&bob_token, &dan_token] {
+	// A stranger is told the team is not there; a read-only member is refused. Nothing is stored.
+	for (token, refused) in [
+		(&bob_token, StatusCode::NOT_FOUND),
+		(&dan_token, StatusCode::FORBIDDEN),
+	] {
 		assert_eq!(
 			upload(&app, &uri, token, "image/png", &png(8, 8)).await,
-			StatusCode::FORBIDDEN
+			refused
 		);
 		let (status, _, _) = send(&app, "DELETE", &uri, Who::Token(token), None).await;
-		assert_eq!(status, StatusCode::FORBIDDEN);
+		assert_eq!(status, refused);
 	}
 	assert_eq!(crate::tests::count(&db, "team_avatars").await, 0);
 	let err = service::set_team(
@@ -478,7 +481,7 @@ async fn avatars_a_team_picture_needs_update_team(db: PgPool) {
 	)
 	.await
 	.unwrap_err();
-	assert!(matches!(err, ServerError::Forbidden), "{err:?}");
+	assert!(matches!(err, ServerError::NotFound), "{err:?}");
 }
 
 // --- the pages ------------------------------------------------------------------------------

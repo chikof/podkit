@@ -606,9 +606,9 @@ async fn environments_other_teams_get_404(db: PgPool) {
 		let (st, _) = call(&s.app, method, &uri, Some(&bob), body).await;
 		assert_eq!(st, StatusCode::NOT_FOUND, "{method} {uri}");
 	}
-	// Naming alice's team outright is refused, not leaked.
+	// Naming alice's team outright is a 404 too: nothing says it exists.
 	let (st, _) = call(&s.app, "GET", &s.envs(), Some(&bob), None).await;
-	assert_eq!(st, StatusCode::FORBIDDEN);
+	assert_eq!(st, StatusCode::NOT_FOUND);
 	assert_eq!(count(&s.db, "environments").await, 2);
 }
 

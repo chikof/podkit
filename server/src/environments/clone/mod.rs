@@ -16,6 +16,8 @@
 //! - custom domains are never copied: a hostname belongs to one application;
 //! - variables are copied as written, or with their values blanked ("secrets blank");
 //! - databases get new credentials and no public port;
+//! - scheduled tasks are copied paused, aimed at the cloned application, and switched on
+//!   only when the clone deploys (a copy that ran jobs on its own would surprise);
 //! - backup schedules, webhooks and git hooks are not copied: they belong to the source.
 
 pub mod copy;
@@ -153,6 +155,8 @@ pub enum Kind {
 	Database,
 	Stack,
 	Model,
+	/// A scheduled task.
+	Cron,
 }
 
 impl Kind {
@@ -163,6 +167,7 @@ impl Kind {
 			Self::Database => "Database",
 			Self::Stack => "Stack",
 			Self::Model => "Model",
+			Self::Cron => "Scheduled task",
 		}
 	}
 }

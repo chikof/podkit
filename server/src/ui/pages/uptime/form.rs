@@ -38,6 +38,7 @@ pub struct Signals {
 	interval_secs: i32,
 	#[serde(deserialize_with = "lenient")]
 	tls_warn_days: i32,
+	tls_skip_verify: bool,
 	enabled: bool,
 	status_visible: bool,
 	status_name: String,
@@ -57,6 +58,7 @@ impl Signals {
 			timeout_secs: self.timeout_secs,
 			interval_secs: self.interval_secs,
 			tls_warn_days: Some(self.tls_warn_days).filter(|d| *d > 0),
+			tls_skip_verify: self.tls_skip_verify,
 			enabled: self.enabled,
 			status_visible: self.status_visible,
 			status_name: self.status_name,
@@ -70,7 +72,8 @@ pub fn initial(check: Option<&Check>) -> Value {
 		None => json!({
 			"name": "", "kind": "http", "url": "https://", "method": "GET", "expected_status": 200,
 			"keyword": "", "host": "", "port": 443, "timeout_secs": 10, "interval_secs": 60,
-			"tls_warn_days": 14, "enabled": true, "status_visible": false, "status_name": "",
+			"tls_warn_days": 14, "tls_skip_verify": false, "enabled": true, "status_visible": false,
+			"status_name": "",
 		}),
 		Some(c) => json!({
 			"name": c.name, "kind": c.kind, "url": c.url.clone().unwrap_or_default(),
@@ -78,7 +81,8 @@ pub fn initial(check: Option<&Check>) -> Value {
 			"keyword": c.keyword.clone().unwrap_or_default(),
 			"host": c.host.clone().unwrap_or_default(), "port": c.port.unwrap_or(443),
 			"timeout_secs": c.timeout_secs, "interval_secs": c.interval_secs,
-			"tls_warn_days": c.tls_warn_days.unwrap_or(0), "enabled": c.enabled,
+			"tls_warn_days": c.tls_warn_days.unwrap_or(0), "tls_skip_verify": c.tls_skip_verify,
+			"enabled": c.enabled,
 			"status_visible": c.status_visible, "status_name": c.status_name.clone().unwrap_or_default(),
 		}),
 	}
@@ -133,6 +137,15 @@ pub fn fields(http: bool) -> Markup {
 					"Warn before the certificate expires (days)"
 					input class=(INPUT) type="number" min="0" max="90" "data-bind:tls_warn_days";
 					span class="ui-hint" { "HTTPS only. 0 turns the warning off." }
+				}
+			}
+			div class="flex flex-col gap-1" {
+				div class="ui-check" {
+					input id="chk-skip-tls" type="checkbox" class=(CHECKBOX) aria-describedby="skip-tls-hint" "data-bind:tls_skip_verify";
+					label for="chk-skip-tls" class="cursor-pointer" { "Skip TLS verification" }
+				}
+				span id="skip-tls-hint" class="ui-hint" {
+					"For a service with a self-signed certificate on your own network. The check then trusts any certificate, so it cannot tell you the site was swapped. HTTPS only."
 				}
 			}
 		}

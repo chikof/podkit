@@ -132,7 +132,7 @@ mod tests {
 		let err = rename(&db, bob, TeamId(team), "Mine now")
 			.await
 			.unwrap_err();
-		assert!(matches!(err, ServerError::Forbidden), "{err:?}");
+		assert!(matches!(err, ServerError::NotFound), "{err:?}");
 		let name: String = sqlx::query_scalar("SELECT name FROM teams WHERE id = $1")
 			.bind(team)
 			.fetch_one(&db)

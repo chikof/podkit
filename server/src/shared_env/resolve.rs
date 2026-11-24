@@ -204,6 +204,26 @@ pub async fn app_env(
 	Ok(out)
 }
 
+/// The variables a resource gets that has no variables of its own to resolve: the shared ones
+/// below `fixed`, which are podkit's to set (an engine's credentials, a launch flag) and win
+/// as they are. Nothing in `fixed` is scanned for references.
+pub async fn inherited_env(
+	s: &AppState,
+	project: ProjectId,
+	environment: EnvironmentId,
+	fixed: Vec<(String, String)>,
+) -> Result<Vec<(String, String)>, ResolveError> {
+	let team = team_of(&s.db, project).await?;
+	let mut out: Vec<(String, String)> = shared(&s.db, &s.secrets, team, project, environment)
+		.await?
+		.into_iter()
+		.filter(|r| !fixed.iter().any(|(k, _)| *k == r.key))
+		.map(|r| (r.key, r.value))
+		.collect();
+	out.extend(fixed);
+	Ok(out)
+}
+
 /// The variables a stack's compose file is interpolated with: the shared ones below the
 /// stack's own, which win. References in the stack's values are replaced.
 pub async fn stack_inputs(

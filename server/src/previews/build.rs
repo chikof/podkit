@@ -168,6 +168,7 @@ pub async fn make(
 			.collect(),
 		stacks: Vec::new(),
 		models: Vec::new(),
+		cron: Vec::new(),
 		shared: Vec::new(),
 		env_networks: Vec::new(),
 	};
