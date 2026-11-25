@@ -14,6 +14,12 @@ agent_cap_kb=25600
 # FI (fix batch merged): the outbound policy, sign-in throttle, team gate and the F5/F6 UI add about
 # 0.6 MB on top of F7's trims, so the merged branch idles at 16.0 MB (15.4 MB for F7 alone). Baseline
 # raised to 14336 KB (limit 16.8 MB, 5 % over the measured value). Bring it down with the next trim.
-server_baseline_kb=14336
+# Crate split (c0bf36d, server into podkit-core, podkit-ui and a thin binary): 16.0 MB to 22.6 MB
+# with no new code or dependency. The per-route axum glue that start-up runs once per route used to
+# sit in one 64 KiB block and is now spread over 134 of them, and the kernel maps 64 KiB around each
+# first touch: 6.6 MB more of the binary's code mapped, clean and reclaimable
+# (docs/footprint.md, "The crate split"). 22.9 MB here, 23.0 MB on CI; baseline raised to 20736 KB
+# (limit 24.3 MB, 5 % over CI). Bring it down when that glue is back in one place.
+server_baseline_kb=20736
 # Agent: 9.1-9.4 MB measured (7.8 MB before wave B: the B6 log collector costs ~0.9 MB). Limit 9.6 MB.
 agent_baseline_kb=8192
