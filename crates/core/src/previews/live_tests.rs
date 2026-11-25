@@ -809,7 +809,8 @@ async fn previews_live_fork_push_after_approval_serves_the_approved_commit_until
 		wait_for("the fork", 60, || async {
 			bob.send(reqwest::Method::GET, "/repos/bob/demo", None)
 				.await
-				.0 == StatusCode::OK
+				.0
+				== StatusCode::OK
 		})
 		.await;
 		let (s, body) = bob

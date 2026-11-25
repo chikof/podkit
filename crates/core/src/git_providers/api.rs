@@ -354,7 +354,8 @@ pub fn valid_repo(repo: &str) -> bool {
 	parts.len() >= 2
 		&& parts.iter().all(|p| {
 			!p.is_empty()
-				&& *p != "." && *p != ".."
+				&& *p != "."
+				&& *p != ".."
 				&& !p.starts_with('-')
 				&& p.bytes()
 					.all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))

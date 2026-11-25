@@ -1334,7 +1334,8 @@ impl Event {
 			Self::Deployed { .. }
 				| Self::Built { .. }
 				| Self::DumpWritten { .. }
-				| Self::Done | Self::Exited { .. }
+				| Self::Done
+				| Self::Exited { .. }
 				| Self::VolumeDumped { .. }
 				| Self::PartsUploaded { .. }
 				| Self::TablesCounted { .. }

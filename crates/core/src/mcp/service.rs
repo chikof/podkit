@@ -114,12 +114,8 @@ impl Session {
 		};
 		let request = request.body(body).map_err(|e| e.to_string())?;
 		let work = async {
-			let response = self
-				.api
-				.clone()
-				.oneshot(request)
-				.await
-				.map_err(|e| e.to_string())?;
+			// A Router cannot fail: its error type is Infallible.
+			let Ok(response) = self.api.clone().oneshot(request).await;
 			let status = response.status();
 			let mut body = response.into_body();
 			let mut bytes = Vec::new();

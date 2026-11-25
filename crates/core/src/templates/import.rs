@@ -1097,7 +1097,7 @@ fn run(o: &Opts) -> Result<(), String> {
 		for (c, l) in kept {
 			if let Some(bad) = l.services.iter().find(|s| dropped.contains(&s.image)) {
 				skipped.push(Skipped {
-					id: c.template.id.clone(),
+					id: c.template.id,
 					reason: format!(
 						"image {} does not exist: {}",
 						bad.image, image_notes[&bad.image]

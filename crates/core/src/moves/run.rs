@@ -815,7 +815,8 @@ pub async fn run_drain(
 				.execute(&state.db)
 				.await
 				.map_err(|e| db_failure(&e))?
-				.rows_affected() == 1;
+				.rows_affected()
+					== 1;
 				report[i].outcome = if moved {
 					Outcome::Moved
 				} else {

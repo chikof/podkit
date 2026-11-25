@@ -189,7 +189,8 @@ async fn cron_live_a_container_task_runs_twice_and_an_exec_task_runs_in_a_contai
 			let done = |runs: &[CronRun], n: usize| {
 				runs.iter()
 					.filter(|r| r.status == RunStatus::Succeeded)
-					.count() >= n
+					.count()
+					>= n
 			};
 			if done(&dates, 2) && done(&whoamis, 1) {
 				break;

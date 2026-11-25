@@ -147,7 +147,8 @@ pub async fn enable(
 		&& matches!(
 			existing.status,
 			ExposureStatus::Starting | ExposureStatus::Removing
-		) && jobs_active(s, app.id).await?
+		)
+		&& jobs_active(s, app.id).await?
 	{
 		return Err(ServerError::Conflict(
 			"the tailnet sidecar is being changed; try again in a moment".to_owned(),
