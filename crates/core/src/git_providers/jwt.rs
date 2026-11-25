@@ -48,8 +48,14 @@ pub fn app_token(pem: &str, app_id: i64, now: i64) -> Result<String, JwtError> {
 		json!({ "iat": now - 60, "exp": now + 9 * 60, "iss": app_id.to_string() }).to_string(),
 	);
 	let input = format!("{header}.{claims}");
+	// With an RNG the private-key operation is blinded: its timing says nothing about the key
+	// (RUSTSEC-2023-0071, ignored in .cargo/audit.toml on that ground).
 	let signature = key
-		.sign(Pkcs1v15Sign::new_unprefixed(), &digest_info(&input))
+		.sign_with_rng(
+			&mut rsa::rand_core::OsRng,
+			Pkcs1v15Sign::new_unprefixed(),
+			&digest_info(&input),
+		)
 		.map_err(|_| JwtError::Sign)?;
 	Ok(format!("{input}.{}", URL_SAFE_NO_PAD.encode(signature)))
 }

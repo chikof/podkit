@@ -6,4 +6,13 @@ ignore = [
 	# libsqlite3-sys is only in Cargo.lock through sqlx's optional sqlite driver;
 	# the sqlite feature is off, so it is never compiled (`cargo tree -i libsqlite3-sys` is empty).
 	"RUSTSEC-2026-0459",
+	# rsa (Marvin timing side channel), two copies with no fixed release to move to:
+	# 0.9.10 via ssh-key 0.6.7 and jsonwebtoken 10 (rsa 0.10 needs ssh-key 0.7, still an rc), and
+	# 0.10.0-rc.19 via webauthn-rs 0.6.2 -> crypto-glue 0.2.2 (needs a feature 0.10.0 dropped).
+	# The attack needs timings of private-key operations on input the attacker picks. podkit's only
+	# one is the GitHub App JWT (git_providers/jwt.rs): the server builds its claims and signs with
+	# blinding. OIDC and passkeys only verify, SSH keys are only generated and parsed.
+	# Drop this when all three are out: ssh-key 0.7, jsonwebtoken 12 (blocked on crypto-glue, see
+	# docs/footprint.md) and a crypto-glue that builds with rsa 0.10.0.
+	"RUSTSEC-2023-0071",
 ]
