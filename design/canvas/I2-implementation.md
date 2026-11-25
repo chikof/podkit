@@ -1,7 +1,7 @@
 # Canvas: I2 implementation notes
 
 What shipped against `README.md` (D1), what differs from the mockups, and how it behaves in
-Firefox. Screenshots are in `screenshots/i2/` (Chromium 157 and Firefox 160, dark and light,
+Firefox. Screenshots were in `screenshots/i2/`, since removed with the prototype (Chromium 157 and Firefox 160, dark and light,
 1440 and 390 px, from an isolated stack seeded with the D1 `storefront` project).
 
 ## `canvas.js` size

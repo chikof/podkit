@@ -2,6 +2,8 @@
 
 A map of one project in the **Quiet** design language: resources are nodes, relationships are links, environments and networks are frames. You click a node to open it and **draw a link to wire things together**.
 
+> The prototype this document describes (the four `canvas*.html` pages, `canvas.css`, `canvas-demo.js`, `tools/build.py`, `screenshots/`) and the Quiet finalist it loaded from `../finalists/02-quiet-linear/` have been removed from the repository; they are in git history. The canvas is built (`crates/ui/src/pages/canvas`, `crates/ui/static/canvas.js`), and this text stays as its spec.
+
 This folder is the design hand-off for **I2** (the build card). Everything here is static HTML, CSS and a small behaviour prototype. It opens from `file://`, makes no external requests and uses only Quiet tokens and components from `../finalists/02-quiet-linear/`.
 
 | File | What it is |

@@ -6,7 +6,8 @@
 //! always left of its provider. Rows are banded per network: each network gets a band of
 //! rows, plus one band for resources on none, and a network frame is the bounding box of its
 //! band, so a frame can never overlap a node that is not in it. Cycles are broken by edge
-//! order. Ported from `design/canvas/tools/build.py`, the reference.
+//! order. Ported from the layout of the canvas design prototype (the spec is
+//! `design/canvas/README.md`; the prototype itself is no longer in the repository).
 
 use std::collections::HashMap;
 
