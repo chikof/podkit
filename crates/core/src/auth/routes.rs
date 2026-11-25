@@ -186,9 +186,7 @@ pub async fn verify_password(
 	let attempt = throttle::begin(db, Who::of_email(found.as_ref().map(|u| u.id), email)).await?;
 	let Some(user) = found else {
 		// Run verify anyway to prevent timing-based user enumeration
-		crypto::verify(Zeroizing::new(password), crypto::DUMMY_HASH.clone())
-			.await
-			.ok();
+		crypto::verify_unknown(Zeroizing::new(password)).await.ok();
 		attempt.fail().await;
 		return Err(ServerError::InvalidCredentials);
 	};
