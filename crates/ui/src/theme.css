@@ -23,7 +23,14 @@
    accent = the hover and current-item wash (#2A2621), border = hairline (#2E2A25),
    border-emphasis = control outline (#3A352F), input = the field border (3:1 against the
    page). Status text uses the lighter tints (#5FD497, #F0B95A, #F58A83) so it reads at
-   12 px. */
+   12 px.
+
+   The values are the podoes design system's (`tokens.json`, version 3). From it:
+   subtle-foreground = ink-faint (#978F84, lightened from #8E867B to pass 4.5:1 on the
+   current-item wash), and brand = the podoes orange (#E4521B). Orange is the team colour
+   and appears in the logo only: it sits too close to warning and destructive to be used
+   for a control. The `brand-*` colors draw the logo's eyes: light ink in the dark scheme,
+   white with a dark edge on a light page. */
 
 @font-face {
 	font-family: "Inter";
@@ -59,11 +66,9 @@
 	--primary: light-dark(oklch(0.519 0.095 175.6), oklch(0.782 0.121 176.1));
 	--primary-foreground: light-dark(oklch(1 0 0), oklch(0.184 0.005 67.5));
 	--secondary: light-dark(oklch(0.953 0.007 80.7), oklch(0.250 0.009 75.2));
-	--secondary-foreground: light-dark(oklch(0.224 0.007 67.4), oklch(0.933 0.011 76.6));
 	--muted: light-dark(oklch(0.953 0.007 80.7), oklch(0.250 0.009 75.2));
 	--muted-foreground: light-dark(oklch(0.483 0.020 75.9), oklch(0.693 0.018 76.1));
 	--accent: light-dark(oklch(0.932 0.009 78.3), oklch(0.271 0.011 73.5));
-	--accent-foreground: light-dark(oklch(0.224 0.007 67.4), oklch(0.933 0.011 76.6));
 	--destructive: light-dark(oklch(0.521 0.173 27.8), oklch(0.747 0.131 24.6));
 	--destructive-foreground: light-dark(oklch(1 0 0), oklch(0.184 0.005 67.5));
 	--success: light-dark(oklch(0.490 0.116 155.0), oklch(0.786 0.139 158.0));
@@ -79,13 +84,6 @@
 	--chart-5: light-dark(oklch(0.571 0.169 27.3), oklch(0.637 0.183 26.7));
 	--chart-6: light-dark(oklch(0.575 0.095 194.8), oklch(0.765 0.110 188.4));
 	--sidebar: light-dark(oklch(0.985 0.003 84.6), oklch(0.201 0.007 78.2));
-	--sidebar-foreground: light-dark(oklch(0.224 0.007 67.4), oklch(0.933 0.011 76.6));
-	--sidebar-primary: light-dark(oklch(0.519 0.095 175.6), oklch(0.782 0.121 176.1));
-	--sidebar-primary-foreground: light-dark(oklch(1 0 0), oklch(0.184 0.005 67.5));
-	--sidebar-accent: light-dark(oklch(0.932 0.009 78.3), oklch(0.271 0.011 73.5));
-	--sidebar-accent-foreground: light-dark(oklch(0.224 0.007 67.4), oklch(0.933 0.011 76.6));
-	--sidebar-border: light-dark(oklch(0.918 0.011 76.6), oklch(0.288 0.011 73.5));
-	--sidebar-ring: light-dark(oklch(0.519 0.095 175.6), oklch(0.834 0.110 177.7));
 	--primary-text: light-dark(oklch(0.482 0.088 175.7), oklch(0.834 0.110 177.7));
 	--primary-hover: light-dark(oklch(0.438 0.080 174.6), oklch(0.834 0.110 177.7));
 	--primary-soft: light-dark(oklch(0.954 0.021 175.0), oklch(0.285 0.037 178.2));
@@ -95,13 +93,17 @@
 	--destructive-soft: light-dark(oklch(0.955 0.017 21.8), oklch(0.259 0.040 27.5));
 	--info-soft: light-dark(oklch(0.958 0.015 251.2), oklch(0.284 0.022 245.8));
 	--muted-strong: light-dark(oklch(0.932 0.009 78.3), oklch(0.271 0.011 73.5));
-	--subtle-foreground: light-dark(oklch(0.529 0.022 75.1), oklch(0.624 0.019 76.0));
+	--subtle-foreground: light-dark(oklch(0.529 0.022 75.1), oklch(0.654 0.019 76.0));
 	--border-emphasis: light-dark(oklch(0.867 0.016 77.1), oklch(0.332 0.012 72.4));
 	--log: light-dark(oklch(0.953 0.007 80.7), oklch(0.165 0.005 67.4));
 	--overlay: light-dark(oklch(0.224 0.007 67.4 / 35%), oklch(0.141 0.003 69.4 / 65%));
 	--grid: light-dark(oklch(0.942 0.009 78.3), oklch(0.237 0.009 75.2));
 	--skeleton-a: light-dark(oklch(0.953 0.007 80.7), oklch(0.250 0.009 75.2));
 	--skeleton-b: light-dark(oklch(0.867 0.016 77.1), oklch(0.304 0.013 72.4));
+	--brand: light-dark(oklch(0.630 0.192 38.4), oklch(0.630 0.192 38.4));
+	--brand-eye: light-dark(oklch(1 0 0), oklch(0.933 0.011 76.6));
+	--brand-eye-edge: light-dark(oklch(0.184 0.005 67.5), oklch(0.933 0.011 76.6));
+	--brand-pupil: light-dark(oklch(0.184 0.005 67.5), oklch(0.184 0.005 67.5));
 
 }
 
@@ -137,9 +139,12 @@
 	--s-7: 32px;
 	--s-8: 48px;
 
-	--r-sm: 5px;
-	--r-md: 8px;
-	--r-lg: 12px;
+	/* The podoes corner scale: xs for keyboard hints, small tags and focus rings, sm for nav
+	   items and logo tiles, md for buttons, inputs and tabs, lg for cards and panels. */
+	--r-xs: 8px;
+	--r-sm: 12px;
+	--r-md: 14px;
+	--r-lg: 18px;
 	--r-pill: 999px;
 
 	--nav-w: 244px;
@@ -168,16 +173,6 @@
 	--dlg-from: translateY(6px) scale(0.985);
 	--pop-from: translateY(-4px);
 	--toast-from: translateY(8px);
-	--reveal-from: translateY(4px);
-
-	/* Older names the pages still use; the Q2 to Q6 cards move off them. */
-	--radius: var(--r-lg);
-	--shadow-xs: var(--sh-1);
-	--shadow-sm: var(--sh-2);
-	--shadow-md: var(--sh-2);
-	--shadow-lg: var(--sh-3);
-	--duration-fast: var(--dur-1);
-	--duration-base: var(--dur-2);
 
 	/* Registry logos are drawn for a light page and some are black: they sit on this plate. */
 	--logo-plate: oklch(0.985 0 0);

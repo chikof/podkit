@@ -167,7 +167,7 @@ fn delete_dialog(team: TeamId, check: &Check) -> Markup {
 			div class="flex flex-col gap-3" {
 				p { "Delete " strong class="break-all" { (check.name) } "?" }
 				@if check.auto_key.is_some() {
-					p class="text-sm text-muted-foreground" { "Podkit made this check for an application domain. It will not make it again." }
+					p class="text-sm text-muted-foreground" { "podkit made this check for an application domain. It will not make it again." }
 				}
 				p class="text-sm text-destructive" role="alert" "data-show"="$_delete_error" "data-text"="$_delete_error" style="display: none" {}
 			}

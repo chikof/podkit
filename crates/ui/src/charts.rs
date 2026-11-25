@@ -643,7 +643,7 @@ pub fn line_chart_with(chart: &Chart<'_>, markers: &[Marker]) -> Markup {
 				p id={ (figure_id) "-summary" } class="ui-visually-hidden" { (summary(chart, markers)) }
 				(data_table(chart, &figure_id))
 			} @else {
-				p id={ (figure_id) "-summary" } class="flex h-32 items-center justify-center rounded-lg border border-dashed border-border px-4 text-center text-sm text-muted-foreground" {
+				p id={ (figure_id) "-summary" } class="flex h-32 items-center justify-center rounded-[length:var(--r-md)] border border-dashed border-border px-4 text-center text-sm text-muted-foreground" {
 					"No readings in this range yet. podkit samples every 30 seconds."
 				}
 			}
@@ -765,7 +765,7 @@ pub fn demo(prefix: &str) -> Markup {
 	html! {
 		div class="flex flex-col gap-6" "data-signals"="{_tables: false}" {
 			div {
-				button type="button" class="ui-button inline-flex h-8 cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground shadow-xs hover:bg-accent" aria-pressed="false"
+				button type="button" class="ui-button inline-flex h-8 cursor-pointer items-center justify-center rounded-[length:var(--r-md)] border border-input bg-background px-3 text-sm font-medium text-foreground shadow-xs hover:bg-accent" aria-pressed="false"
 					"data-on:click"="$_tables = !$_tables" "data-attr:aria-pressed"="$_tables ? 'true' : 'false'" { "Data tables" }
 			}
 			(line_chart(&cpu_chart))

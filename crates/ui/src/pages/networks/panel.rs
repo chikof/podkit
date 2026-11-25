@@ -82,7 +82,7 @@ fn saved_slot(redeploy: Option<&str>, saved: bool) -> Markup {
 	html! {
 		div id="networks-saved" {
 			@if saved {
-				div class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-success/30 bg-success/15 px-4 py-3 text-sm" role="status" {
+				div class="flex flex-wrap items-center justify-between gap-3 rounded-[length:var(--r-md)] border border-success/30 bg-success/15 px-4 py-3 text-sm" role="status" {
 					span { "Saved. Changes apply on the next deploy." }
 					@if let Some(url) = redeploy {
 						button type="button" class=(button_class(Variant::Outline, Size::Sm))

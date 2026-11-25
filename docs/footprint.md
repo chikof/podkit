@@ -171,7 +171,7 @@ What the table says:
 Why B7: `webauthn-rs` 0.5 pulls OpenSSL. `ldd` on the B7 server shows `libssl.so.3` and
 `libcrypto.so.3` loaded at start, and `/proc/<pid>/smaps` shows 1.75 MB + 0.3 MB resident
 in those two libraries (B6 has neither), plus ~1.2 MB more of the server's own text for
-webauthn-rs-core (196 KB of code), OpenSSL bindings and X.509 parsing. Podkit already had
+webauthn-rs-core (196 KB of code), OpenSSL bindings and X.509 parsing. podkit already had
 rustls for everything else, so this was a second TLS and crypto stack.
 
 ### Trims, each with before and after

@@ -19,6 +19,17 @@ paper white with a darker teal, since the design has no light page of its own. T
 values in `theme.css` are the reference; the older Quiet numbers further down are kept
 where they still hold.
 
+**Brand.** podkit is made by podoes and shares its design system: the tokens here are that
+system's `tokens.json`. Both names are lowercase, also at the start of a sentence. The logo
+is the peeker, two eyes lifting the lid of a container, next to the word podkit in Sora 600
+(`shell::brand`); hovering it plays the peek once, and reduced motion skips it. The box and
+lid are always the podoes orange (`--brand`, `#E4521B`). Orange is the team colour and
+appears in the logo only: teal stays the colour of buttons, links and active states, since
+orange sits too close to warning and destructive. On a light page the eyes are white with a
+dark edge. The tab icon is the mark on a dark tile (`/static/favicon.svg`, a 32 px PNG and
+an Apple touch icon). The README banners, the social preview image and the mark as files
+are in `docs/brand/`.
+
 ## Principles
 
 1. **Quiet and dense enough to work in.** podkit is an operator's tool for a homelab:
@@ -57,9 +68,9 @@ template or in `components.css`.
 | `card` / `card-foreground` | cards, panels | `oklch(1 0 0)` | `oklch(0.205 0 0)` |
 | `popover` / `popover-foreground` | menus, dialogs, tooltips, toasts | `oklch(1 0 0)` | `oklch(0.205 0 0)` |
 | `primary` / `primary-foreground` | the one main action | `oklch(0.205 0 0)` | `oklch(0.922 0 0)` |
-| `secondary` / `secondary-foreground` | supporting buttons | `oklch(0.97 0 0)` | `oklch(0.269 0 0)` |
+| `secondary` | supporting buttons | `oklch(0.97 0 0)` | `oklch(0.269 0 0)` |
 | `muted` / `muted-foreground` | quiet surfaces, secondary text | `oklch(0.97 0 0)` / `oklch(0.5 0 0)` | `oklch(0.269 0 0)` / `oklch(0.708 0 0)` |
-| `accent` / `accent-foreground` | hover and selected rows | `oklch(0.97 0 0)` | `oklch(0.269 0 0)` |
+| `accent` | hover and selected rows | `oklch(0.97 0 0)` | `oklch(0.269 0 0)` |
 | `destructive` / `destructive-foreground` | delete, stop, failed | `oklch(0.577 0.245 27.3)` | `oklch(0.704 0.191 22.2)` |
 | `success` | healthy, done | `oklch(0.5 0.14 150)` | `oklch(0.75 0.17 150)` |
 | `warning` | needs attention | `oklch(0.52 0.13 70)` | `oklch(0.82 0.15 85)` |
@@ -67,7 +78,7 @@ template or in `components.css`.
 | `border` | 1px dividers, card edges | `oklch(0.922 0 0)` | `oklch(1 0 0 / 10%)` |
 | `input` | form control borders | `oklch(0.922 0 0)` | `oklch(1 0 0 / 15%)` |
 | `ring` | focus ring | `oklch(0.708 0 0)` | `oklch(0.556 0 0)` |
-| `sidebar`, `sidebar-foreground`, `sidebar-primary(-foreground)`, `sidebar-accent(-foreground)`, `sidebar-border`, `sidebar-ring` | the left navigation | as `card`/`primary`/`accent`/`border`/`ring`, with `sidebar` one step off the page (`0.985` light, `0.205` dark) | |
+| `sidebar` | the left navigation | one step off the page (`0.985` light, `0.201` dark); its text, current item, border and ring are the page's own `foreground`, `accent`, `border` and `ring` | |
 | `chart-1` … `chart-5` | data series, in this order | see `theme.css` | |
 
 Text and its background keep at least 4.5:1 (3:1 for large text and UI borders).
@@ -78,12 +89,12 @@ on `accent` for anything small.
 
 | Token | Value | Notes |
 |---|---|---|
-| `--radius` | `--r-lg` 12px (cards), `--r-md` 8px (controls, chips), `--r-sm` 5px | cards `rounded-xl`, controls `rounded-md`, badges `rounded-full`, tiles `rounded-lg` |
+| Radius | the podoes corner scale: `--r-lg` 18px (cards, panels), `--r-md` 14px (buttons, inputs, tabs, chips), `--r-sm` 12px (nav items, logo tiles, icon buttons), `--r-xs` 8px (keyboard hints, small tags, focus rings) | in a template, `rounded-[length:var(--r-lg)]` and so on, never Tailwind's own `rounded-md`/`-lg`/`-xl`, which do not follow the tokens; badges `rounded-full`; the checkbox keeps 5px so it never reads as a radio |
 | Spacing | Tailwind's 4px scale | inside a card `px-6`/`py-6`, between its blocks `gap-5`, form fields `gap-2` (label to control) and `gap-4` (field to field), sections of a page `gap-6` or `gap-10` |
 | Font | Inter (`--font-sans`), JetBrains Mono (`--font-mono`), Sora (`--font-display`) | variable woff2 (latin subset), `font-display: swap`; mono for ids, hashes, branches, log lines, keys; display for the brand, page titles, card and section titles, stat numbers |
 | Type scale | `--fs-xs` 12 · `--fs-sm` 13 · `--fs-md` 14 (default for UI) · `--fs-lg` 15 · `--fs-xl` 17 (card, dialog and section titles) · `--fs-3xl` 28 (page title) · 26 (stat numbers) | weights 400, 500 (labels, buttons), 600 (titles); never bold above 600 |
-| Shadows | `--shadow-xs` controls, `--shadow-sm` raised cards, `--shadow-md` menus, `--shadow-lg` dialogs and toasts | in dark the border does most of the work |
-| Motion | `--duration-fast` 120ms, `--duration-base` 200ms, `--ease-out` | see Motion |
+| Shadows | `--sh-1` controls (none in dark), `--sh-2` menus and raised cards, `--sh-3` dialogs and toasts | in dark the border does most of the work |
+| Motion | `--dur-1` 90ms, `--dur-2` 160ms, `--dur-3` 240ms, `--ease-out` | see Motion |
 | Widths | page content `max-w-4xl` (forms, detail) to `max-w-7xl` (lists, gallery); dialogs 32rem, wide 48rem | |
 
 Layout: a left sidebar (`sidebar` tokens) 15rem wide from `md` up (3.5rem folded to icons), a

@@ -42,7 +42,7 @@ pub(super) fn issues_of(e: &ServerError) -> Option<(String, Vec<IssueRow>)> {
 /// The panel for refused keys. `id` is the element the page patches.
 pub(super) fn problems(id: &str, headline: &str, rows: &[IssueRow]) -> Markup {
 	html! {
-		section id=(id) class="flex flex-col gap-3 rounded-lg border border-destructive/50 p-4" role="alert"
+		section id=(id) class="flex flex-col gap-3 rounded-[length:var(--r-md)] border border-destructive/50 p-4" role="alert"
 			aria-label="Compose problems" data-state="invalid" {
 			div class="flex flex-col gap-1" {
 				h3 class="text-sm font-semibold text-destructive" { "Cannot deploy this file" }
@@ -54,9 +54,9 @@ pub(super) fn problems(id: &str, headline: &str, rows: &[IssueRow]) -> Markup {
 						li class="flex flex-col gap-0.5 text-sm" {
 							div class="flex flex-wrap items-center gap-2" {
 								@if let Some(service) = &r.service {
-									span class="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs" data-issue-service { (service) }
+									span class="rounded-[length:var(--r-xs)] bg-muted px-1.5 py-0.5 font-mono text-xs" data-issue-service { (service) }
 								} @else {
-									span class="rounded-md bg-muted px-1.5 py-0.5 text-xs" { "whole file" }
+									span class="rounded-[length:var(--r-xs)] bg-muted px-1.5 py-0.5 text-xs" { "whole file" }
 								}
 								code class="font-mono text-xs" data-issue-path { (r.path) }
 							}
@@ -72,7 +72,7 @@ pub(super) fn problems(id: &str, headline: &str, rows: &[IssueRow]) -> Markup {
 /// The panel for a file that passed: what podkit will adjust and what it still needs.
 pub(super) fn valid(id: &str, notes: &[String], missing: &[String]) -> Markup {
 	html! {
-		section id=(id) class="flex flex-col gap-3 rounded-lg border border-border p-4" aria-label="Compose check"
+		section id=(id) class="flex flex-col gap-3 rounded-[length:var(--r-md)] border border-border p-4" aria-label="Compose check"
 			role="status" data-state="valid" {
 			h3 class="flex items-center gap-2 text-sm font-semibold text-success" {
 				"This file can be deployed"

@@ -137,7 +137,7 @@ fn add_card(team: TeamId) -> Markup {
 	);
 	card(&html! {
 		form id="uptime-add" "data-on:submit"=(post) {
-			(card_section("Add a check", Some("Podkit asks from the control plane every interval and tells you when the answer changes."), None))
+			(card_section("Add a check", Some("podkit asks from the control plane every interval and tells you when the answer changes."), None))
 			(card_content(&html! {
 				(form::fields(true))
 				(form_error())
@@ -178,7 +178,7 @@ async fn list_page(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Re
 				div class="ui-page-title" {
 					h1 { "Uptime" }
 					p class="ui-lede" {
-						"Is it up, asked from outside. Podkit checks your applications' domains by itself and anything else you add."
+						"Is it up, asked from outside. podkit checks your applications' domains by itself and anything else you add."
 					}
 				}
 			}

@@ -100,7 +100,7 @@ pub fn patch_into(selector: &str, mode: ElementPatchMode, markup: &Markup) -> Ev
 /// A short message in the corner that removes itself after a few seconds.
 pub fn toast(msg: &str) -> Events {
 	let markup = html! {
-		div class="pointer-events-auto rounded-lg border border-border bg-card px-4 py-3 text-sm text-card-foreground" role="status" "data-init"="setTimeout(() => el.remove(), 4000)" { (msg) }
+		div class="pointer-events-auto rounded-[length:var(--r-md)] border border-border bg-card px-4 py-3 text-sm text-card-foreground" role="status" "data-init"="setTimeout(() => el.remove(), 4000)" { (msg) }
 	};
 	patch_into("#toasts", ElementPatchMode::Append, &markup)
 }

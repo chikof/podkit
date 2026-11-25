@@ -172,7 +172,7 @@ fn destination_row(base: &str, plan: &Plan, d: &Destination, source: DeploymentI
 		))
 	);
 	html! {
-		li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border px-4 py-3" {
+		li class="flex flex-wrap items-center justify-between gap-3 rounded-[length:var(--r-md)] border border-border px-4 py-3" {
 			div class="flex min-w-0 flex-col gap-0.5" {
 				span class="text-sm font-medium" { (d.environment.name) }
 				span class={ "text-xs " @if d.matched.is_ok() { "text-muted-foreground" } @else { "text-destructive" } } {

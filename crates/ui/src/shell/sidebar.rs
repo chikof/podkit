@@ -20,14 +20,35 @@ use podkit_core::servers::AgentSummary;
 const TEAM_TRIGGER: &str = "ui-team-trigger";
 const USER_TRIGGER: &str = "ui-user-trigger";
 
-/// The podkit mark: "pk" on a teal tile. Decoration: the name beside it is the text.
+/// The podkit mark: the podoes peeker, two eyes lifting the lid of a container. Decoration:
+/// the name beside it is the text. Each eye is two circles, so a light page can give it a
+/// dark edge (the logo's `on-light` drawing) with colors alone.
 fn brand_mark() -> Markup {
-	html! { span class="ui-brand-mark" aria-hidden="true" { "pk" } }
+	html! {
+		svg class="ui-brand-mark" viewBox="0 9 200 200" aria-hidden="true" focusable="false" {
+			g class="ui-brand-eyes" {
+				circle class="ui-brand-eye-edge" cx="76" cy="104" r="25" {}
+				circle class="ui-brand-eye-edge" cx="124" cy="104" r="25" {}
+				circle class="ui-brand-eye" cx="76" cy="104" r="20" {}
+				circle class="ui-brand-eye" cx="124" cy="104" r="20" {}
+				g class="ui-brand-pupils" {
+					circle cx="84" cy="98" r="10" {}
+					circle cx="132" cy="98" r="10" {}
+				}
+			}
+			rect class="ui-brand-lid" x="26" y="58" width="148" height="22" rx="10" {}
+			rect class="ui-brand-box" x="32" y="120" width="136" height="52" rx="12" {}
+		}
+	}
 }
 
+/// Hovering plays the peek once. The class stays until the animation ends, so it always
+/// runs to the end, also when the pointer has left.
 fn brand_in(href: &str) -> Markup {
 	html! {
-		a class="ui-brand" href=(href) {
+		a class="ui-brand" href=(href)
+			"data-on:mouseenter"="el.classList.add('ui-brand-play')"
+			"data-on:animationend"="el.classList.remove('ui-brand-play')" {
 			(brand_mark())
 			span class="ui-brand-name" { "podkit" }
 		}

@@ -92,7 +92,7 @@ fn when(t: OffsetDateTime) -> String {
 /// One thing of a report: what it is, where it belongs, what became of it and why.
 fn item_row(item: &Item, extra: Option<&Markup>) -> Markup {
 	html! {
-		li class="flex flex-col gap-1 rounded-lg border border-border px-4 py-3" {
+		li class="flex flex-col gap-1 rounded-[length:var(--r-md)] border border-border px-4 py-3" {
 			div class="flex flex-wrap items-center justify-between gap-3" {
 				span class="text-sm" {
 					span class="text-muted-foreground" { (item.kind.label()) " " }

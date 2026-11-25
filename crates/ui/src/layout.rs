@@ -3,7 +3,8 @@
 use maud::{DOCTYPE, Markup, html};
 
 use super::assets::{
-	FONT_DISPLAY_HREF, FONT_MONO_HREF, FONT_SANS_HREF, PAGE_JS_HREF, PODKIT_JS_HREF,
+	APPLE_TOUCH_ICON_HREF, FAVICON_PNG_HREF, FAVICON_SVG_HREF, FONT_DISPLAY_HREF, FONT_MONO_HREF,
+	FONT_SANS_HREF, PAGE_JS_HREF, PODKIT_JS_HREF,
 };
 use super::components::{BUTTON_OUTLINE, icon, toast, toast_region, toast_region_with};
 use super::extract::TeamCtx;
@@ -32,6 +33,9 @@ pub fn document_with_head(title: &str, head: &Markup, body: &Markup) -> Markup {
 					meta name="podkit-debug" content="1";
 				}
 				title { (title) " · podkit" }
+				link rel="icon" type="image/svg+xml" href=(*FAVICON_SVG_HREF);
+				link rel="icon" type="image/png" sizes="32x32" href=(*FAVICON_PNG_HREF);
+				link rel="apple-touch-icon" href=(*APPLE_TOUCH_ICON_HREF);
 				link rel="preload" href=(FONT_SANS_HREF) "as"="font" type="font/woff2" crossorigin;
 				link rel="preload" href=(FONT_MONO_HREF) "as"="font" type="font/woff2" crossorigin;
 				link rel="preload" href=(FONT_DISPLAY_HREF) "as"="font" type="font/woff2" crossorigin;

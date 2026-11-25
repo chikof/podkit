@@ -334,7 +334,7 @@ fn model_card(ctx: &TeamCtx, view: &View, model: &Model, hardware: Option<&Hardw
 	// The same card as `link_card` (one link stretched over it) with a footer under the
 	// logo row: the fit, what would be downloaded, and the button.
 	html! {
-		article class="ui-card ui-link-card flex flex-col gap-4 rounded-xl border border-border bg-card p-5 text-card-foreground shadow-xs" {
+		article class="ui-card ui-link-card flex flex-col gap-4 rounded-[length:var(--r-lg)] border border-border bg-card p-5 text-card-foreground shadow-xs" {
 			div class="ui-link-card-body" {
 				(family_logo(&model.family, LogoSize::Md))
 				div class="flex min-w-0 flex-1 flex-col gap-1" {
@@ -515,7 +515,7 @@ fn hit_rows(ctx: &TeamCtx, hits: &[Hit], can_download: bool) -> Markup {
 				p class="text-sm text-muted-foreground" { "No repo with GGUF files matches that." }
 			}
 			@for hit in hits {
-				div class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4" {
+				div class="flex flex-col gap-3 rounded-[length:var(--r-lg)] border border-border bg-card p-4" {
 					div class="flex flex-wrap items-center justify-between gap-2" {
 						div class="flex min-w-0 items-center gap-3" {
 							(logo("huggingface", LogoSize::Sm))

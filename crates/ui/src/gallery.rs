@@ -122,11 +122,11 @@ fn section(name: &str, title: &str, note: &str, demo: impl Fn(&str) -> Markup) -
 				p class="max-w-3xl text-sm text-muted-foreground" { (note) }
 			}
 			div class="grid gap-4 lg:grid-cols-2" {
-				div class="ui-scheme-dark flex min-w-0 flex-col gap-4 rounded-xl border border-border bg-background p-6 text-foreground" data-scheme="dark" {
+				div class="ui-scheme-dark flex min-w-0 flex-col gap-4 rounded-[length:var(--r-lg)] border border-border bg-background p-6 text-foreground" data-scheme="dark" {
 					p class="text-xs font-medium text-muted-foreground" { "Dark" }
 					(demo(&format!("{name}-d")))
 				}
-				div class="ui-scheme-light flex min-w-0 flex-col gap-4 rounded-xl border border-border bg-background p-6 text-foreground" data-scheme="light" {
+				div class="ui-scheme-light flex min-w-0 flex-col gap-4 rounded-[length:var(--r-lg)] border border-border bg-background p-6 text-foreground" data-scheme="light" {
 					p class="text-xs font-medium text-muted-foreground" { "Light" }
 					(demo(&format!("{name}-l")))
 				}
@@ -161,7 +161,7 @@ fn body(user: &str) -> Markup {
 			div class="flex flex-col gap-2" {
 				h1 class="text-2xl font-semibold" { "Design system" }
 				p class="max-w-3xl text-sm text-muted-foreground" {
-					"Every component in every state, in both color schemes. The spec is design/finalists/02-quiet-linear (components.html); this page is the visual check. Hover, focus and active are forced with data-state so they sit side by side; the real states work as well."
+					"Every component in every state, in both color schemes. The spec is docs/design/README.md; this page is the visual check. Hover, focus and active are forced with data-state so they sit side by side; the real states work as well."
 				}
 			}
 			"\n"
@@ -340,7 +340,7 @@ fn body(user: &str) -> Markup {
 			(section("icon", "Icon", "The vendored Lucide subset, from /static/icons.svg.", |_| html! {
 				div class="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6" {
 					@for name in sprite_icons() {
-						div class="flex flex-col items-center gap-1.5 rounded-md border border-border p-2 text-center" {
+						div class="flex flex-col items-center gap-1.5 rounded-[length:var(--r-xs)] border border-border p-2 text-center" {
 							(icon_with(name, "h-5 w-5"))
 							span class="w-full truncate text-xs text-muted-foreground" { (name) }
 						}
@@ -848,6 +848,11 @@ mod tests {
 		);
 		assert_contains(&login, "/static/fonts/sora-latin-wght-normal.woff2");
 		assert_contains(&login, "/static/page.js");
+		assert_contains(
+			&login,
+			"rel=\"icon\" type=\"image/svg+xml\" href=\"/static/favicon.svg?v=",
+		);
+		assert_contains(&login, "class=\"ui-brand-mark\"");
 		assert_contains(&login, "id=\"toasts\"");
 	}
 
@@ -871,6 +876,9 @@ mod tests {
 				"font/woff2",
 			),
 			("/static/fonts/sora-latin-wght-normal.woff2", "font/woff2"),
+			("/static/favicon.svg", "image/svg+xml"),
+			("/static/favicon-32.png", "image/png"),
+			("/static/apple-touch-icon.png", "image/png"),
 		] {
 			let resp = tower::ServiceExt::oneshot(
 				app.clone(),

@@ -129,7 +129,7 @@ fn move_button(base: &str, plan: &Plan, c: &Candidate) -> Markup {
 fn candidate_row(base: &str, plan: &Plan, c: &Candidate) -> Markup {
 	let v = &c.verdict;
 	html! {
-		li class="flex flex-col gap-2 rounded-lg border border-border px-4 py-3" {
+		li class="flex flex-col gap-2 rounded-[length:var(--r-md)] border border-border px-4 py-3" {
 			div class="flex flex-wrap items-center justify-between gap-3" {
 				div class="flex min-w-0 items-center gap-2" {
 					span class="text-sm font-medium" { (c.server.name) }
@@ -172,7 +172,7 @@ fn body_markup(ctx: &TeamCtx, plan: &Plan) -> Markup {
 				div { dt { "Volumes" } dd { (plan.volumes) } }
 			}
 			@if let Some(m) = active {
-				div class="flex flex-col gap-1 rounded-lg border border-border px-4 py-3" role="status" {
+				div class="flex flex-col gap-1 rounded-[length:var(--r-md)] border border-border px-4 py-3" role="status" {
 					span class="text-sm font-medium" { "Moving to " (m.to_server_name) }
 					span class="text-xs text-muted-foreground" { (m.step) }
 				}

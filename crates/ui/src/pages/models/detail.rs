@@ -323,7 +323,7 @@ fn preview_table(vars: &[(String, String)]) -> Markup {
 		div id="link-preview" class="flex flex-col gap-2 text-sm" {
 			@if !vars.is_empty() {
 				p class="text-muted-foreground" { "The application gets these on its next deploy. The key is masked." }
-				dl class="flex flex-col gap-1 rounded-lg border border-border bg-muted p-3 font-mono text-xs" {
+				dl class="flex flex-col gap-1 rounded-[length:var(--r-md)] border border-border bg-muted p-3 font-mono text-xs" {
 					@for (name, value) in vars {
 						div class="flex flex-wrap gap-x-2" {
 							dt class="font-semibold" { (name) }

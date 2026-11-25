@@ -394,7 +394,7 @@ pub fn log_view(id: &str, stream_url: &str) -> Markup {
 					"Auto-scroll"
 				}
 			}
-			div class="h-96 overflow-auto rounded-lg border border-border bg-card p-3 font-mono text-xs leading-5 text-card-foreground"
+			div class="h-96 overflow-auto rounded-[length:var(--r-md)] border border-border bg-card p-3 font-mono text-xs leading-5 text-card-foreground"
 				"data-init"="new MutationObserver(() => { if ($_follow) el.scrollTop = el.scrollHeight }).observe(el, {childList: true, subtree: true})" {
 				div id=(id) "data-init"=(on_load) {}
 			}

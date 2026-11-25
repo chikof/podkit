@@ -99,7 +99,7 @@ fn dns_help(server_host: &str) -> Markup {
 			} @else {
 				p { "At your DNS provider, add a " strong { "CNAME" } " record for the hostname pointing to:" }
 			}
-			code class="w-fit rounded-md border border-border bg-muted px-2 py-1 font-mono break-all" { (server_host) }
+			code class="w-fit rounded-[length:var(--r-xs)] border border-border bg-muted px-2 py-1 font-mono break-all" { (server_host) }
 			@if !is_ip {
 				p class="text-muted-foreground" { "A bare domain such as example.com can't have a CNAME; use an A record with the server's IP address instead." }
 			}
@@ -110,7 +110,7 @@ fn dns_help(server_host: &str) -> Markup {
 
 fn https_banner() -> Markup {
 	html! {
-		div class="rounded-lg border border-warning/30 bg-warning/15 px-4 py-3 text-sm" role="note" {
+		div class="rounded-[length:var(--r-md)] border border-warning/30 bg-warning/15 px-4 py-3 text-sm" role="note" {
 			strong { "HTTPS is off for custom domains. " }
 			"No ACME email is configured on this podkit server, so custom domains are served over plain HTTP. Set "
 			code class="font-mono" { "ACME_EMAIL" }

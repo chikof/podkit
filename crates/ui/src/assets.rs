@@ -35,6 +35,10 @@ static INTER: &[u8] = include_bytes!("../static/fonts/inter-latin-wght-normal.wo
 static JETBRAINS_MONO: &[u8] =
 	include_bytes!("../static/fonts/jetbrains-mono-latin-wght-normal.woff2");
 static SORA: &[u8] = include_bytes!("../static/fonts/sora-latin-wght-normal.woff2");
+// The podoes peeker on a dark tile, from the podoes design system's Favicons group.
+static FAVICON_SVG: &str = include_str!("../static/favicon.svg");
+static FAVICON_PNG: &[u8] = include_bytes!("../static/favicon-32.png");
+static APPLE_TOUCH_ICON: &[u8] = include_bytes!("../static/apple-touch-icon.png");
 
 /// The `?v=` of the font URLs below and in `theme.css`'s `@font-face`; bump with the files.
 pub static FONT_SANS_HREF: &str = "/static/fonts/inter-latin-wght-normal.woff2?v=1";
@@ -42,9 +46,22 @@ pub static FONT_MONO_HREF: &str = "/static/fonts/jetbrains-mono-latin-wght-norma
 pub static FONT_DISPLAY_HREF: &str = "/static/fonts/sora-latin-wght-normal.woff2?v=1";
 
 fn hashed(path: &str, body: &str) -> String {
-	let hash = Sha256::digest(body.as_bytes());
+	hashed_bytes(path, body.as_bytes())
+}
+
+fn hashed_bytes(path: &str, body: &[u8]) -> String {
+	let hash = Sha256::digest(body);
 	format!("{path}?v={}", URL_SAFE_NO_PAD.encode(&hash[..6]))
 }
+
+/// The tab icon: the SVG, a 32 px PNG for a browser that takes no SVG icon, and the 180 px
+/// square iOS puts on a home screen.
+pub static FAVICON_SVG_HREF: LazyLock<String> =
+	LazyLock::new(|| hashed("/static/favicon.svg", FAVICON_SVG));
+pub static FAVICON_PNG_HREF: LazyLock<String> =
+	LazyLock::new(|| hashed_bytes("/static/favicon-32.png", FAVICON_PNG));
+pub static APPLE_TOUCH_ICON_HREF: LazyLock<String> =
+	LazyLock::new(|| hashed_bytes("/static/apple-touch-icon.png", APPLE_TOUCH_ICON));
 
 pub static ICONS_HREF: LazyLock<String> = LazyLock::new(|| hashed("/static/icons.svg", ICONS_SVG));
 pub static LOGOS_HREF: LazyLock<String> = LazyLock::new(|| hashed("/static/logos.svg", LOGOS_SVG));
@@ -113,6 +130,9 @@ pub fn router() -> Router<AppState> {
 		.route("/static/xterm-fit.js", get(xterm_fit_js))
 		.route("/static/xterm.css", get(xterm_css))
 		.route("/static/passkey.js", get(passkey_js))
+		.route("/static/favicon.svg", get(favicon_svg))
+		.route("/static/favicon-32.png", get(favicon_png))
+		.route("/static/apple-touch-icon.png", get(apple_touch_icon))
 		.route("/static/fonts/inter-latin-wght-normal.woff2", get(sans))
 		.route(
 			"/static/fonts/jetbrains-mono-latin-wght-normal.woff2",
@@ -225,6 +245,34 @@ fn script(body: &'static str) -> impl IntoResponse {
 		],
 		body,
 	)
+}
+
+async fn favicon_svg() -> impl IntoResponse {
+	(
+		[
+			(header::CONTENT_TYPE, "image/svg+xml"),
+			(header::CACHE_CONTROL, IMMUTABLE),
+		],
+		FAVICON_SVG,
+	)
+}
+
+fn png(body: &'static [u8]) -> impl IntoResponse {
+	(
+		[
+			(header::CONTENT_TYPE, "image/png"),
+			(header::CACHE_CONTROL, IMMUTABLE),
+		],
+		body,
+	)
+}
+
+async fn favicon_png() -> impl IntoResponse {
+	png(FAVICON_PNG)
+}
+
+async fn apple_touch_icon() -> impl IntoResponse {
+	png(APPLE_TOUCH_ICON)
 }
 
 fn font(body: &'static [u8]) -> impl IntoResponse {

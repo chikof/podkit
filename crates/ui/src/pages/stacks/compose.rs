@@ -22,7 +22,7 @@ use podkit_core::state::AppState;
 
 fn saved_panel() -> Markup {
 	html! {
-		div id="compose-result" role="status" class="rounded-lg border border-border p-4 text-sm" data-state="saved" {
+		div id="compose-result" role="status" class="rounded-[length:var(--r-md)] border border-border p-4 text-sm" data-state="saved" {
 			"Saved. Deploy the stack to apply the change."
 		}
 	}

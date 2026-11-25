@@ -10,7 +10,7 @@
      - progressive enhancement: a browser without the feature gets a working, plainer UI.
 
    Vocabulary: `ui-<component>` is the root, `ui-<component>-<part>` a part,
-   `ui-<component>-<variant>` a variant. The spec is design/finalists/02-quiet-linear. */
+   `ui-<component>-<variant>` a variant. The spec is docs/design/README.md. */
 
 /* == base ==================================================================== */
 
@@ -38,7 +38,7 @@ code { font-size: 0.92em; }
 /* The first stop for the keyboard: jumps past the sidebar to the page. Hidden until focused. */
 .ui-skip {
 	position: absolute; inset-block-start: var(--s-3); inset-inline-start: var(--s-3); z-index: 60;
-	padding: var(--s-2) var(--s-3); border-radius: var(--r-sm);
+	padding: var(--s-2) var(--s-3); border-radius: var(--r-xs);
 	background-color: var(--primary); color: var(--primary-foreground);
 	font-size: var(--fs-sm); font-weight: var(--fw-medium); text-decoration: none; translate: 0 -200%;
 }
@@ -60,7 +60,7 @@ code { font-size: 0.92em; }
    server from the name so it never changes). Without color-mix() the tint is the flat wash. */
 .ui-logo {
 	display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; overflow: hidden;
-	border: var(--bw) solid var(--border); border-radius: var(--r-md); background-color: var(--secondary);
+	border: var(--bw) solid var(--border); border-radius: var(--r-sm); background-color: var(--secondary);
 	color: var(--foreground); font-weight: var(--fw-bold); line-height: 1; user-select: none; letter-spacing: 0;
 }
 .ui-logo-sm { width: 1.75rem; height: 1.75rem; font-size: 0.6875rem; }
@@ -72,7 +72,7 @@ code { font-size: 0.92em; }
 
 .ui-avatar {
 	display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center;
-	width: 2rem; height: 2rem; border-radius: var(--r-md); background-color: var(--accent);
+	width: 2rem; height: 2rem; border-radius: var(--r-sm); background-color: var(--accent);
 	color: var(--foreground); font-size: var(--fs-sm); font-weight: var(--fw-bold); line-height: 1; user-select: none;
 }
 
@@ -130,7 +130,7 @@ code { font-size: 0.92em; }
 /* Bare icon button, e.g. a trigger inside a row. */
 .ui-icon-btn {
 	display: inline-grid; place-items: center; width: var(--ctl-h); height: var(--ctl-h); border: 0;
-	border-radius: var(--r-md); background: none; color: var(--muted-foreground); cursor: pointer;
+	border-radius: var(--r-sm); background: none; color: var(--muted-foreground); cursor: pointer;
 	transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 .ui-icon-btn:hover { background-color: var(--secondary); color: var(--foreground); }
@@ -206,7 +206,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 
 /* Checkbox and switch: the native input, painted. Keyboard, forms and a11y stay native. */
 .ui-checkbox, .ui-switch { appearance: none; flex-shrink: 0; margin: 0; cursor: pointer; border: var(--bw) solid var(--input); transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
-.ui-checkbox { display: inline-grid; place-content: center; width: 16px; height: 16px; border-radius: var(--r-sm); background-color: var(--background); }
+.ui-checkbox { display: inline-grid; place-content: center; width: 16px; height: 16px; border-radius: 5px; background-color: var(--background); }
 .ui-checkbox:hover, .ui-switch:hover { border-color: var(--muted-foreground); }
 .ui-checkbox:checked, .ui-checkbox:indeterminate { border-color: var(--primary); background-color: var(--primary); }
 .ui-checkbox:checked::after { content: ""; width: 4px; height: 8px; border: solid var(--primary-foreground); border-width: 0 2px 2px 0; rotate: 45deg; translate: 0 -1px; }
@@ -331,7 +331,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-chip[aria-current="true"], .ui-chip[aria-current="page"], .ui-chip[aria-pressed="true"] { border-color: var(--primary-border); background-color: var(--primary-soft); color: var(--primary-text); }
 .ui-chip[aria-current="true"] .ui-chip-n, .ui-chip[aria-current="page"] .ui-chip-n, .ui-chip[aria-pressed="true"] .ui-chip-n { color: inherit; }
 .ui-chip-n { font-size: var(--fs-xs); color: var(--muted-foreground); }
-.ui-kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding-inline: var(--s-2); border: var(--bw) solid var(--border-emphasis); border-radius: var(--r-sm); background-color: var(--secondary); color: var(--muted-foreground); font-family: var(--font-mono); font-size: var(--fs-xs); }
+.ui-kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 1.25rem; height: 1.25rem; padding-inline: var(--s-2); border: var(--bw) solid var(--border-emphasis); border-radius: var(--r-xs); background-color: var(--secondary); color: var(--muted-foreground); font-family: var(--font-mono); font-size: var(--fs-xs); }
 
 /* A native <progress>: the track on the element, the fill on the browser's own pseudo-element. */
 .ui-progress { appearance: none; width: 100%; height: 6px; border: 0 solid; border-radius: var(--r-pill); overflow: clip; background-color: var(--muted-strong); accent-color: var(--primary); }
@@ -387,7 +387,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-dialog-desc { margin-top: var(--s-2); font-size: var(--fs-sm); color: var(--muted-foreground); }
 .ui-dialog-body { display: grid; gap: var(--s-4); padding: var(--s-5); font-size: var(--fs-md); }
 .ui-dialog-foot { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s-3); padding: var(--s-4) var(--s-5); background-color: var(--secondary); }
-.ui-dialog-ic { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: var(--r-md); font-size: 18px; background-color: var(--info-soft); color: var(--info); }
+.ui-dialog-ic { display: grid; place-items: center; width: 36px; height: 36px; flex: none; border-radius: var(--r-sm); font-size: 18px; background-color: var(--info-soft); color: var(--info); }
 .ui-dialog-ic-err { background-color: var(--destructive-soft); color: var(--destructive); }
 
 .ui-menu {
@@ -428,7 +428,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 /* Tooltip: popover=hint, opened by `interestfor` on hover and keyboard focus; the trigger is
    its implicit anchor. Without interest invokers page.js shows it on the same events. */
 .ui-tip {
-	margin: 0; padding: var(--s-2) var(--s-3); border: 0; border-radius: var(--r-sm); max-width: 28ch; inset: auto;
+	margin: 0; padding: var(--s-2) var(--s-3); border: 0; border-radius: var(--r-xs); max-width: 28ch; inset: auto;
 	background-color: var(--foreground); color: var(--background); font-size: var(--fs-xs); font-weight: var(--fw-medium); line-height: 1.4;
 	opacity: 0; transition-property: opacity, display, overlay; transition-duration: var(--dur-1); transition-behavior: allow-discrete;
 }
@@ -445,12 +445,12 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-toast-body { display: grid; flex: 1; min-width: 0; gap: var(--s-1); }
 .ui-toast-title { font-weight: var(--fw-medium); }
 .ui-toast-text { color: var(--muted-foreground); }
-.ui-toast-x { display: inline-grid; place-items: center; width: 24px; height: 24px; margin: -4px; flex: none; border: 0; border-radius: var(--r-sm); background: none; color: var(--muted-foreground); cursor: pointer; }
+.ui-toast-x { display: inline-grid; place-items: center; width: 24px; height: 24px; margin: -4px; flex: none; border: 0; border-radius: var(--r-xs); background: none; color: var(--muted-foreground); cursor: pointer; }
 .ui-toast-x:hover { background-color: var(--accent); color: var(--foreground); }
 
 /* Shimmer between the two skeleton tokens; stopped under reduced motion. Rows match the
    geometry of the content that replaces them, so the page does not jump. */
-.ui-skeleton { display: block; border-radius: var(--r-sm); background: linear-gradient(90deg, var(--skeleton-a) 0, var(--skeleton-b) 50%, var(--skeleton-a) 100%); background-size: 200% 100%; animation: ui-shimmer 1.4s linear infinite; }
+.ui-skeleton { display: block; border-radius: var(--r-xs); background: linear-gradient(90deg, var(--skeleton-a) 0, var(--skeleton-b) 50%, var(--skeleton-a) 100%); background-size: 200% 100%; animation: ui-shimmer 1.4s linear infinite; }
 .ui-skeleton-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 110px; align-items: center; gap: var(--s-4); min-height: 56px; padding: var(--s-3) var(--s-4); border-bottom: var(--bw) solid var(--border); }
 .ui-skeleton-row > div { display: grid; gap: var(--s-2); }
 
@@ -494,12 +494,10 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 /* ---- Motion ----------------------------------------------------------------------------------- */
 
 @keyframes ui-spin { to { rotate: 360deg; } }
-@keyframes ui-pulse { 50% { opacity: 0.45; } }
 @keyframes ui-dot-pulse { 50% { opacity: 0.25; transform: scale(0.7); } }
 @keyframes ui-badge-flip { 0% { transform: scale(0.8); opacity: 0.2; } 60% { transform: scale(1.08); } 100% { transform: none; opacity: 1; } }
 @keyframes ui-shimmer { to { background-position: -200% 0; } }
 @keyframes ui-log-in { from { opacity: 0; transform: translateY(4px); } }
-@keyframes ui-caret { 50% { opacity: 0; } }
 @keyframes ui-chart-in { from { opacity: 0; transform: scaleY(0.6); } }
 @keyframes ui-vt-out { to { opacity: 0; transform: translateY(-4px); } }
 @keyframes ui-vt-in { from { opacity: 0; transform: translateY(6px); } }
@@ -577,16 +575,54 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 	border-inline-end: var(--bw) solid var(--border); background-color: var(--sidebar);
 }
 
-/* The brand: "pk" on the teal tile, then the name in the display face. */
+/* The brand: the podoes peeker (two eyes lifting the lid of a container), then the name in
+   the display face. The box and lid are always the brand orange. */
 .ui-brand {
-	display: flex; align-items: center; gap: 10px; padding: 0 6px; border-radius: var(--r-md);
+	display: flex; align-items: center; gap: 10px; padding: 0 6px; border-radius: var(--r-sm);
 	color: var(--foreground); font-family: var(--font-display); font-size: 19px; font-weight: var(--fw-bold); letter-spacing: -0.01em; text-decoration: none;
 }
-.ui-brand-mark {
-	display: grid; place-items: center; flex: none; width: 30px; height: 30px; border-radius: var(--r-md);
-	background-color: var(--primary); color: var(--primary-foreground); font-size: 15px; font-weight: var(--fw-bold); line-height: 1; letter-spacing: 0;
-}
+.ui-brand-mark { flex: none; width: 30px; height: 30px; overflow: visible; }
+.ui-brand-lid, .ui-brand-box { fill: var(--brand); }
+.ui-brand-eye { fill: var(--brand-eye); }
+.ui-brand-eye-edge { fill: var(--brand-eye-edge); }
+.ui-brand-pupils { fill: var(--brand-pupil); }
+.ui-brand-lid { transform-origin: 100px 69px; transform: rotate(-9deg); }
 .ui-brand-name { letter-spacing: inherit; }
+/* The peek, on hover: the lid pops into the air, drops back on the eyes and pushes them into
+   the box; they come half way out, look left and right, and rise back. */
+@media (prefers-reduced-motion: no-preference) {
+	.ui-brand-play .ui-brand-lid { animation: ui-brand-lid 3.6s both; }
+	.ui-brand-play .ui-brand-eyes { animation: ui-brand-eyes 3.6s both; }
+	.ui-brand-play .ui-brand-pupils { animation: ui-brand-pupils 3.6s both; }
+}
+@keyframes ui-brand-lid {
+	0% { transform: translateY(0) rotate(-9deg); animation-timing-function: cubic-bezier(0.2, 0.8, 0.3, 1); }
+	11% { transform: translateY(-46px) rotate(12deg); animation-timing-function: cubic-bezier(0.6, 0, 0.9, 0.4); }
+	22% { transform: translateY(0) rotate(-9deg); animation-timing-function: ease-in; }
+	34% { transform: translateY(40px) rotate(0deg); animation-timing-function: ease-out; }
+	37% { transform: translateY(37px) rotate(0deg); }
+	40%, 46% { transform: translateY(40px) rotate(0deg); animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+	56%, 61% { transform: translateY(14px) rotate(-5deg); animation-timing-function: ease-in-out; }
+	66% { transform: translateY(14px) rotate(-8deg); animation-timing-function: ease-in-out; }
+	73% { transform: translateY(14px) rotate(-2deg); }
+	82% { transform: translateY(14px) rotate(-2deg); animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+	95%, 100% { transform: translateY(0) rotate(-9deg); }
+}
+@keyframes ui-brand-eyes {
+	0%, 22% { transform: translateY(0); animation-timing-function: ease-in; }
+	34%, 46% { transform: translateY(42px); animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+	56%, 82% { transform: translateY(14px); animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
+	95%, 100% { transform: translateY(0); }
+}
+/* The look around happens while the eyes are half out, with the pupils high so the box does not hide them. */
+@keyframes ui-brand-pupils {
+	0%, 6% { transform: translate(0, 0); }
+	11%, 18% { transform: translate(-3px, -5px); }
+	24%, 56% { transform: translate(-8px, -2px); animation-timing-function: ease-in-out; }
+	61%, 67% { transform: translate(-20px, -2px); animation-timing-function: ease-in-out; }
+	74%, 82% { transform: translate(4px, -2px); animation-timing-function: ease-in-out; }
+	95%, 100% { transform: translate(0, 0); }
+}
 .ui-brand:focus-visible, .ui-nav-link:focus-visible, .ui-team-trigger:focus-visible, .ui-user-trigger:focus-visible,
 .ui-search:focus-visible, .ui-crumb-switch:focus-visible, .ui-crumb-link:focus-visible, .ui-palette-close:focus-visible {
 	outline: 2px solid var(--ring); outline-offset: 2px;
@@ -595,11 +631,11 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 /* Team switcher and user menu: one button that opens a menu. */
 .ui-team-trigger, .ui-user-trigger {
 	display: flex; align-items: center; gap: var(--s-3); width: 100%; padding: var(--s-2) var(--s-3);
-	border: var(--bw) solid transparent; border-radius: var(--r-md); background: none; color: var(--foreground);
+	border: var(--bw) solid transparent; border-radius: var(--r-sm); background: none; color: var(--foreground);
 	font: inherit; font-size: var(--fs-md); text-align: start; cursor: pointer;
 	transition: background-color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
-.ui-team-trigger { min-height: 46px; padding: 6px 10px 6px 8px; border-color: var(--border-emphasis); border-radius: 10px; background-color: color-mix(in oklab, var(--card) 70%, var(--sidebar)); }
+.ui-team-trigger { min-height: 46px; padding: 6px 10px 6px 8px; border-color: var(--border-emphasis); border-radius: var(--r-sm); background-color: color-mix(in oklab, var(--card) 70%, var(--sidebar)); }
 .ui-team-trigger:hover, .ui-user-trigger:hover, .ui-team-trigger[aria-expanded="true"], .ui-user-trigger[aria-expanded="true"] { background-color: var(--accent); }
 .ui-team-trigger:active, .ui-user-trigger:active { transform: scale(var(--press-scale)); }
 .ui-team-name, .ui-user-name { display: grid; min-width: 0; flex: 1; overflow: hidden; line-height: 1.3; }
@@ -610,7 +646,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 
 /* The team's tile: its initial on the accent. */
 .ui-team-mark {
-	display: grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: var(--r-sm);
+	display: grid; place-items: center; flex: none; width: 22px; height: 22px; border-radius: var(--r-xs);
 	background-color: var(--primary); color: var(--primary-foreground); font-size: var(--fs-xs); font-weight: var(--fw-bold); line-height: 1;
 }
 .ui-team-mark-sm { width: 18px; height: 18px; font-size: 10px; }
@@ -620,7 +656,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 /* The places. Current: a wash, and the icon takes the accent. */
 .ui-nav-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
 .ui-nav-link {
-	display: flex; align-items: center; gap: var(--s-3); height: 34px; padding-inline: 12px; border-radius: var(--r-md);
+	display: flex; align-items: center; gap: var(--s-3); height: 34px; padding-inline: 12px; border-radius: var(--r-sm);
 	color: var(--muted-foreground); font-size: var(--fs-md); font-weight: var(--fw-medium); text-decoration: none;
 	transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
@@ -634,7 +670,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-chrome-foot { display: flex; align-items: center; margin-top: auto; }
 .ui-chrome-foot .ui-avatar { width: 30px; height: 30px; border-radius: 50%; background-color: var(--accent); font-size: var(--fs-xs); }
 /* The account sits at the foot in a card, like the design's agent card. */
-.ui-chrome-foot .ui-user-trigger { min-height: 52px; padding: var(--s-3) 10px; border-color: var(--border); border-radius: 10px; background-color: color-mix(in oklab, var(--card) 70%, var(--sidebar)); }
+.ui-chrome-foot .ui-user-trigger { min-height: 52px; padding: var(--s-3) 10px; border-color: var(--border); border-radius: var(--r-sm); background-color: color-mix(in oklab, var(--card) 70%, var(--sidebar)); }
 
 /* The tab bar is for small screens only. */
 .ui-tabbar { display: none; }
@@ -660,7 +696,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 /* The slash is generated with an empty alternative text, so it is not read out. */
 .ui-crumb + .ui-crumb::before { content: "/" / ""; padding-inline: 10px; color: color-mix(in oklab, var(--subtle-foreground) 70%, transparent); }
 .ui-crumb-more + .ui-crumb::before { content: none; }
-.ui-crumb-link, .ui-crumb-current { min-width: 0; max-width: 14rem; overflow: hidden; border-radius: var(--r-sm); text-overflow: ellipsis; white-space: nowrap; }
+.ui-crumb-link, .ui-crumb-current { min-width: 0; max-width: 14rem; overflow: hidden; border-radius: var(--r-xs); text-overflow: ellipsis; white-space: nowrap; }
 .ui-crumb-link { color: var(--muted-foreground); text-decoration: none; transition: color var(--dur-1) var(--ease); }
 .ui-crumb-link:hover { color: var(--foreground); }
 .ui-crumb-current { max-width: 22rem; color: var(--foreground); font-weight: var(--fw-medium); }
@@ -668,7 +704,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 /* A switcher is the chevrons beside a crumb: project, environment, team. */
 .ui-crumb-switch {
 	display: inline-flex; width: 22px; height: 22px; flex: none; align-items: center; justify-content: center; margin-inline-start: var(--s-1);
-	padding: 0; border: 0; border-radius: var(--r-sm); background: none; color: var(--subtle-foreground); cursor: pointer;
+	padding: 0; border: 0; border-radius: var(--r-xs); background: none; color: var(--subtle-foreground); cursor: pointer;
 	transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease);
 }
 .ui-crumb-switch:hover, .ui-crumb-switch[aria-expanded="true"] { background-color: var(--accent); color: var(--foreground); }
@@ -678,7 +714,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 
 .ui-search {
 	display: flex; flex: none; align-items: center; gap: 10px; min-width: 286px; height: 42px; padding-inline: 14px 10px;
-	border: var(--bw) solid var(--border-emphasis); border-radius: 10px; background-color: var(--card); color: var(--muted-foreground);
+	border: var(--bw) solid var(--border-emphasis); border-radius: var(--r-md); background-color: var(--card); color: var(--muted-foreground);
 	font: inherit; font-size: var(--fs-sm); cursor: pointer;
 	transition: border-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
@@ -746,7 +782,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 /* The first stop for the keyboard: jumps past the sidebar to the page. Hidden until focused. */
 .ui-skip {
 	position: fixed; inset-block-start: var(--s-3); inset-inline-start: var(--s-3); z-index: 99; padding: var(--s-2) var(--s-3);
-	border-radius: var(--r-sm); background-color: var(--primary); color: var(--primary-foreground);
+	border-radius: var(--r-xs); background-color: var(--primary); color: var(--primary-foreground);
 	font-size: var(--fs-sm); font-weight: var(--fw-medium); text-decoration: none; translate: 0 -200%;
 }
 .ui-skip:focus-visible { translate: 0 0; outline: 2px solid var(--ring); outline-offset: 2px; }
@@ -1165,7 +1201,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 
 /* Segmented control: the theme toggle. */
 .ui-seg { display: inline-flex; align-items: center; gap: 2px; padding: 2px; border: var(--bw) solid var(--border); border-radius: var(--r-md); }
-.ui-seg-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 24px; border: 0; border-radius: var(--r-sm); background: none; color: var(--muted-foreground); cursor: pointer; transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+.ui-seg-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 24px; border: 0; border-radius: var(--r-xs); background: none; color: var(--muted-foreground); cursor: pointer; transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
 .ui-seg-btn:hover { color: var(--foreground); }
 .ui-seg-btn[aria-pressed="true"] { background-color: var(--accent); color: var(--foreground); }
 
@@ -1290,7 +1326,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-res-ev-name { font-size: var(--fs-sm); font-weight: var(--fw-medium); line-height: 1.25rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-res-ev-name a { color: inherit; text-decoration: none; }
 .ui-res-ev-name a:hover { text-decoration: underline; }
-.ui-res-ev-name a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--r-sm); }
+.ui-res-ev-name a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--r-xs); }
 .ui-res-ev-line { font-size: var(--fs-xs); color: var(--muted-foreground); overflow-wrap: anywhere; }
 .ui-res-ev-when { font-size: var(--fs-xs); line-height: 1.25rem; color: var(--subtle-foreground); white-space: nowrap; }
 
@@ -1317,7 +1353,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-pk-item > input { position: absolute; opacity: 0; inline-size: 1px; block-size: 1px; }
 .ui-pk-item:has(> input:checked) { background-color: var(--primary-soft); box-shadow: inset 0 0 0 1px var(--primary); }
 .ui-pk-item:has(> input:focus-visible), .ui-pk-engine:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
-.ui-pk-ic { display: inline-grid; place-items: center; flex-shrink: 0; inline-size: 2.5rem; block-size: 2.5rem; border: var(--bw) solid var(--border); border-radius: var(--r-md); background-color: var(--card); color: var(--foreground); font-size: 1.125rem; transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
+.ui-pk-ic { display: inline-grid; place-items: center; flex-shrink: 0; inline-size: 2.5rem; block-size: 2.5rem; border: var(--bw) solid var(--border); border-radius: var(--r-sm); background-color: var(--card); color: var(--foreground); font-size: 1.125rem; transition: color var(--dur-1) var(--ease), border-color var(--dur-1) var(--ease); }
 .ui-pk-item:has(> input:checked) .ui-pk-ic { border-color: var(--primary); color: var(--primary-text); }
 .ui-pk-ic > .ui-logo { border: 0; background: none; inline-size: 100%; block-size: 100%; }
 .ui-pk-t { display: grid; gap: var(--s-1); min-width: 0; flex: 1; }
@@ -1393,7 +1429,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-tl-title { margin: 0; font-size: var(--fs-sm); }
 .ui-tl-title a { color: var(--foreground); text-decoration: none; }
 .ui-tl-title a:hover { text-decoration: underline; }
-.ui-tl-title a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--r-sm); }
+.ui-tl-title a:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--r-xs); }
 .ui-tl-meta { margin: 0; color: var(--muted-foreground); font-size: var(--fs-sm); }
 .ui-tl-meta code { font-family: var(--font-mono); }
 .ui-tl-meta2 { display: flex; flex-wrap: wrap; gap: var(--s-4); margin: 0; color: var(--subtle-foreground); font-size: var(--fs-xs); }
@@ -1579,7 +1615,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-row-main, .ui-row-mid { display: grid; gap: var(--s-1); min-width: 0; }
 .ui-row-name { font-size: var(--fs-md); font-weight: var(--fw-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-row-link { color: inherit; text-decoration: none; outline: none; }
-.ui-row-link::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-sm); }
+.ui-row-link::after { content: ""; position: absolute; inset: 0; border-radius: var(--r-xs); }
 /* The link is the whole row (its ::after covers it), so the ring is drawn on that. */
 .ui-row-link:focus-visible::after { outline: 2px solid var(--ring); outline-offset: -2px; }
 .ui-row-sub { font-size: var(--fs-xs); color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1592,7 +1628,7 @@ textarea.ui-field, .ui-textarea, .ui-log { scrollbar-width: thin; scrollbar-colo
 .ui-range-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3); }
 .ui-range-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
 .ui-range { display: inline-flex; gap: 2px; padding: 2px; border: var(--bw) solid var(--border); border-radius: var(--r-md); }
-.ui-range-link { display: inline-flex; align-items: center; min-height: 24px; padding: 0 var(--s-3); border-radius: var(--r-sm); color: var(--muted-foreground); font-size: var(--fs-xs); font-weight: var(--fw-medium); text-decoration: none; transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
+.ui-range-link { display: inline-flex; align-items: center; min-height: 24px; padding: 0 var(--s-3); border-radius: var(--r-xs); color: var(--muted-foreground); font-size: var(--fs-xs); font-weight: var(--fw-medium); text-decoration: none; transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease); }
 .ui-range-link:hover { color: var(--foreground); }
 .ui-range-link[aria-current="true"] { background-color: var(--muted-strong); color: var(--foreground); }
 .ui-range-link:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
@@ -1724,7 +1760,7 @@ code.font-mono { font-size: 0.92em; }
 /* The repository picker of a new application: results of a server-side search, one row each. */
 .ui-repo-results { display: grid; gap: var(--s-2); min-width: 0; }
 .ui-repo-list { display: grid; margin: 0; padding: var(--s-1); list-style: none; border: var(--bw) solid var(--border); border-radius: var(--r-md); max-height: 16rem; overflow-y: auto; }
-.ui-repo-item { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); width: 100%; min-height: var(--ctl-h); padding: var(--s-2) var(--s-3); border: 0; border-radius: var(--r-sm); background: none; color: var(--foreground); font: inherit; font-size: var(--fs-sm); text-align: start; cursor: pointer; transition: background-color var(--dur-1) var(--ease); }
+.ui-repo-item { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); width: 100%; min-height: var(--ctl-h); padding: var(--s-2) var(--s-3); border: 0; border-radius: var(--r-xs); background: none; color: var(--foreground); font: inherit; font-size: var(--fs-sm); text-align: start; cursor: pointer; transition: background-color var(--dur-1) var(--ease); }
 .ui-repo-item:hover, .ui-repo-item:focus-visible { background-color: var(--accent); outline: none; }
 .ui-repo-item:focus-visible { box-shadow: inset 0 0 0 2px var(--ring); }
 .ui-repo-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--fs-xs); }
@@ -1733,7 +1769,7 @@ code.font-mono { font-size: 0.92em; }
 .ui-repo-chosen { display: flex; align-items: center; gap: var(--s-3); min-height: var(--ctl-h); padding: var(--s-2) var(--s-3); border: var(--bw) solid var(--border); border-radius: var(--r-md); font-size: var(--fs-sm); }
 .ui-repo-chosen .ui-icon { color: var(--muted-foreground); flex: none; }
 .ui-repo-chosen code { min-width: 0; flex: 1; }
-.ui-repo-change { border: 0; background: none; padding: var(--s-1) var(--s-2); border-radius: var(--r-sm); color: var(--primary-text); font: inherit; font-size: var(--fs-xs); cursor: pointer; }
+.ui-repo-change { border: 0; background: none; padding: var(--s-1) var(--s-2); border-radius: var(--r-xs); color: var(--primary-text); font: inherit; font-size: var(--fs-xs); cursor: pointer; }
 .ui-repo-change:hover:not(:disabled), .ui-repo-change:focus-visible { background-color: var(--accent); outline: none; }
 .ui-repo-change:disabled { color: var(--subtle-foreground); cursor: not-allowed; }
 @media (max-width: 640px) { .ui-repo-item, .ui-repo-change, .ui-repo-chosen { min-height: 2.75rem; } }
@@ -1806,7 +1842,7 @@ code.font-mono { font-size: 0.92em; }
 .ui-todo-main { display: grid; gap: var(--s-1); min-width: 0; }
 .ui-todo-name { color: var(--foreground); font-size: var(--fs-md); font-weight: var(--fw-medium); text-decoration: none; }
 a.ui-todo-name:hover { text-decoration: underline; text-underline-offset: 4px; }
-a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--r-sm); }
+a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: var(--r-xs); }
 .ui-todo-detail { color: var(--muted-foreground); font-size: var(--fs-sm); }
 .ui-todo-act { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s-2); }
 .ui-todo-title { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
@@ -1853,7 +1889,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-field[type="file"] { height: auto; min-height: 0; padding: var(--s-1); color: var(--muted-foreground); font-size: var(--fs-sm); cursor: pointer; }
 .ui-field[type="file"]::file-selector-button {
 	height: calc(var(--ctl-h) - 2 * var(--s-1) - 2 * var(--bw)); margin: 0 var(--s-3) 0 0; padding-inline: var(--s-3);
-	border: var(--bw) solid var(--border); border-radius: var(--r-sm); background-color: var(--card); color: var(--foreground);
+	border: var(--bw) solid var(--border); border-radius: var(--r-xs); background-color: var(--card); color: var(--foreground);
 	font: inherit; font-weight: var(--fw-medium); cursor: pointer;
 	transition: background-color var(--dur-1) var(--ease);
 }
@@ -1932,7 +1968,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-cv-node { position: absolute; left: var(--x); top: var(--y); width: var(--cv-w); height: var(--cv-h); display: grid; grid-template-rows: 24px 17px 22px; align-content: space-between; padding: var(--s-3) var(--s-4); border: var(--bw) solid var(--border); border-radius: var(--r-lg); background-color: var(--card); color: var(--foreground); transition: border-color var(--dur-1) var(--ease), background-color var(--dur-1) var(--ease), opacity var(--dur-2) var(--ease), box-shadow var(--dur-2) var(--ease); }
 .ui-cv-head { display: flex; align-items: center; gap: var(--s-3); min-width: 0; }
 .ui-cv-ic { display: grid; place-items: center; flex: none; width: 24px; height: 24px; }
-.ui-cv-ic .ui-logo { width: 24px; height: 24px; border-radius: var(--r-md); font-size: 0.625rem; }
+.ui-cv-ic .ui-logo { width: 24px; height: 24px; border-radius: var(--r-sm); font-size: 0.625rem; }
 .ui-cv-open { flex: 1; min-width: 0; font-size: var(--fs-md); font-weight: var(--fw-medium); line-height: var(--lh-heading); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ui-cv-open::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
 .ui-cv-open:focus-visible { outline: none; }
@@ -2028,10 +2064,9 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-cv-change li { display: grid; grid-template-columns: 64px 1fr; align-items: baseline; gap: var(--s-3); padding: var(--s-3) var(--s-4); font-size: var(--fs-sm); }
 .ui-cv-change li + li { border-top: var(--bw) solid var(--border); }
 .ui-cv-change b { font-size: var(--fs-xs); font-weight: var(--fw-medium); color: var(--subtle-foreground); }
-.ui-cv-change code { padding: 0 var(--s-2); border-radius: var(--r-sm); background-color: var(--accent); font: var(--fw-regular) var(--fs-xs) / var(--lh-body) var(--font-mono); overflow-wrap: anywhere; }
+.ui-cv-change code { padding: 0 var(--s-2); border-radius: var(--r-xs); background-color: var(--accent); font: var(--fw-regular) var(--fs-xs) / var(--lh-body) var(--font-mono); overflow-wrap: anywhere; }
 .ui-cv-change small { display: block; font-size: var(--fs-xs); color: var(--subtle-foreground); }
 .ui-cv-note { margin: 0; font-size: var(--fs-xs); color: var(--subtle-foreground); }
-.ui-cv-refusal { margin: 0; font-size: var(--fs-sm); color: var(--destructive); }
 
 /* The list view: the screen-reader, keyboard and phone alternative to the canvas */
 .ui-cv-list { display: none; gap: var(--s-6); padding: var(--s-5); }
@@ -2045,11 +2080,6 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-cv-links code, .ui-cv-nets code { font: var(--fw-regular) var(--fs-xs) / var(--lh-body) var(--font-mono); }
 .ui-cv-nets { display: flex; flex-wrap: wrap; gap: var(--s-2); }
 .ui-cv-none { color: var(--subtle-foreground); }
-
-/* The empty canvas */
-.ui-cv-empty { display: grid; place-items: center; padding: var(--s-6) var(--s-5); }
-.ui-cv-empty .ui-empty { max-width: 460px; justify-items: center; text-align: center; }
-.ui-cv-empty .ui-empty-act { justify-content: center; }
 
 /* A phone shows the list: nobody pans a 1200 px map with a thumb */
 @media (max-width: 760px) {
@@ -2120,7 +2150,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-sidebar { overflow-x: hidden; }
 .ui-chrome-foot { flex-direction: column; align-items: stretch; gap: var(--s-2); }
 .ui-side-toggle {
-	display: flex; align-items: center; height: 34px; padding-inline: 12px; border: 0; border-radius: var(--r-md);
+	display: flex; align-items: center; height: 34px; padding-inline: 12px; border: 0; border-radius: var(--r-sm);
 	background: none; color: var(--muted-foreground); font: inherit; font-size: var(--fs-sm); text-align: start; cursor: pointer;
 	transition: background-color var(--dur-1) var(--ease), color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease);
 }
@@ -2165,7 +2195,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
    the figures); below 760 px it is not shown. */
 .ui-agent-card {
 	display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
-	border: var(--bw) solid var(--border); border-radius: 10px; background-color: color-mix(in oklab, var(--card) 70%, var(--sidebar));
+	border: var(--bw) solid var(--border); border-radius: var(--r-sm); background-color: color-mix(in oklab, var(--card) 70%, var(--sidebar));
 	color: var(--foreground); text-decoration: none;
 	transition: background-color var(--dur-1) var(--ease), transform var(--dur-1) var(--ease), padding var(--dur-3) var(--ease);
 }
@@ -2210,7 +2240,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
    page.js fills them from the plot's `data-points`; the card is anchored to the crosshair where
    anchor positioning exists (flipping at the plot's edge) and placed by page.js elsewhere. */
 .ui-chart-plot { touch-action: pan-y; }
-.ui-chart-plot:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: var(--r-sm); }
+.ui-chart-plot:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; border-radius: var(--r-xs); }
 .ui-chart-cross { position: absolute; inset-block: 0; width: 1px; margin-inline-start: -0.5px; background-color: var(--muted-foreground); opacity: 0.6; pointer-events: none; }
 .ui-chart-dot { position: absolute; background-color: var(--c); width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; border-radius: 50%; box-shadow: 0 0 0 2px var(--card); pointer-events: none; }
 .ui-chart-tip {
@@ -2245,7 +2275,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 }
 
 /* == infra design review (DR) ==
-   Fixes from the designer review of the infra batch (design/finalists/02-quiet-linear/REVIEW-infra.md).
+   Fixes from the designer review of the infra batch.
    One block, appended: nothing above it was reordered. */
 
 /* A page head lets its title take the row first and the actions follow, so a long lede wraps beside
@@ -2259,7 +2289,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 
 /* Canvas: the view switch is the boxed group of the D1 spec, not underline tabs. */
 .ui-cv-bar .ui-tabs { gap: 0; padding: 2px; border: var(--bw) solid var(--border); border-radius: var(--r-md); overflow: visible; }
-.ui-cv-bar .ui-tab { margin: 0; padding: var(--s-1) var(--s-3); border: 0; border-radius: var(--r-sm); }
+.ui-cv-bar .ui-tab { margin: 0; padding: var(--s-1) var(--s-3); border: 0; border-radius: var(--r-xs); }
 .ui-cv-bar .ui-tabs > input:checked + .ui-tab { background-color: var(--muted-strong); }
 .ui-cv-bar .ui-tabs > input:focus-visible + .ui-tab { outline-offset: 1px; }
 
@@ -2467,7 +2497,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-fw-always { display: grid; gap: var(--s-2); margin: 0; padding: 0; list-style: none; font-size: var(--fs-sm); }
 .ui-fw-always b { font-weight: var(--fw-medium); margin-inline-end: var(--s-2); }
 .ui-fw-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); align-items: end; gap: var(--s-4); }
-.ui-fw-diff { margin: 0; padding: var(--s-4); overflow: auto; max-block-size: 24rem; border: var(--bw) solid var(--border); border-radius: var(--radius); background: var(--muted); font-family: var(--font-mono); font-size: var(--fs-xs); line-height: 1.5; tab-size: 4; }
+.ui-fw-diff { margin: 0; padding: var(--s-4); overflow: auto; max-block-size: 24rem; border: var(--bw) solid var(--border); border-radius: var(--r-lg); background: var(--muted); font-family: var(--font-mono); font-size: var(--fs-xs); line-height: 1.5; tab-size: 4; }
 .ui-fw-line { display: block; white-space: pre; }
 .ui-fw-line.ui-fw-plus { background: var(--success-soft); }
 .ui-fw-line.ui-fw-minus { background: var(--destructive-soft); }
