@@ -12,6 +12,10 @@ agent_cap_kb=25600
 # allocator noise to matter, so its baseline has more room.
 server_anon_baseline_kb=4096
 agent_anon_baseline_kb=1280
+# The same after the load pass (sign-up, sign-in, every linked page, the API lists).
+# Measured: server 8.7 MB, of which the parsed template registry is 2.4 MB; agent 1.1 MB.
+server_used_anon_baseline_kb=9216
+agent_used_anon_baseline_kb=1280
 # Binary size, which follows code and dependencies. Fails over baseline + 10 %.
 # Measured: server 28960 KB, agent 7868 KB.
 server_bin_baseline_kb=29184
