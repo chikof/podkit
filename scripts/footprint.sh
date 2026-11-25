@@ -25,7 +25,8 @@
 # --idle SECS  how long to leave the stack alone before the second sample (default
 #              30 for --check, 600 for a full report: the "10 minutes of no traffic").
 # --bin DIR    where the binaries are (default: target/release). Build them with
-#              `cargo build --release -p server -p agent`.
+#              `scripts/build-ordered.sh`.
+# --no-load    stop at the idle sample (scripts/startup-order.sh profiles that part).
 # --out FILE   also write the numbers as KEY=VALUE lines.
 # Environment: PODKIT_PODMAN_SOCKET (a real Podman socket for the agent), PODKIT_FOOTPRINT_BUDGET (another budget file).
 set -euo pipefail
@@ -33,11 +34,13 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=${PODKIT_BIN_DIR:-$root/target/release}
 check=0
+load=1
 idle=""
 out=""
 while (($#)); do
 	case $1 in
 	--check) check=1 ;;
+	--no-load) load=0 ;;
 	--idle) idle=$2; shift ;;
 	--bin) bin=$2; shift ;;
 	--out) out=$2; shift ;;
@@ -170,6 +173,7 @@ if command -v psql >/dev/null 2>&1; then
 	pg_conns=$(psql "$DATABASE_URL" -Atc "select count(*) from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid()" 2>/dev/null || echo n/a)
 fi
 
+if ((load)); then
 echo "footprint: load…" >&2
 python3 - "http://127.0.0.1:$port" "$SETUP_TOKEN" >&2 <<'PY'
 import http.cookiejar, json, re, sys, urllib.error, urllib.request
@@ -222,6 +226,7 @@ assert len(seen) > 10, f"the crawl found only {sorted(seen)}"
 print(f"footprint: {len(seen)} pages and {len(lists) + 2} API lists")
 PY
 sleep 5
+fi
 declare -A load_rss load_anon
 for n in server agent; do
 	p=${!n}
@@ -280,6 +285,9 @@ for n in server agent; do
 	gate "$n" 'RSS after use' "${load_rss[$n]}" "${!cap}"
 	gate "$n" 'anonymous RSS after use' "${load_anon[$n]}" $((${!used} * 120 / 100))
 	gate "$n" 'binary' "${bin_kb[$n]}" $((${!size} * 110 / 100))
+	# Only the server has one: its start-up code is laid out by scripts/build-ordered.sh.
+	mapped=${n}_idle_file_baseline_kb
+	[[ -z ${!mapped:-} ]] || gate "$n" 'file-backed idle RSS' $((idle_rss[$n] - idle_anon[$n])) $((${!mapped} * 120 / 100))
 	# The libraries the binary itself asks for, as stems: "libc.so.6" is "libc".
 	extra=$(readelf -dW "$bin/${file[$n]}" | sed -n 's/.*Shared library: \[\(.*\)\.so.*\]/\1/p' | while read -r lib; do
 		for ok in $allowed_libs; do
