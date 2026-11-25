@@ -48,7 +48,7 @@ Notes on the numbers:
 ## Method
 
 ```
-cargo build --release -p server -p agent
+scripts/build-ordered.sh                                       # cargo build --release, linked twice
 DATABASE_URL=postgres://… scripts/footprint.sh --idle 600      # the full table above
 DATABASE_URL=postgres://… scripts/footprint.sh --check         # 30 s idle, exit 1 over budget
 ```
@@ -84,9 +84,12 @@ size, raise the baseline in the same commit and say why.
 
 Total idle RSS has only the cap. Most of it is the binary's own code, mapped, and how much of
 that is resident depends on where the linker puts each function, not on what the code does:
-the crate split below moved it by 6.6 MB with no new code. The other three checks do not
-move when code moves between crates. The size check allows a refactor of that kind (the
-split grew the server binary by 8 %); a new native library fails the allowlist whatever its size.
+the crate split below moved it by 6.6 MB with no new code. The size check allows a refactor
+of that kind (the split grew the server binary by 8 %); a new native library fails the
+allowlist whatever its size.
+
+The server has one more check, on the file-backed part of its idle RSS (baseline + 20 %,
+10.8 MB, measured 9.0 MB). It holds what "Start-up order" below won.
 
 ### After use
 
@@ -315,8 +318,46 @@ Tried and not kept:
 - **`lto = "thin"`**: the server idles at 19.5 MB, but its binary grows from 28.3 MB to
   32.8 MB and the agent goes from 9.0 MB to 9.9 MB idle, over its own budget.
 
-This is why total idle RSS no longer has a baseline (see "Budgets"). The pages are the
-binary's own code, clean and reclaimable, and the split is worth them.
+The pages are the binary's own code, clean and reclaimable, and the split is worth them.
+The next section gets them back another way.
+
+## Start-up order: 22.7 MB to 12.9 MB idle
+
+From start to idle the server runs 1.0 MB of its 15.5 MB of code: 3,800 functions, spread
+over the whole binary, 219 stretches of 64 KiB (`callgrind`). The kernel maps 64 KiB around
+each first touch, so 13.5 MB of code ends up resident. The crate split made this worse and
+did not cause it.
+
+`scripts/build-ordered.sh` links the release binaries with those functions first, in one
+block (lld's `--symbol-ordering-file`). Same machine, same script, two runs each:
+
+| server | `cargo build --release` | `scripts/build-ordered.sh` |
+|---|---|---|
+| idle RSS | 22.7 MB | **12.6-13.0 MB** |
+| RSS after use | 35.1 MB | 33.4-33.9 MB |
+| anonymous idle RSS | 3.9 MB | 3.9 MB |
+| binary | 28.3 MB | 28.3 MB |
+
+How it is put together:
+
+- `server/startup.order` lists the functions, one hash per line. The hash is of the
+  demangled name, so a dependency bump or a new compiler does not change it; a mangled name
+  has a per-crate hash in it and does. axum's per-route glue is also listed without its
+  type arguments, so a new route's glue is ordered without touching the list.
+- The build links twice (`server/build.rs` passes the flags when the script asks). The
+  first link writes lld's map, from which `scripts/startup_order.py` picks this build's
+  symbols for the listed hashes; the second places them first. It adds about 70 s to a
+  release build. A plain `cargo build` is not affected.
+- `scripts/startup-order.sh` makes the list again: an unstripped build, run under
+  `callgrind` through `scripts/footprint.sh --no-load`. About 4 minutes; it needs valgrind
+  and an empty database.
+
+The list goes stale when the start-up path changes: each start-up function that is not on
+it can keep 64 KiB resident. The file-backed check in "Budgets" fails when that adds up to
+2 MB; run `scripts/startup-order.sh` and commit the result.
+
+Not done: the container image. The `Dockerfile` still runs `cargo build`, and its musl
+target has not been tried with these linker flags.
 
 ## podkit versus Coolify and Dokploy
 
