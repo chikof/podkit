@@ -68,12 +68,14 @@ read after 20 s.
 
 ### Budgets
 
-`--check` fails on any of four things, per process, read from `scripts/footprint.budget`:
+`--check` fails on any of these, per process, read from `scripts/footprint.budget`:
 
 | check | limit | server | agent | what it catches |
 |---|---|---|---|---|
 | idle RSS | the cap, the promise | 60 MB | 25 MB | the number podkit advertises |
 | anonymous idle RSS (`RssAnon`: heap and stacks) | baseline + 20 % | 4.8 MB (measured 3.9 MB) | 1.5 MB (measured 1.1 MB) | a cache, a pool, a background loop |
+| RSS after use | the cap | 60 MB (measured 34.9 MB) | 25 MB (measured 9.2 MB) | what a server in use holds |
+| anonymous RSS after use | baseline + 20 % | 10.8 MB (measured 8.7 MB) | 1.5 MB (measured 1.1 MB) | a cache that fills and never empties |
 | binary size | baseline + 10 % | 31.3 MB (measured 28.3 MB) | 8.5 MB (measured 7.7 MB) | new code and dependencies |
 | shared libraries (`readelf -d`) | an allowlist | libc, libm, libgcc | the same | a second crypto or TLS stack |
 
@@ -85,6 +87,29 @@ that is resident depends on where the linker puts each function, not on what the
 the crate split below moved it by 6.6 MB with no new code. The other three checks do not
 move when code moves between crates. The size check allows a refactor of that kind (the
 split grew the server binary by 8 %); a new native library fails the allowlist whatever its size.
+
+### After use
+
+Idle is a server nobody has touched. After the idle sample the script signs up, signs in,
+creates a team and a project, opens every page the home page links to (98 pages) and ten API
+lists, waits 5 s and samples again. A page that answers 5xx fails the run.
+
+| server | idle | after use | peak |
+|---|---|---|---|
+| RSS | 23.0 MB | 34.9 MB | 86.5 MB |
+| anonymous | 3.8 MB | 8.7 MB | |
+
+The agent does not move (9.2 MB). Where the server's goes, from a `heaptrack` profile of
+the same run:
+
+- **Held after use, +4.9 MB.** 2.4 MB is the template registry: all 488 templates are parsed
+  on the first visit to the gallery and kept. The rest of the growth in RSS is code pages of
+  the handlers that ran.
+- **Peak, 86.5 MB.** A password hash: Argon2id with 64 MiB of memory
+  (`crates/crypto/src/argon2.rs`), 67 MB in the profile, freed when the hash is done. It is
+  over the 60 MB cap for as long as a sign-in takes, and up to one hash per CPU core runs at
+  a time, so the worst case is 64 MiB times the core count. The peak is reported and not
+  gated.
 
 ## What changed on this card (before / after)
 
