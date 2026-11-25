@@ -102,9 +102,10 @@ lists, waits 5 s and samples again. A page that answers 5xx fails the run.
 The agent does not move (9.2 MB). Where the server's goes, from a `heaptrack` profile of
 the same run:
 
-- **Held after use, +4.9 MB.** 2.4 MB is the template registry: all 488 templates are parsed
-  on the first visit to the gallery and kept. The rest of the growth in RSS is code pages of
-  the handlers that ran.
+- **Anonymous memory held after use, +4.9 MB.** 2.4 MB is the template registry: all 488
+  templates are parsed on the first visit to the gallery and kept. The other 2.5 MB is not
+  attributed to an owner.
+- **File-backed pages, +7.0 MB.** The code of the handlers that ran, mapped from the binary.
 - **Peak, 86.5 MB.** A password hash: Argon2id with 64 MiB of memory
   (`crates/crypto/src/argon2.rs`), 67 MB in the profile, freed when the hash is done. It is
   over the 60 MB cap for as long as a sign-in takes, and up to one hash per CPU core runs at
