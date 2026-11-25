@@ -100,7 +100,8 @@ impl Memory {
 	pub fn models(&mut self, at: i64, totals: &[(i64, i64, i64)], out: &mut ExtSamples) {
 		for &(id, requests, tokens) in totals {
 			if let Some(((req_before, tok_before), was)) = self.models.get(&id)
-				&& at > *was && at - was <= MAX_GAP
+				&& at > *was
+				&& at - was <= MAX_GAP
 				&& requests >= *req_before
 				&& tokens >= *tok_before
 			{

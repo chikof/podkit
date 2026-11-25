@@ -69,10 +69,10 @@ read after 20 s.
 ### Budgets
 
 `scripts/footprint.budget` holds, per process, a **cap** (server 60 MB, agent
-25 MB: the promise) and a **baseline** (the last measured idle RSS, rounded up:
-server 13 MB, agent 8 MB). `--check` fails when the idle RSS is over
-`min(cap, baseline + 20 %)`, which today is **15.9 MB** for the server and
-**9.6 MB** for the agent. So a 25 % regression fails CI long before it reaches the cap.
+25 MB: the promise) and a **baseline** (the last measured idle RSS, rounded up).
+`--check` fails when the idle RSS is over `min(cap, baseline + 20 %)`, which today is
+**24.3 MB** for the server and **9.6 MB** for the agent. So a 25 % regression fails CI long
+before it reaches the cap.
 If a change legitimately costs memory, raise the baseline in the same commit and say why.
 
 ## What changed on this card (before / after)
@@ -238,6 +238,49 @@ Looked at and left alone:
 `server_baseline_kb` is back to 13568: its limit is 15.9 MB, 3 % over the worst of three
 runs, so a return to 18.8 MB fails. The agent baseline stays 8192 (limit 9.6 MB, it passes
 at 9.1-9.4 MB); the B6 log collector is the cost of that margin being thin.
+
+## The crate split: +6.6 MB of mapped code
+
+Splitting `server` into `podkit-core`, `podkit-ui` and a thin binary (`c0bf36d`) moved code and
+changed none of it, and the server's idle RSS went from 16.0 MB to 22.6 MB. Same machine, same
+script (`--idle 20`, fresh database), Rust 1.100.0, one release build per commit:
+
+| commit | server idle RSS | server binary |
+|---|---|---|
+| `f035d7e` (before the split) | 16.0 MB | 25.7 MB |
+| `c0bf36d` (the split) | 22.6 MB | 27.7 MB |
+| `7ab0ac8` | 22.9 MB (23.0 MB on CI) | 28.3 MB |
+
+What it is not: `cargo tree -p server -e normal,features` is the same on both sides apart from
+the two new crates. It is the binary's own code, mapped: 6.9 MB of text resident before,
+13.5 MB after, which is the whole difference. Read from `/proc/<pid>/pagemap` against
+the symbols of an unstripped build:
+
+| | text | resident at idle |
+|---|---|---|
+| `server` crate, before | 6.9 MB | 2.2 MB (32 %) |
+| `podkit_core`, after | 4.8 MB | 3.8 MB (80 %) |
+| `podkit_ui`, after | 3.4 MB | 3.4 MB (100 %) |
+
+Why: every route has a few tiny functions of axum glue, and start-up runs them once per route
+when it builds the route table. `MakeErasedHandler::clone_box` is one of them, 27 bytes each.
+Before the split all 711 sat in one 64 KiB stretch of the binary. After it the 714 are spread
+over 134 such stretches across 10.9 MB, each next to its handler. The kernel maps 64 KiB
+around every first touch of a page (fault-around), so one 27-byte function brings in its
+handler's neighbours: `perf record -e page-faults` shows 105 faults in `clone_box` alone at
+start-up, none before. The pages are clean and file-backed, so the kernel can drop them under
+pressure; they still count as RSS.
+
+Tried and not kept:
+
+- **Building the API route table twice instead of cloning it for the MCP endpoint**
+  (`routes_with`): 23.3 MB, so the clone is not the only start-up pass that touches them.
+- **`lto = "thin"`**: the server idles at 19.5 MB, but its binary grows from 28.3 MB to
+  32.8 MB and the agent goes from 9.0 MB to 9.9 MB idle, over its own budget.
+
+`server_baseline_kb` is 20736 (limit 24.3 MB). Winning the 6.6 MB back means getting that
+glue into one place again, which is a matter of how the binary is laid out, not of what
+it does.
 
 ## podkit versus Coolify and Dokploy
 

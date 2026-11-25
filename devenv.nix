@@ -12,6 +12,10 @@
   dotenv.enable = true;
   languages.rust = {
     enable = true;
+    # The version .github/workflows/ci.yml and the Dockerfile build with: rustfmt and clippy
+    # change between releases, so another toolchain here passes the hooks and fails CI.
+    channel = "stable";
+    version = "1.100.0";
     components = [
       "rustc"
       "cargo"

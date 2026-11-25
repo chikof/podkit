@@ -1714,7 +1714,8 @@ async fn previews_provider_calls_read_pull_requests_and_who_may_write(db: PgPool
 		assert!(
 			providers::can_write(&r.st, provider, w.repo, "a/../b", Some(5))
 				.await
-				.is_err() || prov == Prov::Gitlab
+				.is_err()
+				|| prov == Prov::Gitlab
 		);
 		assert!(
 			providers::pull_request(&r.st, provider, "../x", 1)

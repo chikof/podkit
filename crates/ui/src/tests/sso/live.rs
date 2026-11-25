@@ -180,7 +180,8 @@ async fn oidc_live_dex_round_trip(db: PgPool) {
 		if let Ok(r) = http
 			.get(format!("{issuer}/.well-known/openid-configuration"))
 			.send()
-			.await && r.status().is_success()
+			.await
+			&& r.status().is_success()
 		{
 			up = true;
 			break;
