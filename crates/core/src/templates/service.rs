@@ -165,7 +165,7 @@ pub async fn deploy(
 				project,
 				environment,
 				&server,
-				loaded,
+				&loaded,
 				&name,
 				body,
 			)
@@ -178,7 +178,7 @@ pub async fn deploy(
 				project,
 				environment,
 				&server,
-				loaded,
+				&loaded,
 				&name,
 				body,
 			)

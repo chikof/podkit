@@ -1,13 +1,34 @@
 # Templates
 
-One-click services. A template is a folder under `crates/core/templates/<id>/` that
-`crates/core/build.rs` embeds in the binary, so nothing is fetched at run time.
+One-click services. podkit ships none of its own: they come from the
+[podkit-templates](https://github.com/podoes/podkit-templates) repository, whose
+[website](https://podoes.github.io/podkit-templates/) is the catalog.
+
+## The catalog
+
+The gallery is empty until the administrator of the instance (the first account) presses
+**Download the catalog**. podkit then downloads `index.json` and one archive of every
+template, checks the archive against the SHA-256 in the index, and unpacks it under
+`<data dir>/catalog`. From then on the gallery needs no network. **Refresh the catalog**
+does the same again; when it fails, the catalog already there stays.
+
+`POST /api/v1/templates/refresh` is the same action for a script. It answers
+`{commit, templates, skipped}`, where `skipped` lists templates this podkit could not load
+and why.
+
+`TEMPLATE_CATALOG_URL` names another place to fetch from (default
+`https://podoes.github.io/podkit-templates`). The request goes through the outbound policy,
+so a private address needs `OUTBOUND_PRIVATE`.
+
+## A template
+
+A template is a folder in the catalog:
 
 ```
 template.toml        id, name, description, category, tags, version, logo, links,
                      variables, [config] env / domains / mounts, requires, reveal, gateway
 docker-compose.yml   the subset of docs/stacks.md
-logo.svg | logo.png  SVG, or PNG of at most 64 KiB; or `logo = "@name"` for a file of crates/core/static/logos
+logo.svg | logo.png  SVG, or PNG of at most 64 KiB
 ```
 
 `template.toml` keeps the shape of Dokploy's blueprints (MIT) so they import

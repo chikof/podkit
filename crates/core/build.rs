@@ -52,17 +52,7 @@ fn embed_templates() {
 		)
 	};
 
-	let mut out = String::from("/// Files of each template, by id.\n");
-	out.push_str("/// A template's files: name and content.\npub type Files = &'static [(&'static str, &'static [u8])];\n");
-	out.push_str("pub static TEMPLATES: &[(&str, Files)] = &[\n");
-	for dir in files_in(TEMPLATES_DIR, true) {
-		let _ = writeln!(out, "\t({:?}, &[", file_name(&dir));
-		for file in files_in(&dir.to_string_lossy(), false) {
-			let _ = writeln!(out, "\t\t({:?}, {}),", file_name(&file), include(&file));
-		}
-		out.push_str("\t]),\n");
-	}
-	out.push_str("];\n\n/// Registry logos: file name and content.\n");
+	let mut out = String::from("/// Registry logos: file name and content.\n");
 	out.push_str("pub static LOGOS: &[(&str, &[u8])] = &[\n");
 	for file in files_in(LOGOS_DIR, false) {
 		let name = file_name(&file);

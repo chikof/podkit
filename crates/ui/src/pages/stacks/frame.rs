@@ -150,7 +150,7 @@ pub(super) async fn load(
 }
 
 /// The id of the template a stack came from (`template:<id>@<version>`), if any.
-fn template_of(stack: &Stack) -> Option<&'static templates::Loaded> {
+fn template_of(stack: &Stack) -> Option<std::sync::Arc<templates::Loaded>> {
 	stack
 		.source
 		.strip_prefix("template:")
@@ -160,7 +160,11 @@ fn template_of(stack: &Stack) -> Option<&'static templates::Loaded> {
 
 fn mark(stack: &Stack, size: LogoSize) -> Markup {
 	match template_of(stack) {
-		Some(l) => image_logo(&podkit_core::logos::template_url(l), size, Priority::Normal),
+		Some(l) => image_logo(
+			&podkit_core::logos::template_url(&l),
+			size,
+			Priority::Normal,
+		),
 		None => logo("docker", size),
 	}
 }

@@ -798,6 +798,41 @@ async fn the_list_can_be_searched_and_filtered_and_needs_a_login(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn only_the_instance_administrator_refreshes_the_catalog(db: PgPool) {
+	let s = Setup::new(db).await;
+	let (bob, _) = user_with_team(&s.app, "bob").await;
+	let (status, _) = call(
+		&s.app,
+		"POST",
+		"/api/v1/templates/refresh",
+		Some(&bob),
+		None,
+	)
+	.await;
+	assert_eq!(status, StatusCode::FORBIDDEN);
+	let (status, _) = call(&s.app, "POST", "/api/v1/templates/refresh", None, None).await;
+	assert!(status.is_client_error(), "{status}");
+}
+
+#[sqlx::test]
+async fn a_refresh_that_cannot_reach_the_catalog_keeps_the_one_there(db: PgPool) {
+	let s = Setup::new(db).await;
+	let before = load_all().templates.len();
+	// The test state points the catalog at a port nothing listens on.
+	let (status, body) = call(
+		&s.app,
+		"POST",
+		"/api/v1/templates/refresh",
+		Some(&s.token),
+		None,
+	)
+	.await;
+	assert_eq!(status, StatusCode::BAD_GATEWAY, "{body}");
+	assert_eq!(load_all().templates.len(), before);
+	assert!(!s.state.config.data_dir.join("catalog").exists());
+}
+
+#[sqlx::test]
 async fn the_detail_lists_variables_and_services_and_never_a_generated_value(db: PgPool) {
 	let s = Setup::new(db).await;
 	let (status, body) = s.get("/api/v1/templates/openclaw").await;
@@ -1157,7 +1192,8 @@ async fn a_multi_service_template_becomes_a_stack_with_domains_and_encrypted_var
 #[sqlx::test]
 async fn files_a_template_mounts_are_stored_encrypted_and_reach_the_translation(db: PgPool) {
 	let s = Setup::new(db).await;
-	let (id, l) = load_all()
+	let all = load_all();
+	let (id, l) = all
 		.templates
 		.iter()
 		.find(|(_, l)| {

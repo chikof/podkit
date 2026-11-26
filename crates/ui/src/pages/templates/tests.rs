@@ -129,11 +129,12 @@ impl Fixture {
 
 /// A template with the given trait, found in the catalog rather than named, so a catalog
 /// refresh does not break the test.
-fn find(pred: impl Fn(&templates::Loaded) -> bool) -> &'static templates::Loaded {
+fn find(pred: impl Fn(&templates::Loaded) -> bool) -> std::sync::Arc<templates::Loaded> {
 	templates::load_all()
 		.templates
 		.values()
 		.find(|l| pred(l))
+		.cloned()
 		.expect("a template with that trait")
 }
 

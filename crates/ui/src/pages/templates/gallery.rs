@@ -26,6 +26,7 @@ use crate::layout::{Crumb, app_page};
 use crate::sse::{self, js_string};
 use podkit_core::ids::{ProjectId, TeamId};
 use podkit_core::projects::{self, Project};
+use podkit_core::quotas::service::is_instance_admin;
 use podkit_core::state::AppState;
 use podkit_core::templates::{self, CATEGORIES, Loaded};
 
@@ -196,14 +197,14 @@ fn pager(place: Place, view: &View, page: usize, pages: usize) -> Markup {
 }
 
 /// The templates that match the search text, whatever their category.
-fn by_text(view: &View) -> Vec<&'static Loaded> {
+fn by_text(view: &View) -> Vec<std::sync::Arc<Loaded>> {
 	templates::search((!view.q.is_empty()).then_some(view.q.as_str()), None)
 }
 
-fn in_category(view: &View, by_text: &[&'static Loaded]) -> Vec<&'static Loaded> {
+fn in_category<'a>(view: &View, by_text: &'a [std::sync::Arc<Loaded>]) -> Vec<&'a Loaded> {
 	by_text
 		.iter()
-		.copied()
+		.map(|l| &**l)
 		.filter(|l| view.category.is_none_or(|c| l.template.category == c))
 		.collect()
 }
@@ -330,7 +331,64 @@ pub(super) struct Signals {
 	category: String,
 }
 
-fn render(ctx: &TeamCtx, place: Place, project: Option<&Project>, view: &View) -> Markup {
+/// The site the catalog is browsed on, for whoever cannot refresh it here.
+const CATALOG_SITE: &str = "https://podoes.github.io/podkit-templates/";
+
+/// Which catalog the gallery shows and, for the administrator, the button that fetches it again.
+fn catalog_line(ctx: &TeamCtx, admin: bool) -> Markup {
+	let registry = templates::load_all();
+	let refresh = format!(
+		"@post({})",
+		js_string(&format!("/teams/{}/templates/refresh", ctx.team.id))
+	);
+	html! {
+		p class="ui-lede" {
+			@if !registry.commit.is_empty() {
+				"Catalog " code { (registry.commit.chars().take(7).collect::<String>()) } ". "
+			}
+			@if admin {
+				button type="button" class=(button_class(Variant::Outline, Size::Sm))
+					"data-on:click"=(refresh) "data-indicator:refreshing" "data-attr:disabled"="$refreshing" {
+					"Refresh the catalog"
+				}
+			}
+		}
+	}
+}
+
+/// The gallery before the first refresh: podkit ships no templates of its own.
+fn no_catalog(ctx: &TeamCtx, admin: bool) -> Markup {
+	let refresh = format!(
+		"@post({})",
+		js_string(&format!("/teams/{}/templates/refresh", ctx.team.id))
+	);
+	let action = html! {
+		@if admin {
+			button type="button" class=(button_class(Variant::Default, Size::Md))
+				"data-on:click"=(refresh) "data-indicator:refreshing" "data-attr:disabled"="$refreshing" {
+				"Download the catalog"
+			}
+		}
+		a class=(button_class(Variant::Outline, Size::Md)) href=(CATALOG_SITE) rel="noopener" target="_blank" {
+			"Browse the catalog online"
+		}
+	};
+	let lede = if admin {
+		"podkit downloads its templates once and then works without a connection. This needs internet access."
+	} else {
+		"The administrator of this podkit has not downloaded the template catalog yet."
+	};
+	empty_state("boxes", "No templates yet", Some(lede), Some(&action))
+}
+
+fn render(
+	ctx: &TeamCtx,
+	place: Place,
+	project: Option<&Project>,
+	view: &View,
+	admin: bool,
+) -> Markup {
+	let empty = templates::load_all().templates.is_empty();
 	let signals = json!({ "q": view.q, "category": view.category.unwrap_or_default() });
 	let body = html! {
 		div class="ui-tpl-page" data-signals=(signals.to_string()) {
@@ -338,14 +396,21 @@ fn render(ctx: &TeamCtx, place: Place, project: Option<&Project>, view: &View) -
 				div class="ui-page-title" {
 					p class="ui-eyebrow" { "One-click apps" }
 					h1 { "Templates" }
-					(count_line(view))
+					@if !empty {
+						(count_line(view))
+						(catalog_line(ctx, admin))
+					}
 					@if let Some(p) = project {
 						p class="ui-lede" { "Ready-made services to deploy into " strong { (p.name) } "." }
 					}
 				}
 			}
-			(search_form(place, view))
-			(browser(place, view))
+			@if empty {
+				(no_catalog(ctx, admin))
+			} @else {
+				(search_form(place, view))
+				(browser(place, view))
+			}
 		}
 	};
 	app_page(ctx, "Templates", &crumbs(ctx, project), &body)
@@ -358,17 +423,47 @@ fn results_patch(place: Place, view: &View) -> Response {
 	)
 }
 
+/// Whether the viewer may refresh the catalog, which belongs to the whole instance.
+async fn is_admin(s: &AppState, ctx: &TeamCtx) -> bool {
+	is_instance_admin(&s.db, ctx.user.id).await.unwrap_or(false)
+}
+
+/// `POST /teams/{t}/templates/refresh`: fetch the catalog again, then show it.
+pub(super) async fn refresh(
+	State(s): State<AppState>,
+	ctx: TeamCtx,
+	Path(_): Path<TeamId>,
+) -> Response {
+	let events = if is_admin(&s, &ctx).await {
+		match templates::catalog::refresh(&s).await {
+			Ok(_) => sse::reload(),
+			Err(e) => sse::error(&e.to_string()),
+		}
+	} else {
+		sse::error("Only the administrator of this podkit can refresh the catalog.")
+	};
+	axum::response::IntoResponse::into_response(events)
+}
+
 pub(super) async fn page(
+	State(s): State<AppState>,
 	ctx: TeamCtx,
 	Path(_): Path<TeamId>,
 	Query(q): Query<PageQuery>,
 ) -> Markup {
+	let admin = is_admin(&s, &ctx).await;
 	let place = Place {
 		team: ctx.team.id,
 		project: None,
 		environment: q.environment,
 	};
-	render(&ctx, place, None, &View::new(&q.q, &q.category, q.page))
+	render(
+		&ctx,
+		place,
+		None,
+		&View::new(&q.q, &q.category, q.page),
+		admin,
+	)
 }
 
 pub(super) async fn results(
@@ -404,6 +499,7 @@ pub(super) async fn project_page(
 		place,
 		Some(&project),
 		&View::new(&q.q, &q.category, q.page),
+		is_admin(&s, &ctx).await,
 	))
 }
 

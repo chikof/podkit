@@ -545,7 +545,7 @@ async fn stack_cards(db: &PgPool, environment: EnvironmentId) -> AppResult<Vec<R
 			.strip_prefix("template:")
 			.and_then(|rest| rest.split('@').next())
 			.and_then(crate::templates::find)
-			.map(crate::logos::template_url);
+			.map(|l| crate::logos::template_url(&l));
 		cards.push(ResourceCard {
 			kind: ResourceKind::Stack,
 			id: st.id.0,
