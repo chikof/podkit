@@ -203,6 +203,8 @@ pub async fn deploy_import(
 	compose: &str,
 	body: DeployInput,
 ) -> AppResult<Deployed> {
+	// Before the files are read at all: reading them is work, and not for everybody.
+	authorize(&s.db, user, team, Action::Create, Resource::Stack).await?;
 	let loaded = imported(template_toml, compose)?;
 	let source = import_source(&loaded, template_toml);
 	deploy_loaded(
@@ -247,16 +249,23 @@ fn differs(deployed_from: &str, catalog: &str) -> bool {
 	!deployed_from.is_empty() && !catalog.is_empty() && deployed_from != catalog
 }
 
-/// The catalog's template when it has changed since the application or stack `id` was
-/// deployed from it. The deployed copy is its owner's: this only tells them.
+/// A catalog template that an application or a stack was deployed from.
+pub struct Origin {
+	/// The template, as the catalog has it now.
+	pub template: std::sync::Arc<Loaded>,
+	/// Whether the catalog's has changed since the deploy. The deployed copy is its
+	/// owner's: this only tells them.
+	pub newer: bool,
+}
+
+/// The catalog template the application or stack `id` was deployed from, if any.
+///
+/// This, and not a stack's `source`, says a thing is the catalog's: `source` is text that
+/// a project file can set to anything, while only a catalog deploy writes this record.
 ///
 /// # Errors
 /// Database failures only.
-pub async fn newer(
-	db: &sqlx::PgPool,
-	kind: Kind,
-	id: i64,
-) -> Result<Option<std::sync::Arc<Loaded>>, sqlx::Error> {
+pub async fn origin(db: &sqlx::PgPool, kind: Kind, id: i64) -> Result<Option<Origin>, sqlx::Error> {
 	let row: Option<(String, String)> = sqlx::query_as(match kind {
 		Kind::Application => {
 			"SELECT template_id, revision FROM template_deploys WHERE application_id = $1"
@@ -267,7 +276,9 @@ pub async fn newer(
 	.fetch_optional(db)
 	.await?;
 	Ok(row.and_then(|(template, revision)| {
-		super::find(&template).filter(|l| differs(&revision, &l.revision))
+		let template = super::find(&template)?;
+		let newer = differs(&revision, &template.revision);
+		Some(Origin { template, newer })
 	}))
 }
 
@@ -347,8 +358,12 @@ async fn deploy_loaded(
 		}
 	})
 	.await?;
-	if source.starts_with("template:") {
-		record(&s.db, &deployed, loaded).await?;
+	// The record only feeds the "newer version" notice: the deploy is made, and failing
+	// to note it must not report the deploy as failed.
+	if source.starts_with("template:")
+		&& let Err(e) = record(&s.db, &deployed, loaded).await
+	{
+		tracing::warn!(error = %e, "could not record which template a deploy came from");
 	}
 	audit::log(
 		&s.db,

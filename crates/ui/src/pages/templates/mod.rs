@@ -8,7 +8,7 @@
 //! project and environment are already chosen).
 
 use axum::Router;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use maud::html;
@@ -26,13 +26,47 @@ mod gallery;
 #[cfg(test)]
 mod tests;
 
+#[derive(Default, serde::Deserialize)]
+struct MarketQuery {
+	/// Set on the second visit, the one made from this origin.
+	#[serde(default, deserialize_with = "one")]
+	here: bool,
+}
+
+fn one<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
+	Ok(<String as serde::Deserialize>::deserialize(d)? == "1")
+}
+
 /// `GET /market/{id}`: where the "Deploy to my podkit" button of the catalog's website
 /// lands. It only finds the template's page here, in the viewer's first team; that page is
 /// the confirmation, and deploying from it is a `POST` the viewer makes.
 ///
 /// The address comes from another site, so nothing in it is trusted: the id is looked up in
 /// this podkit's own catalog and the link is built from the catalog's copy of it.
-async fn market(State(s): State<AppState>, user: UiUser, Path(id): Path<String>) -> Response {
+///
+/// The session cookie is `SameSite=Strict`, so a browser does not send it on the visit that
+/// starts at the website. A visit with no session is therefore answered once with a page
+/// that asks for the same address again, from here: that second visit carries the cookie.
+async fn market(
+	State(s): State<AppState>,
+	user: Result<UiUser, Response>,
+	Path(id): Path<String>,
+	Query(q): Query<MarketQuery>,
+) -> Response {
+	let user = match user {
+		Ok(user) => user,
+		// Only an address made of an id is written into the page.
+		Err(_) if !q.here && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-') => {
+			return html! {
+				(maud::DOCTYPE)
+				meta http-equiv="refresh" content={ "0;url=/market/" (id) "?here=1" };
+				title { "podkit" }
+				a href={ "/market/" (id) "?here=1" } { "Continue to podkit" }
+			}
+			.into_response();
+		}
+		Err(to_login) => return to_login,
+	};
 	let teams = match podkit_core::teams::list_for_user(&s.db, user.id).await {
 		Ok(teams) => teams,
 		Err(e) => return error::bare(Some(&user), &e.into()),
@@ -68,9 +102,9 @@ pub fn newer_banner(team: TeamId, t: &podkit_core::templates::Loaded) -> maud::M
 	};
 	banner(
 		BannerKind::Info,
-		Some("The catalog has a newer version of this template."),
+		Some("The catalog's template has changed since this was deployed."),
 		&format!(
-			"{} is now at {}. This is your own copy: nothing changes unless you deploy the template again.",
+			"{} in the catalog is at {}. This is your own copy: nothing changes unless you deploy the template again.",
 			t.template.name, t.template.version
 		),
 		Some(&link),

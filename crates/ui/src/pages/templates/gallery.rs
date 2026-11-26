@@ -358,6 +358,9 @@ fn catalog_line(ctx: &TeamCtx, admin: bool) -> Markup {
 			@if !registry.commit.is_empty() {
 				"Catalog " code { (registry.commit.chars().take(7).collect::<String>()) } ". "
 			}
+			@if !registry.errors.is_empty() {
+				(registry.errors.len()) " of its templates cannot be read by this podkit and are left out: it may need an update. "
+			}
 			@if admin {
 				button type="button" class=(button_class(Variant::Outline, Size::Sm))
 					"data-on:click"=(refresh) "data-indicator:refreshing" "data-attr:disabled"="$refreshing" {

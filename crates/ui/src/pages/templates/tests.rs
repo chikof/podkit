@@ -184,9 +184,19 @@ async fn the_market_link_only_leads_to_a_template_of_this_catalog_and_deploys_no
 	assert_contains(&body, "This podkit does not have that template");
 	assert_not_contains(&body, "no-such");
 
-	// Without a session it is the sign-in page's business.
-	let (status, _, _) = get_html(&f.app, "/market/gotify", None).await;
+	// A visit that starts on another site comes without the cookie: it is asked to come
+	// again from here, once, and only then sent to sign in.
+	let (status, _, body) = get_html(&f.app, "/market/gotify", None).await;
+	assert_eq!(status, StatusCode::OK);
+	assert_contains(&body, "0;url=/market/gotify?here=1");
+	let (status, headers, _) = get_html(&f.app, "/market/gotify?here=1", None).await;
 	assert!(status.is_redirection(), "{status}");
+	assert!(headers["location"].to_str().unwrap().starts_with("/login"));
+	let (status, _, _) = get_html(&f.app, "/market/a%22%3E%3Cb", None).await;
+	assert!(
+		status.is_redirection(),
+		"an id that is not one goes to sign-in: {status}"
+	);
 }
 
 #[db_test(migrator = "podkit_core::db::MIGRATOR")]

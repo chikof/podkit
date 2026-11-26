@@ -25,6 +25,8 @@ const MAX_INDEX_BYTES: usize = 8 << 20;
 const MAX_ARCHIVE_BYTES: usize = 64 << 20;
 /// What the archive may unpack to: a small archive can claim to hold far more.
 const MAX_UNPACKED_BYTES: u64 = 256 << 20;
+/// Files in an archive: three a template, with room for ten times today's catalog.
+const MAX_ENTRIES: usize = 20_000;
 const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 
 #[derive(Deserialize)]
@@ -47,6 +49,8 @@ impl Index {
 		let revisions = self
 			.templates
 			.into_iter()
+			// `template_deploys.revision` holds 32 characters; a longer one is no revision.
+			.filter(|e| e.revision.len() <= 32)
 			.map(|e| (e.id, e.revision))
 			.collect();
 		registry::read(dir, self.commit, &revisions)
@@ -77,6 +81,7 @@ fn dir(data_dir: &Path) -> PathBuf {
 /// Reads the catalog a previous refresh left in `data_dir`, if any. Called once at start.
 pub fn open(data_dir: &Path) {
 	let dir = dir(data_dir);
+	recover(&dir);
 	if let Some(index) = index_of(&dir) {
 		registry::install(index.read(&dir));
 	}
@@ -113,6 +118,14 @@ pub fn check_cli() -> Option<i32> {
 	))
 }
 
+/// A refresh that died between its two renames left the catalog under its old name.
+fn recover(live: &Path) {
+	let previous = live.with_extension("old");
+	if !live.exists() && previous.exists() {
+		let _ = std::fs::rename(&previous, live);
+	}
+}
+
 fn index_of(dir: &Path) -> Option<Index> {
 	serde_json::from_slice(&std::fs::read(dir.join("index.json")).ok()?).ok()
 }
@@ -145,7 +158,13 @@ async fn fetch(s: &AppState, url: &str, max: usize) -> Result<Vec<u8>, ServerErr
 fn unpack(archive: &[u8], into: &Path) -> std::io::Result<()> {
 	let bad = |why: String| std::io::Error::new(std::io::ErrorKind::InvalidData, why);
 	let mut unpacked = 0u64;
-	for entry in tar::Archive::new(GzDecoder::new(archive)).entries()? {
+	// The reader is cut off too: `tar` reads a long-name or extension record whole into
+	// memory before this loop sees an entry.
+	let bounded = std::io::Read::take(GzDecoder::new(archive), MAX_UNPACKED_BYTES);
+	for (count, entry) in tar::Archive::new(bounded).entries()?.enumerate() {
+		if count >= MAX_ENTRIES {
+			return Err(bad(format!("more than {MAX_ENTRIES} files")));
+		}
 		let mut entry = entry?;
 		unpacked = unpacked.saturating_add(entry.size());
 		if unpacked > MAX_UNPACKED_BYTES {
@@ -163,13 +182,72 @@ fn unpack(archive: &[u8], into: &Path) -> std::io::Result<()> {
 	Ok(())
 }
 
+/// Unpacks a checked archive beside the catalog, reads it, and only then puts it in the
+/// catalog's place. Nothing is replaced by a catalog this podkit cannot read.
+fn replace(
+	live: &Path,
+	archive: &[u8],
+	index_bytes: &[u8],
+	index: Index,
+) -> std::io::Result<registry::Registry> {
+	let next = live.with_extension("new");
+	let previous = live.with_extension("old");
+	for stale in [&next, &previous] {
+		if stale.exists() {
+			std::fs::remove_dir_all(stale)?;
+		}
+	}
+	let unpacked = (|| {
+		std::fs::create_dir_all(&next)?;
+		unpack(archive, &next)?;
+		std::fs::write(next.join("index.json"), index_bytes)?;
+		let registry = index.read(&next);
+		if registry.templates.is_empty() {
+			let why = registry.errors.first().map_or_else(
+				|| "it holds no template".to_owned(),
+				|(id, why)| format!("this podkit can read none of its templates ({id}: {why})"),
+			);
+			return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, why));
+		}
+		Ok(registry)
+	})();
+	let registry = match unpacked {
+		Ok(registry) => registry,
+		Err(e) => {
+			// A refused catalog leaves nothing behind.
+			let _ = std::fs::remove_dir_all(&next);
+			return Err(e);
+		}
+	};
+	if live.exists() {
+		std::fs::rename(live, &previous)?;
+	}
+	if let Err(e) = std::fs::rename(&next, live) {
+		let _ = std::fs::rename(&previous, live);
+		return Err(e);
+	}
+	// The new catalog is in place: failing to delete the old one must not undo that.
+	let _ = std::fs::remove_dir_all(&previous);
+	Ok(registry)
+}
+
 /// Downloads the catalog from `Config::template_catalog_url` and makes it the gallery.
-/// The old one stays in place when anything fails.
+/// The old one stays in place when anything fails, and when this podkit can read none of
+/// the new one's templates.
 ///
 /// # Errors
-/// `Import` when the catalog cannot be fetched, is for a newer podkit, or does not match
-/// its hash; I/O errors from the data directory.
+/// `Import` when the catalog cannot be fetched, is for a newer podkit, does not match its
+/// hash or cannot be read; I/O errors from the data directory.
 pub async fn refresh(s: &AppState) -> Result<Refreshed, ServerError> {
+	// A caller that goes away (a closed tab) must not stop this half-way: disk and memory
+	// would disagree, and the next refresh would start under this one's renames.
+	let s = s.clone();
+	tokio::spawn(async move { refresh_now(&s).await })
+		.await
+		.map_err(|e| failed("could not be replaced", e))?
+}
+
+async fn refresh_now(s: &AppState) -> Result<Refreshed, ServerError> {
 	// Two refreshes at once would move the same folders under each other.
 	static RUNNING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 	let _one_at_a_time = RUNNING.lock().await;
@@ -212,28 +290,11 @@ pub async fn refresh(s: &AppState) -> Result<Refreshed, ServerError> {
 	}
 
 	let live = dir(&s.config.data_dir);
-	let registry = tokio::task::spawn_blocking(move || -> std::io::Result<registry::Registry> {
-		let next = live.with_extension("new");
-		let previous = live.with_extension("old");
-		for stale in [&next, &previous] {
-			if stale.exists() {
-				std::fs::remove_dir_all(stale)?;
-			}
-		}
-		std::fs::create_dir_all(&next)?;
-		unpack(&archive, &next)?;
-		std::fs::write(next.join("index.json"), &index_bytes)?;
-		if live.exists() {
-			std::fs::rename(&live, &previous)?;
-		}
-		std::fs::rename(&next, &live)?;
-		if previous.exists() {
-			std::fs::remove_dir_all(&previous)?;
-		}
-		Ok(index.read(&live))
-	})
-	.await
-	.map_err(|e| failed("could not be unpacked", e))??;
+	let registry =
+		tokio::task::spawn_blocking(move || replace(&live, &archive, &index_bytes, index))
+			.await
+			.map_err(|e| failed("could not be unpacked", e))?
+			.map_err(|e| failed("was not accepted", e))?;
 
 	let refreshed = Refreshed {
 		commit: registry.commit.clone(),
@@ -242,4 +303,157 @@ pub async fn refresh(s: &AppState) -> Result<Refreshed, ServerError> {
 	};
 	registry::install(registry);
 	Ok(refreshed)
+}
+
+#[cfg(test)]
+mod tests {
+	use std::io::Write as _;
+
+	use super::*;
+
+	/// A catalog archive of `files` (path, content), as the template repository builds it.
+	fn archive(files: &[(&str, &[u8])]) -> Vec<u8> {
+		let mut tar = tar::Builder::new(Vec::new());
+		for (path, content) in files {
+			let mut header = tar::Header::new_gnu();
+			header.set_size(content.len() as u64);
+			header.set_mode(0o644);
+			header.set_cksum();
+			// `append_data` refuses `..`; a hostile archive is not made with it.
+			header.as_mut_bytes()[..path.len()].copy_from_slice(path.as_bytes());
+			header.set_cksum();
+			tar.append(&header, *content).unwrap();
+		}
+		let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+		gz.write_all(&tar.into_inner().unwrap()).unwrap();
+		gz.finish().unwrap()
+	}
+
+	fn fixture(id: &str, file: &str) -> Vec<u8> {
+		let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("templates");
+		std::fs::read(dir.join(id).join(file)).unwrap()
+	}
+
+	fn index(revision: &str) -> (Vec<u8>, Index) {
+		let bytes = serde_json::json!({
+			"format": FORMAT,
+			"commit": "abc1234",
+			"archive": { "name": "catalog.tar.gz", "sha256": "" },
+			"templates": [{ "id": "gotify", "revision": revision }],
+		})
+		.to_string()
+		.into_bytes();
+		let index = serde_json::from_slice(&bytes).unwrap();
+		(bytes, index)
+	}
+
+	fn gotify() -> Vec<u8> {
+		let toml = fixture("gotify", "template.toml");
+		let compose = fixture("gotify", "docker-compose.yml");
+		let logo = fixture("gotify", "logo.svg");
+		archive(&[
+			("templates/gotify/template.toml", &toml),
+			("templates/gotify/docker-compose.yml", &compose),
+			("templates/gotify/logo.svg", &logo),
+		])
+	}
+
+	#[test]
+	fn a_catalog_replaces_the_one_there_and_is_read_back_with_its_revisions() {
+		let tmp = tempfile::tempdir().unwrap();
+		let live = tmp.path().join("catalog");
+		std::fs::create_dir_all(live.join("templates/old")).unwrap();
+
+		let (bytes, parsed) = index("0123456789abcdef");
+		let registry = replace(&live, &gotify(), &bytes, parsed).unwrap();
+		assert_eq!(registry.commit, "abc1234");
+		assert_eq!(registry.templates["gotify"].revision, "0123456789abcdef");
+		assert!(!live.join("templates/old").exists());
+		assert!(!live.with_extension("old").exists());
+		assert!(!live.with_extension("new").exists());
+
+		// What a restart reads is the same catalog.
+		let again = index_of(&live).unwrap().read(&live);
+		assert_eq!(again.templates["gotify"].revision, "0123456789abcdef");
+		assert!(again.errors.is_empty());
+	}
+
+	#[test]
+	fn a_catalog_this_podkit_cannot_read_leaves_the_one_there() {
+		let tmp = tempfile::tempdir().unwrap();
+		let live = tmp.path().join("catalog");
+		std::fs::create_dir_all(live.join("templates/kept")).unwrap();
+
+		let unreadable = archive(&[
+			(
+				"templates/x/template.toml",
+				b"id = \"x\"\nfrom_the_future = true\n",
+			),
+			("templates/x/docker-compose.yml", b"services: {}\n"),
+		]);
+		let (bytes, parsed) = index("");
+		let refused = replace(&live, &unreadable, &bytes, parsed).err().unwrap();
+		assert!(refused.to_string().contains("can read none"), "{refused}");
+		assert!(live.join("templates/kept").exists());
+		assert!(!live.with_extension("new").exists());
+	}
+
+	#[test]
+	fn an_archive_may_only_hold_plain_files_under_templates() {
+		let tmp = tempfile::tempdir().unwrap();
+		let live = tmp.path().join("catalog");
+		for path in [
+			"templates/../../escaped",
+			"elsewhere/file",
+			"/etc/passwd-like",
+		] {
+			let (bytes, parsed) = index("");
+			let hostile = archive(&[(path, b"x")]);
+			assert!(replace(&live, &hostile, &bytes, parsed).is_err(), "{path}");
+			assert!(!live.with_extension("new").exists(), "{path} left a folder");
+		}
+		assert!(!tmp.path().join("escaped").exists());
+		assert!(!live.exists());
+	}
+
+	#[test]
+	fn an_archive_that_claims_more_than_it_may_hold_is_cut_off() {
+		let tmp = tempfile::tempdir().unwrap();
+		let live = tmp.path().join("catalog");
+		// A long-name record is read whole into memory by `tar`: this one says 1 GiB.
+		let mut header = tar::Header::new_gnu();
+		header.set_entry_type(tar::EntryType::GNULongName);
+		header.set_size(1 << 30);
+		header.as_mut_bytes()[..13].copy_from_slice(b"././@LongLink");
+		header.set_cksum();
+		let mut raw = header.as_bytes().to_vec();
+		raw.resize(raw.len() + (1 << 30), 0);
+		let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+		gz.write_all(&raw).unwrap();
+		let (bytes, parsed) = index("");
+		assert!(replace(&live, &gz.finish().unwrap(), &bytes, parsed).is_err());
+	}
+
+	#[test]
+	fn a_revision_too_long_to_record_counts_as_none() {
+		let tmp = tempfile::tempdir().unwrap();
+		let live = tmp.path().join("catalog");
+		let (bytes, parsed) = index(&"f".repeat(64));
+		let registry = replace(&live, &gotify(), &bytes, parsed).unwrap();
+		assert_eq!(registry.templates["gotify"].revision, "");
+	}
+
+	#[test]
+	fn a_refresh_that_died_between_its_renames_is_put_back_at_start() {
+		let tmp = tempfile::tempdir().unwrap();
+		let live = tmp.path().join("catalog");
+		std::fs::create_dir_all(live.with_extension("old").join("templates")).unwrap();
+		recover(&live);
+		assert!(live.join("templates").exists());
+
+		// A catalog that is there is never overwritten by a leftover.
+		std::fs::create_dir_all(live.with_extension("old").join("stale")).unwrap();
+		recover(&live);
+		assert!(!live.join("stale").exists());
+	}
 }

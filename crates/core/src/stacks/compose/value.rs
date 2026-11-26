@@ -26,6 +26,31 @@ pub fn interpolate(
 	if !input.contains('$') {
 		return Ok(input.to_string());
 	}
+	// A default inside a default is a call inside a call: a thousand of them run the
+	// thread out of stack, which ends the process and not the request.
+	let (mut depth, mut deepest) = (0usize, 0usize);
+	for pair in input.as_bytes().windows(2) {
+		if pair == b"${" {
+			depth += 1;
+			deepest = deepest.max(depth);
+		} else if pair[0] == b'}' {
+			depth = depth.saturating_sub(1);
+		}
+	}
+	if deepest > MAX_NESTING {
+		return Err(format!("\"${{\" is nested more than {MAX_NESTING} deep"));
+	}
+	expand_all(input, env, missing)
+}
+
+/// How deep `${A:-${B:-...}}` may go.
+const MAX_NESTING: usize = 16;
+
+fn expand_all(
+	input: &str,
+	env: &BTreeMap<String, String>,
+	missing: &mut BTreeSet<String>,
+) -> Result<String, String> {
 	let bytes = input.as_bytes();
 	let mut out = String::with_capacity(input.len());
 	let mut i = 0;
@@ -132,14 +157,14 @@ fn expand(
 			if non_empty {
 				Ok(value.cloned().unwrap_or_default())
 			} else {
-				interpolate(rest(2), env, missing)
+				expand_all(rest(2), env, missing)
 			}
 		}
 		_ if op.starts_with('-') => {
 			if set {
 				Ok(value.cloned().unwrap_or_default())
 			} else {
-				interpolate(rest(1), env, missing)
+				expand_all(rest(1), env, missing)
 			}
 		}
 		_ if op.starts_with(":?") || op.starts_with('?') => {
@@ -148,7 +173,7 @@ fn expand(
 			if ok {
 				return Ok(value.cloned().unwrap_or_default());
 			}
-			let message = interpolate(rest(if colon { 2 } else { 1 }), env, missing)?;
+			let message = expand_all(rest(if colon { 2 } else { 1 }), env, missing)?;
 			Err(if message.is_empty() {
 				format!("required variable {name} is missing a value")
 			} else {
@@ -157,14 +182,14 @@ fn expand(
 		}
 		_ if op.starts_with(":+") => {
 			if non_empty {
-				interpolate(rest(2), env, missing)
+				expand_all(rest(2), env, missing)
 			} else {
 				Ok(String::new())
 			}
 		}
 		_ if op.starts_with('+') => {
 			if set {
-				interpolate(rest(1), env, missing)
+				expand_all(rest(1), env, missing)
 			} else {
 				Ok(String::new())
 			}

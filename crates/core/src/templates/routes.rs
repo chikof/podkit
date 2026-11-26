@@ -172,14 +172,37 @@ struct Detail {
 	warnings: Vec<String>,
 }
 
-fn is_secret_expr(text: &str, template: &Template) -> bool {
-	expr::scan(text).unwrap_or_default().iter().any(|e| match e {
-		expr::Expr::Helper(h) => h.is_secret(),
-		expr::Expr::Name(n) => matches!(template.variables.get(n), Some(Variable::Expr(t)) if t != text && is_secret_expr(t, template)),
-	})
+/// The generated variables whose value is a secret: made by a secret helper, or from a
+/// variable that is. Worked out once for the template, each variable scanned once: asking
+/// per variable walked a chain of n variables n times over.
+fn secret_variables(template: &Template) -> std::collections::HashSet<&str> {
+	let mut secret = std::collections::HashSet::new();
+	let mut used_by: std::collections::HashMap<&str, Vec<&str>> = std::collections::HashMap::new();
+	let mut found = Vec::new();
+	for (name, v) in &template.variables {
+		let Variable::Expr(text) = v else { continue };
+		for e in expr::scan(text).unwrap_or_default() {
+			match e {
+				expr::Expr::Helper(h) if h.is_secret() => found.push(name.as_str()),
+				expr::Expr::Helper(_) => {}
+				expr::Expr::Name(n) => {
+					if let Some((of, Variable::Expr(_))) = template.variables.get_key_value(&n) {
+						used_by.entry(of.as_str()).or_default().push(name);
+					}
+				}
+			}
+		}
+	}
+	while let Some(name) = found.pop() {
+		if secret.insert(name) {
+			found.extend(used_by.get(name).into_iter().flatten());
+		}
+	}
+	secret
 }
 
 pub fn variables(t: &Template) -> Vec<VariableInfo> {
+	let secret = secret_variables(t);
 	t.variables
 		.iter()
 		.map(|(name, v)| match v {
@@ -203,14 +226,14 @@ pub fn variables(t: &Template) -> Vec<VariableInfo> {
 				secret: false,
 				revealed: false,
 			},
-			Variable::Expr(text) => VariableInfo {
+			Variable::Expr(_) => VariableInfo {
 				name: name.clone(),
 				kind: "generated",
 				label: None,
 				description: None,
 				default: None,
 				required: false,
-				secret: is_secret_expr(text, t),
+				secret: secret.contains(name.as_str()),
 				revealed: t.reveal.contains(name),
 			},
 		})
@@ -273,11 +296,20 @@ struct ImportPreview {
 /// command that shows it to the person before they confirm.
 async fn import_preview(
 	State(s): State<AppState>,
-	_user: AuthUser,
+	user: AuthUser,
 	Path((team, project)): Path<(TeamId, ProjectId)>,
 	Json(files): Json<ImportFiles>,
 ) -> AppResult<Json<ImportPreview>> {
 	crate::scope::project(&s.db, team, project).await?;
+	// Reading somebody's files is work done for them: only for who may deploy the result.
+	crate::auth::permission::authorize(
+		&s.db,
+		user.id,
+		team,
+		crate::auth::permission::Action::Create,
+		crate::auth::permission::Resource::Stack,
+	)
+	.await?;
 	let loaded = service::imported(&files.template, &files.compose)?;
 	Ok(Json(ImportPreview {
 		official: false,
@@ -307,6 +339,12 @@ async fn import(
 		return Err(ServerError::Validation(
 			"an imported template cannot be linked to a model".to_string(),
 		));
+	}
+	// It starts containers, as `…/{id}/deploy` does: a token needs the same scope.
+	if let Some(grant) = &user.grant
+		&& !grant.allows(crate::auth::tokens::Scope::Deploy)
+	{
+		return Err(ServerError::MissingScope("deploy"));
 	}
 	let deployed = service::deploy_import(
 		&s,

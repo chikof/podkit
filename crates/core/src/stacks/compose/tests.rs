@@ -108,6 +108,19 @@ fn required_variables_and_malformed_expressions_are_errors() {
 	assert!(expand("${DB_PASSWORD:?}", &[("DB_PASSWORD", "")]).is_err());
 	assert!(expand("${DB_PASSWORD?}", &[("DB_PASSWORD", "")]).is_ok());
 	assert!(expand("${unterminated", &[]).is_err());
+	// Defaults nest, to a point: past it the answer is an error and not the end of the stack.
+	let nested = |n: usize| format!("{}z{}", "${U:-".repeat(n), "}".repeat(n));
+	assert_eq!(expand(&nested(16), &[]).unwrap().0, "z");
+	assert!(expand(&nested(17), &[]).unwrap_err().contains("nested"));
+	assert!(expand(&nested(50_000), &[]).is_err());
+	for op in [":-", "-", ":+", "+", ":?", "?"] {
+		let deep = format!(
+			"{}z{}",
+			format!("${{U{op}").repeat(50_000),
+			"}".repeat(50_000)
+		);
+		assert!(expand(&deep, &[("U", "1")]).is_err(), "{op}");
+	}
 	assert!(expand("${1BAD}", &[]).is_err());
 	assert!(expand("${A%x}", &[("A", "1")]).is_err());
 
