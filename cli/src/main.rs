@@ -97,6 +97,25 @@ async fn run(command: Command) -> Result<(), Fail> {
 			follow,
 			tail,
 		} => commands::logs(&ctx(&place)?, &place, &app, follow, tail).await?,
+		Command::Templates { query, json } => {
+			commands::templates(&ctx(&args::Place::default())?, query.as_deref(), json).await?;
+		}
+		Command::TemplateDeploy {
+			template,
+			place,
+			server,
+			name,
+			set,
+			json,
+		} => {
+			let deploy = commands::TemplateDeploy {
+				template: &template,
+				server: server.as_deref(),
+				name: name.as_deref(),
+				set: &set,
+			};
+			commands::template_deploy(&ctx(&place)?, &place, &deploy, json).await?;
+		}
 		Command::EnvPull {
 			app,
 			place,
