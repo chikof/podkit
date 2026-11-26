@@ -16,6 +16,7 @@ slug = "shop-web"
 repo = "git@github.com:acme/shop.git"
 port = 3000
 deploy_key = "ci"
+domains = ["shop.example.com"]
 
 [projects.shop.environments.production.apps.web.env]
 DATABASE_URL = "${secret:production/web/DATABASE_URL}"
@@ -92,13 +93,21 @@ fn a_preset_asks_for_every_server_key_registry_and_secret_it_names() {
 fn saving_a_project_as_a_preset_takes_the_team_s_names_out_and_no_more() {
 	let saved = strip(shop());
 	let text = render(&saved).unwrap();
-	for name in ["fra-1", "fra-2", "\"ci\"", "\"acme\""] {
+	for name in [
+		"fra-1",
+		"fra-2",
+		"\"ci\"",
+		"\"acme\"",
+		"shop.example.com",
+		"\"shop-web\"",
+	] {
 		assert!(!text.contains(name), "{name} is still in:\n{text}");
 	}
 	// What the project is stays: the repository, the image, the placeholders.
 	assert!(text.contains("git@github.com:acme/shop.git"));
 	assert!(text.contains("registry.acme.dev/shop/worker:3"));
 	assert!(text.contains("${secret:production/web/DATABASE_URL}"));
+	assert!(text.contains("slug = \"${project}-web\""), "{text}");
 
 	let needs = needs(&saved).unwrap();
 	assert_eq!(needs.servers.len(), 5);
@@ -132,13 +141,15 @@ fn answers() -> Bindings {
 #[test]
 fn binding_writes_each_choice_where_it_belongs_and_makes_up_what_it_was_asked_to() {
 	let mut made = 0;
-	let (doc, secrets) = bind(strip(shop()), &answers(), || {
+	let (doc, secrets) = bind(strip(shop()), &answers(), "my-shop", || {
 		made += 1;
 		format!("made-{made}")
 	})
 	.unwrap();
 	let env = &doc.projects["shop"].environments["production"];
 	assert_eq!(env.apps["web"].server, "node-a");
+	assert_eq!(env.apps["web"].slug, "my-shop-web");
+	assert_eq!(env.apps["worker"].slug, "my-shop-worker");
 	assert_eq!(env.apps["web"].deploy_key.as_deref(), Some("deploy"));
 	assert_eq!(env.apps["worker"].server, "node-b");
 	assert_eq!(env.apps["worker"].registry.as_deref(), Some("ghcr"));
@@ -170,7 +181,7 @@ fn binding_names_everything_left_unanswered_at_once_and_changes_nothing() {
 	some.deploy_keys.clear();
 	some.secrets
 		.insert("production/web/DATABASE_URL".to_owned(), String::new());
-	let missing = bind(strip(shop()), &some, String::new).unwrap_err();
+	let missing = bind(strip(shop()), &some, "x", String::new).unwrap_err();
 	assert_eq!(
 		missing,
 		[

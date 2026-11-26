@@ -453,6 +453,11 @@ A preset is a project file with one project, made to be applied by a team other 
 one it came from. Where an exported file names a server, an SSH key or a registry, a preset
 says `"${choose}"`; where podkit should make up a secret, it says `"${generate:NAME}"`.
 
+An application's `slug` and every hostname are unique across the install, so a project saved
+as a preset keeps neither: the slug becomes `"${project}-<name>"`, which is filled in with the
+slug of the project the preset is applied to, and `domains` are left out for whoever applies
+it to add.
+
 ```sh
 P=https://podkit.example.com/api/v1/teams/7/presets
 
@@ -486,6 +491,23 @@ curl -s -H "Authorization: Bearer $PK_TOKEN" -H 'Content-Type: application/json'
   stack with a registry, the secrets to type in, and the ones podkit generates.
 - `target` is `{"new": {…}}` for a project made for the preset, or `{"project": <id>}` to add
   its objects to a project that exists. Adding removes nothing and does not rename the project.
+
+A team keeps presets under the same address:
+
+| | |
+|---|---|
+| `GET /presets` | the team's presets, without their files |
+| `POST /presets` with `{name, slug?, description?, preset}` | keep a preset handed in as a file; it is marked `imported` |
+| `GET /presets/from-project/{project}` | what saving that project as a preset would keep, to read first |
+| `POST /presets/from-project/{project}` with `{name, slug?, description?}` | save it; it is marked `saved` |
+| `GET /presets/{id}`, `DELETE /presets/{id}` | one preset with its file; remove it (projects made from it stay) |
+
+Reading needs `read project`, keeping `create project`, removing `delete project`.
 - An apply with an answer missing is refused with every missing answer named. The answers are
   then checked by the plan, as for any project file: a server the team does not have is an
   issue, and an apply with issues changes nothing (422).
+- A preset also checks, before anything is made, that each application slug is free on the
+  server chosen for it: a slug that is taken is an issue too.
+- When a change fails part-way the answer is 409 with the project's id. What ran before the
+  failure stays: creating a database already asks its server to provision it, so nothing is
+  taken back.

@@ -22,6 +22,11 @@ use crate::iac::objects::Secrets;
 /// What a server, key or registry reads as in a preset until somebody chooses one.
 pub const TO_CHOOSE: &str = "${choose}";
 
+/// The slug of the project a preset is applied to, inside an application's slug. An
+/// application's slug is unique on its server across the whole install, so a saved preset
+/// does not carry the one it had: `${project}-web` is `my-blog-web` in the project `my-blog`.
+pub const PROJECT: &str = "${project}";
+
 const SECRET: &str = "${secret:";
 const GENERATE: &str = "${generate:";
 
@@ -229,6 +234,17 @@ pub fn needs(doc: &Doc) -> Result<Needs, String> {
 #[must_use]
 pub fn strip(mut doc: Doc) -> Doc {
 	for project in doc.projects.values_mut() {
+		for env in project.environments.values_mut() {
+			// Both are unique across the install: a slug is made from the new project's, and a
+			// hostname is for whoever applies the preset to give.
+			for (name, app) in &mut env.apps {
+				app.slug = format!("{PROJECT}-{name}");
+				app.domains.clear();
+			}
+			for stack in env.stacks.values_mut() {
+				stack.domains.clear();
+			}
+		}
 		for Named { field, .. } in named(project) {
 			match field {
 				Field::Server(server) => TO_CHOOSE.clone_into(server),
@@ -242,7 +258,8 @@ pub fn strip(mut doc: Doc) -> Doc {
 	doc
 }
 
-/// Writes the person's answers into `doc`, and makes up the secrets it asks podkit for.
+/// Writes the person's answers into `doc`, names its applications after the project
+/// `project_slug` it goes to, and makes up the secrets it asks podkit for.
 ///
 /// The result is an ordinary project file and its secrets: the plan then says whether a
 /// chosen server, key or registry exists, as for any file.
@@ -252,6 +269,7 @@ pub fn strip(mut doc: Doc) -> Doc {
 pub fn bind(
 	mut doc: Doc,
 	answers: &Bindings,
+	project_slug: &str,
 	mut generate: impl FnMut() -> String,
 ) -> Result<(Doc, Secrets), Vec<String>> {
 	let needs = needs(&doc).map_err(|e| vec![e])?;
@@ -267,6 +285,12 @@ pub fn bind(
 		match answers.get(&at).map(|a| a.trim()).filter(|a| !a.is_empty()) {
 			Some(chosen) => chosen.clone_into(name),
 			None => missing.push(format!("{at} needs {what}")),
+		}
+	}
+
+	for env in project.environments.values_mut() {
+		for app in env.apps.values_mut() {
+			app.slug = app.slug.replace(PROJECT, project_slug);
 		}
 	}
 
@@ -292,6 +316,7 @@ pub fn bind(
 
 mod routes;
 pub mod service;
+pub mod store;
 
 pub use routes::router;
 

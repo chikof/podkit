@@ -48,6 +48,7 @@ id!(
 	StackServiceId,
 	NetworkId,
 	SshKeyId,
+	PresetId,
 	RegistryId,
 	ApiTokenId,
 	AuditEventId,

@@ -177,6 +177,32 @@ async fn a_preset_becomes_a_new_project_with_the_answers_in_place(db: PgPool) {
 		.await
 		.unwrap();
 	assert_eq!(variables, 2);
+
+	// The file as written fixes its application's slug, which is unique on a server: a
+	// second project from it on the same server is refused before anything is made.
+	let (status, body) = w
+		.post(
+			"apply",
+			json!({
+				"preset": BLOG,
+				"answers": w.answers(),
+				"target": { "new": { "slug": "other-blog" } },
+			}),
+		)
+		.await;
+	assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+	let issues = body["plan"]["issues"].to_string();
+	assert!(
+		issues.contains("blog-web") && issues.contains("already runs"),
+		"{issues}"
+	);
+	assert_eq!(count(&w.db, "applications").await, 1);
+	assert_eq!(count(&w.db, "databases").await, 1);
+	assert_eq!(
+		count(&w.db, "projects").await,
+		1,
+		"no empty project is left: {status} {body}"
+	);
 }
 
 #[db_test]
@@ -238,4 +264,164 @@ async fn a_preset_naming_a_server_the_team_does_not_have_is_refused_by_the_plan(
 		"{body}"
 	);
 	assert_eq!(count(&w.db, "projects").await, 0);
+}
+
+#[db_test]
+async fn a_project_is_saved_as_a_preset_without_the_team_s_names_and_applies_elsewhere(db: PgPool) {
+	let w = World::new(db).await;
+	let (_, done) = w
+		.post(
+			"apply",
+			json!({ "preset": BLOG, "answers": w.answers(), "target": { "new": {} } }),
+		)
+		.await;
+	let project = done["done"]["project_id"].as_i64().unwrap();
+	let presets = format!("/api/v1/teams/{}/presets", w.team);
+
+	// What would be kept is shown first, and keeps nothing.
+	let (status, shown) = call(
+		&w.app,
+		"GET",
+		&format!("{presets}/from-project/{project}"),
+		Some(&w.token),
+		None,
+	)
+	.await;
+	assert_eq!(status, StatusCode::OK, "{shown}");
+	let file = shown["preset"].as_str().unwrap();
+	assert!(!file.contains(&format!("\"{}\"", w.server)), "{file}");
+	assert!(file.contains("${choose}"));
+	assert!(file.contains("slug = \"${project}-web\""), "{file}");
+	assert!(!file.contains("hunter2"));
+	assert_eq!(count(&w.db, "presets").await, 0);
+
+	let (status, kept) = call(
+		&w.app,
+		"POST",
+		&format!("{presets}/from-project/{project}"),
+		Some(&w.token),
+		Some(json!({ "name": "Blog starter", "description": "Ghost and a database" })),
+	)
+	.await;
+	assert_eq!(status, StatusCode::CREATED, "{kept}");
+	assert_eq!(kept["origin"], "saved");
+	assert_eq!(kept["slug"], "blog");
+
+	// The list has it without its file; one preset has the file, which is the one shown.
+	let (_, list) = call(&w.app, "GET", &presets, Some(&w.token), None).await;
+	assert_eq!(list.as_array().map(Vec::len), Some(1), "{list}");
+	assert_eq!(list[0]["name"], "Blog starter");
+	assert!(list[0].get("file").is_none(), "{list}");
+	let (_, one) = call(
+		&w.app,
+		"GET",
+		&format!("{presets}/{}", kept["id"]),
+		Some(&w.token),
+		None,
+	)
+	.await;
+	assert_eq!(one["file"], file);
+
+	// The kept file asks for its servers again, and applies as a second project.
+	let (_, asked) = w.post("needs", json!({ "preset": file })).await;
+	assert_eq!(asked["needs"]["servers"].as_array().unwrap().len(), 2);
+	assert!(asked["needs"]["servers"][0]["suggested"].is_null());
+	let mut secrets = serde_json::Map::new();
+	for name in asked["needs"]["secrets"].as_array().unwrap() {
+		secrets.insert(name.as_str().unwrap().to_owned(), json!("typed"));
+	}
+	let (status, again) = w
+		.post(
+			"apply",
+			json!({
+				"preset": file,
+				"answers": { "servers": w.answers()["servers"], "secrets": secrets },
+				"target": { "new": { "slug": "blog-two", "name": "Blog two" } },
+			}),
+		)
+		.await;
+	assert_eq!(status, StatusCode::OK, "{again}");
+	assert_eq!(count(&w.db, "projects").await, 2);
+	assert_eq!(count(&w.db, "applications").await, 2);
+
+	// A second of the same slug is refused; removing one leaves the projects alone.
+	let (status, _) = call(
+		&w.app,
+		"POST",
+		&format!("{presets}/from-project/{project}"),
+		Some(&w.token),
+		Some(json!({ "name": "Again" })),
+	)
+	.await;
+	assert_eq!(status, StatusCode::CONFLICT);
+	let (status, _) = call(
+		&w.app,
+		"DELETE",
+		&format!("{presets}/{}", kept["id"]),
+		Some(&w.token),
+		None,
+	)
+	.await;
+	assert_eq!(status, StatusCode::NO_CONTENT);
+	assert_eq!(count(&w.db, "presets").await, 0);
+	assert_eq!(count(&w.db, "projects").await, 2);
+}
+
+#[db_test]
+async fn a_preset_handed_in_as_a_file_is_kept_as_imported_and_only_for_its_team(db: PgPool) {
+	let w = World::new(db).await;
+	let presets = format!("/api/v1/teams/{}/presets", w.team);
+	let (status, kept) = call(
+		&w.app,
+		"POST",
+		&presets,
+		Some(&w.token),
+		Some(json!({ "name": "From a friend", "preset": BLOG })),
+	)
+	.await;
+	assert_eq!(status, StatusCode::CREATED, "{kept}");
+	assert_eq!(kept["origin"], "imported");
+
+	for (what, body) in [
+		(
+			"not a project file",
+			json!({ "name": "X", "preset": "nonsense = [" }),
+		),
+		(
+			"no project in it",
+			json!({ "name": "X", "preset": "version = 1\n" }),
+		),
+		("no name", json!({ "name": " ", "preset": BLOG })),
+		(
+			"a slug that is not one",
+			json!({ "name": "X", "slug": "Not A Slug", "preset": BLOG }),
+		),
+	] {
+		let (status, answer) = call(&w.app, "POST", &presets, Some(&w.token), Some(body)).await;
+		assert_eq!(status, StatusCode::BAD_REQUEST, "{what}: {answer}");
+	}
+
+	// Another team sees and reaches none of it.
+	let (bob, bobs) = user_with_team(&w.app, "bob").await;
+	let (_, list) = call(
+		&w.app,
+		"GET",
+		&format!("/api/v1/teams/{bobs}/presets"),
+		Some(&bob),
+		None,
+	)
+	.await;
+	assert_eq!(list, json!([]));
+	for (method, path) in [
+		("GET", format!("{presets}/{}", kept["id"])),
+		("DELETE", format!("{presets}/{}", kept["id"])),
+		(
+			"GET",
+			format!("/api/v1/teams/{bobs}/presets/{}", kept["id"]),
+		),
+	] {
+		let (status, _) = call(&w.app, method, &path, Some(&bob), None).await;
+		assert!(status.is_client_error(), "{method} {path}: {status}");
+	}
+	assert_eq!(count(&w.db, "presets").await, 1);
 }
