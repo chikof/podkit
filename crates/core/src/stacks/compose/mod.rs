@@ -25,6 +25,9 @@ pub use value::interpolate;
 pub const MAX_BYTES: usize = 256 * 1024;
 /// Most services in one stack.
 pub const MAX_SERVICES: usize = 64;
+/// What the values of one file may come to once their variables are filled in. A file is at
+/// most 256 KiB as written; one variable used in thousands of places made it gigabytes.
+pub const MAX_EXPANDED: usize = 1 << 20;
 
 /// Something in the file podkit will not run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -161,6 +164,8 @@ pub(crate) struct Ctx<'a> {
 	pub(crate) issues: Vec<Issue>,
 	pub(crate) warnings: Vec<Warning>,
 	pub(crate) missing: BTreeSet<String>,
+	/// Bytes of every value that had a variable filled in, so far.
+	pub(crate) expanded: usize,
 	/// Text of top-level `configs.*` and `secrets.*`, by that path.
 	pub(crate) resources: BTreeMap<String, String>,
 }
@@ -197,8 +202,25 @@ impl Ctx<'_> {
 /// is recorded as an issue at its path.
 fn interpolate_tree(ctx: &mut Ctx<'_>, value: &mut Value, path: &str, service: Option<&str>) {
 	match value {
+		// Past the limit nothing more is filled in: the file is refused, and what is left of
+		// it must not be built up first.
+		Value::String(_) if ctx.expanded > MAX_EXPANDED => {}
+		Value::String(s) if !s.contains('$') => {}
 		Value::String(s) => match interpolate(s, ctx.inputs.env, &mut ctx.missing) {
-			Ok(expanded) => *s = expanded,
+			Ok(expanded) => {
+				ctx.expanded += expanded.len();
+				if ctx.expanded > MAX_EXPANDED {
+					ctx.issue(
+						service,
+						path,
+						format!(
+							"the file comes to more than {} KiB once its variables are filled in",
+							MAX_EXPANDED / 1024
+						),
+					);
+				}
+				*s = expanded;
+			}
 			Err(message) => ctx.issue(service, path, message),
 		},
 		Value::Array(items) => {
@@ -278,6 +300,7 @@ pub fn parse(yaml: &str, inputs: &Inputs<'_>) -> Result<Compose, Vec<Issue>> {
 		issues: Vec::new(),
 		warnings: Vec::new(),
 		missing: BTreeSet::new(),
+		expanded: 0,
 		resources: BTreeMap::new(),
 	};
 	let Some(top) = root.as_object_mut() else {

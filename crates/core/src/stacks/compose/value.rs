@@ -43,6 +43,9 @@ pub fn interpolate(
 	expand_all(input, env, missing)
 }
 
+/// How long one value may get as its variables are filled in.
+pub const MAX_VALUE: usize = 1 << 20;
+
 /// How deep `${A:-${B:-...}}` may go.
 const MAX_NESTING: usize = 16;
 
@@ -71,6 +74,10 @@ fn expand_all(
 					.ok_or_else(|| format!("unterminated \"${{\" in {input:?}"))?;
 				out.push_str(&expand(&input[i + 2..close], env, missing)?);
 				i = close + 1;
+				// A value named a thousand times is a thousand copies of it.
+				if out.len() > MAX_VALUE {
+					return Err(format!("a value comes to more than {MAX_VALUE} bytes"));
+				}
 			}
 			Some(&c) if is_name_start(c) => {
 				let end = name_end(bytes, i + 1);

@@ -653,3 +653,42 @@ fn names_that_would_collide_or_break_are_refused() {
 	let issues = refused("services:\n  '-bad':\n    image: x\n");
 	assert_eq!(paths(&issues), ["services.-bad"]);
 }
+
+#[test]
+fn a_variable_used_in_thousands_of_places_does_not_make_the_file_gigabytes() {
+	use std::fmt::Write as _;
+	let big = "y".repeat(60_000);
+	let env = env(&[("BIG", &big)]);
+	let files = BTreeMap::new();
+	let inputs = Inputs {
+		env: &env,
+		files: &files,
+	};
+	let with = |lines: usize| {
+		let mut yaml = "services:\n  x:\n    image: nginx\n    environment:\n".to_owned();
+		for n in 0..lines {
+			let _ = writeln!(yaml, "      - V{n}=${{BIG}}");
+		}
+		yaml
+	};
+	// Seventeen copies are 1 MiB less a little; eighteen are over.
+	assert!(parse(&with(17), &inputs).is_ok());
+	let issues = parse(&with(6400), &inputs).expect_err("6400 copies of 60 KB");
+	assert_eq!(issues.len(), 1, "said once: {issues:#?}");
+	assert!(
+		issues[0]
+			.message
+			.contains("once its variables are filled in")
+	);
+
+	// And one value that names it thousands of times.
+	let one = format!(
+		"services:\n  x:\n    image: nginx\n    command: \"{}\"\n",
+		"${BIG}".repeat(5000)
+	);
+	let issues = parse(&one, &inputs).expect_err("5000 copies in one value");
+	assert!(
+		issues[0].message.contains("a value comes to more than"),
+		"{issues:#?}"
+	);
+}
