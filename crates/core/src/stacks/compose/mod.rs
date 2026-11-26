@@ -28,6 +28,8 @@ pub const MAX_SERVICES: usize = 64;
 /// What the values of one file may come to once their variables are filled in. A file is at
 /// most 256 KiB as written; one variable used in thousands of places made it gigabytes.
 pub const MAX_EXPANDED: usize = 1 << 20;
+/// What the files mounted into the services of one stack may come to, each mount counted.
+pub const MAX_MOUNTED: usize = 4 << 20;
 
 /// Something in the file podkit will not run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -166,6 +168,8 @@ pub(crate) struct Ctx<'a> {
 	pub(crate) missing: BTreeSet<String>,
 	/// Bytes of every value that had a variable filled in, so far.
 	pub(crate) expanded: usize,
+	/// Bytes of file content mounted into services, so far.
+	pub(crate) mounted: usize,
 	/// Text of top-level `configs.*` and `secrets.*`, by that path.
 	pub(crate) resources: BTreeMap<String, String>,
 }
@@ -301,6 +305,7 @@ pub fn parse(yaml: &str, inputs: &Inputs<'_>) -> Result<Compose, Vec<Issue>> {
 		warnings: Vec::new(),
 		missing: BTreeSet::new(),
 		expanded: 0,
+		mounted: 0,
 		resources: BTreeMap::new(),
 	};
 	let Some(top) = root.as_object_mut() else {

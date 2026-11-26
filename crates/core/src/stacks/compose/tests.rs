@@ -692,3 +692,44 @@ fn a_variable_used_in_thousands_of_places_does_not_make_the_file_gigabytes() {
 		"{issues:#?}"
 	);
 }
+
+#[test]
+fn a_file_mounted_thousands_of_times_is_refused_and_not_copied_each_time() {
+	let content = "z".repeat(150_000);
+	let with = |mounts: usize| {
+		format!(
+			"configs:\n  c:\n    content: \"{content}\"\nservices:\n  x:\n    image: nginx\n    configs:\n{}",
+			"      - c\n".repeat(mounts)
+		)
+	};
+	// Twenty-seven mounts of 150 KB are under 4 MiB; twenty-eight are over.
+	assert_eq!(ok(&with(27), &[]).services["x"].mounts.len(), 27);
+	let issues = refused(&with(3000));
+	assert_eq!(issues.len(), 1, "said once: {issues:#?}");
+	assert!(
+		issues[0]
+			.message
+			.contains("files mounted into the services")
+	);
+
+	// The same for a file of the stack bound into a service, and for a folder of them.
+	let env = BTreeMap::new();
+	let files: BTreeMap<String, String> = [("conf/a.txt".to_owned(), content.clone())].into();
+	let inputs = Inputs {
+		env: &env,
+		files: &files,
+	};
+	for bind in ["./conf/a.txt:/a.txt", "./conf:/conf"] {
+		let yaml = format!(
+			"services:\n  x:\n    image: nginx\n    volumes:\n{}",
+			format!("      - {bind}\n").repeat(3000)
+		);
+		let issues = parse(&yaml, &inputs).expect_err(bind);
+		assert!(
+			issues
+				.iter()
+				.any(|i| i.message.contains("files mounted into the services")),
+			"{bind}: {issues:#?}"
+		);
+	}
+}
