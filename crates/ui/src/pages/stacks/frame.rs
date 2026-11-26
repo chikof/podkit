@@ -8,8 +8,8 @@ use serde_json::json;
 
 use super::{project_url, stack_url};
 use crate::components::{
-	BUTTON, BUTTON_OUTLINE, BannerKind, LogoSize, MENU_ITEM_DANGER, Priority, Size, TabItem,
-	Variant, banner, button_class, dropdown_menu, icon, image_logo, logo, menu_link,
+	BUTTON, BUTTON_OUTLINE, BannerKind, LogoSize, MENU_ITEM_DANGER, Priority, Size, TabItem, Tone,
+	Variant, badge, banner, button_class, dropdown_menu, icon, image_logo, logo, menu_link,
 	menu_separator, tabs,
 };
 use crate::error;
@@ -173,6 +173,9 @@ fn source_line(stack: &Stack) -> Markup {
 	html! {
 		@if let Some(l) = template_of(stack) {
 			"From the " (l.template.name) " template"
+		} @else if stack.source.starts_with("import:") {
+			// Somebody handed the files in: it is not the catalog's, whatever its id says.
+			"From an imported template file " (badge(Tone::Warning, "Unofficial"))
 		} @else {
 			"Compose file"
 		}

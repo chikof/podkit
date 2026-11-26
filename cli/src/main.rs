@@ -101,6 +101,8 @@ async fn run(command: Command) -> Result<(), Fail> {
 			commands::templates(&ctx(&args::Place::default())?, query.as_deref(), json).await?;
 		}
 		Command::TemplateDeploy {
+			import,
+			yes,
 			template,
 			place,
 			server,
@@ -109,6 +111,8 @@ async fn run(command: Command) -> Result<(), Fail> {
 			json,
 		} => {
 			let deploy = commands::TemplateDeploy {
+				import,
+				yes,
 				template: &template,
 				server: server.as_deref(),
 				name: name.as_deref(),
