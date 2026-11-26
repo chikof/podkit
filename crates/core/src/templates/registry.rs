@@ -315,6 +315,27 @@ pub struct Registry {
 	pub templates: BTreeMap<String, Arc<Loaded>>,
 	/// Folders that did not, with why.
 	pub errors: Vec<(String, String)>,
+	/// The catalog's presets that this podkit can read.
+	pub presets: Vec<CatalogPreset>,
+}
+
+/// A preset of the catalog: a project file any team can apply ([`crate::presets`]), with
+/// what the catalog says about it.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct CatalogPreset {
+	pub id: String,
+	pub name: String,
+	pub description: String,
+	#[serde(default)]
+	pub tags: Vec<String>,
+	#[serde(default)]
+	pub maintainers: Vec<String>,
+	/// For each secret the person types in, what it is for.
+	#[serde(default)]
+	pub secrets: BTreeMap<String, String>,
+	/// The project file. Left out of lists.
+	#[serde(default, skip_serializing_if = "String::is_empty")]
+	pub file: String,
 }
 
 static CURRENT: RwLock<Option<Arc<Registry>>> = RwLock::new(None);

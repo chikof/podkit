@@ -122,9 +122,9 @@ told anything.
 
 ## Checking a catalog
 
-`server check-templates <dir>` loads every template under `<dir>/templates` the way a
-refresh does, prints the ones that do not load with the reason, and exits 1 when there are
-any. Run it on a checkout of podkit-templates before a change there is published.
+`server check-templates <dir>` loads every template under `<dir>/templates` and every preset
+under `<dir>/presets` the way a refresh does, prints the ones that do not load with the
+reason, and exits 1 when there are any. Run it on a checkout of podkit-templates before a change there is published.
 
 A few templates stay in `crates/core/templates` for podkit's own tests. They are not in the
 binary.

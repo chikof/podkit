@@ -19,6 +19,8 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
 	Router::new()
 		.route("/", get(list).post(import))
+		.route("/catalog", get(catalog))
+		.route("/catalog/{id}", get(catalog_preset))
 		.route("/{preset_id}", get(one).delete(remove))
 		.route(
 			"/from-project/{project_id}",
@@ -153,4 +155,19 @@ async fn remove(
 ) -> AppResult<StatusCode> {
 	service::remove(&s, user.id, team, id).await?;
 	Ok(StatusCode::NO_CONTENT)
+}
+
+/// The catalog's presets, without their files.
+async fn catalog(
+	_user: AuthUser,
+	Path(_): Path<TeamId>,
+) -> Json<Vec<crate::templates::CatalogPreset>> {
+	Json(service::catalog())
+}
+
+async fn catalog_preset(
+	_user: AuthUser,
+	Path((_, id)): Path<(TeamId, String)>,
+) -> AppResult<Json<crate::templates::CatalogPreset>> {
+	Ok(Json(service::catalog_preset(&id)?))
 }

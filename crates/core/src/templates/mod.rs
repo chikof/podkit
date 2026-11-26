@@ -28,7 +28,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-pub use registry::{Loaded, find, load_all, search, short_hash};
+pub use registry::{CatalogPreset, Loaded, find, load_all, search, short_hash};
 pub use routes::{VariableInfo, variables};
 pub use routes::{deploy_router, router};
 

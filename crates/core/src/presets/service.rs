@@ -444,3 +444,36 @@ pub async fn remove(state: &AppState, user: UserId, team: TeamId, id: PresetId) 
 		Err(ServerError::NotFound)
 	}
 }
+
+// ---------------------------------------------------------- the catalog's presets
+
+use crate::templates::CatalogPreset;
+
+/// The catalog's presets, without their files. They are the same for every team; a team
+/// applies one as it applies its own.
+#[must_use]
+pub fn catalog() -> Vec<CatalogPreset> {
+	let registry = crate::templates::load_all();
+	registry
+		.presets
+		.iter()
+		.map(|p| CatalogPreset {
+			file: String::new(),
+			..p.clone()
+		})
+		.collect()
+}
+
+/// One preset of the catalog with its file.
+///
+/// # Errors
+/// `NotFound` for an id the catalog does not have.
+pub fn catalog_preset(id: &str) -> AppResult<CatalogPreset> {
+	let registry = crate::templates::load_all();
+	registry
+		.presets
+		.iter()
+		.find(|p| p.id == id)
+		.cloned()
+		.ok_or(ServerError::NotFound)
+}
