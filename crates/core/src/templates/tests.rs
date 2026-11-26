@@ -1147,6 +1147,41 @@ async fn an_imported_template_is_previewed_in_full_and_deploys_marked_as_an_impo
 }
 
 #[sqlx::test]
+async fn a_catalog_deploy_is_recorded_with_its_template_and_an_import_is_not(db: PgPool) {
+	let s = Setup::new(db).await;
+	let (_, app) = s.deploy("gotify", json!({})).await;
+	let (_, stack) = s.deploy("umami", json!({})).await;
+	let recorded: Vec<(Option<i64>, Option<i64>, String)> = sqlx::query_as(
+		"SELECT application_id, stack_id, template_id FROM template_deploys ORDER BY template_id",
+	)
+	.fetch_all(&s.db)
+	.await
+	.unwrap();
+	assert_eq!(
+		recorded,
+		vec![
+			(app["id"].as_i64(), None, "gotify".to_owned()),
+			(None, stack["id"].as_i64(), "umami".to_owned()),
+		]
+	);
+
+	let mut body = files_of("it-tools");
+	body["server_id"] = json!(s.server().await);
+	let import = format!(
+		"/api/v1/teams/{}/projects/{}/templates/import",
+		s.team, s.project
+	);
+	let (status, _) = call(&s.app, "POST", &import, Some(&s.token), Some(body)).await;
+	assert_eq!(status, StatusCode::ACCEPTED);
+	assert_eq!(count(&s.db, "template_deploys").await, 2);
+
+	// The fixtures have no catalog revision, so nothing is called newer.
+	let id = stack["id"].as_i64().unwrap();
+	let newer = super::service::newer(&s.db, super::service::Kind::Stack, id).await;
+	assert!(newer.unwrap().is_none());
+}
+
+#[sqlx::test]
 async fn an_imported_one_service_template_is_a_stack_so_that_it_carries_its_mark(db: PgPool) {
 	let s = Setup::new(db).await;
 	let (_, from_catalog) = s.deploy("gotify", json!({})).await;
