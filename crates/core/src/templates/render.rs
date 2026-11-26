@@ -161,6 +161,9 @@ fn domain_hosts(t: &Template, place: &Placement<'_>) -> (BTreeMap<String, String
 	(hosts, main)
 }
 
+/// How long a chain of variables, each made from the next, may be. The catalog's longest is 2.
+const MAX_DEPTH: usize = 64;
+
 impl State<'_> {
 	fn eval(&mut self, name: &str) -> Result<(), Invalid> {
 		if self.values.contains_key(name) {
@@ -171,6 +174,13 @@ impl State<'_> {
 		};
 		if self.visiting.iter().any(|v| v == name) {
 			return Err(Invalid(format!("variable {name} refers to itself")));
+		}
+		// One call a link: a chain of thousands runs the thread out of stack, which ends
+		// the process and not the request.
+		if self.visiting.len() >= MAX_DEPTH {
+			return Err(Invalid(format!(
+				"variables refer to each other more than {MAX_DEPTH} deep, at {name}"
+			)));
 		}
 		self.visiting.push(name.to_string());
 		let (value, secret) = match variable {
