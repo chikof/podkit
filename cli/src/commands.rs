@@ -693,6 +693,15 @@ pub async fn template_deploy(
 			.collect::<serde_json::Map<_, _>>()
 			.into();
 	}
+	// The id goes into a path: only what a template id is made of.
+	let id_like =
+		|id: &str| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-');
+	if !deploy.import && !id_like(deploy.template) {
+		return Err(Fail::usage(format!(
+			"{} is not a template id: see podkit templates",
+			deploy.template
+		)));
+	}
 	let templates = format!("/teams/{team}/projects/{}/templates", id_of(project));
 	let made = if deploy.import {
 		confirm_import(ctx, &templates, deploy, &mut body).await?;

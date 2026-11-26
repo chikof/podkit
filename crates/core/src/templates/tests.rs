@@ -1177,8 +1177,12 @@ async fn a_catalog_deploy_is_recorded_with_its_template_and_an_import_is_not(db:
 
 	// The fixtures have no catalog revision, so nothing is called newer.
 	let id = stack["id"].as_i64().unwrap();
-	let newer = super::service::newer(&s.db, super::service::Kind::Stack, id).await;
-	assert!(newer.unwrap().is_none());
+	let origin = super::service::origin(&s.db, super::service::Kind::Stack, id)
+		.await
+		.unwrap()
+		.expect("a catalog deploy has an origin");
+	assert_eq!(origin.template.template.id, "umami");
+	assert!(!origin.newer);
 }
 
 #[sqlx::test]
@@ -1215,6 +1219,76 @@ async fn an_imported_one_service_template_is_a_stack_so_that_it_carries_its_mark
 			.unwrap()
 			.starts_with("import:gotify@"),
 		"{stack}"
+	);
+}
+
+#[sqlx::test]
+async fn hostile_template_files_are_refused_and_not_worked_through(db: PgPool) {
+	use std::fmt::Write as _;
+	let s = Setup::new(db).await;
+	let preview = format!(
+		"/api/v1/teams/{}/projects/{}/templates/import/preview",
+		s.team, s.project
+	);
+	let base = "id = \"x\"\nname = \"X\"\ndescription = \"d\"\ncategory = \"other\"\nlogo = \"logo.svg\"\n";
+	let compose = "services:\n  x:\n    image: nginx\n";
+	// Each variable is a thousand copies of the one before: a terabyte, four levels down.
+	let mut grows = format!("{base}[variables]\na0 = \"{}\"\n", "y".repeat(1000));
+	for level in 1..4 {
+		let copies = format!("${{a{}}}", level - 1).repeat(1000);
+		let _ = writeln!(grows, "a{level} = \"{copies}\"");
+	}
+	// Each variable names the one before twice: two to the sixtieth walks, unless counted once.
+	let mut doubles = format!("{base}[variables]\nv0 = \"\"\n");
+	for level in 1..=60 {
+		let _ = writeln!(doubles, "v{level} = \"${{v{0}}}${{v{0}}}\"", level - 1);
+	}
+	for (what, template, status) in [
+		("a value that grows", grows, StatusCode::BAD_REQUEST),
+		("a variable walked once", doubles, StatusCode::OK),
+	] {
+		let started = std::time::Instant::now();
+		let (got, body) = call(
+			&s.app,
+			"POST",
+			&preview,
+			Some(&s.token),
+			Some(json!({ "template": template, "compose": compose })),
+		)
+		.await;
+		assert_eq!(got, status, "{what}: {body}");
+		assert!(started.elapsed().as_secs() < 10, "{what} took too long");
+	}
+
+	// Somebody who may not create a stack does not get their files read.
+	let (bob, _) = user_with_team(&s.app, "bob").await;
+	let (status, _) = call(
+		&s.app,
+		"POST",
+		&preview,
+		Some(&bob),
+		Some(files_of("umami")),
+	)
+	.await;
+	assert!(
+		status == StatusCode::FORBIDDEN || status == StatusCode::NOT_FOUND,
+		"{status}"
+	);
+}
+
+#[test]
+fn a_template_says_who_maintains_it_only_with_user_names_and_prints_cleanly() {
+	let base = "id = \"x\"\ndescription = \"d\"\ncategory = \"other\"\nlogo = \"logo.svg\"\n";
+	let parse = |extra: &str| Template::parse(&format!("{base}{extra}"));
+	assert!(parse("name = \"X\"\nmaintainers = [\"octo-cat\"]").is_ok());
+	assert!(parse("name = \"X\"\nmaintainers = [\"login/oauth?x=1\"]").is_err());
+	assert!(parse("name = \"X\\u001b[2J\"").is_err());
+	let long = "s".repeat(51);
+	assert!(
+		parse(&format!(
+			"name = \"X\"\n[[config.domains]]\nserviceName = \"{long}\"\nport = 80\nhost = \"h\""
+		))
+		.is_err()
 	);
 }
 

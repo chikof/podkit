@@ -173,10 +173,24 @@ struct Detail {
 }
 
 fn is_secret_expr(text: &str, template: &Template) -> bool {
-	expr::scan(text).unwrap_or_default().iter().any(|e| match e {
-		expr::Expr::Helper(h) => h.is_secret(),
-		expr::Expr::Name(n) => matches!(template.variables.get(n), Some(Variable::Expr(t)) if t != text && is_secret_expr(t, template)),
-	})
+	// Each variable is looked into once: one that names another twice a level would
+	// otherwise be walked two to the power of the depth times.
+	fn walk<'a>(text: &'a str, template: &'a Template, seen: &mut Vec<&'a str>) -> bool {
+		expr::scan(text)
+			.unwrap_or_default()
+			.iter()
+			.any(|e| match e {
+				expr::Expr::Helper(h) => h.is_secret(),
+				expr::Expr::Name(n) => match template.variables.get_key_value(n) {
+					Some((name, Variable::Expr(t))) if !seen.contains(&name.as_str()) => {
+						seen.push(name);
+						walk(t, template, seen)
+					}
+					_ => false,
+				},
+			})
+	}
+	walk(text, template, &mut Vec::new())
 }
 
 pub fn variables(t: &Template) -> Vec<VariableInfo> {
@@ -273,11 +287,20 @@ struct ImportPreview {
 /// command that shows it to the person before they confirm.
 async fn import_preview(
 	State(s): State<AppState>,
-	_user: AuthUser,
+	user: AuthUser,
 	Path((team, project)): Path<(TeamId, ProjectId)>,
 	Json(files): Json<ImportFiles>,
 ) -> AppResult<Json<ImportPreview>> {
 	crate::scope::project(&s.db, team, project).await?;
+	// Reading somebody's files is work done for them: only for who may deploy the result.
+	crate::auth::permission::authorize(
+		&s.db,
+		user.id,
+		team,
+		crate::auth::permission::Action::Create,
+		crate::auth::permission::Resource::Stack,
+	)
+	.await?;
 	let loaded = service::imported(&files.template, &files.compose)?;
 	Ok(Json(ImportPreview {
 		official: false,
@@ -307,6 +330,12 @@ async fn import(
 		return Err(ServerError::Validation(
 			"an imported template cannot be linked to a model".to_string(),
 		));
+	}
+	// It starts containers, as `…/{id}/deploy` does: a token needs the same scope.
+	if let Some(grant) = &user.grant
+		&& !grant.allows(crate::auth::tokens::Scope::Deploy)
+	{
+		return Err(ServerError::MissingScope("deploy"));
 	}
 	let deployed = service::deploy_import(
 		&s,

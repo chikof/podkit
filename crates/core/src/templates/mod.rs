@@ -373,6 +373,30 @@ impl Template {
 		if self.description.trim().is_empty() {
 			return Err(Invalid::new("description is empty"));
 		}
+		// These are shown as they are, in a page and in a terminal.
+		let shown = [&self.name, &self.version]
+			.into_iter()
+			.chain(&self.status_note);
+		if shown.flat_map(|s| s.chars()).any(char::is_control) {
+			return Err(Invalid::new(
+				"name, version and status_note hold no control characters",
+			));
+		}
+		let user_name = |m: &String| {
+			(1..=39).contains(&m.len()) && m.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+		};
+		if !self.maintainers.iter().all(user_name) {
+			return Err(Invalid::new("maintainers are GitHub user names"));
+		}
+		// A service's default hostname is one DNS label with the project's slug in it.
+		if self
+			.config
+			.domains
+			.iter()
+			.any(|d| d.service_name.len() > 50)
+		{
+			return Err(Invalid::new("serviceName is at most 50 characters"));
+		}
 		if !CATEGORIES.contains(&self.category.as_str()) {
 			return Err(Invalid::new(format!(
 				"category {:?} is not one of {CATEGORIES:?}",
