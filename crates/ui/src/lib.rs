@@ -138,6 +138,7 @@ pub fn router() -> Router<AppState> {
 		.merge(pages::security::router())
 		.merge(pages::stacks::router())
 		.merge(pages::templates::router())
+		.merge(pages::presets::router())
 		.merge(pages::volume_backups::router())
 		.merge(pages::uptime::router())
 		.merge(pages::logs::router())

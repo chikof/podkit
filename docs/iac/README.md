@@ -504,6 +504,11 @@ A team keeps presets under the same address:
 
 Reading needs `read project`, keeping `create project`, removing `delete project`.
 
+In the web UI presets are reached from the Templates page: the list, a form to apply one (where
+it goes, a server for each part, the secrets), a page that shows what saving a project keeps,
+and a form to keep a file. A preset kept from a file is marked "Unofficial" and shown whole
+before it is applied.
+
 The template catalog brings presets of its own with each refresh: `GET /presets/catalog` lists
 them and `GET /presets/catalog/{id}` returns one with its file, to apply like any other.
 - An apply with an answer missing is refused with every missing answer named. The answers are
