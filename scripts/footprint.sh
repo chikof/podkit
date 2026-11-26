@@ -11,10 +11,12 @@
 #   - peak RSS (VmHWM), threads, open socket fds, CPU % over the idle window
 #   - disk used by the data dir, and the size of each binary
 # plus the Postgres connections the server holds (when `psql` is available).
+# Then it signs up, signs in and opens every page and API list the home page links to,
+# and records RSS and anonymous RSS again: what the stack holds after use.
 #
 # --check fails (exit 1) on any of these, read from scripts/footprint.budget:
-#   - idle RSS over the cap (the card's promise)
-#   - anonymous idle RSS over its baseline + 20 %: memory the process holds
+#   - RSS over the cap (the card's promise), idle or after use
+#   - anonymous RSS over its baseline + 20 %, idle or after use: memory the process holds
 #   - binary size over its baseline + 10 %: code and dependencies
 #   - a shared library that is not on the allowlist: a second crypto or TLS stack
 # Total RSS has no baseline: most of it is the binary's own code, mapped, and how much of
@@ -98,6 +100,8 @@ export XDG_CONFIG_HOME=$tmp/config HOME=$tmp
 export DATABASE_URL AGE_SECRET_KEY=$age_key HOST=127.0.0.1 PORT=$port
 export DATA_DIR=$tmp/data LOCAL_AGENT_SOCKET=$tmp/agent.sock AGENT_BINARIES_DIR=$bin
 export RUST_LOG=${RUST_LOG:-warn}
+SETUP_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+export SETUP_TOKEN
 
 # The agent refuses to start when its Podman socket path does not exist. Without a
 # real one (PODKIT_PODMAN_SOCKET, e.g. $XDG_RUNTIME_DIR/podman/podman.sock) a stub
@@ -166,10 +170,70 @@ if command -v psql >/dev/null 2>&1; then
 	pg_conns=$(psql "$DATABASE_URL" -Atc "select count(*) from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid()" 2>/dev/null || echo n/a)
 fi
 
-mb() { awk -v k="$1" 'BEGIN { printf "%.1f", k / 1024 }'; }
-printf '\n%-8s %12s %12s %12s %10s %8s %8s %8s\n' process 'start RSS' "idle RSS" 'idle anon' 'peak RSS' threads sockets 'CPU %'
+echo "footprint: load…" >&2
+python3 - "http://127.0.0.1:$port" "$SETUP_TOKEN" >&2 <<'PY'
+import http.cookiejar, json, re, sys, urllib.error, urllib.request
+
+base, setup = sys.argv[1], sys.argv[2]
+opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+
+def call(path, body=None, headers=()):
+    req = urllib.request.Request(base + path, data=json.dumps(body).encode() if body else None)
+    for k, v in (("Content-Type", "application/json"),) * bool(body) + tuple(headers):
+        req.add_header(k, v)
+    try:
+        with opener.open(req, timeout=30) as r:
+            return r.status, r.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+who = {"email": "footprint@example.com", "password": "correct horse battery staple"}
+status, body = call("/api/v1/auth/register", {"name": "Footprint", "setup_token": setup, **who})
+assert status == 201, f"register: {status} {body[:200]}"
+status, body = call("/api/v1/auth/login", who)
+assert status == 200, f"login: {status} {body[:200]}"
+bearer = (("Authorization", "Bearer " + json.loads(body)["token"]),)
+# The session cookie comes from the same Datastar POST the login page makes.
+status, _ = call("/login", who, (("datastar-request", "true"), ("Origin", base)))
+assert status == 200, f"/login: {status}"
+status, body = call("/api/v1/teams", {"name": "Footprint", "slug": "footprint", "logo": ""}, bearer)
+assert status == 200, f"create team: {status} {body[:200]}"
+team = json.loads(body)["id"]
+status, body = call(f"/api/v1/teams/{team}/projects", {"name": "Demo", "slug": "demo"}, bearer)
+assert status < 300, f"create project: {status} {body[:200]}"
+
+seen, queue, bad = set(), ["/"], []
+while queue and len(seen) < 200:
+    path = queue.pop(0)
+    if path in seen or "logout" in path:
+        continue
+    seen.add(path)
+    status, html = call(path)
+    if status >= 500:
+        bad.append(f"{status} {path}")
+    queue += re.findall(r'href="(/[^"#?]*)"', html.decode(errors="replace"))
+lists = ["projects", "servers", "audit", "registries", "ssh-keys", "notifications", "uptime", "api-tokens"]
+for path in ["/api/v1/catalog", "/api/v1/templates"] + [f"/api/v1/teams/{team}/{x}" for x in lists]:
+    status, _ = call(path, headers=bearer)
+    if status >= 500:
+        bad.append(f"{status} {path}")
+assert not bad, f"server errors: {bad}"
+assert len(seen) > 10, f"the crawl found only {sorted(seen)}"
+print(f"footprint: {len(seen)} pages and {len(lists) + 2} API lists")
+PY
+sleep 5
+declare -A load_rss load_anon
 for n in server agent; do
-	printf '%-8s %9s MB %9s MB %9s MB %7s MB %8s %8s %8s\n' "$n" "$(mb "${after_start[$n]}")" "$(mb "${idle_rss[$n]}")" "$(mb "${idle_anon[$n]}")" "$(mb "${peak[$n]}")" "${thr[$n]}" "${fds[$n]}" "${cpu[$n]}"
+	p=${!n}
+	load_rss[$n]=$(status "$p" VmRSS)
+	load_anon[$n]=$(status "$p" RssAnon)
+	peak[$n]=$(status "$p" VmHWM)
+done
+
+mb() { awk -v k="$1" 'BEGIN { printf "%.1f", k / 1024 }'; }
+printf '\n%-8s %12s %12s %12s %12s %12s %10s %8s %8s %8s\n' process 'start RSS' "idle RSS" 'idle anon' 'used RSS' 'used anon' 'peak RSS' threads sockets 'CPU %'
+for n in server agent; do
+	printf '%-8s %9s MB %9s MB %9s MB %9s MB %9s MB %7s MB %8s %8s %8s\n' "$n" "$(mb "${after_start[$n]}")" "$(mb "${idle_rss[$n]}")" "$(mb "${idle_anon[$n]}")" "$(mb "${load_rss[$n]}")" "$(mb "${load_anon[$n]}")" "$(mb "${peak[$n]}")" "${thr[$n]}" "${fds[$n]}" "${cpu[$n]}"
 done
 printf '\nidle window %ss · data dirs %s KB · binaries %s KB · Postgres connections held by the server: %s\n' "$idle" "$disk_kb" "$bins_kb" "$pg_conns"
 
@@ -179,6 +243,8 @@ if [[ -n $out ]]; then
 			echo "${n}_start_kb=${after_start[$n]}"
 			echo "${n}_idle_kb=${idle_rss[$n]}"
 			echo "${n}_idle_anon_kb=${idle_anon[$n]}"
+			echo "${n}_used_kb=${load_rss[$n]}"
+			echo "${n}_used_anon_kb=${load_anon[$n]}"
 			echo "${n}_bin_kb=${bin_kb[$n]}"
 			echo "${n}_peak_kb=${peak[$n]}"
 			echo "${n}_threads=${thr[$n]}"
@@ -208,9 +274,11 @@ gate() {
 }
 declare -A file=([server]=server [agent]=podkit-agent)
 for n in server agent; do
-	cap=${n}_cap_kb anon=${n}_anon_baseline_kb size=${n}_bin_baseline_kb
+	cap=${n}_cap_kb anon=${n}_anon_baseline_kb used=${n}_used_anon_baseline_kb size=${n}_bin_baseline_kb
 	gate "$n" 'idle RSS' "${idle_rss[$n]}" "${!cap}"
 	gate "$n" 'anonymous idle RSS' "${idle_anon[$n]}" $((${!anon} * 120 / 100))
+	gate "$n" 'RSS after use' "${load_rss[$n]}" "${!cap}"
+	gate "$n" 'anonymous RSS after use' "${load_anon[$n]}" $((${!used} * 120 / 100))
 	gate "$n" 'binary' "${bin_kb[$n]}" $((${!size} * 110 / 100))
 	# The libraries the binary itself asks for, as stems: "libc.so.6" is "libc".
 	extra=$(readelf -dW "$bin/${file[$n]}" | sed -n 's/.*Shared library: \[\(.*\)\.so.*\]/\1/p' | while read -r lib; do
