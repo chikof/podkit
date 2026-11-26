@@ -59,6 +59,9 @@ pub struct Loaded {
 	/// and nothing else an application cannot express: it is deployed as an
 	/// image application instead of a one-service stack.
 	pub plain_app: bool,
+	/// The catalog's revision of the template: it changes only when what gets deployed
+	/// changes. Empty for a template that did not come from a catalog.
+	pub revision: String,
 }
 
 /// First 8 hex digits of the SHA-256 of `bytes`.
@@ -157,6 +160,7 @@ pub fn load(
 		services,
 		warnings,
 		plain_app,
+		revision: String::new(),
 	})
 }
 
@@ -316,7 +320,7 @@ pub struct Registry {
 static CURRENT: RwLock<Option<Arc<Registry>>> = RwLock::new(None);
 
 /// Reads every template under `<dir>/templates/<id>/`.
-pub fn read(dir: &Path, commit: String) -> Registry {
+pub fn read(dir: &Path, commit: String, revisions: &BTreeMap<String, String>) -> Registry {
 	let mut registry = Registry {
 		commit,
 		..Registry::default()
@@ -347,7 +351,8 @@ pub fn read(dir: &Path, commit: String) -> Registry {
 			std::fs::read(folder.join(name)).ok().map(Cow::Owned)
 		};
 		match load(&id, &file) {
-			Ok(loaded) => {
+			Ok(mut loaded) => {
+				loaded.revision = revisions.get(&id).cloned().unwrap_or_default();
 				registry.templates.insert(id, Arc::new(loaded));
 			}
 			Err(e) => registry.errors.push((id, e.0)),
@@ -377,8 +382,13 @@ pub fn load_all() -> Arc<Registry> {
 	// Tests read the templates kept in this crate, with no catalog to fetch.
 	#[cfg(any(test, feature = "testing"))]
 	{
-		static FIXTURES: LazyLock<Arc<Registry>> =
-			LazyLock::new(|| install(read(Path::new(env!("CARGO_MANIFEST_DIR")), String::new())));
+		static FIXTURES: LazyLock<Arc<Registry>> = LazyLock::new(|| {
+			install(read(
+				Path::new(env!("CARGO_MANIFEST_DIR")),
+				String::new(),
+				&BTreeMap::new(),
+			))
+		});
 		FIXTURES.clone()
 	}
 	#[cfg(not(any(test, feature = "testing")))]
