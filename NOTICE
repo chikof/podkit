@@ -32,8 +32,8 @@ podkit includes third-party material under the following terms.
 == Dokploy templates (crates/core/templates/*, `upstream` in each template.toml) ==
 
 Templates marked `upstream = "Dokploy/templates@6313a2e ..."` are converted from the blueprints of
-https://github.com/Dokploy/templates. Each one's path in that repository is in its template.toml
-and in crates/core/templates/IMPORT_REPORT.md.
+https://github.com/Dokploy/templates. Each one's path in that repository is in its template.toml.
+podkit keeps a few of them for its tests; the catalog is https://github.com/podoes/podkit-templates.
 
 MIT License
 
