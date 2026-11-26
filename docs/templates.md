@@ -74,17 +74,14 @@ webhook secret), and nowhere else.
 `GET /api/v1/templates?q=&category=` and `GET /api/v1/templates/{id}` list and
 describe (variables, services, translation warnings); no generated value.
 
-## Importing Dokploy's blueprints
+## Checking a catalog
 
-`scripts/templates-import` fetches Dokploy/templates, homarr-labs/dashboard-icons
-and simple-icons at pinned revisions, converts every blueprint, keeps those that
-pass the compose parser and translation, vendors the registry logos of
-`scripts/logos.txt`, and writes `crates/core/templates/IMPORT_REPORT.md` (counts,
-what was skipped and why, each template's upstream path), `NOTICE` and
-`crates/core/static/logos/SOURCES.tsv`. Hand-written templates (no `upstream`) are kept
-and win over a blueprint of the same id. Images of hand-written templates are
-checked with `podman manifest inspect`; `--verify-images=all` checks every image
-(Docker Hub rate-limits anonymous reads, so it is not the default).
+`server check-templates <dir>` loads every template under `<dir>/templates` the way a
+refresh does, prints the ones that do not load with the reason, and exits 1 when there are
+any. Run it on a checkout of podkit-templates before a change there is published.
+
+A few templates stay in `crates/core/templates` for podkit's own tests. They are not in the
+binary.
 
 ## Logos
 
@@ -96,7 +93,6 @@ guesses a registry logo from an image reference.
 ## Tests
 
 - `cargo test -p podkit-core --all-features -- templates::`
-- `grep '^| imported' crates/core/templates/IMPORT_REPORT.md`
 - Live (podman, ports 18090/18091, under 1 GB of images):
   `cargo test -p podkit-core --all-features -- --ignored template_live`
   (gotify as an application, it-tools as a one-service stack, umami with postgres)
