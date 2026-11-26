@@ -107,6 +107,17 @@ An import is not the catalog's, whatever id it gives itself:
 - It may not set `gateway` or `[mcp]`, and cannot be linked to a model.
 - It is never told about a newer version.
 
+## When the catalog's template changes
+
+The catalog gives each template a revision that changes only with what gets deployed: the
+compose file, the variables and the config. A new description or logo does not change it.
+
+podkit notes the template and the revision an application or a stack was deployed from
+(`template_deploys`, migration 0085). When a refresh brings a different revision, the
+page of that application or stack says the catalog has a newer version and links to it.
+Nothing is changed for you: the deployed copy is yours. An imported template file is never
+told anything.
+
 ## Checking a catalog
 
 `server check-templates <dir>` loads every template under `<dir>/templates` the way a

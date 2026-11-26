@@ -219,6 +219,58 @@ pub async fn deploy_import(
 	.await
 }
 
+/// Notes which catalog template, at which revision, `deployed` was made from.
+async fn record(
+	db: &sqlx::PgPool,
+	deployed: &Deployed,
+	loaded: &Loaded,
+) -> Result<(), sqlx::Error> {
+	sqlx::query(match deployed.kind {
+		Kind::Application => {
+			"INSERT INTO template_deploys (application_id, template_id, revision) VALUES ($1, $2, $3)"
+		}
+		Kind::Stack => {
+			"INSERT INTO template_deploys (stack_id, template_id, revision) VALUES ($1, $2, $3)"
+		}
+	})
+	.bind(deployed.id)
+	.bind(&loaded.template.id)
+	.bind(&loaded.revision)
+	.execute(db)
+	.await?;
+	Ok(())
+}
+
+/// Whether the catalog's template is not the one a deploy was made from. A revision that
+/// is empty came from no catalog and says nothing either way.
+fn differs(deployed_from: &str, catalog: &str) -> bool {
+	!deployed_from.is_empty() && !catalog.is_empty() && deployed_from != catalog
+}
+
+/// The catalog's template when it has changed since the application or stack `id` was
+/// deployed from it. The deployed copy is its owner's: this only tells them.
+///
+/// # Errors
+/// Database failures only.
+pub async fn newer(
+	db: &sqlx::PgPool,
+	kind: Kind,
+	id: i64,
+) -> Result<Option<std::sync::Arc<Loaded>>, sqlx::Error> {
+	let row: Option<(String, String)> = sqlx::query_as(match kind {
+		Kind::Application => {
+			"SELECT template_id, revision FROM template_deploys WHERE application_id = $1"
+		}
+		Kind::Stack => "SELECT template_id, revision FROM template_deploys WHERE stack_id = $1",
+	})
+	.bind(id)
+	.fetch_optional(db)
+	.await?;
+	Ok(row.and_then(|(template, revision)| {
+		super::find(&template).filter(|l| differs(&revision, &l.revision))
+	}))
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn deploy_loaded(
 	s: &AppState,
@@ -295,6 +347,9 @@ async fn deploy_loaded(
 		}
 	})
 	.await?;
+	if source.starts_with("template:") {
+		record(&s.db, &deployed, loaded).await?;
+	}
 	audit::log(
 		&s.db,
 		user,
@@ -655,4 +710,17 @@ fn plan_of(s: &AppState, loaded: &Loaded, rendered: &Rendered) -> AppResult<tran
 		},
 	)
 	.map_err(|_| ServerError::Internal)
+}
+
+#[cfg(test)]
+mod unit {
+	use super::differs;
+
+	#[test]
+	fn a_template_is_newer_only_when_both_revisions_are_known_and_unequal() {
+		assert!(differs("aaaa", "bbbb"));
+		assert!(!differs("aaaa", "aaaa"));
+		assert!(!differs("", "bbbb"), "deployed before revisions existed");
+		assert!(!differs("aaaa", ""), "the template came from no catalog");
+	}
 }

@@ -13,7 +13,7 @@ use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use maud::html;
 
-use crate::components::{Size, Variant, button_class};
+use crate::components::{BannerKind, Size, Variant, banner, button_class};
 use crate::extract::UiUser;
 use crate::{error, layout};
 
@@ -58,6 +58,23 @@ async fn market(State(s): State<AppState>, user: UiUser, Path(id): Path<String>)
 		)
 		.into_response(),
 	}
+}
+
+/// What an application or a stack says when the catalog's template has changed since it
+/// was deployed from it. It is the owner's copy: nothing changes by itself.
+pub fn newer_banner(team: TeamId, t: &podkit_core::templates::Loaded) -> maud::Markup {
+	let link = html! {
+		a href={ "/teams/" (team) "/templates/" (t.template.id) } { "See the template" }
+	};
+	banner(
+		BannerKind::Info,
+		Some("The catalog has a newer version of this template."),
+		&format!(
+			"{} is now at {}. This is your own copy: nothing changes unless you deploy the template again.",
+			t.template.name, t.template.version
+		),
+		Some(&link),
+	)
 }
 
 pub fn router() -> Router<AppState> {

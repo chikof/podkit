@@ -110,6 +110,8 @@ pub(super) struct Loaded {
 	pub usage: Option<ResourcePoint>,
 	/// The security badge of the head; empty when nothing was scanned or it may not be read.
 	pub security: Markup,
+	/// The catalog's template, when it changed since this stack was deployed from it.
+	pub newer: Option<std::sync::Arc<templates::Loaded>>,
 }
 
 impl Loaded {
@@ -141,11 +143,16 @@ pub(super) async fn load(
 		.and_then(|points| points.last().cloned());
 	let security =
 		security::header_badge(s, ctx, project.id, Subject::Stack(detail.stack.id)).await;
+	let newer = templates::service::newer(&s.db, templates::service::Kind::Stack, id.0)
+		.await
+		.ok()
+		.flatten();
 	Ok(Loaded {
 		project,
 		detail,
 		usage,
 		security,
+		newer,
 	})
 }
 
@@ -292,6 +299,9 @@ fn header(ctx: &TeamCtx, l: &Loaded, tab: Tab) -> Markup {
 					}
 				},
 			))
+			@if let Some(t) = &l.newer {
+				(crate::pages::templates::newer_banner(ctx.team.id, t))
+			}
 			@if stack.status == StackStatus::Failed {
 				@if let Some(message) = &stack.status_message {
 					div data-status-message { (banner(BannerKind::Error, Some("This stack failed."), message, None)) }

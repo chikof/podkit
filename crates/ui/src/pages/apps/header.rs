@@ -230,6 +230,10 @@ async fn replica_status(
 
 /// `#app-header`: what polling and the actions re-render. `rows` are the newest deployments
 /// (newest first), for the Rollback entry and the uptime.
+#[allow(
+	clippy::too_many_lines,
+	reason = "one markup block: the header is read top to bottom like the page it draws"
+)]
 pub async fn header(
 	s: &AppState,
 	ctx: &TeamCtx,
@@ -289,6 +293,11 @@ pub async fn header(
 	let health = live_health(rows);
 	// Only an application set to run several copies has a list; the others pay nothing here.
 	let replicas = replica_status(s, ctx, app, running).await;
+	let kind = podkit_core::templates::service::Kind::Application;
+	let newer = podkit_core::templates::service::newer(&s.db, kind, app.id.0)
+		.await
+		.ok()
+		.flatten();
 	html! {
 		div id="app-header" class="flex flex-col gap-5" {
 			(poll(&format!("{base}/header"), busy))
@@ -329,6 +338,9 @@ pub async fn header(
 				},
 				&actions(ctx, app, rollback_to),
 			))
+			@if let Some(t) = &newer {
+				(crate::pages::templates::newer_banner(ctx.team.id, t))
+			}
 			p class="text-sm text-destructive" role="alert" "data-show"="$_action_error" "data-text"="$_action_error" style="display: none" {}
 			(chrome::stats("Live figures", &figures))
 			@if let Some(live) = &replicas {

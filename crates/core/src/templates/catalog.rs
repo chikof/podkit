@@ -32,6 +32,25 @@ struct Index {
 	format: u32,
 	commit: String,
 	archive: Archive,
+	#[serde(default)]
+	templates: Vec<Entry>,
+}
+
+#[derive(Deserialize)]
+struct Entry {
+	id: String,
+	revision: String,
+}
+
+impl Index {
+	fn read(self, dir: &Path) -> registry::Registry {
+		let revisions = self
+			.templates
+			.into_iter()
+			.map(|e| (e.id, e.revision))
+			.collect();
+		registry::read(dir, self.commit, &revisions)
+	}
 }
 
 #[derive(Deserialize)]
@@ -58,8 +77,8 @@ fn dir(data_dir: &Path) -> PathBuf {
 /// Reads the catalog a previous refresh left in `data_dir`, if any. Called once at start.
 pub fn open(data_dir: &Path) {
 	let dir = dir(data_dir);
-	if let Some(commit) = commit_of(&dir) {
-		registry::install(registry::read(&dir, commit));
+	if let Some(index) = index_of(&dir) {
+		registry::install(index.read(&dir));
 	}
 }
 
@@ -76,7 +95,11 @@ pub fn check_cli() -> Option<i32> {
 		eprintln!("usage: server check-templates <dir with a templates/ folder>");
 		return Some(2);
 	};
-	let registry = registry::read(Path::new(dir), String::new());
+	let registry = registry::read(
+		Path::new(dir),
+		String::new(),
+		&std::collections::BTreeMap::new(),
+	);
 	for (id, why) in &registry.errors {
 		eprintln!("{id}: {why}");
 	}
@@ -90,9 +113,8 @@ pub fn check_cli() -> Option<i32> {
 	))
 }
 
-fn commit_of(dir: &Path) -> Option<String> {
-	let index: Index = serde_json::from_slice(&std::fs::read(dir.join("index.json")).ok()?).ok()?;
-	Some(index.commit)
+fn index_of(dir: &Path) -> Option<Index> {
+	serde_json::from_slice(&std::fs::read(dir.join("index.json")).ok()?).ok()
 }
 
 fn failed(what: &str, why: impl std::fmt::Display) -> ServerError {
@@ -190,7 +212,6 @@ pub async fn refresh(s: &AppState) -> Result<Refreshed, ServerError> {
 	}
 
 	let live = dir(&s.config.data_dir);
-	let commit = index.commit;
 	let registry = tokio::task::spawn_blocking(move || -> std::io::Result<registry::Registry> {
 		let next = live.with_extension("new");
 		let previous = live.with_extension("old");
@@ -209,7 +230,7 @@ pub async fn refresh(s: &AppState) -> Result<Refreshed, ServerError> {
 		if previous.exists() {
 			std::fs::remove_dir_all(&previous)?;
 		}
-		Ok(registry::read(&live, commit))
+		Ok(index.read(&live))
 	})
 	.await
 	.map_err(|e| failed("could not be unpacked", e))??;
