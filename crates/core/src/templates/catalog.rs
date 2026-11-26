@@ -153,17 +153,24 @@ pub fn check_cli() -> Option<i32> {
 		registry.templates.len(),
 		registry.errors.len()
 	);
-	// Presets too, read as an apply reads them: `presets/<id>/preset.toml`.
+	// Presets too, as an apply takes them: `presets/<id>/preset.toml`.
 	let (mut presets, mut unreadable) = (0, 0);
 	let mut folders: Vec<_> = std::fs::read_dir(Path::new(dir).join("presets"))
 		.map(|d| d.flatten().map(|e| e.path()).collect())
 		.unwrap_or_default();
 	folders.sort();
 	for folder in folders.iter().filter(|f| f.is_dir()) {
+		// Read, and planned as a new project: a parser lets through what the plan refuses.
 		let read = std::fs::read_to_string(folder.join("preset.toml"))
 			.map_err(|e| e.to_string())
-			.and_then(|text| crate::iac::doc::parse(&text).map_err(|e| e.to_string()))
-			.and_then(|doc| crate::presets::needs(&doc).map(drop));
+			.and_then(|text| crate::presets::dry_run(&text))
+			.and_then(|issues| {
+				if issues.is_empty() {
+					Ok(())
+				} else {
+					Err(issues.join("; "))
+				}
+			});
 		match read {
 			Ok(()) => presets += 1,
 			Err(why) => {

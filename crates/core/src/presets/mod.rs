@@ -320,6 +320,57 @@ pub mod store;
 
 pub use routes::router;
 
+/// What is wrong with applying the preset `file` as a new project, with every server, key
+/// and registry it asks for answered by one made-up name that exists and every secret given
+/// a value. Nothing is read or made: it is how a catalog's preset is checked before it is
+/// published, where there is no team.
+///
+/// It sees what the plan of a project file sees, such as two databases of one name. It does
+/// not see what depends on an install: a slug that is taken, a model that is not downloaded.
+///
+/// # Errors
+/// A message for a file that is not a preset.
+pub fn dry_run(file: &str) -> Result<Vec<String>, String> {
+	const STAND_IN: &str = "stand-in";
+	let doc = crate::iac::doc::parse(file).map_err(|e| e.to_string())?;
+	let needs = needs(&doc)?;
+	let all = |slots: &[Slot]| {
+		slots
+			.iter()
+			.map(|s| (s.at.clone(), STAND_IN.to_owned()))
+			.collect()
+	};
+	let answers = Bindings {
+		servers: all(&needs.servers),
+		deploy_keys: all(&needs.deploy_keys),
+		registries: all(&needs.registries),
+		secrets: needs
+			.secrets
+			.iter()
+			.map(|name| (name.clone(), STAND_IN.to_owned()))
+			.collect(),
+	};
+	let (bound, secrets) =
+		bind(doc, &answers, "preset", || STAND_IN.to_owned()).map_err(|m| m.join("; "))?;
+	let mut lookup = crate::iac::snapshot::Lookup::default();
+	lookup
+		.servers
+		.insert(STAND_IN.to_owned(), crate::ids::ServerId(1));
+	lookup
+		.ssh_keys
+		.insert(STAND_IN.to_owned(), crate::ids::SshKeyId(1));
+	lookup
+		.registries
+		.insert(STAND_IN.to_owned(), crate::ids::RegistryId(1));
+	let (slug, project) = bound.projects.iter().next().ok_or("no project")?;
+	let plan = crate::iac::service::plan_of_new(slug, project, &lookup, secrets);
+	Ok(plan
+		.issues
+		.iter()
+		.map(|i| format!("{}: {}", i.path, i.message))
+		.collect())
+}
+
 #[cfg(test)]
 mod api_tests;
 #[cfg(test)]

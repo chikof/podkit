@@ -122,9 +122,12 @@ told anything.
 
 ## Checking a catalog
 
-`server check-templates <dir>` loads every template under `<dir>/templates` and every preset
-under `<dir>/presets` the way a refresh does, prints the ones that do not load with the
-reason, and exits 1 when there are any. Run it on a checkout of podkit-templates before a change there is published.
+`server check-templates <dir>` loads every template under `<dir>/templates` the way a refresh
+does, and plans every preset under `<dir>/presets` as a new project, with one stand-in for
+each server, key and registry it asks for. It prints what does not load or does not plan, with
+the reason, and exits 1 when there is any. A plan sees what a parser lets through, such as two
+databases of one name in a project; it cannot see what depends on an install, such as a slug
+that is taken. Run it on a checkout of podkit-templates before a change there is published.
 
 A few templates stay in `crates/core/templates` for podkit's own tests. They are not in the
 binary.
