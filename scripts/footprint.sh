@@ -7,14 +7,18 @@
 # needed: the agent only needs its socket path to exist), waits for them to be
 # ready, then records for each process:
 #   - RSS (VmRSS from /proc/<pid>/status) right after start, and after SECS idle
+#   - the anonymous part of the idle RSS (RssAnon: heap and stacks)
 #   - peak RSS (VmHWM), threads, open socket fds, CPU % over the idle window
-#   - disk used by the data dir
+#   - disk used by the data dir, and the size of each binary
 # plus the Postgres connections the server holds (when `psql` is available).
 #
-# --check fails (exit 1) when an idle RSS is over its budget. The budget of each
-# process is min(cap, baseline + 20 %), both read from scripts/footprint.budget:
-# the cap is the card's promise, the baseline the last measured value, so a
-# regression is caught before it reaches the cap.
+# --check fails (exit 1) on any of these, read from scripts/footprint.budget:
+#   - idle RSS over the cap (the card's promise)
+#   - anonymous idle RSS over its baseline + 20 %: memory the process holds
+#   - binary size over its baseline + 10 %: code and dependencies
+#   - a shared library that is not on the allowlist: a second crypto or TLS stack
+# Total RSS has no baseline: most of it is the binary's own code, mapped, and how much of
+# that is resident moves with the layout of the binary, not with what the code does.
 #
 # --idle SECS  how long to leave the stack alone before the second sample (default
 #              30 for --check, 600 for a full report: the "10 minutes of no traffic").
@@ -132,7 +136,7 @@ status() { awk -v k="$2:" '$1 == k { print $2 }' "/proc/$1/status"; }
 ticks() { awk '{ print $14 + $15 }' "/proc/$1/stat"; }
 socks() { { ls -l "/proc/$1/fd" 2>/dev/null || true; } | grep -c 'socket:' || true; }
 
-declare -A after_start idle_rss peak thr fds cpu
+declare -A after_start idle_rss idle_anon bin_kb peak thr fds cpu
 for n in server agent; do
 	p=${!n}
 	after_start[$n]=$(status "$p" VmRSS)
@@ -146,6 +150,7 @@ for n in server agent; do
 	p=${!n}
 	kill -0 "$p" 2>/dev/null || { echo "footprint: $n died while idle" >&2; tail -5 "$tmp/$n.log" >&2; exit 1; }
 	idle_rss[$n]=$(status "$p" VmRSS)
+	idle_anon[$n]=$(status "$p" RssAnon)
 	peak[$n]=$(status "$p" VmHWM)
 	thr[$n]=$(status "$p" Threads)
 	fds[$n]=$(socks "$p")
@@ -153,16 +158,18 @@ done
 cpu[server]=$(awk -v a="$t0_server" -v b="$(ticks "$server")" -v hz="$hz" -v s="$idle" 'BEGIN { printf "%.2f", (b - a) / hz / s * 100 }')
 cpu[agent]=$(awk -v a="$t0_agent" -v b="$(ticks "$agent")" -v hz="$hz" -v s="$idle" 'BEGIN { printf "%.2f", (b - a) / hz / s * 100 }')
 disk_kb=$(du -sk "$tmp/data" "$tmp/agent" | awk '{ s += $1 } END { print s }')
-bins_kb=$(du -Lsk "$bin/server" "$bin/podkit-agent" | awk '{ s += $1 } END { print s }')
+bin_kb[server]=$(du -Lk "$bin/server" | awk '{ print $1 }')
+bin_kb[agent]=$(du -Lk "$bin/podkit-agent" | awk '{ print $1 }')
+bins_kb=$((bin_kb[server] + bin_kb[agent]))
 pg_conns=n/a
 if command -v psql >/dev/null 2>&1; then
 	pg_conns=$(psql "$DATABASE_URL" -Atc "select count(*) from pg_stat_activity where datname = current_database() and pid <> pg_backend_pid()" 2>/dev/null || echo n/a)
 fi
 
 mb() { awk -v k="$1" 'BEGIN { printf "%.1f", k / 1024 }'; }
-printf '\n%-8s %12s %12s %10s %8s %8s %8s\n' process 'start RSS' "idle RSS" 'peak RSS' threads sockets 'CPU %'
+printf '\n%-8s %12s %12s %12s %10s %8s %8s %8s\n' process 'start RSS' "idle RSS" 'idle anon' 'peak RSS' threads sockets 'CPU %'
 for n in server agent; do
-	printf '%-8s %9s MB %9s MB %7s MB %8s %8s %8s\n' "$n" "$(mb "${after_start[$n]}")" "$(mb "${idle_rss[$n]}")" "$(mb "${peak[$n]}")" "${thr[$n]}" "${fds[$n]}" "${cpu[$n]}"
+	printf '%-8s %9s MB %9s MB %9s MB %7s MB %8s %8s %8s\n' "$n" "$(mb "${after_start[$n]}")" "$(mb "${idle_rss[$n]}")" "$(mb "${idle_anon[$n]}")" "$(mb "${peak[$n]}")" "${thr[$n]}" "${fds[$n]}" "${cpu[$n]}"
 done
 printf '\nidle window %ss · data dirs %s KB · binaries %s KB · Postgres connections held by the server: %s\n' "$idle" "$disk_kb" "$bins_kb" "$pg_conns"
 
@@ -171,6 +178,8 @@ if [[ -n $out ]]; then
 		for n in server agent; do
 			echo "${n}_start_kb=${after_start[$n]}"
 			echo "${n}_idle_kb=${idle_rss[$n]}"
+			echo "${n}_idle_anon_kb=${idle_anon[$n]}"
+			echo "${n}_bin_kb=${bin_kb[$n]}"
 			echo "${n}_peak_kb=${peak[$n]}"
 			echo "${n}_threads=${thr[$n]}"
 			echo "${n}_sockets=${fds[$n]}"
@@ -188,18 +197,34 @@ fi
 # shellcheck source=scripts/footprint.budget
 source "${PODKIT_FOOTPRINT_BUDGET:-$root/scripts/footprint.budget}"
 fail=0
-for n in server agent; do
-	cap_var=${n}_cap_kb
-	base_var=${n}_baseline_kb
-	cap=${!cap_var}
-	base=${!base_var}
-	limit=$((base * 120 / 100))
-	((limit < cap)) || limit=$cap
-	if ((idle_rss[$n] > limit)); then
-		printf 'FAIL %s: idle RSS %s MB is over the budget of %s MB (cap %s MB, baseline %s MB + 20%%)\n' "$n" "$(mb "${idle_rss[$n]}")" "$(mb "$limit")" "$(mb "$cap")" "$(mb "$base")"
+# gate NAME WHAT VALUE_KB LIMIT_KB
+gate() {
+	if (($3 > $4)); then
+		printf 'FAIL %s: %s %s MB is over the budget of %s MB\n' "$1" "$2" "$(mb "$3")" "$(mb "$4")"
 		fail=1
 	else
-		printf 'ok   %s: idle RSS %s MB <= %s MB\n' "$n" "$(mb "${idle_rss[$n]}")" "$(mb "$limit")"
+		printf 'ok   %s: %s %s MB <= %s MB\n' "$1" "$2" "$(mb "$3")" "$(mb "$4")"
+	fi
+}
+declare -A file=([server]=server [agent]=podkit-agent)
+for n in server agent; do
+	cap=${n}_cap_kb anon=${n}_anon_baseline_kb size=${n}_bin_baseline_kb
+	gate "$n" 'idle RSS' "${idle_rss[$n]}" "${!cap}"
+	gate "$n" 'anonymous idle RSS' "${idle_anon[$n]}" $((${!anon} * 120 / 100))
+	gate "$n" 'binary' "${bin_kb[$n]}" $((${!size} * 110 / 100))
+	# The libraries the binary itself asks for, as stems: "libc.so.6" is "libc".
+	extra=$(readelf -dW "$bin/${file[$n]}" | sed -n 's/.*Shared library: \[\(.*\)\.so.*\]/\1/p' | while read -r lib; do
+		for ok in $allowed_libs; do
+			# shellcheck disable=SC2053 # $ok is a glob on purpose
+			[[ $lib == $ok ]] && continue 2
+		done
+		printf '%s ' "$lib"
+	done)
+	if [[ -n $extra ]]; then
+		printf 'FAIL %s: links shared libraries that are not allowed: %s\n' "$n" "$extra"
+		fail=1
+	else
+		printf 'ok   %s: shared libraries\n' "$n"
 	fi
 done
 exit "$fail"

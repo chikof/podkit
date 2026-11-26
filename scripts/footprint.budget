@@ -1,25 +1,21 @@
-# Idle RSS budgets, in KB, read by scripts/footprint.sh --check.
-# A process fails when its idle RSS is over min(cap, baseline + 20 %).
-#   cap       the promise: server 60 MB, agent 25 MB
-#   baseline  the last measured idle RSS (docs/footprint.md), rounded up. Lower it
-#             when a change makes podkit lighter; raise it only with a reason.
+# Budgets, in KB, read by scripts/footprint.sh --check. docs/footprint.md has the history.
+#
+# Idle RSS: only the cap, the promise (server 60 MB, agent 25 MB). It has no baseline: most of
+# it is the binary's own code, mapped, and the resident share moves with the layout of the
+# binary. The crate split (c0bf36d) took the server from 16.0 MB to 22.6 MB that way with no
+# new code (docs/footprint.md, "The crate split").
 server_cap_kb=61440
 agent_cap_kb=25600
-# Server: wave B took it from 12.4 MB to 18.8 MB idle; the F7 trims (OpenSSL gone, malloc arenas,
-# lazy HTTP client) won back 3 MB: 15.4-15.8 MB in three runs. The remainder over 12.4 MB is code
-# pages, not state (docs/footprint.md, "Wave B"): wave A had already reached 14.7 MB and B1-B12 add
-# routes and parsers (+1.2 MB). Still 5 threads and 9 sockets. The baseline is the lowest value whose
-# limit (baseline + 20 % = 16.3 MB) still clears the worst of those runs by 3 %, so the old 18.8 MB
-# fails. It sits below the measured RSS on purpose; raise it only with a reason.
-# FI (fix batch merged): the outbound policy, sign-in throttle, team gate and the F5/F6 UI add about
-# 0.6 MB on top of F7's trims, so the merged branch idles at 16.0 MB (15.4 MB for F7 alone). Baseline
-# raised to 14336 KB (limit 16.8 MB, 5 % over the measured value). Bring it down with the next trim.
-# Crate split (c0bf36d, server into podkit-core, podkit-ui and a thin binary): 16.0 MB to 22.6 MB
-# with no new code or dependency. The per-route axum glue that start-up runs once per route used to
-# sit in one 64 KiB block and is now spread over 134 of them, and the kernel maps 64 KiB around each
-# first touch: 6.6 MB more of the binary's code mapped, clean and reclaimable
-# (docs/footprint.md, "The crate split"). 22.9 MB here, 23.0 MB on CI; baseline raised to 20736 KB
-# (limit 24.3 MB, 5 % over CI). Bring it down when that glue is back in one place.
-server_baseline_kb=20736
-# Agent: 9.1-9.4 MB measured (7.8 MB before wave B: the B6 log collector costs ~0.9 MB). Limit 9.6 MB.
-agent_baseline_kb=8192
+# Anonymous idle RSS (RssAnon: heap and stacks), the memory a process holds. Fails over
+# baseline + 20 %. The baseline is the last measured value, rounded up; raise it only with a
+# reason. Measured: server 3952 KB, agent 1092 KB. The agent's is small enough for
+# allocator noise to matter, so its baseline has more room.
+server_anon_baseline_kb=4096
+agent_anon_baseline_kb=1280
+# Binary size, which follows code and dependencies. Fails over baseline + 10 %.
+# Measured: server 28960 KB, agent 7868 KB.
+server_bin_baseline_kb=29184
+agent_bin_baseline_kb=7936
+# The shared libraries a binary may ask for (stems, globs allowed). Anything else is a new
+# native dependency: OpenSSL arriving with webauthn-rs 0.5 cost 3 MB (docs/footprint.md, "Wave B").
+allowed_libs="libc libm libgcc_s ld-linux-*"
