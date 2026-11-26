@@ -16,6 +16,7 @@
 #
 # --check fails (exit 1) on any of these, read from scripts/footprint.budget:
 #   - RSS over the cap (the card's promise), idle or after use
+#   - peak RSS over the cap plus the one transient the budget names (a password hash)
 #   - anonymous RSS over its baseline + 20 %, idle or after use: memory the process holds
 #   - binary size over its baseline + 10 %: code and dependencies
 #   - a shared library that is not on the allowlist: a second crypto or TLS stack
@@ -283,6 +284,8 @@ for n in server agent; do
 	gate "$n" 'idle RSS' "${idle_rss[$n]}" "${!cap}"
 	gate "$n" 'anonymous idle RSS' "${idle_anon[$n]}" $((${!anon} * 120 / 100))
 	gate "$n" 'RSS after use' "${load_rss[$n]}" "${!cap}"
+	transient=${n}_transient_kb
+	gate "$n" 'peak RSS' "${peak[$n]}" $((${!cap} + ${!transient}))
 	gate "$n" 'anonymous RSS after use' "${load_anon[$n]}" $((${!used} * 120 / 100))
 	gate "$n" 'binary' "${bin_kb[$n]}" $((${!size} * 110 / 100))
 	# Only the server has one: its start-up code is laid out by scripts/build-ordered.sh.

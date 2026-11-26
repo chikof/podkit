@@ -7,6 +7,11 @@ enforced: `scripts/footprint.sh --check` (and the `footprint` job in
 
 ## What was measured
 
+The server and agent rows below are from the first footprint card, before most of today's
+features. Today the server idles at 13.0 MB when built with `scripts/build-ordered.sh` and
+at 23.2 MB as a plain build, which is what the container image still is; it holds 33.3 MB
+after use, and the agent 9.1 MB. The sections after this one say how the numbers moved.
+
 Release build (`cargo build --release`, `opt-level = "z"`, LTO, stripped), Linux
 6.18 on a 16-thread workstation, Postgres 18 in a container (`pk-pg`), rootless
 Podman. Idle means: started, ready, **no requests and no registered remote server**,
@@ -75,6 +80,7 @@ read after 20 s.
 | idle RSS | the cap, the promise | 60 MB | 25 MB | the number podkit advertises |
 | anonymous idle RSS (`RssAnon`: heap and stacks) | baseline + 20 % | 4.8 MB (measured 3.9 MB) | 1.5 MB (measured 1.1 MB) | a cache, a pool, a background loop |
 | RSS after use | the cap | 60 MB (measured 34.9 MB) | 25 MB (measured 9.2 MB) | what a server in use holds |
+| peak RSS | the cap plus one password hash (64 MiB) for the server | 124 MB (measured 79.4 MB) | 25 MB (measured 9.5 MB) | a moment that costs more than a sign-in |
 | anonymous RSS after use | baseline + 20 % | 10.8 MB (measured 8.7 MB) | 1.5 MB (measured 1.1 MB) | a cache that fills and never empties |
 | binary size | baseline + 10 % | 31.3 MB (measured 28.3 MB) | 8.5 MB (measured 7.7 MB) | new code and dependencies |
 | shared libraries (`readelf -d`) | an allowlist | libc, libm, libgcc | the same | a second crypto or TLS stack |
@@ -110,10 +116,22 @@ the same run:
   attributed to an owner.
 - **File-backed pages, +7.0 MB.** The code of the handlers that ran, mapped from the binary.
 - **Peak, 86.5 MB.** A password hash: Argon2id with 64 MiB of memory
-  (`crates/crypto/src/argon2.rs`), 67 MB in the profile, freed when the hash is done. It is
-  over the 60 MB cap for as long as a sign-in takes, and up to one hash per CPU core runs at
-  a time, so the worst case is 64 MiB times the core count. The peak is reported and not
-  gated.
+  (`crates/crypto/src/argon2.rs`), 67 MB in the profile, freed when the hash is done.
+
+### What the 60 MB means
+
+The server holds at most 60 MB, idle or after use. While a password is being hashed, at
+sign-up, sign-in or a password change, it holds 64 MiB more, for about 100 ms. One hash
+runs at a time, whatever the number of cores, so that is the whole of it: twelve sign-ins
+at once peak at 98 MB and the last one waits a second. With one hash per core, as it was,
+the same burst reached 354 MB on a 16-core machine.
+
+So a memory limit for the server's container wants 128 MB, not 64.
+
+The 64 MiB is not trimmed. It is the second recommended option of RFC 9106, the one for
+memory-constrained environments; OWASP's minimum is lower (19 MiB with two passes) and
+costs resistance to guessing a stolen hash. `--check` fails when the peak goes over the cap
+plus one hash.
 
 ## What changed on this card (before / after)
 
@@ -367,7 +385,7 @@ do publish is the hardware to provide and the services they run.
 
 | | podkit | Coolify v4 | Dokploy |
 |---|---|---|---|
-| Published minimum | none beyond the host; budget: server ≤ 60 MB, agent ≤ 25 MB RSS (measured 12.4 / 7.8 MB) | 2 CPU cores, 2 GB RAM, 10 GB disk ([installation docs](https://coolify.io/docs/get-started/installation)) | at least 2 GB RAM and 30 GB disk ([installation docs](https://docs.dokploy.com/docs/core/installation)) |
+| Published minimum | none beyond the host; budget: server ≤ 60 MB (64 MiB more while a password is hashed), agent ≤ 25 MB RSS (measured 12.4 / 7.8 MB) | 2 CPU cores, 2 GB RAM, 10 GB disk ([installation docs](https://coolify.io/docs/get-started/installation)) | at least 2 GB RAM and 30 GB disk ([installation docs](https://docs.dokploy.com/docs/core/installation)) |
 | Smaller setups | runs next to other workloads on a homelab box | "can run on smaller servers (for example: 1 CPU core, 512 MB RAM, 4 GB disk), but this is not recommended" (same page) | not stated |
 | Always-on services of the control plane | `server` (1 process) + Postgres; `podkit-agent` (1 process per server) | `coolify` (PHP app), `postgres`, `redis`, `soketi` realtime, all from one compose file ([docker-compose.prod.yml](https://raw.githubusercontent.com/coollabsio/coolify/v4.x/docker-compose.prod.yml)); plus a proxy it creates for each server | `dokploy` app, `postgres:16`, and `traefik:v3.7.19`, created by the installer as Docker Swarm services ([install.sh](https://dokploy.com/install.sh)) |
 | Reverse proxy | Traefik, started on the first routed deploy | proxy container on every managed server | Traefik from install |
