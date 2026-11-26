@@ -1,8 +1,9 @@
 //! One-click templates: a service or a small stack with its variables, ready
 //! to deploy from a gallery.
 //!
-//! Templates are files under `crates/core/templates/<id>/` that `build.rs` embeds
-//! in the binary, so nothing is fetched at run time:
+//! Templates come from the podkit-templates repository. An administrator refreshes the
+//! catalog, which is then read from the data directory with no network ([`catalog`]).
+//! Each is a folder:
 //!
 //! ```text
 //! template.toml       who it is, its variables, domains and file mounts
@@ -13,6 +14,7 @@
 //! `template.toml` keeps the shape of Dokploy's blueprints (MIT), so those
 //! import without rewriting; see `docs/templates.md`.
 
+pub mod catalog;
 pub(crate) mod embed;
 pub mod expr;
 pub mod import;
@@ -27,9 +29,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-#[cfg(any(test, feature = "testing"))]
-pub use registry::load_all;
-pub use registry::{Loaded, find, search, short_hash};
+pub use registry::{Loaded, find, load_all, search, short_hash};
 pub use routes::{VariableInfo, variables};
 pub use routes::{deploy_router, router};
 
@@ -57,6 +57,29 @@ pub const CATEGORIES: &[&str] = &[
 
 /// Largest logo, in bytes.
 pub const MAX_LOGO_BYTES: usize = 64 * 1024;
+
+/// Whether a template is known to work.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Status {
+	/// Nothing is known to be wrong.
+	#[default]
+	Ok,
+	/// It does not deploy or start as written.
+	Broken,
+	/// Nobody keeps it up to date.
+	Unmaintained,
+}
+
+impl Status {
+	#[allow(
+		clippy::trivially_copy_pass_by_ref,
+		reason = "serde's skip_serializing_if hands a reference"
+	)]
+	fn is_ok(&self) -> bool {
+		*self == Self::Ok
+	}
+}
 
 /// A template as written in `template.toml`.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -91,6 +114,15 @@ pub struct Template {
 	/// `Dokploy/templates@6313a2e blueprints/umami`.
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	pub upstream: Option<String>,
+	/// Set by a maintainer of the catalog when the template is broken or unmaintained.
+	#[serde(default, skip_serializing_if = "Status::is_ok")]
+	pub status: Status,
+	/// Why, in a sentence.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	pub status_note: Option<String>,
+	/// GitHub user names of the people who look after the template.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	pub maintainers: Vec<String>,
 	/// The software talks to an OpenAI-compatible endpoint: link a podkit
 	/// model to the application and it gets the gateway's variables.
 	#[serde(default, skip_serializing_if = "std::ops::Not::not")]

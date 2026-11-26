@@ -233,6 +233,7 @@ async fn render(
 	query: &DetailQuery,
 ) -> Result<Markup, Response> {
 	let l = templates::find(id).ok_or_else(|| error::page(ctx, &ServerError::NotFound))?;
+	let l = &*l;
 	let t = &l.template;
 	let vars = templates::variables(t);
 	let deployable = can_deploy(ctx, l);

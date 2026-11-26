@@ -23,6 +23,7 @@ pub fn router() -> Router<AppState> {
 	Router::new()
 		.route("/teams/{team_id}/templates", get(gallery::page))
 		.route("/teams/{team_id}/templates/results", get(gallery::results))
+		.route("/teams/{team_id}/templates/refresh", post(gallery::refresh))
 		.route(
 			"/teams/{team_id}/templates/{template_id}",
 			get(detail::page),

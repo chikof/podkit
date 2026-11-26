@@ -21,7 +21,20 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
 	Router::new()
 		.route("/", get(list))
+		.route("/refresh", post(refresh))
 		.route("/{template_id}", get(detail))
+}
+
+/// `POST /refresh`: fetch the catalog again. The catalog is the whole instance's, so only
+/// its administrator may.
+async fn refresh(
+	State(s): State<AppState>,
+	user: AuthUser,
+) -> AppResult<Json<super::catalog::Refreshed>> {
+	if !crate::quotas::service::is_instance_admin(&s.db, user.id).await? {
+		return Err(ServerError::Forbidden);
+	}
+	Ok(Json(super::catalog::refresh(&s).await?))
 }
 
 /// `POST /{id}/deploy`, nested under a project.
@@ -106,7 +119,7 @@ async fn list(_user: AuthUser, Query(query): Query<ListQuery>) -> AppResult<Json
 		.filter(|c| c.count > 0)
 		.collect();
 	Ok(Json(ListResponse {
-		templates: search(q, category).into_iter().map(summary).collect(),
+		templates: search(q, category).iter().map(|l| summary(l)).collect(),
 		categories,
 	}))
 }
@@ -200,7 +213,7 @@ async fn detail(_user: AuthUser, Path(id): Path<String>) -> AppResult<Json<Detai
 	let l = super::find(&id).ok_or(ServerError::NotFound)?;
 	let t = &l.template;
 	Ok(Json(Detail {
-		summary: summary(l),
+		summary: summary(&l),
 		docs: t.docs.clone(),
 		source: t.source.clone(),
 		upstream: t.upstream.clone(),
