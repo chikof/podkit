@@ -151,25 +151,9 @@ impl Builder<'_, '_> {
 		self.ctx.issue(Some(self.name), path, message);
 	}
 
-	/// Whether `bytes` more of file content may be mounted. A file is copied into each
-	/// mount of it, so one config mounted thousands of times was gigabytes; past the
-	/// limit the stack is refused, once, and nothing more is copied.
-	fn room(&mut self, path: &str, bytes: usize) -> bool {
-		if self.ctx.mounted > super::MAX_MOUNTED {
-			return false;
-		}
-		self.ctx.mounted += bytes;
-		if self.ctx.mounted > super::MAX_MOUNTED {
-			self.issue(
-				path,
-				format!(
-					"the files mounted into the services come to more than {} MiB",
-					super::MAX_MOUNTED >> 20
-				),
-			);
-			return false;
-		}
-		true
+	/// One use of `bytes` from a variable or a file of the stack ([`super::Ctx::take`]).
+	fn take(&mut self, path: &str, bytes: usize) -> bool {
+		self.ctx.take(Some(self.name), path, bytes)
 	}
 
 	fn warn(&mut self, path: &str, message: impl Into<String>) {
@@ -339,7 +323,9 @@ impl Builder<'_, '_> {
 				for (key, v) in map {
 					match v {
 						Value::Null => {
-							if let Some(found) = self.ctx.inputs.env.get(key) {
+							if let Some(found) = self.ctx.inputs.env.get(key)
+								&& self.take(path, found.len())
+							{
 								out.push((key.clone(), found.clone()));
 							}
 						}
@@ -362,7 +348,9 @@ impl Builder<'_, '_> {
 					match text.split_once('=') {
 						Some((key, v)) => out.push((key.to_string(), v.to_string())),
 						None => {
-							if let Some(found) = self.ctx.inputs.env.get(&text) {
+							if let Some(found) = self.ctx.inputs.env.get(&text)
+								&& self.take(path, found.len())
+							{
 								out.push((text.clone(), found.clone()));
 							}
 						}
@@ -404,7 +392,11 @@ impl Builder<'_, '_> {
 				continue;
 			}
 			match self.ctx.inputs.files.get(&normalized) {
-				Some(content) => out.extend(value::dotenv(content)),
+				Some(content) => {
+					if self.take(path, content.len()) {
+						out.extend(value::dotenv(content));
+					}
+				}
 				None => self.issue(
 					path,
 					format!("env_file {entry:?} is not supported; set the variables on the stack"),
@@ -820,7 +812,7 @@ impl Builder<'_, '_> {
 				);
 				continue;
 			};
-			if !self.room(&item_path, size) {
+			if !self.take(&item_path, size) {
 				return;
 			}
 			let content = self.ctx.resources[&key].clone();
@@ -995,7 +987,7 @@ impl Builder<'_, '_> {
 		}
 		let files = self.ctx.inputs.files;
 		if let Some(content) = files.get(&normalized) {
-			if self.room(path, content.len()) {
+			if self.take(path, content.len()) {
 				s.mounts.push(Mount::File {
 					target: target.to_string(),
 					content: content.clone(),
@@ -1011,12 +1003,14 @@ impl Builder<'_, '_> {
 				k.strip_prefix(&prefix).map(str::to_string)
 			}
 		};
-		let size: usize = files
+		// Each file under the folder is a use, an empty one too.
+		let (count, size) = files
 			.iter()
 			.filter(|(k, _)| under(k).is_some())
-			.map(|(_, v)| v.len())
-			.sum();
-		if size > 0 && !self.room(path, size) {
+			.fold((0usize, 0usize), |(n, bytes), (_, v)| {
+				(n + 1, bytes + v.len())
+			});
+		if count > 0 && !self.take(path, size + count * 64) {
 			return;
 		}
 		let nested: Vec<(String, String)> = files

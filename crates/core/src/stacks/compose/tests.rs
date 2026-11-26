@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use proto::{Protocol, Restart};
 
 use super::value::{bytes, dotenv, duration_ms, port};
-use super::{Compose, Condition, Inputs, Issue, Mount, interpolate, parse, slug};
+use super::{Compose, Condition, Inputs, Issue, MAX_BYTES, Mount, interpolate, parse, slug};
 
 fn env(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
 	pairs
@@ -654,39 +654,78 @@ fn names_that_would_collide_or_break_are_refused() {
 	assert_eq!(paths(&issues), ["services.-bad"]);
 }
 
-#[test]
-fn a_variable_used_in_thousands_of_places_does_not_make_the_file_gigabytes() {
-	use std::fmt::Write as _;
-	let big = "y".repeat(60_000);
-	let env = env(&[("BIG", &big)]);
-	let files = BTreeMap::new();
+// ------------------------------------------------- what a file may take
+
+/// A stack variable of the largest size the API takes.
+const BIG: usize = 64 * 1024;
+
+/// Parses `yaml` with `BIG`-sized variables `V0..` and files, and expects one refusal that
+/// names the budget. Each case is a file under 256 KiB that used to be gigabytes.
+fn refused_for_taking(yaml: &str, variables: usize, files: &[(&str, usize)]) {
+	assert!(
+		yaml.len() <= MAX_BYTES,
+		"the case itself is {} bytes",
+		yaml.len()
+	);
+	let env: BTreeMap<String, String> = (0..variables)
+		.map(|n| (format!("V{n}"), "y".repeat(BIG)))
+		.collect();
+	let files: BTreeMap<String, String> = files
+		.iter()
+		.map(|(name, size)| ((*name).to_owned(), "z".repeat(*size)))
+		.collect();
 	let inputs = Inputs {
 		env: &env,
 		files: &files,
 	};
-	let with = |lines: usize| {
-		let mut yaml = "services:\n  x:\n    image: nginx\n    environment:\n".to_owned();
-		for n in 0..lines {
-			let _ = writeln!(yaml, "      - V{n}=${{BIG}}");
-		}
-		yaml
-	};
-	// Seventeen copies are 1 MiB less a little; eighteen are over.
-	assert!(parse(&with(17), &inputs).is_ok());
-	let issues = parse(&with(6400), &inputs).expect_err("6400 copies of 60 KB");
-	assert_eq!(issues.len(), 1, "said once: {issues:#?}");
+	let started = std::time::Instant::now();
+	let issues = parse(yaml, &inputs).expect_err("it is refused");
+	let about_taking = issues
+		.iter()
+		.filter(|i| i.message.contains("counting every use"))
+		.count();
+	assert_eq!(about_taking, 1, "said once: {issues:#?}");
 	assert!(
-		issues[0]
-			.message
-			.contains("once its variables are filled in")
+		started.elapsed().as_secs() < 5,
+		"refused late: {:?}",
+		started.elapsed()
 	);
+}
 
-	// And one value that names it thousands of times.
-	let one = format!(
-		"services:\n  x:\n    image: nginx\n    command: \"{}\"\n",
-		"${BIG}".repeat(5000)
+/// `count` lines, the `n`th made by `line`.
+fn lines(count: usize, line: impl Fn(usize) -> String) -> String {
+	let mut out = String::new();
+	for n in 0..count {
+		out.push_str(&line(n));
+	}
+	out
+}
+
+fn service(body: &str) -> String {
+	format!("services:\n  x:\n    image: nginx\n{body}")
+}
+
+#[test]
+fn a_variable_filled_in_thousands_of_times_is_refused() {
+	refused_for_taking(
+		&service(&format!(
+			"    environment:\n{}",
+			"      - A=${V0}\n".repeat(6400)
+		)),
+		1,
+		&[],
 	);
-	let issues = parse(&one, &inputs).expect_err("5000 copies in one value");
+	// In one value, the value itself stops first.
+	let one = service(&format!("    command: \"{}\"\n", "${V0}".repeat(5000)));
+	let big = "y".repeat(BIG);
+	let issues = parse(
+		&one,
+		&Inputs {
+			env: &env(&[("V0", &big)]),
+			files: &BTreeMap::new(),
+		},
+	)
+	.expect_err("5000 copies in one value");
 	assert!(
 		issues[0].message.contains("a value comes to more than"),
 		"{issues:#?}"
@@ -694,42 +733,128 @@ fn a_variable_used_in_thousands_of_places_does_not_make_the_file_gigabytes() {
 }
 
 #[test]
-fn a_file_mounted_thousands_of_times_is_refused_and_not_copied_each_time() {
+fn a_variable_passed_through_thousands_of_times_is_refused() {
+	// Listed by name alone, the value comes from the stack: no `$` in the file at all.
+	refused_for_taking(
+		&service(&format!(
+			"    environment:\n{}",
+			"      - V0\n".repeat(20_000)
+		)),
+		1,
+		&[],
+	);
+	refused_for_taking(
+		&service(&format!(
+			"    environment:\n{}",
+			lines(200, |n| format!("      V{n}:\n"))
+		)),
+		200,
+		&[],
+	);
+	// The same list in each of 64 services.
+	let list = lines(200, |n| format!("      - V{n}\n"));
+	let services = lines(10, |n| {
+		format!("  s{n}:\n    image: nginx\n    environment:\n{list}")
+	});
+	refused_for_taking(&format!("services:\n{services}"), 200, &[]);
+}
+
+#[test]
+fn a_config_taken_from_a_variable_or_a_file_thousands_of_times_is_refused() {
+	let from_variable = lines(8000, |n| format!("  c{n}:\n    environment: V0\n"));
+	refused_for_taking(&format!("configs:\n{from_variable}{}", service("")), 1, &[]);
+	let from_file = lines(2000, |n| format!("  c{n}:\n    file: ./big\n"));
+	refused_for_taking(
+		&format!("secrets:\n{from_file}{}", service("")),
+		0,
+		&[("big", 900_000)],
+	);
+}
+
+#[test]
+fn a_file_mounted_thousands_of_times_is_refused() {
 	let content = "z".repeat(150_000);
 	let with = |mounts: usize| {
 		format!(
-			"configs:\n  c:\n    content: \"{content}\"\nservices:\n  x:\n    image: nginx\n    configs:\n{}",
-			"      - c\n".repeat(mounts)
+			"configs:\n  c:\n    content: \"{content}\"\n{}",
+			service(&format!("    configs:\n{}", "      - c\n".repeat(mounts)))
 		)
 	};
-	// Twenty-seven mounts of 150 KB are under 4 MiB; twenty-eight are over.
+	// Twenty-seven mounts of 150 KB are under the budget; twenty-eight are over.
 	assert_eq!(ok(&with(27), &[]).services["x"].mounts.len(), 27);
-	let issues = refused(&with(3000));
-	assert_eq!(issues.len(), 1, "said once: {issues:#?}");
-	assert!(
-		issues[0]
-			.message
-			.contains("files mounted into the services")
-	);
+	refused_for_taking(&with(28), 0, &[]);
+	refused_for_taking(&with(3000), 0, &[]);
 
-	// The same for a file of the stack bound into a service, and for a folder of them.
-	let env = BTreeMap::new();
-	let files: BTreeMap<String, String> = [("conf/a.txt".to_owned(), content.clone())].into();
-	let inputs = Inputs {
-		env: &env,
-		files: &files,
-	};
+	// A file of the stack, and a folder of them, bound into a service.
 	for bind in ["./conf/a.txt:/a.txt", "./conf:/conf"] {
-		let yaml = format!(
-			"services:\n  x:\n    image: nginx\n    volumes:\n{}",
-			format!("      - {bind}\n").repeat(3000)
-		);
-		let issues = parse(&yaml, &inputs).expect_err(bind);
-		assert!(
-			issues
-				.iter()
-				.any(|i| i.message.contains("files mounted into the services")),
-			"{bind}: {issues:#?}"
+		refused_for_taking(
+			&service(&format!(
+				"    volumes:\n{}",
+				format!("      - {bind}\n").repeat(3000)
+			)),
+			0,
+			&[("conf/a.txt", 150_000)],
 		);
 	}
+	// An env file read thousands of times.
+	refused_for_taking(
+		&service(&format!(
+			"    env_file:\n{}",
+			"      - ./conf/a.env\n".repeat(3000)
+		)),
+		0,
+		&[("conf/a.env", 150_000)],
+	);
+}
+
+#[test]
+fn a_folder_of_empty_files_bound_thousands_of_times_is_refused() {
+	// No bytes at all, and four million mounts.
+	let names: Vec<String> = (0..2000).map(|n| format!("dir/f{n}")).collect();
+	let files: Vec<(&str, usize)> = names.iter().map(|n| (n.as_str(), 0)).collect();
+	let binds = lines(2000, |n| format!("      - ./dir:/t/{n}\n"));
+	refused_for_taking(&service(&format!("    volumes:\n{binds}")), 0, &files);
+}
+
+#[test]
+fn an_anchor_replayed_into_every_service_is_refused_by_the_parser() {
+	// One 250 KB scalar, four aliases of it in a list, that list in 64 services: 64 MB.
+	let services = lines(64, |n| {
+		format!("  s{n}:\n    image: nginx\n    command: *b\n")
+	});
+	let yaml = format!(
+		"x-a: &a \"{}\"\nx-b: &b [*a, *a, *a, *a]\nservices:\n{services}",
+		"q".repeat(250_000)
+	);
+	assert!(yaml.len() <= MAX_BYTES);
+	let issues = refused(&yaml);
+	assert!(issues[0].message.contains("not valid YAML"), "{issues:#?}");
+
+	// Anchors as people use them still read: a shared block merged into each service.
+	let shared = "x-common: &common\n  restart: unless-stopped\n  environment:\n    TZ: UTC\n";
+	let services = lines(20, |n| {
+		format!("  s{n}:\n    <<: *common\n    image: nginx\n")
+	});
+	assert_eq!(
+		ok(&format!("{shared}services:\n{services}"), &[])
+			.services
+			.len(),
+		20
+	);
+}
+
+#[test]
+fn what_a_real_stack_takes_is_far_below_the_budget() {
+	// A dozen variables used a few times each and a config mounted into every service.
+	let env: Vec<(String, String)> = (0..12).map(|n| (format!("K{n}"), "v".repeat(40))).collect();
+	let env: Vec<(&str, &str)> = env.iter().map(|(k, v)| (k.as_str(), v.as_str())).collect();
+	let uses = lines(12, |n| format!("      A{n}: \"${{K{n}}}\"\n      K{n}:\n"));
+	let services = lines(8, |n| {
+		format!("  s{n}:\n    image: nginx\n    environment:\n{uses}    configs:\n      - c\n")
+	});
+	let yaml = format!(
+		"configs:\n  c:\n    content: \"{}\"\nservices:\n{services}",
+		"c".repeat(4000)
+	);
+	assert_eq!(ok(&yaml, &env).services.len(), 8);
 }

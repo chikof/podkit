@@ -25,11 +25,19 @@ pub use value::interpolate;
 pub const MAX_BYTES: usize = 256 * 1024;
 /// Most services in one stack.
 pub const MAX_SERVICES: usize = 64;
-/// What the values of one file may come to once their variables are filled in. A file is at
-/// most 256 KiB as written; one variable used in thousands of places made it gigabytes.
-pub const MAX_EXPANDED: usize = 1 << 20;
-/// What the files mounted into the services of one stack may come to, each mount counted.
-pub const MAX_MOUNTED: usize = 4 << 20;
+/// What reading one file may take from outside it: every value of a variable filled in or
+/// passed through, and every file or config mounted, counted each time it is used.
+///
+/// The file is at most 256 KiB as written, but a use is a copy: one 64 KiB variable listed
+/// 25,000 times, or one config mounted 3,000 times, was gigabytes. Limits on single places
+/// kept missing the next place, so every read of a variable or a file goes through
+/// [`Ctx::take`] and there is one budget.
+pub const MAX_TAKEN: usize = 4 << 20;
+/// What a use costs besides its bytes, so that a million uses of nothing are counted too.
+const PER_USE: usize = 64;
+/// Scalar text the YAML may come to with its aliases followed: an anchor can be replayed
+/// into every service. The parser's own limit is 64 MiB.
+const MAX_YAML_SCALARS: usize = 8 * MAX_BYTES;
 
 /// Something in the file podkit will not run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -166,15 +174,35 @@ pub(crate) struct Ctx<'a> {
 	pub(crate) issues: Vec<Issue>,
 	pub(crate) warnings: Vec<Warning>,
 	pub(crate) missing: BTreeSet<String>,
-	/// Bytes of every value that had a variable filled in, so far.
-	pub(crate) expanded: usize,
-	/// Bytes of file content mounted into services, so far.
-	pub(crate) mounted: usize,
+	/// What has been taken from the variables and files so far ([`MAX_TAKEN`]).
+	pub(crate) taken: usize,
 	/// Text of top-level `configs.*` and `secrets.*`, by that path.
 	pub(crate) resources: BTreeMap<String, String>,
 }
 
 impl Ctx<'_> {
+	/// Counts one use of `bytes` from a variable or a file against [`MAX_TAKEN`], and says
+	/// whether it may be made. Past the limit the file is refused, once, and no further
+	/// copy is made.
+	pub(crate) fn take(&mut self, service: Option<&str>, path: &str, bytes: usize) -> bool {
+		if self.taken > MAX_TAKEN {
+			return false;
+		}
+		self.taken = self.taken.saturating_add(bytes).saturating_add(PER_USE);
+		if self.taken > MAX_TAKEN {
+			self.issue(
+				service,
+				path,
+				format!(
+					"the file takes more than {} MiB from its variables and files, counting every use",
+					MAX_TAKEN >> 20
+				),
+			);
+			return false;
+		}
+		true
+	}
+
 	pub(crate) fn issue(&mut self, service: Option<&str>, path: &str, message: impl Into<String>) {
 		self.issues.push(Issue {
 			service: service.map(str::to_string),
@@ -208,22 +236,13 @@ fn interpolate_tree(ctx: &mut Ctx<'_>, value: &mut Value, path: &str, service: O
 	match value {
 		// Past the limit nothing more is filled in: the file is refused, and what is left of
 		// it must not be built up first.
-		Value::String(_) if ctx.expanded > MAX_EXPANDED => {}
+		Value::String(_) if ctx.taken > MAX_TAKEN => {}
 		Value::String(s) if !s.contains('$') => {}
 		Value::String(s) => match interpolate(s, ctx.inputs.env, &mut ctx.missing) {
 			Ok(expanded) => {
-				ctx.expanded += expanded.len();
-				if ctx.expanded > MAX_EXPANDED {
-					ctx.issue(
-						service,
-						path,
-						format!(
-							"the file comes to more than {} KiB once its variables are filled in",
-							MAX_EXPANDED / 1024
-						),
-					);
+				if ctx.take(service, path, expanded.len()) {
+					*s = expanded;
 				}
-				*s = expanded;
 			}
 			Err(message) => ctx.issue(service, path, message),
 		},
@@ -297,15 +316,19 @@ pub fn parse(yaml: &str, inputs: &Inputs<'_>) -> Result<Compose, Vec<Issue>> {
 			MAX_BYTES / 1024
 		)));
 	}
-	let mut root: Value =
-		serde_saphyr::from_str(yaml).map_err(|e| top_issue(format!("not valid YAML: {e}")))?;
+	let options = serde_saphyr::options! {
+		budget: serde_saphyr::budget! {
+			max_total_scalar_bytes: MAX_YAML_SCALARS,
+		},
+	};
+	let mut root: Value = serde_saphyr::from_str_with_options(yaml, options)
+		.map_err(|e| top_issue(format!("not valid YAML: {e}")))?;
 	let mut ctx = Ctx {
 		inputs,
 		issues: Vec::new(),
 		warnings: Vec::new(),
 		missing: BTreeSet::new(),
-		expanded: 0,
-		mounted: 0,
+		taken: 0,
 		resources: BTreeMap::new(),
 	};
 	let Some(top) = root.as_object_mut() else {
@@ -461,14 +484,21 @@ fn top_resources(ctx: &mut Ctx<'_>, kind: &str, value: &Value) {
 			match (key.as_str(), v.as_str()) {
 				("content", Some(text)) => content = Some(text.to_string()),
 				("environment", Some(var)) => {
-					content = Some(ctx.inputs.env.get(var).cloned().unwrap_or_default());
-					if !ctx.inputs.env.contains_key(var) {
+					let found = ctx.inputs.env.get(var);
+					if found.is_none() {
 						ctx.missing.insert(var.to_string());
+					}
+					if ctx.take(None, &key_path, found.map_or(0, String::len)) {
+						content = Some(found.cloned().unwrap_or_default());
 					}
 				}
 				("file", Some(file)) => {
 					match ctx.inputs.files.get(&service::normalize_relative(file)) {
-						Some(text) => content = Some(text.clone()),
+						Some(text) => {
+							if ctx.take(None, &key_path, text.len()) {
+								content = Some(text.clone());
+							}
+						}
 						None => ctx.issue(
 							None,
 							&key_path,
