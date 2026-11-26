@@ -6,6 +6,11 @@
 # new code (docs/footprint.md, "The crate split").
 server_cap_kb=61440
 agent_cap_kb=25600
+# What a process may add to its cap for a moment (peak RSS, VmHWM). The server hashes a
+# password with 64 MiB of memory (Argon2id, crates/crypto/src/argon2.rs), one hash at a
+# time, and frees it. The agent has nothing of the kind.
+server_transient_kb=65536
+agent_transient_kb=0
 # File-backed idle RSS of the server (idle RSS minus RssAnon): the code of the binary that
 # is mapped. scripts/build-ordered.sh keeps it small by laying the start-up code out in one
 # block; without that it is about 19 MB. Fails over baseline + 20 %. When it does, a list
