@@ -8,12 +8,11 @@ use argon2::{
 use tokio::{sync::Semaphore, task};
 use zeroize::Zeroizing;
 
-/// Caps concurrent hashing/verification so peak memory stays at
-/// permits x 64 MiB no matter how many logins arrive at once.
-///
-/// Two, whatever the machine: one permit per core let a 16-core host spend 1 GiB on a
-/// burst of sign-ins. The rest wait their turn, about 100 ms per hash ahead of them.
-static LIMIT: Semaphore = Semaphore::const_new(2);
+/// One hash or verification at a time, so a sign-in never costs the server more than the
+/// 64 MiB of a single hash, however many arrive at once and whatever the machine: one
+/// permit per core let a 16-core host spend 1 GiB on a burst. The others wait their turn,
+/// about 100 ms per hash ahead of them.
+static LIMIT: Semaphore = Semaphore::const_new(1);
 
 /// Builds an Argon2id instance with hardened parameters:
 /// m=64 MiB, t=3 iterations, p=4 lanes
