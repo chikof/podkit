@@ -798,6 +798,20 @@ async fn the_list_can_be_searched_and_filtered_and_needs_a_login(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn a_template_the_catalog_flags_says_so_with_its_reason(db: PgPool) {
+	let s = Setup::new(db).await;
+	let (_, flagged) = s.get("/api/v1/templates/bytebase").await;
+	assert_eq!(flagged["status"], "broken");
+	assert_eq!(
+		flagged["status_note"],
+		"The image tag it names is no longer published."
+	);
+	let (_, fine) = s.get("/api/v1/templates/gotify").await;
+	assert_eq!(fine["status"], "ok");
+	assert_eq!(fine["status_note"], Value::Null);
+}
+
+#[sqlx::test]
 async fn only_the_instance_administrator_refreshes_the_catalog(db: PgPool) {
 	let s = Setup::new(db).await;
 	let (bob, _) = user_with_team(&s.app, "bob").await;
