@@ -6,6 +6,11 @@
 # new code (docs/footprint.md, "The crate split").
 server_cap_kb=61440
 agent_cap_kb=25600
+# File-backed idle RSS of the server (idle RSS minus RssAnon): the code of the binary that
+# is mapped. scripts/build-ordered.sh keeps it small by laying the start-up code out in one
+# block; without that it is about 19 MB. Fails over baseline + 20 %. When it does, a list
+# of start-up functions has gone stale: run scripts/startup-order.sh. Measured: 8.7-9.1 MB.
+server_idle_file_baseline_kb=9216
 # Anonymous idle RSS (RssAnon: heap and stacks), the memory a process holds. Fails over
 # baseline + 20 %. The baseline is the last measured value, rounded up; raise it only with a
 # reason. Measured: server 3952 KB, agent 1092 KB. The agent's is small enough for
