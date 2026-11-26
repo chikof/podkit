@@ -151,6 +151,29 @@ fn redirect_of(body: &str) -> String {
 }
 
 #[db_test(migrator = "podkit_core::db::MIGRATOR")]
+async fn the_market_link_only_leads_to_a_template_of_this_catalog_and_deploys_nothing(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	let (status, headers, _) = get_html(&f.app, "/market/gotify", Some(&f.cookie)).await;
+	assert_eq!(status, StatusCode::SEE_OTHER);
+	assert_eq!(
+		headers["location"],
+		format!("/teams/{}/templates/gotify", f.team)
+	);
+	assert_eq!(count(&db, "applications").await, 0);
+	assert_eq!(count(&db, "stacks").await, 0);
+
+	// An id the catalog does not have is answered with a page, and is not echoed into a link.
+	let (status, _, body) = get_html(&f.app, "/market/no-such%2F..%2Fx", Some(&f.cookie)).await;
+	assert_eq!(status, StatusCode::OK);
+	assert_contains(&body, "This podkit does not have that template");
+	assert_not_contains(&body, "no-such");
+
+	// Without a session it is the sign-in page's business.
+	let (status, _, _) = get_html(&f.app, "/market/gotify", None).await;
+	assert!(status.is_redirection(), "{status}");
+}
+
+#[db_test(migrator = "podkit_core::db::MIGRATOR")]
 async fn the_gallery_shows_a_page_of_logo_cards_with_ai_and_databases_to_filter_by(db: PgPool) {
 	let f = Fixture::new(&db).await;
 	let (s, body) = f.get(&f.gallery()).await;
