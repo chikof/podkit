@@ -95,6 +95,21 @@ pub enum Command {
 		allow_empty: bool,
 		dry_run: bool,
 	},
+	Templates {
+		/// Words to search the catalog for.
+		query: Option<String>,
+		json: bool,
+	},
+	TemplateDeploy {
+		template: String,
+		place: Place,
+		/// `--server`: a name or an id; the team's only server when unset.
+		server: Option<String>,
+		name: Option<String>,
+		/// `--set name=value`, the answers to the template's questions.
+		set: Vec<(String, String)>,
+		json: bool,
+	},
 }
 
 /// The overview printed by `podkit --help`.
@@ -112,6 +127,8 @@ Usage: podkit <command> [options]
   logs <app>             print an application's logs (-f follows them)
   env pull <app> [file]  write the application's variables to a .env file
   env push <app> <file>  set the application's variables from a .env file
+  templates [words]      list the template catalog, or search it
+  templates deploy <id>  deploy a template into a project
   import <platform>      bring projects over from Coolify, Dokploy or CapRover
   mcp                    serve podkit's MCP tools over stdio
 
@@ -209,6 +226,22 @@ only) and asking. Variables not in the file are kept, unless --prune deletes the
                  variable the application has is skipped, so a pulled file pushed back
                  blanks nothing
   --dry-run      print what would change and stop
+"
+		}
+		"templates" => {
+			"Usage: podkit templates [words...] [--json]
+       podkit templates deploy <id> [--project <p>] [--server <s>] [--name <n>]
+                                    [--set <variable>=<value>]... [--json]
+
+Without deploy, lists the templates of podkit's catalog, or the ones that match the words.
+
+deploy makes an application or a stack from the template <id> in a project, and prints
+its address and any credentials podkit generated, which are shown this once.
+  --project <p>  the project (default: the saved one, or the team's only project)
+  --server <s>   the server to run it on, by name or id (default: the team's only server)
+  --name <n>     what to call it (default: the template's name)
+  --set a=b      an answer to one of the template's questions, or the host of a domain;
+                 give it once per variable
 "
 		}
 		_ => return None,
@@ -506,8 +539,47 @@ pub fn parse(args: Vec<String>) -> Result<Command, String> {
 			})
 		}
 		"env" => env(rest),
+		"templates" => templates(rest),
 		other => Err(format!("unknown command {other}\n\n{USAGE}")),
 	}
+}
+
+fn templates(rest: Vec<String>) -> Result<Command, String> {
+	let usage = help("templates").unwrap_or(USAGE);
+	if rest.first().map(String::as_str) != Some("deploy") {
+		let o = split(rest, &["--json"], &[])?;
+		return Ok(Command::Templates {
+			query: (!o.positional.is_empty()).then(|| o.positional.join(" ")),
+			json: o.has("--json"),
+		});
+	}
+	let o = split(
+		rest.into_iter().skip(1).collect(),
+		&["--json"],
+		&with_place(&["--server", "--name", "--set"]),
+	)?;
+	let [template] = o.positional.as_slice() else {
+		return Err(format!("name one template\n\n{usage}"));
+	};
+	let set = o
+		.values
+		.iter()
+		.filter(|(k, _)| *k == "--set")
+		.map(|(_, v)| {
+			v.split_once('=')
+				.filter(|(name, _)| !name.is_empty())
+				.map(|(name, value)| (name.to_owned(), value.to_owned()))
+				.ok_or(format!("--set takes <variable>=<value>, not {v}"))
+		})
+		.collect::<Result<Vec<_>, _>>()?;
+	Ok(Command::TemplateDeploy {
+		template: template.clone(),
+		place: o.place(),
+		server: o.value("--server"),
+		name: o.value("--name"),
+		set,
+		json: o.has("--json"),
+	})
 }
 
 fn env(rest: Vec<String>) -> Result<Command, String> {
@@ -561,6 +633,50 @@ mod tests {
 
 	fn p(line: &str) -> Result<Command, String> {
 		parse(line.split_whitespace().map(str::to_owned).collect())
+	}
+
+	#[test]
+	fn templates_lists_searches_and_deploys() {
+		assert_eq!(
+			p("templates"),
+			Ok(Command::Templates {
+				query: None,
+				json: false
+			})
+		);
+		assert_eq!(
+			p("templates password manager --json"),
+			Ok(Command::Templates {
+				query: Some("password manager".into()),
+				json: true
+			})
+		);
+		assert_eq!(
+			p(
+				"templates deploy n8n -p shop --server node-01 --set timezone=Europe/Berlin --set a=b=c"
+			),
+			Ok(Command::TemplateDeploy {
+				template: "n8n".into(),
+				place: place(None, Some("shop")),
+				server: Some("node-01".into()),
+				name: None,
+				set: vec![
+					("timezone".into(), "Europe/Berlin".into()),
+					("a".into(), "b=c".into())
+				],
+				json: false,
+			})
+		);
+		assert!(
+			p("templates deploy")
+				.unwrap_err()
+				.starts_with("name one template")
+		);
+		assert!(
+			p("templates deploy n8n --set novalue")
+				.unwrap_err()
+				.contains("--set takes")
+		);
 	}
 
 	fn place(team: Option<&str>, project: Option<&str>) -> Place {

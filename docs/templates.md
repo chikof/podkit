@@ -74,6 +74,17 @@ webhook secret), and nowhere else.
 `GET /api/v1/templates?q=&category=` and `GET /api/v1/templates/{id}` list and
 describe (variables, services, translation warnings); no generated value.
 
+## From the command line
+
+```sh
+podkit templates                 # the catalog
+podkit templates password        # the templates that match
+podkit templates deploy gotify --project shop --set main_domain=push.example.com
+```
+
+`deploy` prints the address and the generated credentials, which are shown that once.
+`podkit templates --help` lists the options.
+
 ## Checking a catalog
 
 `server check-templates <dir>` loads every template under `<dir>/templates` the way a
