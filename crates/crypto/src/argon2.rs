@@ -1,4 +1,4 @@
-use std::{num::NonZero, sync::LazyLock};
+use std::sync::LazyLock;
 
 use anyhow::{Context, anyhow};
 use argon2::{
@@ -8,10 +8,11 @@ use argon2::{
 use tokio::{sync::Semaphore, task};
 use zeroize::Zeroizing;
 
-/// Caps concurrent hashing/verification so peak memory stays at
-/// permits x 64 MiB no matter how many logins arrive at once.
-static LIMIT: LazyLock<Semaphore> =
-	LazyLock::new(|| Semaphore::new(std::thread::available_parallelism().map_or(2, NonZero::get)));
+/// One hash or verification at a time, so a sign-in never costs the server more than the
+/// 64 MiB of a single hash, however many arrive at once and whatever the machine: one
+/// permit per core let a 16-core host spend 1 GiB on a burst. The others wait their turn,
+/// about 100 ms per hash ahead of them.
+static LIMIT: Semaphore = Semaphore::const_new(1);
 
 /// Builds an Argon2id instance with hardened parameters:
 /// m=64 MiB, t=3 iterations, p=4 lanes
@@ -23,13 +24,10 @@ fn argon2() -> anyhow::Result<Argon2<'static>> {
 	))
 }
 
-/// Pre-computed valid Argon2id hash used for constant-time dummy verification.
-///
-/// When a user is not found, callers should verify the supplied password against
-/// this hash (and discard the result) to prevent user-enumeration via timing analysis.
-/// An invalid PHC string short-circuits `PasswordHash::new` and returns in microseconds
-/// instead of the full ~100 ms argon2 window, this defeats that.
-pub static DUMMY_HASH: LazyLock<String> = LazyLock::new(|| {
+/// A valid Argon2id hash nobody knows the password of, for [`verify_unknown`]. An invalid
+/// PHC string would short-circuit `PasswordHash::new` and return in microseconds instead of
+/// the full ~100 ms argon2 window.
+static DUMMY_HASH: LazyLock<String> = LazyLock::new(|| {
 	argon2()
 		.expect("valid argon2 params")
 		.hash_password(b"__podkit_timing_sentinel__")
@@ -63,17 +61,32 @@ pub async fn hash(password: Zeroizing<String>) -> anyhow::Result<String> {
 /// Returns `true` if the password matches, `false` if it does not.
 /// The password is zeroed from memory after verification.
 ///
-/// For timing-attack protection when a user is not found, pass [`DUMMY_HASH`]
-/// as `hash` and discard the result. This ensures the response time is
-/// indistinguishable from a real failed login.
-///
 /// Runs on a blocking thread pool to avoid stalling the async runtime.
 ///
 /// # Errors
 /// Fails if `hash` is not a valid PHC string or the Argon2 operation fails.
 pub async fn verify(password: Zeroizing<String>, hash: String) -> anyhow::Result<bool> {
+	check(password, move || hash).await
+}
+
+/// Spends the time a [`verify`] takes, for a sign-in whose user does not exist: the
+/// response time then does not say which emails have an account.
+///
+/// # Errors
+/// Fails if the Argon2 operation fails.
+pub async fn verify_unknown(password: Zeroizing<String>) -> anyhow::Result<()> {
+	check(password, || DUMMY_HASH.clone()).await.map(drop)
+}
+
+/// `hash` runs on the blocking thread with the permit held, so the first [`DUMMY_HASH`],
+/// itself a full hash, is neither on an async worker nor outside the limit.
+async fn check(
+	password: Zeroizing<String>,
+	hash: impl FnOnce() -> String + Send + 'static,
+) -> anyhow::Result<bool> {
 	let _permit = LIMIT.acquire().await.context("argon2 limiter closed")?;
 	task::spawn_blocking(move || {
+		let hash = hash();
 		let hash =
 			PasswordHash::new(&hash).map_err(|e| anyhow!(e).context("invalid password hash"))?;
 

@@ -3,9 +3,14 @@
 podkit's pitch is that it is light. This page measures it, compares it with what
 Coolify and Dokploy publish, and says what keeps it that way. The numbers are
 enforced: `scripts/footprint.sh --check` (and the `footprint` job in
-`.github/workflows/ci.yml`) fails when an idle RSS goes over its budget.
+`.github/workflows/ci.yml`) fails when a process goes over a budget.
 
 ## What was measured
+
+The server and agent rows below are from the first footprint card, before most of today's
+features. Today the server idles at 13.0 MB when built with `scripts/build-ordered.sh` and
+at 23.2 MB as a plain build, which is what the container image still is; it holds 33.3 MB
+after use, and the agent 9.1 MB. The sections after this one say how the numbers moved.
 
 Release build (`cargo build --release`, `opt-level = "z"`, LTO, stripped), Linux
 6.18 on a 16-thread workstation, Postgres 18 in a container (`pk-pg`), rootless
@@ -48,7 +53,7 @@ Notes on the numbers:
 ## Method
 
 ```
-cargo build --release -p server -p agent
+scripts/build-ordered.sh                                       # cargo build --release, linked twice
 DATABASE_URL=postgres://… scripts/footprint.sh --idle 600      # the full table above
 DATABASE_URL=postgres://… scripts/footprint.sh --check         # 30 s idle, exit 1 over budget
 ```
@@ -68,12 +73,65 @@ read after 20 s.
 
 ### Budgets
 
-`scripts/footprint.budget` holds, per process, a **cap** (server 60 MB, agent
-25 MB: the promise) and a **baseline** (the last measured idle RSS, rounded up).
-`--check` fails when the idle RSS is over `min(cap, baseline + 20 %)`, which today is
-**24.3 MB** for the server and **9.6 MB** for the agent. So a 25 % regression fails CI long
-before it reaches the cap.
-If a change legitimately costs memory, raise the baseline in the same commit and say why.
+`--check` fails on any of these, per process, read from `scripts/footprint.budget`:
+
+| check | limit | server | agent | what it catches |
+|---|---|---|---|---|
+| idle RSS | the cap, the promise | 60 MB | 25 MB | the number podkit advertises |
+| anonymous idle RSS (`RssAnon`: heap and stacks) | baseline + 20 % | 4.8 MB (measured 3.9 MB) | 1.5 MB (measured 1.1 MB) | a cache, a pool, a background loop |
+| RSS after use | the cap | 60 MB (measured 34.9 MB) | 25 MB (measured 9.2 MB) | what a server in use holds |
+| peak RSS | the cap plus one password hash (64 MiB) for the server | 124 MB (measured 79.4 MB) | 25 MB (measured 9.5 MB) | a moment that costs more than a sign-in |
+| anonymous RSS after use | baseline + 20 % | 10.8 MB (measured 8.7 MB) | 1.5 MB (measured 1.1 MB) | a cache that fills and never empties |
+| binary size | baseline + 10 % | 31.3 MB (measured 28.3 MB) | 8.5 MB (measured 7.7 MB) | new code and dependencies |
+| shared libraries (`readelf -d`) | an allowlist | libc, libm, libgcc | the same | a second crypto or TLS stack |
+
+A baseline is the last measured value, rounded up. If a change legitimately costs memory or
+size, raise the baseline in the same commit and say why.
+
+Total idle RSS has only the cap. Most of it is the binary's own code, mapped, and how much of
+that is resident depends on where the linker puts each function, not on what the code does:
+the crate split below moved it by 6.6 MB with no new code. The size check allows a refactor
+of that kind (the split grew the server binary by 8 %); a new native library fails the
+allowlist whatever its size.
+
+The server has one more check, on the file-backed part of its idle RSS (baseline + 20 %,
+10.8 MB, measured 9.0 MB). It holds what "Start-up order" below won.
+
+### After use
+
+Idle is a server nobody has touched. After the idle sample the script signs up, signs in,
+creates a team and a project, opens every page the home page links to (98 pages) and ten API
+lists, waits 5 s and samples again. A page that answers 5xx fails the run.
+
+| server | idle | after use | peak |
+|---|---|---|---|
+| RSS | 23.0 MB | 34.9 MB | 86.5 MB |
+| anonymous | 3.8 MB | 8.7 MB | |
+
+The agent does not move (9.2 MB). Where the server's goes, from a `heaptrack` profile of
+the same run:
+
+- **Anonymous memory held after use, +4.9 MB.** 2.4 MB is the template registry: all 488
+  templates are parsed on the first visit to the gallery and kept. The other 2.5 MB is not
+  attributed to an owner.
+- **File-backed pages, +7.0 MB.** The code of the handlers that ran, mapped from the binary.
+- **Peak, 86.5 MB.** A password hash: Argon2id with 64 MiB of memory
+  (`crates/crypto/src/argon2.rs`), 67 MB in the profile, freed when the hash is done.
+
+### What the 60 MB means
+
+The server holds at most 60 MB, idle or after use. While a password is being hashed, at
+sign-up, sign-in or a password change, it holds 64 MiB more, for about 100 ms. One hash
+runs at a time, whatever the number of cores, so that is the whole of it: twelve sign-ins
+at once peak at 98 MB and the last one waits a second. With one hash per core, as it was,
+the same burst reached 354 MB on a 16-core machine.
+
+So a memory limit for the server's container wants 128 MB, not 64.
+
+The 64 MiB is not trimmed. It is the second recommended option of RFC 9106, the one for
+memory-constrained environments; OWASP's minimum is lower (19 MiB with two passes) and
+costs resistance to guessing a stolen hash. `--check` fails when the peak goes over the cap
+plus one hash.
 
 ## What changed on this card (before / after)
 
@@ -278,9 +336,46 @@ Tried and not kept:
 - **`lto = "thin"`**: the server idles at 19.5 MB, but its binary grows from 28.3 MB to
   32.8 MB and the agent goes from 9.0 MB to 9.9 MB idle, over its own budget.
 
-`server_baseline_kb` is 20736 (limit 24.3 MB). Winning the 6.6 MB back means getting that
-glue into one place again, which is a matter of how the binary is laid out, not of what
-it does.
+The pages are the binary's own code, clean and reclaimable, and the split is worth them.
+The next section gets them back another way.
+
+## Start-up order: 22.7 MB to 12.9 MB idle
+
+From start to idle the server runs 1.0 MB of its 15.5 MB of code: 3,800 functions, spread
+over the whole binary, 219 stretches of 64 KiB (`callgrind`). The kernel maps 64 KiB around
+each first touch, so 13.5 MB of code ends up resident. The crate split made this worse and
+did not cause it.
+
+`scripts/build-ordered.sh` links the release binaries with those functions first, in one
+block (lld's `--symbol-ordering-file`). Same machine, same script, two runs each:
+
+| server | `cargo build --release` | `scripts/build-ordered.sh` |
+|---|---|---|
+| idle RSS | 22.7 MB | **12.6-13.0 MB** |
+| RSS after use | 35.1 MB | 33.4-33.9 MB |
+| anonymous idle RSS | 3.9 MB | 3.9 MB |
+| binary | 28.3 MB | 28.3 MB |
+
+How it is put together:
+
+- `server/startup.order` lists the functions, one hash per line. The hash is of the
+  demangled name, so a dependency bump or a new compiler does not change it; a mangled name
+  has a per-crate hash in it and does. axum's per-route glue is also listed without its
+  type arguments, so a new route's glue is ordered without touching the list.
+- The build links twice (`server/build.rs` passes the flags when the script asks). The
+  first link writes lld's map, from which `scripts/startup_order.py` picks this build's
+  symbols for the listed hashes; the second places them first. It adds about 70 s to a
+  release build. A plain `cargo build` is not affected.
+- `scripts/startup-order.sh` makes the list again: an unstripped build, run under
+  `callgrind` through `scripts/footprint.sh --no-load`. About 4 minutes; it needs valgrind
+  and an empty database.
+
+The list goes stale when the start-up path changes: each start-up function that is not on
+it can keep 64 KiB resident. The file-backed check in "Budgets" fails when that adds up to
+2 MB; run `scripts/startup-order.sh` and commit the result.
+
+Not done: the container image. The `Dockerfile` still runs `cargo build`, and its musl
+target has not been tried with these linker flags.
 
 ## podkit versus Coolify and Dokploy
 
@@ -290,7 +385,7 @@ do publish is the hardware to provide and the services they run.
 
 | | podkit | Coolify v4 | Dokploy |
 |---|---|---|---|
-| Published minimum | none beyond the host; budget: server ≤ 60 MB, agent ≤ 25 MB RSS (measured 12.4 / 7.8 MB) | 2 CPU cores, 2 GB RAM, 10 GB disk ([installation docs](https://coolify.io/docs/get-started/installation)) | at least 2 GB RAM and 30 GB disk ([installation docs](https://docs.dokploy.com/docs/core/installation)) |
+| Published minimum | none beyond the host; budget: server ≤ 60 MB (64 MiB more while a password is hashed), agent ≤ 25 MB RSS (measured 12.4 / 7.8 MB) | 2 CPU cores, 2 GB RAM, 10 GB disk ([installation docs](https://coolify.io/docs/get-started/installation)) | at least 2 GB RAM and 30 GB disk ([installation docs](https://docs.dokploy.com/docs/core/installation)) |
 | Smaller setups | runs next to other workloads on a homelab box | "can run on smaller servers (for example: 1 CPU core, 512 MB RAM, 4 GB disk), but this is not recommended" (same page) | not stated |
 | Always-on services of the control plane | `server` (1 process) + Postgres; `podkit-agent` (1 process per server) | `coolify` (PHP app), `postgres`, `redis`, `soketi` realtime, all from one compose file ([docker-compose.prod.yml](https://raw.githubusercontent.com/coollabsio/coolify/v4.x/docker-compose.prod.yml)); plus a proxy it creates for each server | `dokploy` app, `postgres:16`, and `traefik:v3.7.19`, created by the installer as Docker Swarm services ([install.sh](https://dokploy.com/install.sh)) |
 | Reverse proxy | Traefik, started on the first routed deploy | proxy container on every managed server | Traefik from install |
