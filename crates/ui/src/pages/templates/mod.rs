@@ -8,7 +8,14 @@
 //! project and environment are already chosen).
 
 use axum::Router;
+use axum::extract::{Path, State};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
+use maud::html;
+
+use crate::components::{Size, Variant, button_class};
+use crate::extract::UiUser;
+use crate::{error, layout};
 
 use podkit_core::ids::{ProjectId, TeamId};
 use podkit_core::state::AppState;
@@ -19,8 +26,43 @@ mod gallery;
 #[cfg(test)]
 mod tests;
 
+/// `GET /market/{id}`: where the "Deploy to my podkit" button of the catalog's website
+/// lands. It only finds the template's page here, in the viewer's first team; that page is
+/// the confirmation, and deploying from it is a `POST` the viewer makes.
+///
+/// The address comes from another site, so nothing in it is trusted: the id is looked up in
+/// this podkit's own catalog and the link is built from the catalog's copy of it.
+async fn market(State(s): State<AppState>, user: UiUser, Path(id): Path<String>) -> Response {
+	let teams = match podkit_core::teams::list_for_user(&s.db, user.id).await {
+		Ok(teams) => teams,
+		Err(e) => return error::bare(Some(&user), &e.into()),
+	};
+	let Some(team) = teams.first() else {
+		return Redirect::to("/").into_response();
+	};
+	match podkit_core::templates::find(&id) {
+		Some(l) => Redirect::to(&format!("/teams/{}/templates/{}", team.id, l.template.id))
+			.into_response(),
+		None => layout::bare_page(
+			Some(&user.name),
+			"Template not found",
+			&html! {
+				h1 { "This podkit does not have that template" }
+				p class="ui-lede" {
+					"Its catalog may be older than the website's. The administrator can refresh it from the gallery."
+				}
+				a class=(button_class(Variant::Default, Size::Md)) href={ "/teams/" (team.id) "/templates" } {
+					"Open the gallery"
+				}
+			},
+		)
+		.into_response(),
+	}
+}
+
 pub fn router() -> Router<AppState> {
 	Router::new()
+		.route("/market/{template_id}", get(market))
 		.route("/teams/{team_id}/templates", get(gallery::page))
 		.route("/teams/{team_id}/templates/results", get(gallery::results))
 		.route("/teams/{team_id}/templates/refresh", post(gallery::refresh))
