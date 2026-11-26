@@ -591,7 +591,11 @@ pub async fn templates(ctx: &Ctx, query: Option<&str>, json: bool) -> Result<()>
 
 /// What `podkit templates deploy` was asked for.
 pub struct TemplateDeploy<'a> {
-	/// The template's id.
+	/// `templates import`: `template` is a folder with the two files.
+	pub import: bool,
+	/// Do not ask before deploying an import.
+	pub yes: bool,
+	/// The template's id, or the folder.
 	pub template: &'a str,
 	/// `--server`: a name or an id.
 	pub server: Option<&'a str>,
@@ -599,6 +603,46 @@ pub struct TemplateDeploy<'a> {
 	pub name: Option<&'a str>,
 	/// `--set name=value`.
 	pub set: &'a [(String, String)],
+}
+
+/// Reads the two files of `deploy.template` into `body`, shows what they would run and asks.
+///
+/// # Errors
+/// When a file cannot be read, podkit refuses the files, or the answer is no.
+async fn confirm_import(
+	ctx: &Ctx,
+	templates: &str,
+	deploy: &TemplateDeploy<'_>,
+	body: &mut Value,
+) -> Result<()> {
+	let read = |name: &str| {
+		let path = Path::new(deploy.template).join(name);
+		std::fs::read_to_string(&path).map_err(|e| Fail::usage(format!("{}: {e}", path.display())))
+	};
+	body["template"] = json!(read("template.toml")?);
+	body["compose"] = json!(read("docker-compose.yml")?);
+	let preview = ctx
+		.api
+		.post(&format!("{templates}/import/preview"), Some(body))
+		.await?;
+	if !deploy.yes {
+		eprintln!(
+			"{} {} is not from podkit's catalog. It would run:",
+			text(&preview, "name"),
+			text(&preview, "version")
+		);
+		for s in preview["services"].as_array().into_iter().flatten() {
+			eprintln!("  {}  {}", text(s, "name"), text(s, "image"));
+		}
+		for w in preview["warnings"].as_array().into_iter().flatten() {
+			eprintln!("  note: {}", w.as_str().unwrap_or_default());
+		}
+		eprintln!("\n{}", text(&preview, "compose").trim_end());
+		if !confirm("\nDeploy it?")? {
+			return Err(Fail::new("nothing was deployed"));
+		}
+	}
+	Ok(())
 }
 
 /// `podkit templates deploy <id>`: makes an application or a stack from a template.
@@ -649,17 +693,20 @@ pub async fn template_deploy(
 			.collect::<serde_json::Map<_, _>>()
 			.into();
 	}
-	let made = ctx
-		.api
-		.post(
-			&format!(
-				"/teams/{team}/projects/{}/templates/{}/deploy",
-				id_of(project),
-				deploy.template
-			),
-			Some(&body),
-		)
-		.await?;
+	let templates = format!("/teams/{team}/projects/{}/templates", id_of(project));
+	let made = if deploy.import {
+		confirm_import(ctx, &templates, deploy, &mut body).await?;
+		ctx.api
+			.post(&format!("{templates}/import"), Some(&body))
+			.await?
+	} else {
+		ctx.api
+			.post(
+				&format!("{templates}/{}/deploy", deploy.template),
+				Some(&body),
+			)
+			.await?
+	};
 	if json {
 		print_json(&made);
 		return Ok(());

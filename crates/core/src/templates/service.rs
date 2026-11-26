@@ -124,11 +124,119 @@ pub async fn deploy(
 	template: &str,
 	body: DeployInput,
 ) -> AppResult<Deployed> {
+	let loaded = super::find(template).ok_or(ServerError::NotFound)?;
+	let source = format!(
+		"template:{}@{}",
+		loaded.template.id, loaded.template.version
+	);
+	deploy_loaded(
+		s,
+		user,
+		team,
+		project,
+		environment,
+		server,
+		&loaded,
+		&source,
+		body,
+	)
+	.await
+}
+
+/// A neutral picture for a template file that came without its logo.
+const NO_LOGO: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="#888"/></svg>"##;
+
+/// A template somebody hands in as two files, checked exactly as a catalog's are.
+///
+/// It is not the catalog's, whatever it calls itself: it may not ask for what podkit
+/// gives only to templates it vouches for (a model gateway, a place among the MCP servers).
+///
+/// # Errors
+/// `Validation` saying what is wrong with the files.
+pub fn imported(template_toml: &str, compose: &str) -> AppResult<Loaded> {
+	let template = super::Template::parse(template_toml).map_err(invalid)?;
+	if template.gateway || template.mcp.is_some() {
+		return Err(ServerError::Validation(
+			"an imported template cannot use `gateway` or `[mcp]`: only the catalog's may"
+				.to_string(),
+		));
+	}
+	let logo = template.logo.clone();
+	super::registry::load(&template.id, &|name| {
+		let bytes = match name {
+			"template.toml" => template_toml.as_bytes(),
+			"docker-compose.yml" => compose.as_bytes(),
+			n if n == logo && !n.starts_with('@') => NO_LOGO,
+			_ => return None,
+		};
+		Some(std::borrow::Cow::Owned(bytes.to_vec()))
+	})
+	.map_err(invalid)
+}
+
+/// The mark a deployed import carries where a catalog template has `template:<id>@<version>`:
+/// `import:<id>@<hash of the two files>`. Nothing that reads `template:` takes it for the
+/// catalog's template of the same id.
+#[must_use]
+pub fn import_source(loaded: &Loaded, template_toml: &str) -> String {
+	let files = [template_toml.as_bytes(), loaded.compose.as_bytes()].concat();
+	format!(
+		"import:{}@{}",
+		loaded.template.id,
+		super::short_hash(&files)
+	)
+}
+
+/// Deploys an [`imported`] template, as [`deploy`] does a catalog's.
+///
+/// # Errors
+/// As [`deploy`], and `Validation` for files that are not a usable template.
+#[allow(clippy::too_many_arguments)]
+pub async fn deploy_import(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	environment: Option<EnvironmentId>,
+	server: ServerId,
+	template_toml: &str,
+	compose: &str,
+	body: DeployInput,
+) -> AppResult<Deployed> {
+	let loaded = imported(template_toml, compose)?;
+	let source = import_source(&loaded, template_toml);
+	deploy_loaded(
+		s,
+		user,
+		team,
+		project,
+		environment,
+		server,
+		&loaded,
+		&source,
+		body,
+	)
+	.await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn deploy_loaded(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	environment: Option<EnvironmentId>,
+	server: ServerId,
+	loaded: &Loaded,
+	source: &str,
+	body: DeployInput,
+) -> AppResult<Deployed> {
 	scope::project(&s.db, team, project).await?;
 	let environment = environments::service::resolve(&s.db, team, project, environment).await?;
 	let server = scope::server(&s.db, team, server).await?;
-	let loaded = super::find(template).ok_or(ServerError::NotFound)?;
-	let as_app = loaded.plain_app;
+	// Only a stack records where it came from, so an import is always one, even with a
+	// single service: it has to carry its `import:` mark.
+	let as_app = loaded.plain_app && source.starts_with("template:");
 	if as_app {
 		for resource in [
 			Resource::Application,
@@ -165,7 +273,7 @@ pub async fn deploy(
 				project,
 				environment,
 				&server,
-				&loaded,
+				loaded,
 				&name,
 				body,
 			)
@@ -178,7 +286,8 @@ pub async fn deploy(
 				project,
 				environment,
 				&server,
-				&loaded,
+				loaded,
+				source,
 				&name,
 				body,
 			)
@@ -202,6 +311,7 @@ pub async fn deploy(
 		.in_project(project),
 		Diff::new()
 			.set("template", template_id)
+			.set("source", source.to_owned())
 			.set("version", version)
 			.set("server_id", server.id.0)
 			.set("name", deployed.name.clone())
@@ -220,6 +330,7 @@ async fn deploy_stack(
 	environment: EnvironmentId,
 	server: &Server,
 	loaded: &Loaded,
+	source: &str,
 	name: &str,
 	body: DeployInput,
 ) -> AppResult<Deployed> {
@@ -256,7 +367,7 @@ async fn deploy_stack(
 			files: rendered.files.clone(),
 			server_id: server.id,
 			environment_id: Some(environment),
-			source: Some(format!("template:{}@{}", t.id, t.version)),
+			source: Some(source.to_owned()),
 			deploy: false,
 			registry: body.registry,
 		};

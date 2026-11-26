@@ -1095,6 +1095,119 @@ async fn an_application_template_stores_its_environment_encrypted_and_never_retu
 	);
 }
 
+/// The two files of a fixture template, as somebody would hand them in.
+fn files_of(id: &str) -> Value {
+	let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+		.join("templates")
+		.join(id);
+	json!({
+		"template": std::fs::read_to_string(dir.join("template.toml")).unwrap(),
+		"compose": std::fs::read_to_string(dir.join("docker-compose.yml")).unwrap(),
+	})
+}
+
+#[sqlx::test]
+async fn an_imported_template_is_previewed_in_full_and_deploys_marked_as_an_import(db: PgPool) {
+	let s = Setup::new(db).await;
+	let base = format!(
+		"/api/v1/teams/{}/projects/{}/templates/import",
+		s.team, s.project
+	);
+	let files = files_of("umami");
+
+	let (status, preview) = call(
+		&s.app,
+		"POST",
+		&format!("{base}/preview"),
+		Some(&s.token),
+		Some(files.clone()),
+	)
+	.await;
+	assert_eq!(status, StatusCode::OK, "{preview}");
+	assert_eq!(preview["official"], false);
+	assert_eq!(preview["compose"], files["compose"]);
+	assert_eq!(preview["services"].as_array().unwrap().len(), 2);
+	assert_eq!(count(&s.db, "stacks").await, 0, "a preview deploys nothing");
+
+	let mut body = files.clone();
+	body["server_id"] = json!(s.server().await);
+	let (status, made) = call(&s.app, "POST", &base, Some(&s.token), Some(body)).await;
+	assert_eq!(status, StatusCode::ACCEPTED, "{made}");
+	assert_eq!(made["kind"], "stack");
+	let (_, stack) = s
+		.get(&format!(
+			"/api/v1/teams/{}/projects/{}/stacks/{}",
+			s.team, s.project, made["id"]
+		))
+		.await;
+	// The file says it is umami, and the catalog has an umami: the result is not that one.
+	let source = stack["source"].as_str().unwrap();
+	assert_eq!(source, preview["origin"]);
+	assert!(source.starts_with("import:umami@"), "{source}");
+}
+
+#[sqlx::test]
+async fn an_imported_one_service_template_is_a_stack_so_that_it_carries_its_mark(db: PgPool) {
+	let s = Setup::new(db).await;
+	let (_, from_catalog) = s.deploy("gotify", json!({})).await;
+	assert_eq!(from_catalog["kind"], "application");
+
+	let mut body = files_of("gotify");
+	body["server_id"] = json!(s.server().await);
+	body["name"] = json!("Gotify by hand");
+	let (status, made) = call(
+		&s.app,
+		"POST",
+		&format!(
+			"/api/v1/teams/{}/projects/{}/templates/import",
+			s.team, s.project
+		),
+		Some(&s.token),
+		Some(body),
+	)
+	.await;
+	assert_eq!(status, StatusCode::ACCEPTED, "{made}");
+	assert_eq!(made["kind"], "stack");
+	let (_, stack) = s
+		.get(&format!(
+			"/api/v1/teams/{}/projects/{}/stacks/{}",
+			s.team, s.project, made["id"]
+		))
+		.await;
+	assert!(
+		stack["source"]
+			.as_str()
+			.unwrap()
+			.starts_with("import:gotify@"),
+		"{stack}"
+	);
+}
+
+#[sqlx::test]
+async fn an_imported_template_gets_nothing_podkit_keeps_for_the_catalog(db: PgPool) {
+	let s = Setup::new(db).await;
+	let preview = format!(
+		"/api/v1/teams/{}/projects/{}/templates/import/preview",
+		s.team, s.project
+	);
+	for id in ["n8n", "mcp-fetch"] {
+		let (status, body) =
+			call(&s.app, "POST", &preview, Some(&s.token), Some(files_of(id))).await;
+		assert_eq!(status, StatusCode::BAD_REQUEST, "{id}: {body}");
+	}
+	let (status, body) = call(
+		&s.app,
+		"POST",
+		&preview,
+		Some(&s.token),
+		Some(json!({ "template": "id = \"x\"", "compose": "services: {}" })),
+	)
+	.await;
+	assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+	let (status, _) = call(&s.app, "POST", &preview, None, Some(files_of("umami"))).await;
+	assert!(status.is_client_error(), "{status}");
+}
+
 #[sqlx::test]
 async fn a_multi_service_template_becomes_a_stack_with_domains_and_encrypted_variables(db: PgPool) {
 	let s = Setup::new(db).await;

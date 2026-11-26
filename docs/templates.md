@@ -85,6 +85,28 @@ podkit templates deploy gotify --project shop --set main_domain=push.example.com
 `deploy` prints the address and the generated credentials, which are shown that once.
 `podkit templates --help` lists the options.
 
+## Importing a template file
+
+A template need not come from the catalog: hand in its `template.toml` and
+`docker-compose.yml`.
+
+```sh
+podkit templates import ./my-template --project shop
+```
+
+The command prints what the files would run and the whole compose file, and asks. The
+API is `POST /api/v1/teams/{t}/projects/{p}/templates/import/preview` with
+`{template, compose}` (deploys nothing, answers the detail, the compose file and
+`official: false`) and `POST …/templates/import` with the same two and the fields of a
+deploy.
+
+An import is not the catalog's, whatever id it gives itself:
+
+- It is always a stack, and the stack's `source` is `import:<id>@<hash of the two files>`
+  where a catalog template has `template:<id>@<version>`. Its page says "Unofficial".
+- It may not set `gateway` or `[mcp]`, and cannot be linked to a model.
+- It is never told about a newer version.
+
 ## Checking a catalog
 
 `server check-templates <dir>` loads every template under `<dir>/templates` the way a
