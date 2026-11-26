@@ -294,10 +294,12 @@ pub async fn header(
 	// Only an application set to run several copies has a list; the others pay nothing here.
 	let replicas = replica_status(s, ctx, app, running).await;
 	let kind = podkit_core::templates::service::Kind::Application;
-	let newer = podkit_core::templates::service::newer(&s.db, kind, app.id.0)
+	let newer = podkit_core::templates::service::origin(&s.db, kind, app.id.0)
 		.await
 		.ok()
-		.flatten();
+		.flatten()
+		.filter(|o| o.newer)
+		.map(|o| o.template);
 	html! {
 		div id="app-header" class="flex flex-col gap-5" {
 			(poll(&format!("{base}/header"), busy))

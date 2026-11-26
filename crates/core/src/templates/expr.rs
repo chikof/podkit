@@ -321,6 +321,9 @@ pub fn generate(helper: &Helper, ctx: &mut Context<'_>) -> String {
 	}
 }
 
+/// The longest a value may get while its `${...}` are replaced.
+const MAX_EXPANDED: usize = 64 * 1024;
+
 /// `text` with every `${...}` replaced: helpers by a fresh value, names by
 /// their variable's value, anything else as written.
 ///
@@ -350,6 +353,10 @@ pub fn expand(text: &str, ctx: &mut Context<'_>) -> Result<String, String> {
 			}
 		}
 		rest = &after[end + 1..];
+		// A variable made of copies of another grows a thousandfold a level.
+		if out.len() > MAX_EXPANDED {
+			return Err(format!("a value grows past {MAX_EXPANDED} bytes"));
+		}
 	}
 	out.push_str(rest);
 	Ok(out)

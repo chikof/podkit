@@ -18,7 +18,9 @@ and why.
 
 `TEMPLATE_CATALOG_URL` names another place to fetch from (default
 `https://podoes.github.io/podkit-templates`). The request goes through the outbound policy,
-so a private address needs `OUTBOUND_PRIVATE`.
+so a private address needs `OUTBOUND_PRIVATE`. The hash in the index protects against a
+broken download and nothing more: the index and the archive come from the same place, so use
+an `https` address you trust.
 
 ## A template
 
