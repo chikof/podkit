@@ -101,6 +101,10 @@ pub enum Command {
 		json: bool,
 	},
 	TemplateDeploy {
+		/// Deploy the files of this folder, not a template of the catalog.
+		import: bool,
+		/// Do not ask before deploying an import.
+		yes: bool,
 		template: String,
 		place: Place,
 		/// `--server`: a name or an id; the team's only server when unset.
@@ -129,6 +133,7 @@ Usage: podkit <command> [options]
   env push <app> <file>  set the application's variables from a .env file
   templates [words]      list the template catalog, or search it
   templates deploy <id>  deploy a template into a project
+  templates import <dir> deploy a template from its files, marked unofficial
   import <platform>      bring projects over from Coolify, Dokploy or CapRover
   mcp                    serve podkit's MCP tools over stdio
 
@@ -232,6 +237,7 @@ only) and asking. Variables not in the file are kept, unless --prune deletes the
 			"Usage: podkit templates [words...] [--json]
        podkit templates deploy <id> [--project <p>] [--server <s>] [--name <n>]
                                     [--set <variable>=<value>]... [--json]
+       podkit templates import <folder> [the options of deploy] [--yes]
 
 Without deploy, lists the templates of podkit's catalog, or the ones that match the words.
 
@@ -242,6 +248,11 @@ its address and any credentials podkit generated, which are shown this once.
   --name <n>     what to call it (default: the template's name)
   --set a=b      an answer to one of the template's questions, or the host of a domain;
                  give it once per variable
+
+import deploys the template.toml and docker-compose.yml of a folder, which need not come
+from the catalog. It prints what they would run and the whole compose file, and asks. The
+result is a stack that podkit marks as unofficial.
+  --yes          do not ask (needed when stdin is not a terminal)
 "
 		}
 		_ => return None,
@@ -546,7 +557,8 @@ pub fn parse(args: Vec<String>) -> Result<Command, String> {
 
 fn templates(rest: Vec<String>) -> Result<Command, String> {
 	let usage = help("templates").unwrap_or(USAGE);
-	if rest.first().map(String::as_str) != Some("deploy") {
+	let import = rest.first().map(String::as_str) == Some("import");
+	if !import && rest.first().map(String::as_str) != Some("deploy") {
 		let o = split(rest, &["--json"], &[])?;
 		return Ok(Command::Templates {
 			query: (!o.positional.is_empty()).then(|| o.positional.join(" ")),
@@ -555,11 +567,14 @@ fn templates(rest: Vec<String>) -> Result<Command, String> {
 	}
 	let o = split(
 		rest.into_iter().skip(1).collect(),
-		&["--json"],
+		&["--json", "--yes"],
 		&with_place(&["--server", "--name", "--set"]),
 	)?;
 	let [template] = o.positional.as_slice() else {
-		return Err(format!("name one template\n\n{usage}"));
+		return Err(format!(
+			"name one {}\n\n{usage}",
+			if import { "folder" } else { "template" }
+		));
 	};
 	let set = o
 		.values
@@ -573,6 +588,8 @@ fn templates(rest: Vec<String>) -> Result<Command, String> {
 		})
 		.collect::<Result<Vec<_>, _>>()?;
 	Ok(Command::TemplateDeploy {
+		import,
+		yes: o.has("--yes"),
 		template: template.clone(),
 		place: o.place(),
 		server: o.value("--server"),
@@ -656,6 +673,8 @@ mod tests {
 				"templates deploy n8n -p shop --server node-01 --set timezone=Europe/Berlin --set a=b=c"
 			),
 			Ok(Command::TemplateDeploy {
+				import: false,
+				yes: false,
 				template: "n8n".into(),
 				place: place(None, Some("shop")),
 				server: Some("node-01".into()),
@@ -676,6 +695,15 @@ mod tests {
 			p("templates deploy n8n --set novalue")
 				.unwrap_err()
 				.contains("--set takes")
+		);
+		assert!(matches!(
+			p("templates import ./mine --yes"),
+			Ok(Command::TemplateDeploy { import: true, yes: true, template, .. }) if template == "./mine"
+		));
+		assert!(
+			p("templates import")
+				.unwrap_err()
+				.starts_with("name one folder")
 		);
 	}
 

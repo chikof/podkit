@@ -39,7 +39,10 @@ async fn refresh(
 
 /// `POST /{id}/deploy`, nested under a project.
 pub fn deploy_router() -> Router<AppState> {
-	Router::new().route("/{template_id}/deploy", post(deploy))
+	Router::new()
+		.route("/{template_id}/deploy", post(deploy))
+		.route("/import", post(import))
+		.route("/import/preview", post(import_preview))
 }
 
 #[derive(Serialize)]
@@ -218,9 +221,13 @@ pub fn variables(t: &Template) -> Vec<VariableInfo> {
 /// a generated value: those only exist once a deploy makes them.
 async fn detail(_user: AuthUser, Path(id): Path<String>) -> AppResult<Json<Detail>> {
 	let l = super::find(&id).ok_or(ServerError::NotFound)?;
+	Ok(Json(detail_of(&l)))
+}
+
+fn detail_of(l: &Loaded) -> Detail {
 	let t = &l.template;
-	Ok(Json(Detail {
-		summary: summary(&l),
+	Detail {
+		summary: summary(l),
 		docs: t.docs.clone(),
 		source: t.source.clone(),
 		upstream: t.upstream.clone(),
@@ -237,7 +244,88 @@ async fn detail(_user: AuthUser, Path(id): Path<String>) -> AppResult<Json<Detai
 			})
 			.collect(),
 		warnings: l.warnings.clone(),
+	}
+}
+
+/// The two files of a template somebody hands in.
+#[derive(Deserialize)]
+struct ImportFiles {
+	/// `template.toml`.
+	template: String,
+	/// `docker-compose.yml`.
+	compose: String,
+}
+
+#[derive(Serialize)]
+struct ImportPreview {
+	/// Always `false`: an imported template is not the catalog's.
+	official: bool,
+	/// What the result will carry in place of `template:<id>@<version>`. Not `source`:
+	/// that is the template's repository.
+	origin: String,
+	#[serde(flatten)]
+	detail: Detail,
+	/// The compose file as it will be run, to be read before it is.
+	compose: String,
+}
+
+/// What an imported template is and would run, deploying nothing. For the page or the
+/// command that shows it to the person before they confirm.
+async fn import_preview(
+	State(s): State<AppState>,
+	_user: AuthUser,
+	Path((team, project)): Path<(TeamId, ProjectId)>,
+	Json(files): Json<ImportFiles>,
+) -> AppResult<Json<ImportPreview>> {
+	crate::scope::project(&s.db, team, project).await?;
+	let loaded = service::imported(&files.template, &files.compose)?;
+	Ok(Json(ImportPreview {
+		official: false,
+		origin: service::import_source(&loaded, &files.template),
+		detail: detail_of(&loaded),
+		compose: files.compose,
 	}))
+}
+
+#[derive(Deserialize)]
+struct ImportRequest {
+	#[serde(flatten)]
+	files: ImportFiles,
+	#[serde(flatten)]
+	deploy: DeployRequest,
+}
+
+/// Deploys a template handed in as files; 202 with what was created. The result is marked
+/// `import:` and never taken for a catalog template.
+async fn import(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, project)): Path<(TeamId, ProjectId)>,
+	Json(body): Json<ImportRequest>,
+) -> AppResult<(StatusCode, Json<Deployed>)> {
+	if body.deploy.model_id.is_some() {
+		return Err(ServerError::Validation(
+			"an imported template cannot be linked to a model".to_string(),
+		));
+	}
+	let deployed = service::deploy_import(
+		&s,
+		user.id,
+		team,
+		project,
+		body.deploy.environment_id,
+		body.deploy.server_id,
+		&body.files.template,
+		&body.files.compose,
+		DeployInput {
+			name: body.deploy.name,
+			inputs: body.deploy.inputs,
+			model: None,
+			registry: body.deploy.registry_id,
+		},
+	)
+	.await?;
+	Ok((StatusCode::ACCEPTED, Json(deployed)))
 }
 
 #[derive(Deserialize)]
