@@ -276,6 +276,25 @@ async fn render(
 				@if let Some(url) = web_link(t.docs.as_deref()) { (link_row("Documentation", url)) }
 				@if let Some(url) = web_link(t.source.as_deref()) { (link_row("Source", url)) }
 			}
+			@if let Some((tone, label)) = gallery::status_tag(t.status) {
+				p class="flex flex-wrap items-center gap-2 text-sm" role="note" {
+					(badge(tone, label))
+					span { (t.status_note.as_deref().unwrap_or("The catalog flags this template.")) }
+				}
+			}
+			p class="text-sm text-muted-foreground" {
+				@if t.upstream.is_some() {
+					"Adapted from the Dokploy community templates. "
+				}
+				@if !t.maintainers.is_empty() {
+					"Maintained by "
+					@for (i, m) in t.maintainers.iter().enumerate() {
+						@if i > 0 { ", " }
+						a href={ "https://github.com/" (m) } rel="noopener" target="_blank" { "@" (m) }
+					}
+					"."
+				}
+			}
 			@if !deployable {
 				p class="text-sm text-muted-foreground" { "Your role in this team can look at templates but not deploy them." }
 			}

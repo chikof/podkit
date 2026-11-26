@@ -12,6 +12,8 @@ website = "https://www.bytebase.com"
 docs = "https://www.bytebase.com/docs"
 source = "https://github.com/bytebase/bytebase"
 upstream = "Dokploy/templates@6313a2e blueprints/bytebase"
+status = "broken"
+status_note = "The image tag it names is no longer published."
 
 [variables]
 db_password = "${password:16}"

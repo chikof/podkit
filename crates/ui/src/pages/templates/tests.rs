@@ -151,6 +151,22 @@ fn redirect_of(body: &str) -> String {
 }
 
 #[db_test(migrator = "podkit_core::db::MIGRATOR")]
+async fn a_flagged_template_is_labelled_in_the_gallery_and_explained_on_its_page(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	let (_, list) = f.get(&format!("{}?q=bytebase", f.gallery())).await;
+	assert_contains(page_main(&list), "Broken");
+	let (_, list) = f.get(&format!("{}?q=gotify", f.gallery())).await;
+	assert_not_contains(page_main(&list), "Broken");
+
+	let (_, page) = f.get(&format!("{}/bytebase", f.gallery())).await;
+	assert_contains(
+		page_main(&page),
+		"The image tag it names is no longer published.",
+	);
+	assert_contains(page_main(&page), "Dokploy community");
+}
+
+#[db_test(migrator = "podkit_core::db::MIGRATOR")]
 async fn the_market_link_only_leads_to_a_template_of_this_catalog_and_deploys_nothing(db: PgPool) {
 	let f = Fixture::new(&db).await;
 	let (status, headers, _) = get_html(&f.app, "/market/gotify", Some(&f.cookie)).await;
