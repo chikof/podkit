@@ -10,6 +10,6 @@ pub mod snowflake;
 /// Generating and comparing bearer tokens.
 pub mod token;
 
-pub use argon2::{DUMMY_HASH, hash, verify};
+pub use argon2::{hash, verify, verify_unknown};
 pub use snowflake::generate_id;
 pub use token::{constant_time_eq, generate_token};
