@@ -197,18 +197,28 @@ fn replace(
 			std::fs::remove_dir_all(stale)?;
 		}
 	}
-	std::fs::create_dir_all(&next)?;
-	unpack(archive, &next)?;
-	std::fs::write(next.join("index.json"), index_bytes)?;
-	let registry = index.read(&next);
-	if registry.templates.is_empty() {
-		let why = registry.errors.first().map_or_else(
-			|| "it holds no template".to_owned(),
-			|(id, why)| format!("this podkit can read none of its templates ({id}: {why})"),
-		);
-		std::fs::remove_dir_all(&next)?;
-		return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, why));
-	}
+	let unpacked = (|| {
+		std::fs::create_dir_all(&next)?;
+		unpack(archive, &next)?;
+		std::fs::write(next.join("index.json"), index_bytes)?;
+		let registry = index.read(&next);
+		if registry.templates.is_empty() {
+			let why = registry.errors.first().map_or_else(
+				|| "it holds no template".to_owned(),
+				|(id, why)| format!("this podkit can read none of its templates ({id}: {why})"),
+			);
+			return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, why));
+		}
+		Ok(registry)
+	})();
+	let registry = match unpacked {
+		Ok(registry) => registry,
+		Err(e) => {
+			// A refused catalog leaves nothing behind.
+			let _ = std::fs::remove_dir_all(&next);
+			return Err(e);
+		}
+	};
 	if live.exists() {
 		std::fs::rename(live, &previous)?;
 	}
@@ -400,6 +410,7 @@ mod tests {
 			let (bytes, parsed) = index("");
 			let hostile = archive(&[(path, b"x")]);
 			assert!(replace(&live, &hostile, &bytes, parsed).is_err(), "{path}");
+			assert!(!live.with_extension("new").exists(), "{path} left a folder");
 		}
 		assert!(!tmp.path().join("escaped").exists());
 		assert!(!live.exists());

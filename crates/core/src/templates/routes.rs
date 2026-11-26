@@ -172,28 +172,37 @@ struct Detail {
 	warnings: Vec<String>,
 }
 
-fn is_secret_expr(text: &str, template: &Template) -> bool {
-	// Each variable is looked into once: one that names another twice a level would
-	// otherwise be walked two to the power of the depth times.
-	fn walk<'a>(text: &'a str, template: &'a Template, seen: &mut Vec<&'a str>) -> bool {
-		expr::scan(text)
-			.unwrap_or_default()
-			.iter()
-			.any(|e| match e {
-				expr::Expr::Helper(h) => h.is_secret(),
-				expr::Expr::Name(n) => match template.variables.get_key_value(n) {
-					Some((name, Variable::Expr(t))) if !seen.contains(&name.as_str()) => {
-						seen.push(name);
-						walk(t, template, seen)
+/// The generated variables whose value is a secret: made by a secret helper, or from a
+/// variable that is. Worked out once for the template, each variable scanned once: asking
+/// per variable walked a chain of n variables n times over.
+fn secret_variables(template: &Template) -> std::collections::HashSet<&str> {
+	let mut secret = std::collections::HashSet::new();
+	let mut used_by: std::collections::HashMap<&str, Vec<&str>> = std::collections::HashMap::new();
+	let mut found = Vec::new();
+	for (name, v) in &template.variables {
+		let Variable::Expr(text) = v else { continue };
+		for e in expr::scan(text).unwrap_or_default() {
+			match e {
+				expr::Expr::Helper(h) if h.is_secret() => found.push(name.as_str()),
+				expr::Expr::Helper(_) => {}
+				expr::Expr::Name(n) => {
+					if let Some((of, Variable::Expr(_))) = template.variables.get_key_value(&n) {
+						used_by.entry(of.as_str()).or_default().push(name);
 					}
-					_ => false,
-				},
-			})
+				}
+			}
+		}
 	}
-	walk(text, template, &mut Vec::new())
+	while let Some(name) = found.pop() {
+		if secret.insert(name) {
+			found.extend(used_by.get(name).into_iter().flatten());
+		}
+	}
+	secret
 }
 
 pub fn variables(t: &Template) -> Vec<VariableInfo> {
+	let secret = secret_variables(t);
 	t.variables
 		.iter()
 		.map(|(name, v)| match v {
@@ -217,14 +226,14 @@ pub fn variables(t: &Template) -> Vec<VariableInfo> {
 				secret: false,
 				revealed: false,
 			},
-			Variable::Expr(text) => VariableInfo {
+			Variable::Expr(_) => VariableInfo {
 				name: name.clone(),
 				kind: "generated",
 				label: None,
 				description: None,
 				default: None,
 				required: false,
-				secret: is_secret_expr(text, t),
+				secret: secret.contains(name.as_str()),
 				revealed: t.reveal.contains(name),
 			},
 		})

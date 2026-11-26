@@ -1243,9 +1243,15 @@ async fn hostile_template_files_are_refused_and_not_worked_through(db: PgPool) {
 	for level in 1..=60 {
 		let _ = writeln!(doubles, "v{level} = \"${{v{0}}}${{v{0}}}\"", level - 1);
 	}
+	// Five thousand variables, each made from the one before and the first a secret.
+	let mut chain = format!("{base}[variables]\nc0 = \"${{password:8}}\"\n");
+	for n in 1..5000 {
+		let _ = writeln!(chain, "c{n} = \"${{c{}}}\"", n - 1);
+	}
 	for (what, template, status) in [
 		("a value that grows", grows, StatusCode::BAD_REQUEST),
 		("a variable walked once", doubles, StatusCode::OK),
+		("a long chain", chain, StatusCode::OK),
 	] {
 		let started = std::time::Instant::now();
 		let (got, body) = call(
@@ -1258,6 +1264,14 @@ async fn hostile_template_files_are_refused_and_not_worked_through(db: PgPool) {
 		.await;
 		assert_eq!(got, status, "{what}: {body}");
 		assert!(started.elapsed().as_secs() < 10, "{what} took too long");
+		if what == "a long chain" {
+			// Secrecy follows the chain to its end, and stops at what is not on it.
+			let secret = |name: &str| {
+				let all = body["variables"].as_array().unwrap();
+				all.iter().find(|v| v["name"] == name).unwrap()["secret"] == true
+			};
+			assert!(secret("c0") && secret("c4999"));
+		}
 	}
 
 	// Somebody who may not create a stack does not get their files read.
