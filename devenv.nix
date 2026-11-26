@@ -5,6 +5,8 @@
     lazysql
     nixpacks
     python3
+    # scripts/startup-order.sh profiles the server's start-up with callgrind.
+    valgrind
     # webauthn-rs links OpenSSL.
     openssl
   ];

@@ -38,15 +38,21 @@ so expect rough edges.
 
 ## How light is it?
 
-Idle memory (RSS) on a release build after 10 minutes with no traffic:
+Memory (RSS) of a release build, after 10 minutes with no traffic and again after use
+(signing in and opening every page):
 
-| Part | Idle RSS | Runs when |
-|---|---|---|
-| `server` (control plane and UI) | 12.4 MB | always (plus your Postgres) |
-| `podkit-agent` (per server) | 7.8 MB | always |
-| Traefik | 89.7 MB | from the first deploy with a domain |
-| LLM gateway sidecar | 7.1 MB | only while a model link exists |
-| Vulnerability scanner (Syft, Grype) | 0 MB | only during a scan |
+| Part | Idle | After use | Runs when |
+|---|---|---|---|
+| `server` (control plane and UI) | 13.0 MB | 33.3 MB | always (plus your Postgres) |
+| `podkit-agent` (per server) | 9.1 MB | 9.1 MB | always |
+| Traefik | 89.7 MB | | from the first deploy with a domain |
+| LLM gateway sidecar | 7.1 MB | | only while a model link exists |
+| Vulnerability scanner (Syft, Grype) | 0 MB | | only during a scan |
+
+The server is built with `scripts/build-ordered.sh`; a plain `cargo build --release`, which
+the container image still uses, idles at 23.2 MB. Hashing a password takes 64 MiB more for
+about 100 ms, one hash at a time, so a sign-in peaks near 100 MB: give the server's
+container 128 MB.
 
 CI fails when the server or the agent grows past its budget. The method, the
 budgets and what a comparison with Coolify and Dokploy does and does not show
