@@ -13,5 +13,3 @@
 /target
 LICENSE
 README.md
-# crates/core/build.rs embeds these; the rules above would drop them from the build context.
-!crates/core/templates/**/docker-compose.yml

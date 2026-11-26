@@ -17,7 +17,6 @@
 pub mod catalog;
 pub(crate) mod embed;
 pub mod expr;
-pub mod import;
 mod registry;
 pub mod render;
 mod routes;

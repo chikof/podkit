@@ -63,6 +63,33 @@ pub fn open(data_dir: &Path) {
 	}
 }
 
+/// `server check-templates <dir>`: loads every template under `<dir>/templates` the way a
+/// refresh does and says which do not load. The template repository's checks cannot know
+/// that; this is how its catalog is tried against a podkit before it is published.
+#[must_use]
+pub fn check_cli() -> Option<i32> {
+	let args: Vec<String> = std::env::args().collect();
+	if args.get(1).map(String::as_str) != Some("check-templates") {
+		return None;
+	}
+	let Some(dir) = args.get(2) else {
+		eprintln!("usage: server check-templates <dir with a templates/ folder>");
+		return Some(2);
+	};
+	let registry = registry::read(Path::new(dir), String::new());
+	for (id, why) in &registry.errors {
+		eprintln!("{id}: {why}");
+	}
+	println!(
+		"{} templates load, {} do not",
+		registry.templates.len(),
+		registry.errors.len()
+	);
+	Some(i32::from(
+		!registry.errors.is_empty() || registry.templates.is_empty(),
+	))
+}
+
 fn commit_of(dir: &Path) -> Option<String> {
 	let index: Index = serde_json::from_slice(&std::fs::read(dir.join("index.json")).ok()?).ok()?;
 	Some(index.commit)

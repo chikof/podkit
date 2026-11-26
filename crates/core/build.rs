@@ -1,5 +1,5 @@
-//! Generates `$OUT_DIR/embedded.rs`: the files of every template under `templates/<id>/` and
-//! the registry logos under `static/logos`, so the binary carries them.
+//! Generates `$OUT_DIR/embedded.rs`: the registry logos under `static/logos`, so the binary
+//! carries them.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -9,7 +9,6 @@ fn main() {
 	embed_templates();
 }
 
-const TEMPLATES_DIR: &str = "templates";
 const LOGOS_DIR: &str = "static/logos";
 
 fn files_in(dir: &str, dirs: bool) -> Vec<PathBuf> {
@@ -42,7 +41,6 @@ fn is_image(name: &str) -> bool {
 /// `templates/<id>/` and every logo under `static/logos`, as `include_bytes!`,
 /// so the binary carries them and nothing is read from disk at run time.
 fn embed_templates() {
-	println!("cargo::rerun-if-changed={TEMPLATES_DIR}");
 	println!("cargo::rerun-if-changed={LOGOS_DIR}");
 	let root = env::current_dir().expect("current dir");
 	let include = |path: &Path| {
