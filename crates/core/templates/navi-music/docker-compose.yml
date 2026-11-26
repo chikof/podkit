@@ -26,7 +26,7 @@ services:
       YOUTUBE_CIPHER_PASSWORD: ${YOUTUBE_CIPHER_PASSWORD}
 
   yt-cipher:
-    image: ghcr.io/kikkia/yt-cipher:master@sha256:4c5ec381ff57336cfc24822d2b526a5ad7cd0171f61065a1bbc87bb736842449
+    image: ghcr.io/kikkia/yt-cipher:master@sha256:0e4b6dded97558c28421fcb592afffa5b2b27718f8a2c15c1f95c3cc46f98eb3
     restart: unless-stopped
     environment:
       OVERRIDE_PLAYER_VARIANT: IAS
