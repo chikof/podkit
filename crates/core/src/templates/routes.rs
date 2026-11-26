@@ -57,6 +57,10 @@ struct Summary {
 	services: usize,
 	ram_mb: Option<u32>,
 	gateway: bool,
+	/// `ok`, `broken` or `unmaintained`, with the catalog's reason for the last two.
+	status: super::Status,
+	status_note: Option<String>,
+	maintainers: Vec<String>,
 }
 
 fn kind(l: &Loaded) -> &'static str {
@@ -78,6 +82,9 @@ fn summary(l: &Loaded) -> Summary {
 		services: l.services.len(),
 		ram_mb: t.requires.ram_mb,
 		gateway: t.gateway,
+		status: t.status,
+		status_note: t.status_note.clone(),
+		maintainers: t.maintainers.clone(),
 	}
 }
 

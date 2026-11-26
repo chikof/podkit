@@ -17,8 +17,8 @@ use serde_json::json;
 
 use super::Place;
 use crate::components::{
-	INPUT, LogoSize, Priority, Size, Variant, button_class, empty_state, icon, image_logo,
-	link_button,
+	INPUT, LogoSize, Priority, Size, Tone, Variant, badge, button_class, empty_state, icon,
+	image_logo, link_button,
 };
 use crate::error;
 use crate::extract::TeamCtx;
@@ -28,7 +28,7 @@ use podkit_core::ids::{ProjectId, TeamId};
 use podkit_core::projects::{self, Project};
 use podkit_core::quotas::service::is_instance_admin;
 use podkit_core::state::AppState;
-use podkit_core::templates::{self, CATEGORIES, Loaded};
+use podkit_core::templates::{self, CATEGORIES, Loaded, Status};
 
 /// Rows per page: two columns of twelve.
 const PAGE_SIZE: usize = 24;
@@ -122,6 +122,15 @@ fn version_label(version: &str) -> String {
 	}
 }
 
+/// How a template the catalog flags reads; nothing for one that works.
+pub(super) fn status_tag(status: Status) -> Option<(Tone, &'static str)> {
+	match status {
+		Status::Ok => None,
+		Status::Broken => Some((Tone::Danger, "Broken")),
+		Status::Unmaintained => Some((Tone::Warning, "Unmaintained")),
+	}
+}
+
 /// One template as one row: the whole row is the link (the name's `::after` covers it).
 fn row(place: Place, l: &Loaded, index: usize) -> Markup {
 	let t = &l.template;
@@ -134,7 +143,10 @@ fn row(place: Place, l: &Loaded, index: usize) -> Markup {
 		li class="ui-link-card ui-tpl-row" {
 			(image_logo(&podkit_core::logos::template_url(l), LogoSize::Md, priority))
 			div class="ui-tpl-main" {
-				h2 { a href=(detail_href(place, &t.id)) class="ui-link-card-link" { (t.name) } }
+				h2 {
+					a href=(detail_href(place, &t.id)) class="ui-link-card-link" { (t.name) }
+					@if let Some((tone, label)) = status_tag(t.status) { " " (badge(tone, label)) }
+				}
 				p { (t.description) }
 			}
 			div class="ui-tpl-meta" {
