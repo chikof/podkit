@@ -1,8 +1,11 @@
-//! The templates compiled into the binary, parsed and checked once.
+//! The templates of the catalog on disk, parsed and checked when the catalog is read.
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::sync::OnceLock;
+use std::path::Path;
+#[cfg(any(test, feature = "testing"))]
+use std::sync::LazyLock;
+use std::sync::{Arc, RwLock};
 
 use proto::{ContainerOptions, Ingress};
 use sha2::{Digest, Sha256};
@@ -56,6 +59,9 @@ pub struct Loaded {
 	/// and nothing else an application cannot express: it is deployed as an
 	/// image application instead of a one-service stack.
 	pub plain_app: bool,
+	/// The catalog's revision of the template: it changes only when what gets deployed
+	/// changes. Empty for a template that did not come from a catalog.
+	pub revision: String,
 }
 
 /// First 8 hex digits of the SHA-256 of `bytes`.
@@ -154,6 +160,7 @@ pub fn load(
 		services,
 		warnings,
 		plain_app,
+		revision: String::new(),
 	})
 }
 
@@ -299,64 +306,112 @@ fn valid_env_key(key: &str) -> bool {
 		&& key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-/// What loading the embedded templates produced.
+/// What reading a catalog produced.
+#[derive(Default)]
 pub struct Registry {
+	/// Commit of the template repository the catalog was built from; empty for none.
+	pub commit: String,
 	/// Templates that loaded, by id.
-	pub templates: BTreeMap<String, Loaded>,
-	/// Folders that did not, with why. Empty in a healthy build; a test
-	/// fails otherwise.
-	#[allow(dead_code, reason = "read by the tests that keep the gallery healthy")]
+	pub templates: BTreeMap<String, Arc<Loaded>>,
+	/// Folders that did not, with why.
 	pub errors: Vec<(String, String)>,
 }
 
-static REGISTRY: OnceLock<Registry> = OnceLock::new();
+static CURRENT: RwLock<Option<Arc<Registry>>> = RwLock::new(None);
 
-/// Loads (once) every embedded template.
-pub fn load_all() -> &'static Registry {
-	REGISTRY.get_or_init(|| {
-		let mut templates = BTreeMap::new();
-		let mut errors = Vec::new();
-		for (id, files) in embed::TEMPLATES {
-			let file = |name: &str| {
-				if let Some(logo) = name.strip_prefix('@') {
-					let want = format!("{logo}.svg");
-					return embed::LOGOS
-						.iter()
-						.find(|(n, _)| *n == want)
-						.map(|(_, bytes)| Cow::Borrowed(*bytes));
-				}
-				files
+/// Reads every template under `<dir>/templates/<id>/`.
+pub fn read(dir: &Path, commit: String, revisions: &BTreeMap<String, String>) -> Registry {
+	let mut registry = Registry {
+		commit,
+		..Registry::default()
+	};
+	let mut folders: Vec<_> = std::fs::read_dir(dir.join("templates"))
+		.map(|d| d.flatten().map(|e| e.path()).collect())
+		.unwrap_or_default();
+	folders.sort();
+	for folder in folders.iter().filter(|f| f.is_dir()) {
+		let id = folder
+			.file_name()
+			.unwrap_or_default()
+			.to_string_lossy()
+			.into_owned();
+		let file = |name: &str| {
+			// The templates podkit keeps for its own tests name a logo of static/logos.
+			if let Some(logo) = name.strip_prefix('@') {
+				let want = format!("{logo}.svg");
+				return embed::LOGOS
 					.iter()
-					.find(|(n, _)| *n == name)
-					.map(|(_, bytes)| Cow::Borrowed(*bytes))
-			};
-			match load(id, &file) {
-				Ok(loaded) => {
-					templates.insert((*id).to_string(), loaded);
-				}
-				Err(e) => errors.push(((*id).to_string(), e.0)),
+					.find(|(n, _)| *n == want)
+					.map(|(_, bytes)| Cow::Borrowed(*bytes));
 			}
+			// A name with a separator would read outside the template's folder.
+			if name.contains(['/', '\\']) || name.starts_with('.') {
+				return None;
+			}
+			std::fs::read(folder.join(name)).ok().map(Cow::Owned)
+		};
+		match load(&id, &file) {
+			Ok(mut loaded) => {
+				loaded.revision = revisions.get(&id).cloned().unwrap_or_default();
+				registry.templates.insert(id, Arc::new(loaded));
+			}
+			Err(e) => registry.errors.push((id, e.0)),
 		}
-		Registry { templates, errors }
-	})
+	}
+	registry
+}
+
+/// Makes `registry` the gallery.
+pub fn install(registry: Registry) -> Arc<Registry> {
+	let registry = Arc::new(registry);
+	*CURRENT
+		.write()
+		.unwrap_or_else(std::sync::PoisonError::into_inner) = Some(registry.clone());
+	registry
+}
+
+/// The gallery: the catalog last read, or an empty one before the first refresh.
+pub fn load_all() -> Arc<Registry> {
+	if let Some(registry) = CURRENT
+		.read()
+		.unwrap_or_else(std::sync::PoisonError::into_inner)
+		.clone()
+	{
+		return registry;
+	}
+	// Tests read the templates kept in this crate, with no catalog to fetch.
+	#[cfg(any(test, feature = "testing"))]
+	{
+		static FIXTURES: LazyLock<Arc<Registry>> = LazyLock::new(|| {
+			install(read(
+				Path::new(env!("CARGO_MANIFEST_DIR")),
+				String::new(),
+				&BTreeMap::new(),
+			))
+		});
+		FIXTURES.clone()
+	}
+	#[cfg(not(any(test, feature = "testing")))]
+	Arc::default()
 }
 
 /// One template by id.
 #[must_use]
-pub fn find(id: &str) -> Option<&'static Loaded> {
-	load_all().templates.get(id)
+pub fn find(id: &str) -> Option<Arc<Loaded>> {
+	load_all().templates.get(id).cloned()
 }
 
 /// Templates matching `q` (every word in the name, id, description, tags or
 /// category) and, when given, in `category`, best matches first, then by name.
 #[must_use]
-pub fn search(q: Option<&str>, category: Option<&str>) -> Vec<&'static Loaded> {
+pub fn search(q: Option<&str>, category: Option<&str>) -> Vec<Arc<Loaded>> {
 	let words: Vec<String> = q
 		.unwrap_or_default()
 		.split_whitespace()
 		.map(str::to_lowercase)
 		.collect();
-	let mut hits: Vec<(u8, &Loaded)> = load_all()
+	let registry = load_all();
+	let mut hits: Vec<(u8, &Arc<Loaded>)> = registry
 		.templates
 		.values()
 		.filter(|l| category.is_none_or(|c| l.template.category == c))
@@ -395,5 +450,5 @@ pub fn search(q: Option<&str>, category: Option<&str>) -> Vec<&'static Loaded> {
 				.cmp(&b.1.template.name.to_lowercase())
 		})
 	});
-	hits.into_iter().map(|(_, l)| l).collect()
+	hits.into_iter().map(|(_, l)| l.clone()).collect()
 }

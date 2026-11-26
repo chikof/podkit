@@ -540,12 +540,10 @@ async fn stack_cards(db: &PgPool, environment: EnvironmentId) -> AppResult<Vec<R
 	for st in stacks::list_by_environment(db, environment).await? {
 		let services = stacks::list_services(db, st.id).await?;
 		let host = services.iter().find_map(|svc| svc.domain.clone());
-		let logo_url = st
-			.source
-			.strip_prefix("template:")
-			.and_then(|rest| rest.split('@').next())
-			.and_then(crate::templates::find)
-			.map(crate::logos::template_url);
+		let origin =
+			crate::templates::service::origin(db, crate::templates::service::Kind::Stack, st.id.0)
+				.await?;
+		let logo_url = origin.map(|o| crate::logos::template_url(&o.template));
 		cards.push(ResourceCard {
 			kind: ResourceKind::Stack,
 			id: st.id.0,

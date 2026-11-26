@@ -70,6 +70,11 @@ pub struct ServerConfig {
 	#[config(env = "HF_ENDPOINT")]
 	pub hf_endpoint: Option<String>,
 
+	/// Where the template catalog is fetched from when an administrator refreshes it;
+	/// defaults to `https://podoes.github.io/podkit-templates`.
+	#[config(env = "TEMPLATE_CATALOG_URL")]
+	pub template_catalog_url: Option<String>,
+
 	/// The address git providers (GitHub, GitLab, Gitea) reach podkit at, like
 	/// `https://podkit.example.com`. Push webhooks need it; without it deploys are manual.
 	#[config(env = "PUBLIC_URL")]

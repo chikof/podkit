@@ -45,7 +45,7 @@ fn main() -> AppResult<()> {
 
 #[allow(clippy::too_many_lines, reason = "start-up reads best straight down")]
 async fn run() -> AppResult<()> {
-	if let Some(code) = templates::import::cli() {
+	if let Some(code) = templates::catalog::check_cli() {
 		std::process::exit(code);
 	}
 	#[cfg(debug_assertions)]
@@ -77,6 +77,7 @@ async fn run() -> AppResult<()> {
 		.mode(0o700)
 		.create(&log_dir)?;
 
+	templates::catalog::open(&runtime_config.data_dir);
 	let addr = format!("{}:{}", config.host, config.port);
 	let db = db::connect(&config.database_url).await?;
 	db::migrate(&db)
@@ -276,6 +277,10 @@ fn resolve_config(config: &ServerConfig) -> AppResult<Config> {
 			.as_deref()
 			.map_or("https://huggingface.co", |e| e.trim_end_matches('/'))
 			.to_owned(),
+		template_catalog_url: config
+			.template_catalog_url
+			.clone()
+			.unwrap_or_else(|| "https://podoes.github.io/podkit-templates".to_owned()),
 		model_ready_timeout: None,
 		model_ready_interval: Duration::from_secs(3),
 		public_url: config

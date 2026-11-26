@@ -21,12 +21,28 @@ use crate::state::AppState;
 pub fn router() -> Router<AppState> {
 	Router::new()
 		.route("/", get(list))
+		.route("/refresh", post(refresh))
 		.route("/{template_id}", get(detail))
+}
+
+/// `POST /refresh`: fetch the catalog again. The catalog is the whole instance's, so only
+/// its administrator may.
+async fn refresh(
+	State(s): State<AppState>,
+	user: AuthUser,
+) -> AppResult<Json<super::catalog::Refreshed>> {
+	if !crate::quotas::service::is_instance_admin(&s.db, user.id).await? {
+		return Err(ServerError::Forbidden);
+	}
+	Ok(Json(super::catalog::refresh(&s).await?))
 }
 
 /// `POST /{id}/deploy`, nested under a project.
 pub fn deploy_router() -> Router<AppState> {
-	Router::new().route("/{template_id}/deploy", post(deploy))
+	Router::new()
+		.route("/{template_id}/deploy", post(deploy))
+		.route("/import", post(import))
+		.route("/import/preview", post(import_preview))
 }
 
 #[derive(Serialize)]
@@ -44,6 +60,10 @@ struct Summary {
 	services: usize,
 	ram_mb: Option<u32>,
 	gateway: bool,
+	/// `ok`, `broken` or `unmaintained`, with the catalog's reason for the last two.
+	status: super::Status,
+	status_note: Option<String>,
+	maintainers: Vec<String>,
 }
 
 fn kind(l: &Loaded) -> &'static str {
@@ -65,6 +85,9 @@ fn summary(l: &Loaded) -> Summary {
 		services: l.services.len(),
 		ram_mb: t.requires.ram_mb,
 		gateway: t.gateway,
+		status: t.status,
+		status_note: t.status_note.clone(),
+		maintainers: t.maintainers.clone(),
 	}
 }
 
@@ -106,7 +129,7 @@ async fn list(_user: AuthUser, Query(query): Query<ListQuery>) -> AppResult<Json
 		.filter(|c| c.count > 0)
 		.collect();
 	Ok(Json(ListResponse {
-		templates: search(q, category).into_iter().map(summary).collect(),
+		templates: search(q, category).iter().map(|l| summary(l)).collect(),
 		categories,
 	}))
 }
@@ -150,10 +173,24 @@ struct Detail {
 }
 
 fn is_secret_expr(text: &str, template: &Template) -> bool {
-	expr::scan(text).unwrap_or_default().iter().any(|e| match e {
-		expr::Expr::Helper(h) => h.is_secret(),
-		expr::Expr::Name(n) => matches!(template.variables.get(n), Some(Variable::Expr(t)) if t != text && is_secret_expr(t, template)),
-	})
+	// Each variable is looked into once: one that names another twice a level would
+	// otherwise be walked two to the power of the depth times.
+	fn walk<'a>(text: &'a str, template: &'a Template, seen: &mut Vec<&'a str>) -> bool {
+		expr::scan(text)
+			.unwrap_or_default()
+			.iter()
+			.any(|e| match e {
+				expr::Expr::Helper(h) => h.is_secret(),
+				expr::Expr::Name(n) => match template.variables.get_key_value(n) {
+					Some((name, Variable::Expr(t))) if !seen.contains(&name.as_str()) => {
+						seen.push(name);
+						walk(t, template, seen)
+					}
+					_ => false,
+				},
+			})
+	}
+	walk(text, template, &mut Vec::new())
 }
 
 pub fn variables(t: &Template) -> Vec<VariableInfo> {
@@ -198,8 +235,12 @@ pub fn variables(t: &Template) -> Vec<VariableInfo> {
 /// a generated value: those only exist once a deploy makes them.
 async fn detail(_user: AuthUser, Path(id): Path<String>) -> AppResult<Json<Detail>> {
 	let l = super::find(&id).ok_or(ServerError::NotFound)?;
+	Ok(Json(detail_of(&l)))
+}
+
+fn detail_of(l: &Loaded) -> Detail {
 	let t = &l.template;
-	Ok(Json(Detail {
+	Detail {
 		summary: summary(l),
 		docs: t.docs.clone(),
 		source: t.source.clone(),
@@ -217,7 +258,103 @@ async fn detail(_user: AuthUser, Path(id): Path<String>) -> AppResult<Json<Detai
 			})
 			.collect(),
 		warnings: l.warnings.clone(),
+	}
+}
+
+/// The two files of a template somebody hands in.
+#[derive(Deserialize)]
+struct ImportFiles {
+	/// `template.toml`.
+	template: String,
+	/// `docker-compose.yml`.
+	compose: String,
+}
+
+#[derive(Serialize)]
+struct ImportPreview {
+	/// Always `false`: an imported template is not the catalog's.
+	official: bool,
+	/// What the result will carry in place of `template:<id>@<version>`. Not `source`:
+	/// that is the template's repository.
+	origin: String,
+	#[serde(flatten)]
+	detail: Detail,
+	/// The compose file as it will be run, to be read before it is.
+	compose: String,
+}
+
+/// What an imported template is and would run, deploying nothing. For the page or the
+/// command that shows it to the person before they confirm.
+async fn import_preview(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, project)): Path<(TeamId, ProjectId)>,
+	Json(files): Json<ImportFiles>,
+) -> AppResult<Json<ImportPreview>> {
+	crate::scope::project(&s.db, team, project).await?;
+	// Reading somebody's files is work done for them: only for who may deploy the result.
+	crate::auth::permission::authorize(
+		&s.db,
+		user.id,
+		team,
+		crate::auth::permission::Action::Create,
+		crate::auth::permission::Resource::Stack,
+	)
+	.await?;
+	let loaded = service::imported(&files.template, &files.compose)?;
+	Ok(Json(ImportPreview {
+		official: false,
+		origin: service::import_source(&loaded, &files.template),
+		detail: detail_of(&loaded),
+		compose: files.compose,
 	}))
+}
+
+#[derive(Deserialize)]
+struct ImportRequest {
+	#[serde(flatten)]
+	files: ImportFiles,
+	#[serde(flatten)]
+	deploy: DeployRequest,
+}
+
+/// Deploys a template handed in as files; 202 with what was created. The result is marked
+/// `import:` and never taken for a catalog template.
+async fn import(
+	State(s): State<AppState>,
+	user: AuthUser,
+	Path((team, project)): Path<(TeamId, ProjectId)>,
+	Json(body): Json<ImportRequest>,
+) -> AppResult<(StatusCode, Json<Deployed>)> {
+	if body.deploy.model_id.is_some() {
+		return Err(ServerError::Validation(
+			"an imported template cannot be linked to a model".to_string(),
+		));
+	}
+	// It starts containers, as `…/{id}/deploy` does: a token needs the same scope.
+	if let Some(grant) = &user.grant
+		&& !grant.allows(crate::auth::tokens::Scope::Deploy)
+	{
+		return Err(ServerError::MissingScope("deploy"));
+	}
+	let deployed = service::deploy_import(
+		&s,
+		user.id,
+		team,
+		project,
+		body.deploy.environment_id,
+		body.deploy.server_id,
+		&body.files.template,
+		&body.files.compose,
+		DeployInput {
+			name: body.deploy.name,
+			inputs: body.deploy.inputs,
+			model: None,
+			registry: body.deploy.registry_id,
+		},
+	)
+	.await?;
+	Ok((StatusCode::ACCEPTED, Json(deployed)))
 }
 
 #[derive(Deserialize)]

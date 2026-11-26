@@ -533,6 +533,212 @@ pub async fn apps(ctx: &Ctx, place: &Place, json: bool) -> Result<()> {
 	Ok(())
 }
 
+/// `podkit templates [words]`: the catalog, or what matches.
+///
+/// # Errors
+/// When podkit refuses or cannot be reached.
+pub async fn templates(ctx: &Ctx, query: Option<&str>, json: bool) -> Result<()> {
+	let mut path = "/templates".to_owned();
+	if let Some(q) = query {
+		path.push_str("?q=");
+		for b in q.bytes() {
+			if b.is_ascii_alphanumeric() {
+				path.push(char::from(b));
+			} else {
+				let _ = write!(path, "%{b:02X}");
+			}
+		}
+	}
+	let list = ctx.api.get(&path).await?;
+	if json {
+		print_json(&list["templates"]);
+		return Ok(());
+	}
+	let found = list["templates"].as_array().cloned().unwrap_or_default();
+	if found.is_empty() {
+		println!(
+			"{}",
+			if query.is_some() {
+				"No template matches."
+			} else {
+				"The catalog is empty: its administrator downloads it from the Templates page."
+			}
+		);
+		return Ok(());
+	}
+	let mut rows = vec![
+		["ID", "NAME", "VERSION", "CATEGORY", "STATUS"]
+			.map(str::to_owned)
+			.to_vec(),
+	];
+	for t in &found {
+		let status = text(t, "status");
+		rows.push(vec![
+			text(t, "id"),
+			text(t, "name"),
+			text(t, "version"),
+			text(t, "category"),
+			if status == "ok" {
+				String::new()
+			} else {
+				status
+			},
+		]);
+	}
+	print!("{}", table(&rows));
+	Ok(())
+}
+
+/// What `podkit templates deploy` was asked for.
+pub struct TemplateDeploy<'a> {
+	/// `templates import`: `template` is a folder with the two files.
+	pub import: bool,
+	/// Do not ask before deploying an import.
+	pub yes: bool,
+	/// The template's id, or the folder.
+	pub template: &'a str,
+	/// `--server`: a name or an id.
+	pub server: Option<&'a str>,
+	/// `--name`.
+	pub name: Option<&'a str>,
+	/// `--set name=value`.
+	pub set: &'a [(String, String)],
+}
+
+/// Reads the two files of `deploy.template` into `body`, shows what they would run and asks.
+///
+/// # Errors
+/// When a file cannot be read, podkit refuses the files, or the answer is no.
+async fn confirm_import(
+	ctx: &Ctx,
+	templates: &str,
+	deploy: &TemplateDeploy<'_>,
+	body: &mut Value,
+) -> Result<()> {
+	let read = |name: &str| {
+		let path = Path::new(deploy.template).join(name);
+		std::fs::read_to_string(&path).map_err(|e| Fail::usage(format!("{}: {e}", path.display())))
+	};
+	body["template"] = json!(read("template.toml")?);
+	body["compose"] = json!(read("docker-compose.yml")?);
+	let preview = ctx
+		.api
+		.post(&format!("{templates}/import/preview"), Some(body))
+		.await?;
+	if !deploy.yes {
+		eprintln!(
+			"{} {} is not from podkit's catalog. It would run:",
+			text(&preview, "name"),
+			text(&preview, "version")
+		);
+		for s in preview["services"].as_array().into_iter().flatten() {
+			eprintln!("  {}  {}", text(s, "name"), text(s, "image"));
+		}
+		for w in preview["warnings"].as_array().into_iter().flatten() {
+			eprintln!("  note: {}", w.as_str().unwrap_or_default());
+		}
+		eprintln!("\n{}", text(&preview, "compose").trim_end());
+		if !confirm("\nDeploy it?")? {
+			return Err(Fail::new("nothing was deployed"));
+		}
+	}
+	Ok(())
+}
+
+/// `podkit templates deploy <id>`: makes an application or a stack from a template.
+///
+/// # Errors
+/// When the project or the server cannot be told, or podkit refuses.
+pub async fn template_deploy(
+	ctx: &Ctx,
+	place: &Place,
+	deploy: &TemplateDeploy<'_>,
+	json: bool,
+) -> Result<()> {
+	let team = id_of(&ctx.team(place).await?);
+	let projects = ctx.projects(team).await?;
+	let project = pick(&projects, ctx.wanted_project(place), "project", "--project")?;
+	let servers = ctx.api.get(&format!("/teams/{team}/servers")).await?;
+	let servers = servers.as_array().cloned().unwrap_or_default();
+	let listed = || {
+		servers
+			.iter()
+			.map(|s| format!("{} ({})", text(s, "name"), id_of(s)))
+			.collect::<Vec<_>>()
+			.join(", ")
+	};
+	let server = match (deploy.server, servers.as_slice()) {
+		(Some(w), _) => servers
+			.iter()
+			.find(|s| text(s, "name") == w || id_of(s).to_string() == w)
+			.ok_or_else(|| Fail::usage(format!("no server {w}; there is: {}", listed())))?,
+		(None, [one]) => one,
+		(None, []) => return Err(Fail::new("this team has no server to deploy on")),
+		(None, _) => {
+			return Err(Fail::usage(format!(
+				"there are several; pick the server with --server: {}",
+				listed()
+			)));
+		}
+	};
+	let mut body = json!({ "server_id": id_of(server) });
+	if let Some(name) = deploy.name {
+		body["name"] = json!(name);
+	}
+	if !deploy.set.is_empty() {
+		body["inputs"] = deploy
+			.set
+			.iter()
+			.map(|(k, v)| (k.clone(), json!(v)))
+			.collect::<serde_json::Map<_, _>>()
+			.into();
+	}
+	// The id goes into a path: only what a template id is made of.
+	let id_like =
+		|id: &str| !id.is_empty() && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-');
+	if !deploy.import && !id_like(deploy.template) {
+		return Err(Fail::usage(format!(
+			"{} is not a template id: see podkit templates",
+			deploy.template
+		)));
+	}
+	let templates = format!("/teams/{team}/projects/{}/templates", id_of(project));
+	let made = if deploy.import {
+		confirm_import(ctx, &templates, deploy, &mut body).await?;
+		ctx.api
+			.post(&format!("{templates}/import"), Some(&body))
+			.await?
+	} else {
+		ctx.api
+			.post(
+				&format!("{templates}/{}/deploy", deploy.template),
+				Some(&body),
+			)
+			.await?
+	};
+	if json {
+		print_json(&made);
+		return Ok(());
+	}
+	println!(
+		"Deploying {} as the {} {} in project {}.",
+		deploy.template,
+		text(&made, "kind"),
+		text(&made, "name"),
+		text(project, "slug")
+	);
+	for url in made["urls"].as_array().into_iter().flatten() {
+		println!("  {}", url.as_str().unwrap_or_default());
+	}
+	if let Some(credentials) = made["credentials"].as_object().filter(|c| !c.is_empty()) {
+		println!("Credentials, shown this once:");
+		for (name, value) in credentials {
+			println!("  {name}: {}", value.as_str().unwrap_or_default());
+		}
+	}
+	Ok(())
+}
+
 /// The health column of a deployment: the verdict and why.
 fn health(d: &Value) -> String {
 	match (d["health"].as_str(), d["health_detail"].as_str()) {

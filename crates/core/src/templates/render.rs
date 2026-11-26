@@ -114,6 +114,10 @@ fn domain_hosts(t: &Template, place: &Placement<'_>) -> (BTreeMap<String, String
 				default_host(&format!("{service}-{n}"), place)
 			};
 			n += 1;
+			// A name cut to a label's 63 characters stops changing with the number.
+			if n > 99 {
+				break;
+			}
 		}
 		used.insert(host.clone());
 		hosts.insert(name.clone(), host);

@@ -8,8 +8,8 @@ use serde_json::json;
 
 use super::{project_url, stack_url};
 use crate::components::{
-	BUTTON, BUTTON_OUTLINE, BannerKind, LogoSize, MENU_ITEM_DANGER, Priority, Size, TabItem,
-	Variant, banner, button_class, dropdown_menu, icon, image_logo, logo, menu_link,
+	BUTTON, BUTTON_OUTLINE, BannerKind, LogoSize, MENU_ITEM_DANGER, Priority, Size, TabItem, Tone,
+	Variant, badge, banner, button_class, dropdown_menu, icon, image_logo, logo, menu_link,
 	menu_separator, tabs,
 };
 use crate::error;
@@ -30,6 +30,7 @@ use podkit_core::stacks::service::{self, StackDetail};
 use podkit_core::stacks::{ServiceStatus, Stack, StackStatus};
 use podkit_core::state::AppState;
 use podkit_core::templates;
+use podkit_core::templates::service::Origin;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Tab {
@@ -110,6 +111,8 @@ pub(super) struct Loaded {
 	pub usage: Option<ResourcePoint>,
 	/// The security badge of the head; empty when nothing was scanned or it may not be read.
 	pub security: Markup,
+	/// The catalog template this stack was deployed from, if it was.
+	pub origin: Option<Origin>,
 }
 
 impl Loaded {
@@ -141,34 +144,37 @@ pub(super) async fn load(
 		.and_then(|points| points.last().cloned());
 	let security =
 		security::header_badge(s, ctx, project.id, Subject::Stack(detail.stack.id)).await;
+	let origin = templates::service::origin(&s.db, templates::service::Kind::Stack, id.0)
+		.await
+		.ok()
+		.flatten();
 	Ok(Loaded {
 		project,
 		detail,
 		usage,
 		security,
+		origin,
 	})
 }
 
-/// The id of the template a stack came from (`template:<id>@<version>`), if any.
-fn template_of(stack: &Stack) -> Option<&'static templates::Loaded> {
-	stack
-		.source
-		.strip_prefix("template:")
-		.and_then(|rest| rest.split('@').next())
-		.and_then(templates::find)
-}
-
-fn mark(stack: &Stack, size: LogoSize) -> Markup {
-	match template_of(stack) {
-		Some(l) => image_logo(&podkit_core::logos::template_url(l), size, Priority::Normal),
+fn mark(origin: Option<&Origin>, size: LogoSize) -> Markup {
+	match origin {
+		Some(o) => image_logo(
+			&podkit_core::logos::template_url(&o.template),
+			size,
+			Priority::Normal,
+		),
 		None => logo("docker", size),
 	}
 }
 
-fn source_line(stack: &Stack) -> Markup {
+fn source_line(stack: &Stack, origin: Option<&Origin>) -> Markup {
 	html! {
-		@if let Some(l) = template_of(stack) {
-			"From the " (l.template.name) " template"
+		@if let Some(o) = origin {
+			"From the " (o.template.template.name) " template"
+		} @else if stack.source.starts_with("import:") {
+			// Somebody handed the files in: it is not the catalog's, whatever its id says.
+			"From an imported template file " (badge(Tone::Warning, "Unofficial"))
 		} @else {
 			"Compose file"
 		}
@@ -242,7 +248,7 @@ fn header(ctx: &TeamCtx, l: &Loaded, tab: Tab) -> Markup {
 		div id="stack-header" class="flex flex-col gap-5" "data-signals"="{_action_error: '', _acting: false}" {
 			(poll(&poll_url, status.in_flight()))
 			(chrome::head(
-				&mark(stack, LogoSize::Lg),
+				&mark(l.origin.as_ref(), LogoSize::Lg),
 				&html! { (icon("layers")) "Compose stack" },
 				&stack.name,
 				&html! {
@@ -250,7 +256,7 @@ fn header(ctx: &TeamCtx, l: &Loaded, tab: Tab) -> Markup {
 					(l.security)
 					span class="inline-flex items-center gap-2" {
 						(services) @if services == 1 { " service" } @else { " services" }
-						" \u{b7} " (source_line(stack))
+						" \u{b7} " (source_line(stack, l.origin.as_ref()))
 					}
 				},
 				&html! {
@@ -285,6 +291,9 @@ fn header(ctx: &TeamCtx, l: &Loaded, tab: Tab) -> Markup {
 					}
 				},
 			))
+			@if let Some(o) = l.origin.as_ref().filter(|o| o.newer) {
+				(crate::pages::templates::newer_banner(ctx.team.id, &o.template))
+			}
 			@if stack.status == StackStatus::Failed {
 				@if let Some(message) = &stack.status_message {
 					div data-status-message { (banner(BannerKind::Error, Some("This stack failed."), message, None)) }

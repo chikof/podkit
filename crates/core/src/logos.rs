@@ -201,7 +201,13 @@ pub fn router() -> Router<AppState> {
 }
 
 /// A response for `bytes` that browsers may keep for a year.
-fn immutable(media: &'static str, hash: &str, bytes: &'static [u8], svg: bool) -> Response {
+fn immutable(
+	media: &'static str,
+	hash: &str,
+	bytes: impl Into<axum::body::Body>,
+	svg: bool,
+) -> Response {
+	let bytes: axum::body::Body = bytes.into();
 	let mut res = (StatusCode::OK, bytes).into_response();
 	let h = res.headers_mut();
 	h.insert(header::CONTENT_TYPE, HeaderValue::from_static(media));
@@ -241,12 +247,11 @@ async fn serve(Path(file): Path<String>) -> Response {
 		&& let Some(l) = crate::templates::find(id)
 		&& l.logo.hash == hash
 		&& !l.template.logo.starts_with('@')
-		&& let std::borrow::Cow::Borrowed(bytes) = &l.logo.bytes
 	{
 		let svg = l.logo.media == "image/svg+xml";
 		let want = if svg { "svg" } else { "png" };
 		if want == ext {
-			return immutable(l.logo.media, &l.logo.hash, bytes, svg);
+			return immutable(l.logo.media, &l.logo.hash, l.logo.bytes.to_vec(), svg);
 		}
 	}
 	StatusCode::NOT_FOUND.into_response()

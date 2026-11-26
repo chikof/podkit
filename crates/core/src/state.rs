@@ -76,6 +76,8 @@ pub struct Config {
 	pub agent_binaries_dir: PathBuf,
 	/// Base URL of the Hugging Face hub; tests point it at a local stub.
 	pub hf_endpoint: String,
+	/// Where the template catalog is published (`index.json` and its archive).
+	pub template_catalog_url: String,
 	/// Replaces the per-engine readiness timeout of model starts; tests shorten it.
 	pub model_ready_timeout: Option<std::time::Duration>,
 	/// Pause between readiness probes of a starting model.

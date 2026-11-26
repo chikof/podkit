@@ -129,11 +129,12 @@ impl Fixture {
 
 /// A template with the given trait, found in the catalog rather than named, so a catalog
 /// refresh does not break the test.
-fn find(pred: impl Fn(&templates::Loaded) -> bool) -> &'static templates::Loaded {
+fn find(pred: impl Fn(&templates::Loaded) -> bool) -> std::sync::Arc<templates::Loaded> {
 	templates::load_all()
 		.templates
 		.values()
 		.find(|l| pred(l))
+		.cloned()
 		.expect("a template with that trait")
 }
 
@@ -147,6 +148,55 @@ fn redirect_of(body: &str) -> String {
 		.and_then(|s| s.split('\'').next())
 		.unwrap_or_else(|| panic!("no redirect in {body}"))
 		.to_owned()
+}
+
+#[db_test(migrator = "podkit_core::db::MIGRATOR")]
+async fn a_flagged_template_is_labelled_in_the_gallery_and_explained_on_its_page(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	let (_, list) = f.get(&format!("{}?q=bytebase", f.gallery())).await;
+	assert_contains(page_main(&list), "Broken");
+	let (_, list) = f.get(&format!("{}?q=gotify", f.gallery())).await;
+	assert_not_contains(page_main(&list), "Broken");
+
+	let (_, page) = f.get(&format!("{}/bytebase", f.gallery())).await;
+	assert_contains(
+		page_main(&page),
+		"The image tag it names is no longer published.",
+	);
+	assert_contains(page_main(&page), "Dokploy community");
+}
+
+#[db_test(migrator = "podkit_core::db::MIGRATOR")]
+async fn the_market_link_only_leads_to_a_template_of_this_catalog_and_deploys_nothing(db: PgPool) {
+	let f = Fixture::new(&db).await;
+	let (status, headers, _) = get_html(&f.app, "/market/gotify", Some(&f.cookie)).await;
+	assert_eq!(status, StatusCode::SEE_OTHER);
+	assert_eq!(
+		headers["location"],
+		format!("/teams/{}/templates/gotify", f.team)
+	);
+	assert_eq!(count(&db, "applications").await, 0);
+	assert_eq!(count(&db, "stacks").await, 0);
+
+	// An id the catalog does not have is answered with a page, and is not echoed into a link.
+	let (status, _, body) = get_html(&f.app, "/market/no-such%2F..%2Fx", Some(&f.cookie)).await;
+	assert_eq!(status, StatusCode::OK);
+	assert_contains(&body, "This podkit does not have that template");
+	assert_not_contains(&body, "no-such");
+
+	// A visit that starts on another site comes without the cookie: it is asked to come
+	// again from here, once, and only then sent to sign in.
+	let (status, _, body) = get_html(&f.app, "/market/gotify", None).await;
+	assert_eq!(status, StatusCode::OK);
+	assert_contains(&body, "0;url=/market/gotify?here=1");
+	let (status, headers, _) = get_html(&f.app, "/market/gotify?here=1", None).await;
+	assert!(status.is_redirection(), "{status}");
+	assert!(headers["location"].to_str().unwrap().starts_with("/login"));
+	let (status, _, _) = get_html(&f.app, "/market/a%22%3E%3Cb", None).await;
+	assert!(
+		status.is_redirection(),
+		"an id that is not one goes to sign-in: {status}"
+	);
 }
 
 #[db_test(migrator = "podkit_core::db::MIGRATOR")]

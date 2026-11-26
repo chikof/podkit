@@ -414,33 +414,17 @@ fn two_domain_variables_get_one_host_each() {
 	assert_eq!(r.domains[0].host, "demo.203-0-113-7.sslip.io");
 }
 
-#[test]
-fn the_docker_build_context_keeps_the_templates_compose_files() {
-	// `**/docker-compose*` is ignored for the image build; without the
-	// exception the binary would embed templates with no compose file.
-	let ignore = include_str!("../../../../.dockerignore");
-	assert!(
-		ignore
-			.lines()
-			.any(|l| l == "!crates/core/templates/**/docker-compose.yml")
-	);
-}
-
 // ---------------------------------------------------------- the gallery
 
 #[test]
-fn every_embedded_template_parses_validates_and_translates() {
+fn every_template_kept_for_the_tests_parses_validates_and_translates() {
 	let registry = load_all();
 	assert!(
 		registry.errors.is_empty(),
 		"templates that do not load: {:#?}",
 		registry.errors
 	);
-	assert!(
-		registry.templates.len() > 300,
-		"{}",
-		registry.templates.len()
-	);
+	assert!(!registry.templates.is_empty());
 	for (id, l) in &registry.templates {
 		assert_eq!(&l.template.id, id);
 		assert!(!l.services.is_empty(), "{id} has no services");
@@ -453,44 +437,6 @@ fn every_embedded_template_parses_validates_and_translates() {
 			);
 		}
 	}
-}
-
-#[test]
-fn imported_templates_are_at_least_70_percent_of_the_b3_fully_supported_count() {
-	let imported = load_all()
-		.templates
-		.values()
-		.filter(|l| l.template.upstream.is_some())
-		.count();
-	let b3_fully_supported = 433;
-	assert!(
-		imported * 100 >= b3_fully_supported * 70,
-		"{imported} imported of {b3_fully_supported}"
-	);
-	// The report says the same.
-	let report = include_str!("../../templates/IMPORT_REPORT.md");
-	assert!(
-		report.contains(&format!("| imported | {imported} |")),
-		"IMPORT_REPORT.md is out of date: rerun scripts/templates-import"
-	);
-	assert!(report.contains("| skipped |"));
-	for l in load_all()
-		.templates
-		.values()
-		.filter(|l| l.template.upstream.is_some())
-	{
-		let upstream = l.template.upstream.as_deref().unwrap();
-		assert!(upstream.starts_with("Dokploy/templates@"), "{upstream}");
-		assert!(
-			report.contains(&format!("| `{}` | `{upstream}` |", l.template.id)),
-			"{} is not in the report",
-			l.template.id
-		);
-	}
-	let notice = include_str!("../../../../NOTICE");
-	assert!(notice.contains("Copyright (c) 2024 Dokploy and Carlos Ortiz"));
-	assert!(notice.contains("MIT License"));
-	assert!(notice.contains("Apache License 2.0") && notice.contains("CC0"));
 }
 
 #[test]
@@ -798,6 +744,55 @@ async fn the_list_can_be_searched_and_filtered_and_needs_a_login(db: PgPool) {
 }
 
 #[sqlx::test]
+async fn a_template_the_catalog_flags_says_so_with_its_reason(db: PgPool) {
+	let s = Setup::new(db).await;
+	let (_, flagged) = s.get("/api/v1/templates/bytebase").await;
+	assert_eq!(flagged["status"], "broken");
+	assert_eq!(
+		flagged["status_note"],
+		"The image tag it names is no longer published."
+	);
+	let (_, fine) = s.get("/api/v1/templates/gotify").await;
+	assert_eq!(fine["status"], "ok");
+	assert_eq!(fine["status_note"], Value::Null);
+}
+
+#[sqlx::test]
+async fn only_the_instance_administrator_refreshes_the_catalog(db: PgPool) {
+	let s = Setup::new(db).await;
+	let (bob, _) = user_with_team(&s.app, "bob").await;
+	let (status, _) = call(
+		&s.app,
+		"POST",
+		"/api/v1/templates/refresh",
+		Some(&bob),
+		None,
+	)
+	.await;
+	assert_eq!(status, StatusCode::FORBIDDEN);
+	let (status, _) = call(&s.app, "POST", "/api/v1/templates/refresh", None, None).await;
+	assert!(status.is_client_error(), "{status}");
+}
+
+#[sqlx::test]
+async fn a_refresh_that_cannot_reach_the_catalog_keeps_the_one_there(db: PgPool) {
+	let s = Setup::new(db).await;
+	let before = load_all().templates.len();
+	// The test state points the catalog at a port nothing listens on.
+	let (status, body) = call(
+		&s.app,
+		"POST",
+		"/api/v1/templates/refresh",
+		Some(&s.token),
+		None,
+	)
+	.await;
+	assert_eq!(status, StatusCode::BAD_GATEWAY, "{body}");
+	assert_eq!(load_all().templates.len(), before);
+	assert!(!s.state.config.data_dir.join("catalog").exists());
+}
+
+#[sqlx::test]
 async fn the_detail_lists_variables_and_services_and_never_a_generated_value(db: PgPool) {
 	let s = Setup::new(db).await;
 	let (status, body) = s.get("/api/v1/templates/openclaw").await;
@@ -1100,6 +1095,228 @@ async fn an_application_template_stores_its_environment_encrypted_and_never_retu
 	);
 }
 
+/// The two files of a fixture template, as somebody would hand them in.
+fn files_of(id: &str) -> Value {
+	let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+		.join("templates")
+		.join(id);
+	json!({
+		"template": std::fs::read_to_string(dir.join("template.toml")).unwrap(),
+		"compose": std::fs::read_to_string(dir.join("docker-compose.yml")).unwrap(),
+	})
+}
+
+#[sqlx::test]
+async fn an_imported_template_is_previewed_in_full_and_deploys_marked_as_an_import(db: PgPool) {
+	let s = Setup::new(db).await;
+	let base = format!(
+		"/api/v1/teams/{}/projects/{}/templates/import",
+		s.team, s.project
+	);
+	let files = files_of("umami");
+
+	let (status, preview) = call(
+		&s.app,
+		"POST",
+		&format!("{base}/preview"),
+		Some(&s.token),
+		Some(files.clone()),
+	)
+	.await;
+	assert_eq!(status, StatusCode::OK, "{preview}");
+	assert_eq!(preview["official"], false);
+	assert_eq!(preview["compose"], files["compose"]);
+	assert_eq!(preview["services"].as_array().unwrap().len(), 2);
+	assert_eq!(count(&s.db, "stacks").await, 0, "a preview deploys nothing");
+
+	let mut body = files.clone();
+	body["server_id"] = json!(s.server().await);
+	let (status, made) = call(&s.app, "POST", &base, Some(&s.token), Some(body)).await;
+	assert_eq!(status, StatusCode::ACCEPTED, "{made}");
+	assert_eq!(made["kind"], "stack");
+	let (_, stack) = s
+		.get(&format!(
+			"/api/v1/teams/{}/projects/{}/stacks/{}",
+			s.team, s.project, made["id"]
+		))
+		.await;
+	// The file says it is umami, and the catalog has an umami: the result is not that one.
+	let source = stack["source"].as_str().unwrap();
+	assert_eq!(source, preview["origin"]);
+	assert!(source.starts_with("import:umami@"), "{source}");
+}
+
+#[sqlx::test]
+async fn a_catalog_deploy_is_recorded_with_its_template_and_an_import_is_not(db: PgPool) {
+	let s = Setup::new(db).await;
+	let (_, app) = s.deploy("gotify", json!({})).await;
+	let (_, stack) = s.deploy("umami", json!({})).await;
+	let recorded: Vec<(Option<i64>, Option<i64>, String)> = sqlx::query_as(
+		"SELECT application_id, stack_id, template_id FROM template_deploys ORDER BY template_id",
+	)
+	.fetch_all(&s.db)
+	.await
+	.unwrap();
+	assert_eq!(
+		recorded,
+		vec![
+			(app["id"].as_i64(), None, "gotify".to_owned()),
+			(None, stack["id"].as_i64(), "umami".to_owned()),
+		]
+	);
+
+	let mut body = files_of("it-tools");
+	body["server_id"] = json!(s.server().await);
+	let import = format!(
+		"/api/v1/teams/{}/projects/{}/templates/import",
+		s.team, s.project
+	);
+	let (status, _) = call(&s.app, "POST", &import, Some(&s.token), Some(body)).await;
+	assert_eq!(status, StatusCode::ACCEPTED);
+	assert_eq!(count(&s.db, "template_deploys").await, 2);
+
+	// The fixtures have no catalog revision, so nothing is called newer.
+	let id = stack["id"].as_i64().unwrap();
+	let origin = super::service::origin(&s.db, super::service::Kind::Stack, id)
+		.await
+		.unwrap()
+		.expect("a catalog deploy has an origin");
+	assert_eq!(origin.template.template.id, "umami");
+	assert!(!origin.newer);
+}
+
+#[sqlx::test]
+async fn an_imported_one_service_template_is_a_stack_so_that_it_carries_its_mark(db: PgPool) {
+	let s = Setup::new(db).await;
+	let (_, from_catalog) = s.deploy("gotify", json!({})).await;
+	assert_eq!(from_catalog["kind"], "application");
+
+	let mut body = files_of("gotify");
+	body["server_id"] = json!(s.server().await);
+	body["name"] = json!("Gotify by hand");
+	let (status, made) = call(
+		&s.app,
+		"POST",
+		&format!(
+			"/api/v1/teams/{}/projects/{}/templates/import",
+			s.team, s.project
+		),
+		Some(&s.token),
+		Some(body),
+	)
+	.await;
+	assert_eq!(status, StatusCode::ACCEPTED, "{made}");
+	assert_eq!(made["kind"], "stack");
+	let (_, stack) = s
+		.get(&format!(
+			"/api/v1/teams/{}/projects/{}/stacks/{}",
+			s.team, s.project, made["id"]
+		))
+		.await;
+	assert!(
+		stack["source"]
+			.as_str()
+			.unwrap()
+			.starts_with("import:gotify@"),
+		"{stack}"
+	);
+}
+
+#[sqlx::test]
+async fn hostile_template_files_are_refused_and_not_worked_through(db: PgPool) {
+	use std::fmt::Write as _;
+	let s = Setup::new(db).await;
+	let preview = format!(
+		"/api/v1/teams/{}/projects/{}/templates/import/preview",
+		s.team, s.project
+	);
+	let base = "id = \"x\"\nname = \"X\"\ndescription = \"d\"\ncategory = \"other\"\nlogo = \"logo.svg\"\n";
+	let compose = "services:\n  x:\n    image: nginx\n";
+	// Each variable is a thousand copies of the one before: a terabyte, four levels down.
+	let mut grows = format!("{base}[variables]\na0 = \"{}\"\n", "y".repeat(1000));
+	for level in 1..4 {
+		let copies = format!("${{a{}}}", level - 1).repeat(1000);
+		let _ = writeln!(grows, "a{level} = \"{copies}\"");
+	}
+	// Each variable names the one before twice: two to the sixtieth walks, unless counted once.
+	let mut doubles = format!("{base}[variables]\nv0 = \"\"\n");
+	for level in 1..=60 {
+		let _ = writeln!(doubles, "v{level} = \"${{v{0}}}${{v{0}}}\"", level - 1);
+	}
+	for (what, template, status) in [
+		("a value that grows", grows, StatusCode::BAD_REQUEST),
+		("a variable walked once", doubles, StatusCode::OK),
+	] {
+		let started = std::time::Instant::now();
+		let (got, body) = call(
+			&s.app,
+			"POST",
+			&preview,
+			Some(&s.token),
+			Some(json!({ "template": template, "compose": compose })),
+		)
+		.await;
+		assert_eq!(got, status, "{what}: {body}");
+		assert!(started.elapsed().as_secs() < 10, "{what} took too long");
+	}
+
+	// Somebody who may not create a stack does not get their files read.
+	let (bob, _) = user_with_team(&s.app, "bob").await;
+	let (status, _) = call(
+		&s.app,
+		"POST",
+		&preview,
+		Some(&bob),
+		Some(files_of("umami")),
+	)
+	.await;
+	assert!(
+		status == StatusCode::FORBIDDEN || status == StatusCode::NOT_FOUND,
+		"{status}"
+	);
+}
+
+#[test]
+fn a_template_says_who_maintains_it_only_with_user_names_and_prints_cleanly() {
+	let base = "id = \"x\"\ndescription = \"d\"\ncategory = \"other\"\nlogo = \"logo.svg\"\n";
+	let parse = |extra: &str| Template::parse(&format!("{base}{extra}"));
+	assert!(parse("name = \"X\"\nmaintainers = [\"octo-cat\"]").is_ok());
+	assert!(parse("name = \"X\"\nmaintainers = [\"login/oauth?x=1\"]").is_err());
+	assert!(parse("name = \"X\\u001b[2J\"").is_err());
+	let long = "s".repeat(51);
+	assert!(
+		parse(&format!(
+			"name = \"X\"\n[[config.domains]]\nserviceName = \"{long}\"\nport = 80\nhost = \"h\""
+		))
+		.is_err()
+	);
+}
+
+#[sqlx::test]
+async fn an_imported_template_gets_nothing_podkit_keeps_for_the_catalog(db: PgPool) {
+	let s = Setup::new(db).await;
+	let preview = format!(
+		"/api/v1/teams/{}/projects/{}/templates/import/preview",
+		s.team, s.project
+	);
+	for id in ["n8n", "mcp-fetch"] {
+		let (status, body) =
+			call(&s.app, "POST", &preview, Some(&s.token), Some(files_of(id))).await;
+		assert_eq!(status, StatusCode::BAD_REQUEST, "{id}: {body}");
+	}
+	let (status, body) = call(
+		&s.app,
+		"POST",
+		&preview,
+		Some(&s.token),
+		Some(json!({ "template": "id = \"x\"", "compose": "services: {}" })),
+	)
+	.await;
+	assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+	let (status, _) = call(&s.app, "POST", &preview, None, Some(files_of("umami"))).await;
+	assert!(status.is_client_error(), "{status}");
+}
+
 #[sqlx::test]
 async fn a_multi_service_template_becomes_a_stack_with_domains_and_encrypted_variables(db: PgPool) {
 	let s = Setup::new(db).await;
@@ -1157,7 +1374,8 @@ async fn a_multi_service_template_becomes_a_stack_with_domains_and_encrypted_var
 #[sqlx::test]
 async fn files_a_template_mounts_are_stored_encrypted_and_reach_the_translation(db: PgPool) {
 	let s = Setup::new(db).await;
-	let (id, l) = load_all()
+	let all = load_all();
+	let (id, l) = all
 		.templates
 		.iter()
 		.find(|(_, l)| {

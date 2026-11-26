@@ -124,11 +124,182 @@ pub async fn deploy(
 	template: &str,
 	body: DeployInput,
 ) -> AppResult<Deployed> {
+	let loaded = super::find(template).ok_or(ServerError::NotFound)?;
+	let source = format!(
+		"template:{}@{}",
+		loaded.template.id, loaded.template.version
+	);
+	deploy_loaded(
+		s,
+		user,
+		team,
+		project,
+		environment,
+		server,
+		&loaded,
+		&source,
+		body,
+	)
+	.await
+}
+
+/// A neutral picture for a template file that came without its logo.
+const NO_LOGO: &[u8] = br##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="#888"/></svg>"##;
+
+/// A template somebody hands in as two files, checked exactly as a catalog's are.
+///
+/// It is not the catalog's, whatever it calls itself: it may not ask for what podkit
+/// gives only to templates it vouches for (a model gateway, a place among the MCP servers).
+///
+/// # Errors
+/// `Validation` saying what is wrong with the files.
+pub fn imported(template_toml: &str, compose: &str) -> AppResult<Loaded> {
+	let template = super::Template::parse(template_toml).map_err(invalid)?;
+	if template.gateway || template.mcp.is_some() {
+		return Err(ServerError::Validation(
+			"an imported template cannot use `gateway` or `[mcp]`: only the catalog's may"
+				.to_string(),
+		));
+	}
+	let logo = template.logo.clone();
+	super::registry::load(&template.id, &|name| {
+		let bytes = match name {
+			"template.toml" => template_toml.as_bytes(),
+			"docker-compose.yml" => compose.as_bytes(),
+			n if n == logo && !n.starts_with('@') => NO_LOGO,
+			_ => return None,
+		};
+		Some(std::borrow::Cow::Owned(bytes.to_vec()))
+	})
+	.map_err(invalid)
+}
+
+/// The mark a deployed import carries where a catalog template has `template:<id>@<version>`:
+/// `import:<id>@<hash of the two files>`. Nothing that reads `template:` takes it for the
+/// catalog's template of the same id.
+#[must_use]
+pub fn import_source(loaded: &Loaded, template_toml: &str) -> String {
+	let files = [template_toml.as_bytes(), loaded.compose.as_bytes()].concat();
+	format!(
+		"import:{}@{}",
+		loaded.template.id,
+		super::short_hash(&files)
+	)
+}
+
+/// Deploys an [`imported`] template, as [`deploy`] does a catalog's.
+///
+/// # Errors
+/// As [`deploy`], and `Validation` for files that are not a usable template.
+#[allow(clippy::too_many_arguments)]
+pub async fn deploy_import(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	environment: Option<EnvironmentId>,
+	server: ServerId,
+	template_toml: &str,
+	compose: &str,
+	body: DeployInput,
+) -> AppResult<Deployed> {
+	// Before the files are read at all: reading them is work, and not for everybody.
+	authorize(&s.db, user, team, Action::Create, Resource::Stack).await?;
+	let loaded = imported(template_toml, compose)?;
+	let source = import_source(&loaded, template_toml);
+	deploy_loaded(
+		s,
+		user,
+		team,
+		project,
+		environment,
+		server,
+		&loaded,
+		&source,
+		body,
+	)
+	.await
+}
+
+/// Notes which catalog template, at which revision, `deployed` was made from.
+async fn record(
+	db: &sqlx::PgPool,
+	deployed: &Deployed,
+	loaded: &Loaded,
+) -> Result<(), sqlx::Error> {
+	sqlx::query(match deployed.kind {
+		Kind::Application => {
+			"INSERT INTO template_deploys (application_id, template_id, revision) VALUES ($1, $2, $3)"
+		}
+		Kind::Stack => {
+			"INSERT INTO template_deploys (stack_id, template_id, revision) VALUES ($1, $2, $3)"
+		}
+	})
+	.bind(deployed.id)
+	.bind(&loaded.template.id)
+	.bind(&loaded.revision)
+	.execute(db)
+	.await?;
+	Ok(())
+}
+
+/// Whether the catalog's template is not the one a deploy was made from. A revision that
+/// is empty came from no catalog and says nothing either way.
+fn differs(deployed_from: &str, catalog: &str) -> bool {
+	!deployed_from.is_empty() && !catalog.is_empty() && deployed_from != catalog
+}
+
+/// A catalog template that an application or a stack was deployed from.
+pub struct Origin {
+	/// The template, as the catalog has it now.
+	pub template: std::sync::Arc<Loaded>,
+	/// Whether the catalog's has changed since the deploy. The deployed copy is its
+	/// owner's: this only tells them.
+	pub newer: bool,
+}
+
+/// The catalog template the application or stack `id` was deployed from, if any.
+///
+/// This, and not a stack's `source`, says a thing is the catalog's: `source` is text that
+/// a project file can set to anything, while only a catalog deploy writes this record.
+///
+/// # Errors
+/// Database failures only.
+pub async fn origin(db: &sqlx::PgPool, kind: Kind, id: i64) -> Result<Option<Origin>, sqlx::Error> {
+	let row: Option<(String, String)> = sqlx::query_as(match kind {
+		Kind::Application => {
+			"SELECT template_id, revision FROM template_deploys WHERE application_id = $1"
+		}
+		Kind::Stack => "SELECT template_id, revision FROM template_deploys WHERE stack_id = $1",
+	})
+	.bind(id)
+	.fetch_optional(db)
+	.await?;
+	Ok(row.and_then(|(template, revision)| {
+		let template = super::find(&template)?;
+		let newer = differs(&revision, &template.revision);
+		Some(Origin { template, newer })
+	}))
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn deploy_loaded(
+	s: &AppState,
+	user: UserId,
+	team: TeamId,
+	project: ProjectId,
+	environment: Option<EnvironmentId>,
+	server: ServerId,
+	loaded: &Loaded,
+	source: &str,
+	body: DeployInput,
+) -> AppResult<Deployed> {
 	scope::project(&s.db, team, project).await?;
 	let environment = environments::service::resolve(&s.db, team, project, environment).await?;
 	let server = scope::server(&s.db, team, server).await?;
-	let loaded = super::find(template).ok_or(ServerError::NotFound)?;
-	let as_app = loaded.plain_app;
+	// Only a stack records where it came from, so an import is always one, even with a
+	// single service: it has to carry its `import:` mark.
+	let as_app = loaded.plain_app && source.starts_with("template:");
 	if as_app {
 		for resource in [
 			Resource::Application,
@@ -179,6 +350,7 @@ pub async fn deploy(
 				environment,
 				&server,
 				loaded,
+				source,
 				&name,
 				body,
 			)
@@ -186,6 +358,13 @@ pub async fn deploy(
 		}
 	})
 	.await?;
+	// The record only feeds the "newer version" notice: the deploy is made, and failing
+	// to note it must not report the deploy as failed.
+	if source.starts_with("template:")
+		&& let Err(e) = record(&s.db, &deployed, loaded).await
+	{
+		tracing::warn!(error = %e, "could not record which template a deploy came from");
+	}
 	audit::log(
 		&s.db,
 		user,
@@ -202,6 +381,7 @@ pub async fn deploy(
 		.in_project(project),
 		Diff::new()
 			.set("template", template_id)
+			.set("source", source.to_owned())
 			.set("version", version)
 			.set("server_id", server.id.0)
 			.set("name", deployed.name.clone())
@@ -220,6 +400,7 @@ async fn deploy_stack(
 	environment: EnvironmentId,
 	server: &Server,
 	loaded: &Loaded,
+	source: &str,
 	name: &str,
 	body: DeployInput,
 ) -> AppResult<Deployed> {
@@ -256,7 +437,7 @@ async fn deploy_stack(
 			files: rendered.files.clone(),
 			server_id: server.id,
 			environment_id: Some(environment),
-			source: Some(format!("template:{}@{}", t.id, t.version)),
+			source: Some(source.to_owned()),
 			deploy: false,
 			registry: body.registry,
 		};
@@ -544,4 +725,17 @@ fn plan_of(s: &AppState, loaded: &Loaded, rendered: &Rendered) -> AppResult<tran
 		},
 	)
 	.map_err(|_| ServerError::Internal)
+}
+
+#[cfg(test)]
+mod unit {
+	use super::differs;
+
+	#[test]
+	fn a_template_is_newer_only_when_both_revisions_are_known_and_unequal() {
+		assert!(differs("aaaa", "bbbb"));
+		assert!(!differs("aaaa", "aaaa"));
+		assert!(!differs("", "bbbb"), "deployed before revisions existed");
+		assert!(!differs("aaaa", ""), "the template came from no catalog");
+	}
 }
