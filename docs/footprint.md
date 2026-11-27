@@ -9,8 +9,8 @@ enforced: `scripts/footprint.sh --check` (and the `footprint` job in
 
 The server and agent rows below are from the first footprint card, before most of today's
 features. Today the server idles at 13.0 MB when built with `scripts/build-ordered.sh` and
-at 23.2 MB as a plain build, which is what the container image still is; it holds 33.3 MB
-after use, and the agent 9.1 MB. The sections after this one say how the numbers moved.
+at 22.9 MB as a plain build, which is what the container image still is; it holds 32.9 MB
+after use with the template catalog downloaded, and the agent 9.4 MB. The sections after this one say how the numbers moved.
 
 Release build (`cargo build --release`, `opt-level = "z"`, LTO, stripped), Linux
 6.18 on a 16-thread workstation, Postgres 18 in a container (`pk-pg`), rootless
@@ -79,10 +79,10 @@ read after 20 s.
 |---|---|---|---|---|
 | idle RSS | the cap, the promise | 60 MB | 25 MB | the number podkit advertises |
 | anonymous idle RSS (`RssAnon`: heap and stacks) | baseline + 20 % | 4.8 MB (measured 3.9 MB) | 1.5 MB (measured 1.1 MB) | a cache, a pool, a background loop |
-| RSS after use | the cap | 60 MB (measured 34.9 MB) | 25 MB (measured 9.2 MB) | what a server in use holds |
+| RSS after use | the cap | 60 MB (measured 32.9 MB) | 25 MB (measured 9.4 MB) | what a server in use holds |
 | peak RSS | the cap plus one password hash (64 MiB) for the server | 124 MB (measured 79.4 MB) | 25 MB (measured 9.5 MB) | a moment that costs more than a sign-in |
-| anonymous RSS after use | baseline + 20 % | 10.8 MB (measured 8.7 MB) | 1.5 MB (measured 1.1 MB) | a cache that fills and never empties |
-| binary size | baseline + 10 % | 31.3 MB (measured 28.3 MB) | 8.5 MB (measured 7.7 MB) | new code and dependencies |
+| anonymous RSS after use | baseline + 20 % | 16.8 MB (measured 13.2 MB, with the catalog) | 1.5 MB (measured 1.2 MB) | a cache that fills and never empties |
+| binary size | baseline + 10 % | 25.6 MB (measured 23.0 MB) | 8.5 MB (measured 7.7 MB) | new code and dependencies |
 | shared libraries (`readelf -d`) | an allowlist | libc, libm, libgcc | the same | a second crypto or TLS stack |
 
 A baseline is the last measured value, rounded up. If a change legitimately costs memory or
@@ -95,28 +95,32 @@ of that kind (the split grew the server binary by 8 %); a new native library fai
 allowlist whatever its size.
 
 The server has one more check, on the file-backed part of its idle RSS (baseline + 20 %,
-10.8 MB, measured 9.0 MB). It holds what "Start-up order" below won.
+12.0 MB, measured 9.2 MB here and 9.7 MB on CI). It holds what "Start-up order" below won.
 
 ### After use
 
 Idle is a server nobody has touched. After the idle sample the script signs up, signs in,
-creates a team and a project, opens every page the home page links to (98 pages) and ten API
-lists, waits 5 s and samples again. A page that answers 5xx fails the run.
+creates a team and a project, downloads the template catalog (`--catalog`, a built catalog
+served from the same machine), opens every page the home page links to (98 pages) and ten
+API lists, waits 5 s and samples again. A page that answers 5xx fails the run.
 
-| server | idle | after use | peak |
+| server, ordered build | idle | after use | peak |
 |---|---|---|---|
-| RSS | 23.0 MB | 34.9 MB | 86.5 MB |
-| anonymous | 3.8 MB | 8.7 MB | |
+| RSS | 13.0 MB | 32.9 MB | 79.2 MB |
+| anonymous | 3.8 MB | 13.2 MB | |
 
-The agent does not move (9.2 MB). Where the server's goes, from a `heaptrack` profile of
-the same run:
+The agent does not move (9.2 MB). Where the server's goes:
 
-- **Anonymous memory held after use, +4.9 MB.** 2.4 MB is the template registry: all 488
-  templates are parsed on the first visit to the gallery and kept. The other 2.5 MB is not
-  attributed to an owner.
-- **File-backed pages, +7.0 MB.** The code of the handlers that ran, mapped from the binary.
-- **Peak, 86.5 MB.** A password hash: Argon2id with 64 MiB of memory
-  (`crates/crypto/src/argon2.rs`), 67 MB in the profile, freed when the hash is done.
+- **The catalog, 8.0 MB of anonymous memory.** Without `--catalog` the same run ends at
+  23.9 MB, 5.2 MB of it anonymous. A refresh parses the 487 templates and keeps them with
+  their logos, which are 4.1 MB of the catalog's files. While the templates were compiled
+  into the binary most of this was the binary's own pages, which the kernel can drop; held
+  in memory it cannot. Reading a logo from the data directory when it is asked for would
+  give about half of it back.
+- **The rest of the rise** is the code of the handlers that ran, mapped from the binary,
+  and what they left allocated.
+- **Peak, 79.2 MB.** A password hash: Argon2id with 64 MiB of memory
+  (`crates/crypto/src/argon2.rs`), freed when the hash is done.
 
 ### What the 60 MB means
 
