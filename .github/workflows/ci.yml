@@ -110,6 +110,23 @@ jobs:
 
   docker:
     name: docker / build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          target: final
+
+  # A commit on main is published only once every other job has passed on it, so
+  # podkit-templates' CI can run `podkit check-templates` from an image that is known good.
+  publish:
+    name: docker / publish
+    if: github.event_name == 'push'
+    needs: [rust-fmt, rust-clippy, rust-test, footprint, rust-audit]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -117,10 +134,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4
-      # Pull requests only build. A push to main also publishes, so podkit-templates' CI
-      # can run `podkit check-templates` from the image.
       - uses: docker/login-action@v4
-        if: github.event_name == 'push'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -128,8 +142,10 @@ jobs:
       - uses: docker/build-push-action@v7
         with:
           context: .
-          push: ${{ github.event_name == 'push' }}
+          push: true
           target: final
           tags: |
             ghcr.io/podoes/podkit:main
             ghcr.io/podoes/podkit:${{ github.sha }}
+          # Links the package to this repository on GHCR.
+          labels: org.opencontainers.image.source=https://github.com/podoes/podkit
