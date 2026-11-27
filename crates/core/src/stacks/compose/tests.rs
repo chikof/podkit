@@ -842,6 +842,20 @@ fn an_anchor_replayed_into_every_service_is_refused_by_the_parser() {
 			.contains("not valid YAML")
 	);
 
+	// Fifty services sharing two anchors: a small file, refused for how often it follows
+	// them, and told so.
+	let shared = "x-a: &a\n  restart: always\nx-b: &b\n  TZ: UTC\n";
+	let services = lines(50, |n| {
+		format!("  s{n}:\n    <<: *a\n    image: nginx\n    environment: *b\n")
+	});
+	let issues = refused(&format!("{shared}services:\n{services}"));
+	assert!(
+		issues[0]
+			.message
+			.contains("its 2 anchors (`&name`) 100 times"),
+		"{issues:#?}"
+	);
+
 	// Anchors as people use them still read: a shared block merged into each service.
 	let shared = "x-common: &common\n  restart: unless-stopped\n  environment:\n    TZ: UTC\n";
 	let services = lines(20, |n| {

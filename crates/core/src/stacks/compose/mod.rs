@@ -294,22 +294,33 @@ pub fn slug(name: &str) -> String {
 	slug.trim_matches('-').to_string()
 }
 
-/// Why the parser refused a file. Going over its budget is said as what it is: the YAML
-/// is well formed, and too large once its anchors are followed.
+/// Why the parser refused a file. Its two limits on anchors are said as what they are: the
+/// YAML is well formed, and either too large once its anchors are followed or follows them
+/// more often than the parser allows.
 fn yaml_refusal(error: &serde_saphyr::Error) -> String {
+	use serde_saphyr::budget::BudgetBreach;
 	let mut cause = error;
 	while let serde_saphyr::Error::WithSnippet { error, .. }
 	| serde_saphyr::Error::AliasError { error, .. } = cause
 	{
 		cause = error;
 	}
-	if matches!(cause, serde_saphyr::Error::Budget { .. }) {
-		return format!(
+	match cause {
+		serde_saphyr::Error::Budget {
+			breach: BudgetBreach::ScalarBytes { .. },
+			..
+		} => format!(
 			"the compose file is larger than {} KiB once its anchors (`&name`, `*name`) are followed",
 			MAX_YAML_SCALARS / 1024
-		);
+		),
+		serde_saphyr::Error::Budget {
+			breach: BudgetBreach::AliasAnchorRatio { aliases, anchors },
+			..
+		} => format!(
+			"the compose file uses its {anchors} anchors (`&name`) {aliases} times (`*name`), which is more often than is read; repeat the shared block in the services instead"
+		),
+		_ => format!("not valid YAML: {error}"),
 	}
-	format!("not valid YAML: {error}")
 }
 
 /// Parses `yaml`, interpolates it against `inputs.env` and checks it against
