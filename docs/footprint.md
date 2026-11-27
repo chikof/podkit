@@ -9,7 +9,7 @@ enforced: `scripts/footprint.sh --check` (and the `footprint` job in
 
 The server and agent rows below are from the first footprint card, before most of today's
 features. Today the server idles at 13.0 MB when built with `scripts/build-ordered.sh` and
-at 22.9 MB as a plain build, which is what the container image still is; it holds 32.9 MB
+at 22.9 MB as a plain build; it holds 32.9 MB
 after use with the template catalog downloaded, and the agent 9.4 MB. The sections after this one say how the numbers moved.
 
 Release build (`cargo build --release`, `opt-level = "z"`, LTO, stripped), Linux
@@ -378,8 +378,13 @@ The list goes stale when the start-up path changes: each start-up function that 
 it can keep 64 KiB resident. The file-backed check in "Budgets" fails when that adds up to
 2 MB; run `scripts/startup-order.sh` and commit the result.
 
-Not done: the container image. The `Dockerfile` still runs `cargo build`, and its musl
-target has not been tried with these linker flags.
+The container image is built the same way: the `Dockerfile` runs
+`scripts/build-ordered.sh` and links with `lld`, which its musl target does not use by
+default. Measured on the binaries copied out of the image, without a catalog: the server
+idles at 10.2 MB against 20.1 MB for a plain build of the same image. That is lower
+than the 13.0 MB above, which is a glibc build measured on a development machine: the image's
+binary is linked statically against musl, so it maps no shared libraries. The two were not
+measured side by side, so read the difference as that and not as a second saving.
 
 ## podkit versus Coolify and Dokploy
 
