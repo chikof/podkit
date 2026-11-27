@@ -12,7 +12,7 @@ A self hosted PaaS on [Podman](https://podman.io) instead of Docker. Built in
 Rust for small hosts.
 
 Connect a repository, deploy it, and get a public URL. podkit is made for a
-homelab or a small server: the control plane idles at about 12 MB of memory.
+homelab or a small server: the control plane idles at about 13 MB of memory.
 
 ## What it does
 
@@ -39,18 +39,18 @@ so expect rough edges.
 ## How light is it?
 
 Memory (RSS) of a release build, after 10 minutes with no traffic and again after use
-(signing in and opening every page):
+(signing in, downloading the template catalog and opening every page):
 
 | Part | Idle | After use | Runs when |
 |---|---|---|---|
-| `server` (control plane and UI) | 13.0 MB | 33.3 MB | always (plus your Postgres) |
-| `podkit-agent` (per server) | 9.1 MB | 9.1 MB | always |
+| `server` (control plane and UI) | 13.0 MB | 32.9 MB | always (plus your Postgres) |
+| `podkit-agent` (per server) | 9.2 MB | 9.4 MB | always |
 | Traefik | 89.7 MB | | from the first deploy with a domain |
 | LLM gateway sidecar | 7.1 MB | | only while a model link exists |
 | Vulnerability scanner (Syft, Grype) | 0 MB | | only during a scan |
 
 The server is built with `scripts/build-ordered.sh`; a plain `cargo build --release`, which
-the container image still uses, idles at 23.2 MB. Hashing a password takes 64 MiB more for
+the container image still uses, idles at 22.9 MB. Hashing a password takes 64 MiB more for
 about 100 ms, one hash at a time, so a sign-in peaks near 100 MB: give the server's
 container 128 MB.
 

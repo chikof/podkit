@@ -28,6 +28,10 @@
 # --bin DIR    where the binaries are (default: target/release). Build them with
 #              `scripts/build-ordered.sh`.
 # --no-load    stop at the idle sample (scripts/startup-order.sh profiles that part).
+# --catalog DIR  a built template catalog (the `dist/` of podkit-templates) for the server to
+#              download during the load pass, so "after use" is a server that holds one.
+#              It is served from this machine: the numbers then do not depend on the
+#              network or on what the published catalog has grown to.
 # --out FILE   also write the numbers as KEY=VALUE lines.
 # Environment: PODKIT_PODMAN_SOCKET (a real Podman socket for the agent), PODKIT_FOOTPRINT_BUDGET (another budget file).
 set -euo pipefail
@@ -36,6 +40,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 bin=${PODKIT_BIN_DIR:-$root/target/release}
 check=0
 load=1
+catalog=""
 idle=""
 out=""
 while (($#)); do
@@ -44,6 +49,7 @@ while (($#)); do
 	--no-load) load=0 ;;
 	--idle) idle=$2; shift ;;
 	--bin) bin=$2; shift ;;
+	--catalog) catalog=$2; shift ;;
 	--out) out=$2; shift ;;
 	-h | --help) sed -n '2,23p' "$0"; exit 0 ;;
 	*) echo "footprint: unknown argument $1" >&2; exit 2 ;;
@@ -104,6 +110,16 @@ export XDG_CONFIG_HOME=$tmp/config HOME=$tmp
 export DATABASE_URL AGE_SECRET_KEY=$age_key HOST=127.0.0.1 PORT=$port
 export DATA_DIR=$tmp/data LOCAL_AGENT_SOCKET=$tmp/agent.sock AGENT_BINARIES_DIR=$bin
 export RUST_LOG=${RUST_LOG:-warn}
+if [[ -n $catalog ]]; then
+	[[ -f $catalog/index.json ]] || { echo "footprint: $catalog has no index.json" >&2; exit 2; }
+	# podkit never fetches from a loopback address, so the catalog is served on this machine's
+	# own address, which the server is told it may reach.
+	address=$(python3 -c 'import socket; s=socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.connect(("192.0.2.1", 9)); print(s.getsockname()[0])')
+	catalog_port=$(python3 -c 'import socket,sys; s=socket.socket(); s.bind((sys.argv[1],0)); print(s.getsockname()[1])' "$address")
+	python3 -m http.server "$catalog_port" --bind "$address" --directory "$catalog" >"$tmp/catalog.log" 2>&1 &
+	pids+=($!)
+	export TEMPLATE_CATALOG_URL=http://$address:$catalog_port OUTBOUND_PRIVATE=allow
+fi
 SETUP_TOKEN=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
 export SETUP_TOKEN
 
@@ -176,14 +192,14 @@ fi
 
 if ((load)); then
 echo "footprint: load…" >&2
-python3 - "http://127.0.0.1:$port" "$SETUP_TOKEN" >&2 <<'PY'
+python3 - "http://127.0.0.1:$port" "$SETUP_TOKEN" "$catalog" >&2 <<'PY'
 import http.cookiejar, json, re, sys, urllib.error, urllib.request
 
-base, setup = sys.argv[1], sys.argv[2]
+base, setup, catalog = sys.argv[1], sys.argv[2], sys.argv[3]
 opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
 
-def call(path, body=None, headers=()):
-    req = urllib.request.Request(base + path, data=json.dumps(body).encode() if body else None)
+def call(path, body=None, headers=(), method=None):
+    req = urllib.request.Request(base + path, data=json.dumps(body).encode() if body else None, method=method)
     for k, v in (("Content-Type", "application/json"),) * bool(body) + tuple(headers):
         req.add_header(k, v)
     try:
@@ -207,6 +223,13 @@ team = json.loads(body)["id"]
 status, body = call(f"/api/v1/teams/{team}/projects", {"name": "Demo", "slug": "demo"}, bearer)
 assert status < 300, f"create project: {status} {body[:200]}"
 
+templates = 0
+if catalog:
+    status, body = call("/api/v1/templates/refresh", headers=bearer, method="POST")
+    assert status == 200, f"refresh the catalog: {status} {body[:300]}"
+    templates = json.loads(body)["templates"]
+    assert templates > 0, "the catalog has no template"
+
 seen, queue, bad = set(), ["/"], []
 while queue and len(seen) < 200:
     path = queue.pop(0)
@@ -224,7 +247,7 @@ for path in ["/api/v1/catalog", "/api/v1/templates"] + [f"/api/v1/teams/{team}/{
         bad.append(f"{status} {path}")
 assert not bad, f"server errors: {bad}"
 assert len(seen) > 10, f"the crawl found only {sorted(seen)}"
-print(f"footprint: {len(seen)} pages and {len(lists) + 2} API lists")
+print(f"footprint: {len(seen)} pages and {len(lists) + 2} API lists, {templates} templates in the catalog")
 PY
 sleep 5
 fi

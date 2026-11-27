@@ -14,8 +14,9 @@ agent_transient_kb=0
 # File-backed idle RSS of the server (idle RSS minus RssAnon): the code of the binary that
 # is mapped. scripts/build-ordered.sh keeps it small by laying the start-up code out in one
 # block; without that it is about 19 MB. Fails over baseline + 20 %. When it does, a list
-# of start-up functions has gone stale: run scripts/startup-order.sh. Measured: 8.7-9.1 MB.
-server_idle_file_baseline_kb=9216
+# of start-up functions has gone stale: run scripts/startup-order.sh. Measured: 9.2 MB here,
+# 9.4 to 10.7 MB across 77 CI runs.
+server_idle_file_baseline_kb=11264
 # Anonymous idle RSS (RssAnon: heap and stacks), the memory a process holds. Fails over
 # baseline + 20 %. The baseline is the last measured value, rounded up; raise it only with a
 # reason. Measured: server 3952 KB, agent 1092 KB. The agent's is small enough for
@@ -23,12 +24,14 @@ server_idle_file_baseline_kb=9216
 server_anon_baseline_kb=4096
 agent_anon_baseline_kb=1280
 # The same after the load pass (sign-up, sign-in, every linked page, the API lists).
-# Measured: server 8.7 MB, of which the parsed template registry is 2.4 MB; agent 1.1 MB.
-server_used_anon_baseline_kb=9216
+# The server has downloaded the template catalog by then (`--catalog`), and holds it: 487
+# templates parsed, with their logos (4.1 MB of the files). Measured: server 13.2 MB with
+# the catalog and 5.2 MB without; agent 1.2 MB.
+server_used_anon_baseline_kb=14336
 agent_used_anon_baseline_kb=1280
 # Binary size, which follows code and dependencies. Fails over baseline + 10 %.
-# Measured: server 28960 KB, agent 7868 KB.
-server_bin_baseline_kb=29184
+# Measured: server 23528 KB (28960 KB while the templates were compiled in), agent 7872 KB.
+server_bin_baseline_kb=23808
 agent_bin_baseline_kb=7936
 # The shared libraries a binary may ask for (stems, globs allowed). Anything else is a new
 # native dependency: OpenSSL arriving with webauthn-rs 0.5 cost 3 MB (docs/footprint.md, "Wave B").
