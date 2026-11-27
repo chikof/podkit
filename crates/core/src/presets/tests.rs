@@ -200,3 +200,35 @@ fn a_preset_is_one_project() {
 	assert!(needs(&two).unwrap_err().contains("exactly one project"));
 	assert!(needs(&Doc::new()).is_err());
 }
+
+#[test]
+fn a_preset_is_planned_without_a_team_and_what_the_plan_refuses_is_said() {
+	// As saved, the shop plans with nothing to fix.
+	let saved = render(&strip(shop())).unwrap();
+	assert_eq!(dry_run(&saved).unwrap(), Vec::<String>::new());
+
+	// Two environments that each call their database `main`: a parser reads it, the plan
+	// does not take it.
+	let twice = r#"version = 1
+[projects.app]
+name = "App"
+[projects.app.environments.production]
+name = "Production"
+[projects.app.environments.production.databases.main]
+server = "${choose}"
+engine = "postgres"
+[projects.app.environments.staging]
+name = "Staging"
+[projects.app.environments.staging.databases.main]
+server = "${choose}"
+engine = "postgres"
+"#;
+	let issues = dry_run(twice).unwrap();
+	assert_eq!(issues.len(), 1, "{issues:?}");
+	assert!(
+		issues[0].contains("database names are unique"),
+		"{issues:?}"
+	);
+
+	assert!(dry_run("version = 1\n").is_err());
+}

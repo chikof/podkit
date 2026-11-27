@@ -321,6 +321,27 @@ pub struct ProjectPlan {
 	pub plan: Plan,
 }
 
+/// The plan of making `desired` as a new project `slug`, against what `lookup` says the
+/// team has. No database is read: it is the plan an import shows, for a check that has no
+/// team to ask.
+#[must_use]
+pub fn plan_of_new(slug: &str, desired: &ProjectDoc, lookup: &Lookup, secrets: Secrets) -> Plan {
+	let input = Input {
+		text: String::new(),
+		secrets,
+		prune: true,
+		deploy: false,
+	};
+	compare_docs(
+		&fresh_project(&desired.name),
+		&Secrets::default(),
+		desired,
+		lookup,
+		&input,
+		Some(slug.to_owned()),
+	)
+}
+
 /// What the default environment of a new project looks like.
 fn fresh_project(name: &str) -> ProjectDoc {
 	let mut environments = std::collections::BTreeMap::new();
