@@ -2075,6 +2075,7 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-cv-static .ui-cv-view { height: auto; max-height: 560px; overflow: auto; padding: var(--s-5); cursor: default; }
 .ui-cv-static .ui-cv-world { position: relative; transform: none; }
 .ui-cv-static .ui-cv-node { grid-template-rows: 24px 17px; align-content: center; gap: var(--s-2); }
+.ui-cv-static .ui-cv-elabel { cursor: default; }
 
 /* The list view: the screen-reader, keyboard and phone alternative to the canvas */
 .ui-cv-list { display: none; gap: var(--s-6); padding: var(--s-5); }
