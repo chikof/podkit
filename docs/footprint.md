@@ -381,7 +381,10 @@ it can keep 64 KiB resident. The file-backed check in "Budgets" fails when that 
 The container image is built the same way: the `Dockerfile` runs
 `scripts/build-ordered.sh` and links with `lld`, which its musl target does not use by
 default. Measured on the binaries copied out of the image, without a catalog: the server
-idles at 10.2 MB against 20.1 MB for a plain build of the same image.
+idles at 10.2 MB against 20.1 MB for a plain build of the same image. That is lower
+than the 13.0 MB above, which is a glibc build measured on a development machine: the image's
+binary is linked statically against musl, so it maps no shared libraries. The two were not
+measured side by side, so read the difference as that and not as a second saving.
 
 ## podkit versus Coolify and Dokploy
 
