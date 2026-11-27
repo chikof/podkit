@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use sqlx::PgPool;
 
-use super::live::{HTTPS_PORT, INGRESS_PORT, Live, agent_binary, podman};
+use super::live::{HTTPS_PORT, INGRESS_PORT, Live, podman};
 use super::{FakeAgent, Setup};
 use crate::ids::{ApplicationId, ProjectId, TeamId, UserId};
 use crate::shared_env::{Scope, service};
@@ -46,7 +46,7 @@ async fn shared_env_live_a_team_variable_reaches_the_running_container(db: PgPoo
 		config.https_port = HTTPS_PORT;
 	}
 	let agent_dir = tempfile::tempdir().unwrap().keep();
-	let mut agent = tokio::process::Command::new(agent_binary())
+	let mut agent = tokio::process::Command::new(crate::tests::agent_binary())
 		.arg("--data-dir")
 		.arg(&agent_dir)
 		.arg("--podman-socket")

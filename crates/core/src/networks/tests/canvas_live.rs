@@ -16,7 +16,7 @@ use std::time::Duration;
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 
-use super::live::{HTTPS_PORT, INGRESS_PORT, Live, agent_binary, podman};
+use super::live::{HTTPS_PORT, INGRESS_PORT, Live, podman};
 use super::{FakeAgent, Setup};
 use crate::ids::{ProjectId, TeamId, UserId};
 use crate::jobs::{self, JobKind};
@@ -50,7 +50,7 @@ async fn canvas_live_wiring_an_app_to_postgres_injects_the_url_and_connects(db: 
 		config.https_port = HTTPS_PORT;
 	}
 	let agent_dir = tempfile::tempdir().unwrap().keep();
-	let mut agent = tokio::process::Command::new(agent_binary())
+	let mut agent = tokio::process::Command::new(crate::tests::agent_binary())
 		.arg("--data-dir")
 		.arg(&agent_dir)
 		.arg("--podman-socket")

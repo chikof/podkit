@@ -48,6 +48,24 @@ pub async fn app(db: PgPool) -> Router {
 	crate::routes::routes(state(db)).await.unwrap()
 }
 
+/// The `podkit-agent` a live test starts, built by `cargo build -p agent`.
+///
+/// # Panics
+/// When there is none above the test binary.
+pub fn agent_binary() -> std::path::PathBuf {
+	// Next to the profile directory; how deep the test binary sits under it depends on cargo.
+	let exe = std::env::current_exe().unwrap();
+	exe.ancestors()
+		.map(|dir| dir.join("podkit-agent"))
+		.find(|binary| binary.is_file())
+		.unwrap_or_else(|| {
+			panic!(
+				"no podkit-agent above {}; run `cargo build -p agent` first",
+				exe.display()
+			)
+		})
+}
+
 /// The Podman socket a live test runs against: `PODKIT_LIVE_PODMAN_SOCKET`, a service of its
 /// own, never the host's. Unset (or empty) the test has nothing to run on: it says so and
 /// the caller returns, so `--ignored` on a machine without one is a skip, not a panic.

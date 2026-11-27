@@ -10,7 +10,6 @@
 //!   cargo test -p podkit-core --all-features -- --ignored networks_live
 //! ```
 
-use std::path::PathBuf;
 use std::process::Stdio;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -113,21 +112,6 @@ impl Live {
 		.trim()
 		.to_owned()
 	}
-}
-
-pub(super) fn agent_binary() -> PathBuf {
-	let exe = std::env::current_exe().unwrap();
-	let binary = exe
-		.parent()
-		.and_then(|deps| deps.parent())
-		.unwrap()
-		.join("podkit-agent");
-	assert!(
-		binary.exists(),
-		"{} is missing; run `cargo build -p agent` first",
-		binary.display()
-	);
-	binary
 }
 
 impl Setup {
@@ -272,7 +256,7 @@ async fn networks_live_environments_are_isolated_and_user_networks_connect(db: P
 		config.https_port = HTTPS_PORT;
 	}
 	let agent_dir = tempfile::tempdir().unwrap().keep();
-	let mut agent = tokio::process::Command::new(agent_binary())
+	let mut agent = tokio::process::Command::new(crate::tests::agent_binary())
 		.arg("--data-dir")
 		.arg(&agent_dir)
 		.arg("--podman-socket")
