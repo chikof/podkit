@@ -25,9 +25,9 @@ server_anon_baseline_kb=4096
 agent_anon_baseline_kb=1280
 # The same after the load pass (sign-up, sign-in, every linked page, the API lists).
 # The server has downloaded the template catalog by then (`--catalog`), and holds it: 487
-# templates parsed, with their logos (4.1 MB of the files). Measured: server 13.2 MB with
-# the catalog and 5.2 MB without; agent 1.2 MB.
-server_used_anon_baseline_kb=14336
+# templates parsed; their logos stay on disk. Measured: server 9.5 MB with the catalog and
+# 5.2 MB without; agent 1.2 MB.
+server_used_anon_baseline_kb=10240
 agent_used_anon_baseline_kb=1280
 # Binary size, which follows code and dependencies. Fails over baseline + 10 %.
 # Measured: server 23528 KB (28960 KB while the templates were compiled in), agent 7872 KB.

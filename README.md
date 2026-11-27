@@ -43,7 +43,7 @@ Memory (RSS) of a release build, after 10 minutes with no traffic and again afte
 
 | Part | Idle | After use | Runs when |
 |---|---|---|---|
-| `server` (control plane and UI) | 13.0 MB | 32.9 MB | always (plus your Postgres) |
+| `server` (control plane and UI) | 13.0 MB | 29.2 MB | always (plus your Postgres) |
 | `podkit-agent` (per server) | 9.2 MB | 9.4 MB | always |
 | Traefik | 89.7 MB | | from the first deploy with a domain |
 | LLM gateway sidecar | 7.1 MB | | only while a model link exists |
