@@ -505,12 +505,12 @@ mod tests {
 		let s = state(db.clone());
 		let u = user(&db).await;
 		begin_totp(&s, u).await.unwrap();
-		confirm_totp(&s, u, &current_code(&s, u).await)
-			.await
-			.unwrap();
+		// Asked for once: a second look at the clock could land in the next 30 s step, and
+		// that step's code is no replay.
+		let code = current_code(&s, u).await;
+		confirm_totp(&s, u, &code).await.unwrap();
 
 		// The code that confirmed the setup is spent; the next step's is fresh.
-		let code = current_code(&s, u).await;
 		assert!(
 			!check_code(&s, u, &code).await.unwrap(),
 			"replay of the confirming code"
