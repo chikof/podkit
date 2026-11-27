@@ -326,7 +326,8 @@ pub use routes::router;
 /// published, where there is no team.
 ///
 /// It sees what the plan of a project file sees, such as two databases of one name. It does
-/// not see what depends on an install: a slug that is taken, a model that is not downloaded.
+/// not see what depends on an install: a slug that is taken, or whether a model the preset
+/// runs has been downloaded to the server chosen for it.
 ///
 /// # Errors
 /// A message for a file that is not a preset.
@@ -363,6 +364,22 @@ pub fn dry_run(file: &str) -> Result<Vec<String>, String> {
 		.registries
 		.insert(STAND_IN.to_owned(), crate::ids::RegistryId(1));
 	let (slug, project) = bound.projects.iter().next().ok_or("no project")?;
+	// A model runs from a download its server already has: one a real team would have to
+	// make first. Here each stands as made, so the rest of the preset is still planned.
+	for model in project
+		.environments
+		.values()
+		.flat_map(|e| e.models.values())
+	{
+		lookup.model_files.insert(
+			(
+				model.server.clone(),
+				model.repo.clone(),
+				model.revision.clone(),
+			),
+			crate::ids::ModelFileId(1),
+		);
+	}
 	let plan = crate::iac::service::plan_of_new(slug, project, &lookup, secrets);
 	Ok(plan
 		.issues

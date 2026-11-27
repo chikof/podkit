@@ -218,6 +218,32 @@ async fn presets_ui_saving_a_project_shows_what_is_kept_first(db: PgPool) {
 	let (_, list) = w.page("").await;
 	assert_contains(page_main(&list), "Blog starter");
 	assert_contains(page_main(&list), "Ghost and a database");
+
+	// Each kept preset can be removed from the list, and the project made from one stays.
+	assert_contains(page_main(&list), "aria-label=\"Remove Blog starter\"");
+	let id: i64 = sqlx::query_scalar("SELECT id FROM presets WHERE name = 'Blog starter'")
+		.fetch_one(&w.db)
+		.await
+		.unwrap();
+	let (_, sent) = w.post(&format!("/kept/{id}/remove"), &json!({})).await;
+	assert_contains(&sent, "location.reload()");
+	assert_eq!(count(&w.db, "presets").await, 1);
+	assert_eq!(count(&w.db, "projects").await, 1);
+	// Another team's preset is not removed by asking for its number.
+	let (_, bobs) = user_with_team(&w.app, "bob").await;
+	let bob = ui_login(&w.app, "bob").await;
+	let other: i64 = sqlx::query_scalar("SELECT id FROM presets")
+		.fetch_one(&w.db)
+		.await
+		.unwrap();
+	post_signals(
+		&w.app,
+		&format!("/teams/{bobs}/presets/kept/{other}/remove"),
+		Some(&bob),
+		&json!({}),
+	)
+	.await;
+	assert_eq!(count(&w.db, "presets").await, 1);
 }
 
 #[db_test(migrator = "podkit_core::db::MIGRATOR")]
