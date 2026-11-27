@@ -12,7 +12,9 @@ env:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer commit replaces a pull request's run. On main each commit keeps its own, so a
+  # second merge does not cancel the first one's publish.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   rust-fmt:
