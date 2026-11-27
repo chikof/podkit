@@ -503,6 +503,9 @@ A team keeps presets under the same address:
 | `GET /presets/{id}`, `DELETE /presets/{id}` | one preset with its file; remove it (projects made from it stay) |
 
 Reading needs `read project`, keeping `create project`, removing `delete project`.
+
+The template catalog brings presets of its own with each refresh: `GET /presets/catalog` lists
+them and `GET /presets/catalog/{id}` returns one with its file, to apply like any other.
 - An apply with an answer missing is refused with every missing answer named. The answers are
   then checked by the plan, as for any project file: a server the team does not have is an
   issue, and an apply with issues changes nothing (422).

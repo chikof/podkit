@@ -36,6 +36,9 @@ struct Index {
 	archive: Archive,
 	#[serde(default)]
 	templates: Vec<Entry>,
+	/// Carried whole in the index: a preset is one small file.
+	#[serde(default)]
+	presets: Vec<registry::CatalogPreset>,
 }
 
 #[derive(Deserialize)]
@@ -53,7 +56,44 @@ impl Index {
 			.filter(|e| e.revision.len() <= 32)
 			.map(|e| (e.id, e.revision))
 			.collect();
-		registry::read(dir, self.commit, &revisions)
+		let mut registry = registry::read(dir, self.commit, &revisions);
+		for preset in self.presets {
+			let id_like = (1..=64).contains(&preset.id.len())
+				&& preset
+					.id
+					.bytes()
+					.all(|b| b.is_ascii_alphanumeric() || b == b'-');
+			let refused = if !id_like {
+				Err("its id is not one".to_owned())
+			} else if preset.file.len() > crate::presets::service::MAX_FILE {
+				Err("its file is larger than a kept preset may be".to_owned())
+			} else if registry.presets.iter().any(|p| p.id == preset.id) {
+				Err("another preset has this id".to_owned())
+			} else {
+				// The same reading an apply does: one this podkit cannot apply is left out.
+				crate::iac::doc::parse(&preset.file)
+					.map_err(|e| e.to_string())
+					.and_then(|doc| crate::presets::needs(&doc).map(drop))
+			};
+			match refused {
+				Ok(()) => registry.presets.push(preset),
+				// A parser quotes the line it stopped at, and an id is whatever was sent:
+				// neither is repeated at length to whoever reads the refresh's answer.
+				Err(why) => registry.errors.push((
+					format!("preset {:?}", short(&preset.id, 80)),
+					short(&why, 300),
+				)),
+			}
+		}
+		registry
+	}
+}
+
+/// `text`, cut at `max` characters.
+fn short(text: &str, max: usize) -> String {
+	match text.char_indices().nth(max) {
+		Some((end, _)) => format!("{}\u{2026}", &text[..end]),
+		None => text.to_owned(),
 	}
 }
 
@@ -87,8 +127,8 @@ pub fn open(data_dir: &Path) {
 	}
 }
 
-/// `server check-templates <dir>`: loads every template under `<dir>/templates` the way a
-/// refresh does and says which do not load. The template repository's checks cannot know
+/// `server check-templates <dir>`: loads every template under `<dir>/templates` and every
+/// preset under `<dir>/presets` the way a refresh does, and says which do not load. The template repository's checks cannot know
 /// that; this is how its catalog is tried against a podkit before it is published.
 #[must_use]
 pub fn check_cli() -> Option<i32> {
@@ -113,8 +153,28 @@ pub fn check_cli() -> Option<i32> {
 		registry.templates.len(),
 		registry.errors.len()
 	);
+	// Presets too, read as an apply reads them: `presets/<id>/preset.toml`.
+	let (mut presets, mut unreadable) = (0, 0);
+	let mut folders: Vec<_> = std::fs::read_dir(Path::new(dir).join("presets"))
+		.map(|d| d.flatten().map(|e| e.path()).collect())
+		.unwrap_or_default();
+	folders.sort();
+	for folder in folders.iter().filter(|f| f.is_dir()) {
+		let read = std::fs::read_to_string(folder.join("preset.toml"))
+			.map_err(|e| e.to_string())
+			.and_then(|text| crate::iac::doc::parse(&text).map_err(|e| e.to_string()))
+			.and_then(|doc| crate::presets::needs(&doc).map(drop));
+		match read {
+			Ok(()) => presets += 1,
+			Err(why) => {
+				unreadable += 1;
+				eprintln!("preset {}: {why}", folder.display());
+			}
+		}
+	}
+	println!("{presets} presets load, {unreadable} do not");
 	Some(i32::from(
-		!registry.errors.is_empty() || registry.templates.is_empty(),
+		!registry.errors.is_empty() || registry.templates.is_empty() || unreadable > 0,
 	))
 }
 
@@ -432,6 +492,59 @@ mod tests {
 		gz.write_all(&raw).unwrap();
 		let (bytes, parsed) = index("");
 		assert!(replace(&live, &gz.finish().unwrap(), &bytes, parsed).is_err());
+	}
+
+	#[test]
+	fn the_catalog_s_presets_come_with_the_index_and_survive_a_restart() {
+		let tmp = tempfile::tempdir().unwrap();
+		let live = tmp.path().join("catalog");
+		let good = "version = 1\n[projects.app]\nname = \"App\"\n\
+			[projects.app.environments.production]\nname = \"Production\"\n\
+			[projects.app.environments.production.databases.main]\nserver = \"${choose}\"\nengine = \"postgres\"\n";
+		let bytes = serde_json::json!({
+			"format": FORMAT,
+			"commit": "abc1234",
+			"archive": { "name": "catalog.tar.gz", "sha256": "" },
+			"templates": [],
+			"presets": [
+				{ "id": "starter", "name": "Starter", "description": "d", "tags": ["x"],
+				  "maintainers": [], "secrets": {}, "sha256": "ignored", "file": good },
+				{ "id": "from-the-future", "name": "F", "description": "d",
+				  "file": "version = 1\n[projects.a]\nname = \"A\"\nnot_yet_invented = true\n" },
+				{ "id": "two", "name": "T", "description": "d",
+				  "file": "version = 1\n[projects.a]\nname = \"A\"\n[projects.b]\nname = \"B\"\n" },
+				{ "id": "../x", "name": "X", "description": "d", "file": good },
+				{ "id": "starter", "name": "Again", "description": "d", "file": good },
+				{ "id": "big", "name": "Big", "description": "d",
+				  "file": format!("{good}# {}\n", "x".repeat(2 << 20)) },
+				{ "id": "long-line", "name": "L", "description": "d",
+				  "file": format!("version = 1\n[projects.a]\nname = {}\n", "x".repeat(5000)) },
+			],
+		})
+		.to_string()
+		.into_bytes();
+		let parsed: Index = serde_json::from_slice(&bytes).unwrap();
+		let registry = replace(&live, &gotify(), &bytes, parsed).unwrap();
+		let ids =
+			|r: &registry::Registry| r.presets.iter().map(|p| p.id.clone()).collect::<Vec<_>>();
+		assert_eq!(ids(&registry), ["starter"], "{:?}", registry.errors);
+		assert_eq!(registry.presets[0].file, good);
+		// The six it cannot use are said, beside the templates it cannot read, and briefly.
+		assert_eq!(registry.errors.len(), 6, "{:?}", registry.errors);
+		let why = |id: &str| {
+			let named = format!("preset {id:?}");
+			&registry.errors.iter().find(|e| e.0 == named).unwrap().1
+		};
+		assert_eq!(why("starter"), "another preset has this id");
+		assert_eq!(why("big"), "its file is larger than a kept preset may be");
+		assert!(
+			why("long-line").chars().count() <= 301,
+			"{}",
+			why("long-line")
+		);
+
+		let again = index_of(&live).unwrap().read(&live);
+		assert_eq!(ids(&again), ["starter"]);
 	}
 
 	#[test]
