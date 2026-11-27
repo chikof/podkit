@@ -77,6 +77,8 @@ struct State<'a> {
 	hosts: BTreeMap<String, String>,
 	/// What a bare `${domain}` outside a variable stands for.
 	main_host: String,
+	/// Bytes of every value made so far.
+	spent: usize,
 }
 
 fn is_domain_expr(text: &str) -> bool {
@@ -163,6 +165,8 @@ fn domain_hosts(t: &Template, place: &Placement<'_>) -> (BTreeMap<String, String
 
 /// How long a chain of variables, each made from the next, may be. The catalog's longest is 2.
 const MAX_DEPTH: usize = 64;
+/// What every value of one template may come to together. The catalog's largest is far below.
+const MAX_RENDERED: usize = 1 << 20;
 
 impl State<'_> {
 	fn eval(&mut self, name: &str) -> Result<(), Invalid> {
@@ -225,6 +229,7 @@ impl State<'_> {
 		if secret {
 			self.secrets.insert(name.to_string());
 		}
+		self.spend(value.len())?;
 		self.values.insert(name.to_string(), value);
 		Ok(())
 	}
@@ -235,7 +240,21 @@ impl State<'_> {
 			variables: &self.values,
 			domain: &self.main_host,
 		};
-		expr::expand(text, &mut ctx).map_err(Invalid)
+		let value = expr::expand(text, &mut ctx).map_err(Invalid)?;
+		self.spend(value.len())?;
+		Ok(value)
+	}
+
+	/// Counts a value towards what the whole template may come to. One value stops at
+	/// 64 KiB, but thousands of settings can each hold a copy of one.
+	fn spend(&mut self, bytes: usize) -> Result<(), Invalid> {
+		self.spent += bytes;
+		if self.spent > MAX_RENDERED {
+			return Err(Invalid(format!(
+				"the template's values come to more than {MAX_RENDERED} bytes"
+			)));
+		}
+		Ok(())
 	}
 }
 
@@ -281,6 +300,7 @@ pub fn render(
 		values: BTreeMap::new(),
 		secrets: BTreeSet::new(),
 		visiting: Vec::new(),
+		spent: 0,
 		hosts,
 		main_host,
 	};
