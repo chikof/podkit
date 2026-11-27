@@ -2,7 +2,7 @@
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 #[cfg(any(test, feature = "testing"))]
 use std::sync::LazyLock;
 use std::sync::{Arc, RwLock};
@@ -36,8 +36,9 @@ pub struct ServiceInfo {
 pub struct Logo {
 	/// Media type.
 	pub media: &'static str,
-	/// File content.
-	pub bytes: Cow<'static, [u8]>,
+	/// Where a catalog template's logo is on disk. It is read when a browser asks for it:
+	/// held in memory, the catalog's logos were 4 MB that the kernel could not reclaim.
+	pub file: Option<PathBuf>,
 	/// First 8 hex digits of its SHA-256, the cache-busting part of its URL.
 	pub hash: String,
 }
@@ -149,7 +150,7 @@ pub fn load(
 	let logo = Logo {
 		media,
 		hash: short_hash(&bytes),
-		bytes,
+		file: None,
 	};
 
 	let (services, warnings, plain_app) = translate_check(&template, &compose_text)?;
@@ -374,6 +375,9 @@ pub fn read(dir: &Path, commit: String, revisions: &BTreeMap<String, String>) ->
 		match load(&id, &file) {
 			Ok(mut loaded) => {
 				loaded.revision = revisions.get(&id).cloned().unwrap_or_default();
+				if !loaded.template.logo.starts_with('@') {
+					loaded.logo.file = Some(folder.join(&loaded.template.logo));
+				}
 				registry.templates.insert(id, Arc::new(loaded));
 			}
 			Err(e) => registry.errors.push((id, e.0)),

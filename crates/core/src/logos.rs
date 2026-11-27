@@ -246,13 +246,40 @@ async fn serve(Path(file): Path<String>) -> Response {
 	if let Some(id) = name.strip_prefix("t-")
 		&& let Some(l) = crate::templates::find(id)
 		&& l.logo.hash == hash
-		&& !l.template.logo.starts_with('@')
+		&& let Some(path) = &l.logo.file
 	{
 		let svg = l.logo.media == "image/svg+xml";
 		let want = if svg { "svg" } else { "png" };
-		if want == ext {
-			return immutable(l.logo.media, &l.logo.hash, l.logo.bytes.to_vec(), svg);
+		if want == ext
+			&& let Some(bytes) = file_with_hash(path, hash).await
+		{
+			return immutable(l.logo.media, &l.logo.hash, bytes, svg);
 		}
 	}
 	StatusCode::NOT_FOUND.into_response()
+}
+
+/// The file at `path` when its content has `hash`. A refresh puts the next catalog at the
+/// same path, so the file can be another one than the address names: it is cached for a
+/// year as whatever is sent, and so is sent only when it is the one asked for.
+async fn file_with_hash(path: &std::path::Path, hash: &str) -> Option<Vec<u8>> {
+	let bytes = tokio::fs::read(path).await.ok()?;
+	(crate::templates::short_hash(&bytes) == hash).then_some(bytes)
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn a_logo_file_replaced_since_it_was_read_is_not_sent_under_the_old_hash() {
+	let dir = tempfile::tempdir().unwrap();
+	let path = dir.path().join("logo.svg");
+	std::fs::write(&path, "<svg>old</svg>").unwrap();
+	let hash = crate::templates::short_hash(b"<svg>old</svg>");
+	assert_eq!(
+		file_with_hash(&path, &hash).await.unwrap(),
+		b"<svg>old</svg>"
+	);
+	std::fs::write(&path, "<svg>new</svg>").unwrap();
+	assert_eq!(file_with_hash(&path, &hash).await, None);
+	std::fs::remove_file(&path).unwrap();
+	assert_eq!(file_with_hash(&path, &hash).await, None);
 }
