@@ -661,7 +661,8 @@ const BIG: usize = 64 * 1024;
 
 /// Parses `yaml` with `BIG`-sized variables `V0..` and files, and expects one refusal that
 /// names the budget. Each case is a file under 256 KiB that used to be gigabytes.
-fn refused_for_taking(yaml: &str, variables: usize, files: &[(&str, usize)]) {
+/// Where the refusal was reported, for the caller that cares.
+fn refused_for_taking(yaml: &str, variables: usize, files: &[(&str, usize)]) -> String {
 	assert!(
 		yaml.len() <= MAX_BYTES,
 		"the case itself is {} bytes",
@@ -680,16 +681,17 @@ fn refused_for_taking(yaml: &str, variables: usize, files: &[(&str, usize)]) {
 	};
 	let started = std::time::Instant::now();
 	let issues = parse(yaml, &inputs).expect_err("it is refused");
-	let about_taking = issues
+	let about_taking: Vec<&Issue> = issues
 		.iter()
 		.filter(|i| i.message.contains("counting every use"))
-		.count();
-	assert_eq!(about_taking, 1, "said once: {issues:#?}");
+		.collect();
+	assert_eq!(about_taking.len(), 1, "said once: {issues:#?}");
 	assert!(
 		started.elapsed().as_secs() < 5,
 		"refused late: {:?}",
 		started.elapsed()
 	);
+	about_taking[0].path.clone()
 }
 
 /// `count` lines, the `n`th made by `line`.
@@ -762,13 +764,15 @@ fn a_variable_passed_through_thousands_of_times_is_refused() {
 #[test]
 fn a_config_taken_from_a_variable_or_a_file_thousands_of_times_is_refused() {
 	let from_variable = lines(8000, |n| format!("  c{n}:\n    environment: V0\n"));
-	refused_for_taking(&format!("configs:\n{from_variable}{}", service("")), 1, &[]);
+	let at = refused_for_taking(&format!("configs:\n{from_variable}{}", service("")), 1, &[]);
+	assert!(at.starts_with("configs.c"), "refused while reading {at}");
 	let from_file = lines(2000, |n| format!("  c{n}:\n    file: ./big\n"));
-	refused_for_taking(
+	let at = refused_for_taking(
 		&format!("secrets:\n{from_file}{}", service("")),
 		0,
 		&[("big", 900_000)],
 	);
+	assert!(at.starts_with("secrets.c"), "refused while reading {at}");
 }
 
 #[test]
@@ -828,7 +832,15 @@ fn an_anchor_replayed_into_every_service_is_refused_by_the_parser() {
 	);
 	assert!(yaml.len() <= MAX_BYTES);
 	let issues = refused(&yaml);
-	assert!(issues[0].message.contains("not valid YAML"), "{issues:#?}");
+	assert!(
+		issues[0].message.contains("once its anchors"),
+		"{issues:#?}"
+	);
+	assert!(
+		refused("services: [unclosed")[0]
+			.message
+			.contains("not valid YAML")
+	);
 
 	// Anchors as people use them still read: a shared block merged into each service.
 	let shared = "x-common: &common\n  restart: unless-stopped\n  environment:\n    TZ: UTC\n";

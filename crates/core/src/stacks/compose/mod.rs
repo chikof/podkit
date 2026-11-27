@@ -294,6 +294,24 @@ pub fn slug(name: &str) -> String {
 	slug.trim_matches('-').to_string()
 }
 
+/// Why the parser refused a file. Going over its budget is said as what it is: the YAML
+/// is well formed, and too large once its anchors are followed.
+fn yaml_refusal(error: &serde_saphyr::Error) -> String {
+	let mut cause = error;
+	while let serde_saphyr::Error::WithSnippet { error, .. }
+	| serde_saphyr::Error::AliasError { error, .. } = cause
+	{
+		cause = error;
+	}
+	if matches!(cause, serde_saphyr::Error::Budget { .. }) {
+		return format!(
+			"the compose file is larger than {} KiB once its anchors (`&name`, `*name`) are followed",
+			MAX_YAML_SCALARS / 1024
+		);
+	}
+	format!("not valid YAML: {error}")
+}
+
 /// Parses `yaml`, interpolates it against `inputs.env` and checks it against
 /// the supported subset.
 ///
@@ -322,7 +340,7 @@ pub fn parse(yaml: &str, inputs: &Inputs<'_>) -> Result<Compose, Vec<Issue>> {
 		},
 	};
 	let mut root: Value = serde_saphyr::from_str_with_options(yaml, options)
-		.map_err(|e| top_issue(format!("not valid YAML: {e}")))?;
+		.map_err(|e| top_issue(yaml_refusal(&e)))?;
 	let mut ctx = Ctx {
 		inputs,
 		issues: Vec::new(),
