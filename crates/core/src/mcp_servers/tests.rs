@@ -773,21 +773,6 @@ mod live {
 		}
 	}
 
-	fn agent_binary() -> PathBuf {
-		let exe = std::env::current_exe().unwrap();
-		let binary = exe
-			.parent()
-			.and_then(|deps| deps.parent())
-			.unwrap()
-			.join("podkit-agent");
-		assert!(
-			binary.exists(),
-			"{} is missing; run `cargo build -p agent` first",
-			binary.display()
-		);
-		binary
-	}
-
 	/// Runs `script` in `container`; the output on success, the failure text otherwise.
 	fn exec(container: &str, script: &str) -> Result<String, String> {
 		let out = Private::podman(&["exec", container, "sh", "-c", script]);
@@ -864,7 +849,7 @@ mod live {
 			config.https_port = HTTPS_PORT;
 		}
 		let agent_dir = tempfile::tempdir().unwrap().keep();
-		let mut agent = tokio::process::Command::new(agent_binary())
+		let mut agent = tokio::process::Command::new(crate::tests::agent_binary())
 			.arg("--data-dir")
 			.arg(&agent_dir)
 			.arg("--podman-socket")

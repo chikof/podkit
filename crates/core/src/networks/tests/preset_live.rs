@@ -17,7 +17,7 @@ use serde_json::json;
 use sqlx::PgPool;
 use tokio_util::sync::CancellationToken;
 
-use super::live::{HTTPS_PORT, INGRESS_PORT, Live, agent_binary, podman};
+use super::live::{HTTPS_PORT, INGRESS_PORT, Live, podman};
 use super::{FakeAgent, Setup};
 use crate::jobs::{self, JobKind};
 use crate::tests::state;
@@ -70,7 +70,7 @@ async fn preset_live_an_applied_preset_runs_and_answers(db: PgPool) {
 		config.https_port = HTTPS_PORT;
 	}
 	let agent_dir = tempfile::tempdir().unwrap().keep();
-	let mut agent = tokio::process::Command::new(agent_binary())
+	let mut agent = tokio::process::Command::new(crate::tests::agent_binary())
 		.arg("--data-dir")
 		.arg(&agent_dir)
 		.arg("--podman-socket")
