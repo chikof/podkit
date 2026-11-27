@@ -116,18 +116,17 @@ impl Live {
 }
 
 pub(super) fn agent_binary() -> PathBuf {
+	// Next to the profile directory; how deep the test binary sits under it depends on cargo.
 	let exe = std::env::current_exe().unwrap();
-	let binary = exe
-		.parent()
-		.and_then(|deps| deps.parent())
-		.unwrap()
-		.join("podkit-agent");
-	assert!(
-		binary.exists(),
-		"{} is missing; run `cargo build -p agent` first",
-		binary.display()
-	);
-	binary
+	exe.ancestors()
+		.map(|dir| dir.join("podkit-agent"))
+		.find(|binary| binary.is_file())
+		.unwrap_or_else(|| {
+			panic!(
+				"no podkit-agent above {}; run `cargo build -p agent` first",
+				exe.display()
+			)
+		})
 }
 
 impl Setup {

@@ -15,6 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 mod canvas_live;
 mod live;
+mod preset_live;
 mod shared_env_live;
 
 use crate::jobs::{self, JobKind};
