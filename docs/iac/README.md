@@ -446,3 +446,68 @@ name = "Two"
 [projects.two.environments.production]
 name = "production"
 ```
+
+## Presets
+
+A preset is a project file with one project, made to be applied by a team other than the
+one it came from. Where an exported file names a server, an SSH key or a registry, a preset
+says `"${choose}"`; where podkit should make up a secret, it says `"${generate:NAME}"`.
+
+An application's `slug` and every hostname are unique across the install, so a project saved
+as a preset keeps neither: the slug becomes `"${project}-<name>"`, which is filled in with the
+slug of the project the preset is applied to, and `domains` are left out for whoever applies
+it to add.
+
+```sh
+P=https://podkit.example.com/api/v1/teams/7/presets
+
+# What the preset asks, and the team's servers, keys and registries to answer with
+jq -n --rawfile preset blog.toml '{preset: $preset}' \
+  | curl -s -H "Authorization: Bearer $PK_TOKEN" -H 'Content-Type: application/json' -d @- $P/needs
+
+# What applying it would do, then doing it
+curl -s -H "Authorization: Bearer $PK_TOKEN" -H 'Content-Type: application/json' -d @request.json $P/plan
+curl -s -H "Authorization: Bearer $PK_TOKEN" -H 'Content-Type: application/json' -d @request.json $P/apply
+```
+
+`request.json`:
+
+```json
+{
+  "preset": "<the file>",
+  "answers": {
+    "servers": { "production/app/web": "fra-1", "production/database/main": "fra-1" },
+    "deploy_keys": {},
+    "registries": {},
+    "secrets": { "mail-password": "…" }
+  },
+  "target": { "new": { "slug": "my-blog", "name": "My blog" } },
+  "deploy": false
+}
+```
+
+- `needs` lists a place for every object that wants a server (`<environment>/<kind>/<name>`,
+  or `network/<name>`), for every application with a deploy key and every application or
+  stack with a registry, the secrets to type in, and the ones podkit generates.
+- `target` is `{"new": {…}}` for a project made for the preset, or `{"project": <id>}` to add
+  its objects to a project that exists. Adding removes nothing and does not rename the project.
+
+A team keeps presets under the same address:
+
+| | |
+|---|---|
+| `GET /presets` | the team's presets, without their files |
+| `POST /presets` with `{name, slug?, description?, preset}` | keep a preset handed in as a file; it is marked `imported` |
+| `GET /presets/from-project/{project}` | what saving that project as a preset would keep, to read first |
+| `POST /presets/from-project/{project}` with `{name, slug?, description?}` | save it; it is marked `saved` |
+| `GET /presets/{id}`, `DELETE /presets/{id}` | one preset with its file; remove it (projects made from it stay) |
+
+Reading needs `read project`, keeping `create project`, removing `delete project`.
+- An apply with an answer missing is refused with every missing answer named. The answers are
+  then checked by the plan, as for any project file: a server the team does not have is an
+  issue, and an apply with issues changes nothing (422).
+- A preset also checks, before anything is made, that each application slug is free on the
+  server chosen for it: a slug that is taken is an issue too.
+- When a change fails part-way the answer is 409 with the project's id. What ran before the
+  failure stays: creating a database already asks its server to provision it, so nothing is
+  taken back.

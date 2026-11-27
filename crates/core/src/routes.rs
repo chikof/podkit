@@ -13,8 +13,8 @@ use crate::{
 	applications, audit, auth, auto_update, avatars, backups, catalog, cron, databases,
 	deployments, domains, env_vars, environments, git_providers, iac, importers, links, log_search,
 	logos, mcp, mcp_servers, members, metrics, model_files, models, moves, networks, notifications,
-	projects, quadlet, quotas, registries, scanning, servers, ssh_keys, stacks, tailscale, teams,
-	templates, terminal, uptime, volume_backups, volumes, webhooks,
+	presets, projects, quadlet, quotas, registries, scanning, servers, ssh_keys, stacks, tailscale,
+	teams, templates, terminal, uptime, volume_backups, volumes, webhooks,
 };
 
 const APP: &str = "/teams/{team_id}/projects/{project_id}/applications/{application_id}";
@@ -76,6 +76,7 @@ pub async fn routes_with(
 			cron::router(),
 		)
 		.nest("/teams/{team_id}/import", iac::import_router())
+		.nest("/teams/{team_id}/presets", presets::router())
 		.nest("/teams/{team_id}/importers", importers::router())
 		.nest("/teams/{team_id}/servers", servers::router())
 		.nest("/teams/{team_id}/ssh-keys", ssh_keys::router())

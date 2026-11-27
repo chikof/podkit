@@ -62,6 +62,7 @@ pub mod moves;
 pub mod net;
 pub mod networks;
 pub mod notifications;
+pub mod presets;
 pub mod previews;
 pub mod projects;
 pub mod quadlet;
