@@ -58,25 +58,42 @@ impl Index {
 			.collect();
 		let mut registry = registry::read(dir, self.commit, &revisions);
 		for preset in self.presets {
-			// The same reading an apply does: one this podkit cannot apply is left out, and said.
-			let readable = crate::iac::doc::parse(&preset.file)
-				.map_err(|e| e.to_string())
-				.and_then(|doc| crate::presets::needs(&doc).map(drop));
-			let id_like = !preset.id.is_empty()
+			let id_like = (1..=64).contains(&preset.id.len())
 				&& preset
 					.id
 					.bytes()
 					.all(|b| b.is_ascii_alphanumeric() || b == b'-');
-			match readable {
-				Ok(()) if id_like => registry.presets.push(preset),
-				Ok(()) => registry.errors.push((
-					format!("preset {:?}", preset.id),
-					"its id is not one".to_owned(),
+			let refused = if !id_like {
+				Err("its id is not one".to_owned())
+			} else if preset.file.len() > crate::presets::service::MAX_FILE {
+				Err("its file is larger than a kept preset may be".to_owned())
+			} else if registry.presets.iter().any(|p| p.id == preset.id) {
+				Err("another preset has this id".to_owned())
+			} else {
+				// The same reading an apply does: one this podkit cannot apply is left out.
+				crate::iac::doc::parse(&preset.file)
+					.map_err(|e| e.to_string())
+					.and_then(|doc| crate::presets::needs(&doc).map(drop))
+			};
+			match refused {
+				Ok(()) => registry.presets.push(preset),
+				// A parser quotes the line it stopped at, and an id is whatever was sent:
+				// neither is repeated at length to whoever reads the refresh's answer.
+				Err(why) => registry.errors.push((
+					format!("preset {:?}", short(&preset.id, 80)),
+					short(&why, 300),
 				)),
-				Err(why) => registry.errors.push((format!("preset {}", preset.id), why)),
 			}
 		}
 		registry
+	}
+}
+
+/// `text`, cut at `max` characters.
+fn short(text: &str, max: usize) -> String {
+	match text.char_indices().nth(max) {
+		Some((end, _)) => format!("{}\u{2026}", &text[..end]),
+		None => text.to_owned(),
 	}
 }
 
@@ -497,6 +514,11 @@ mod tests {
 				{ "id": "two", "name": "T", "description": "d",
 				  "file": "version = 1\n[projects.a]\nname = \"A\"\n[projects.b]\nname = \"B\"\n" },
 				{ "id": "../x", "name": "X", "description": "d", "file": good },
+				{ "id": "starter", "name": "Again", "description": "d", "file": good },
+				{ "id": "big", "name": "Big", "description": "d",
+				  "file": format!("{good}# {}\n", "x".repeat(2 << 20)) },
+				{ "id": "long-line", "name": "L", "description": "d",
+				  "file": format!("version = 1\n[projects.a]\nname = {}\n", "x".repeat(5000)) },
 			],
 		})
 		.to_string()
@@ -507,8 +529,19 @@ mod tests {
 			|r: &registry::Registry| r.presets.iter().map(|p| p.id.clone()).collect::<Vec<_>>();
 		assert_eq!(ids(&registry), ["starter"], "{:?}", registry.errors);
 		assert_eq!(registry.presets[0].file, good);
-		// The three it cannot use are said, beside the templates it cannot read.
-		assert_eq!(registry.errors.len(), 3, "{:?}", registry.errors);
+		// The six it cannot use are said, beside the templates it cannot read, and briefly.
+		assert_eq!(registry.errors.len(), 6, "{:?}", registry.errors);
+		let why = |id: &str| {
+			let named = format!("preset {id:?}");
+			&registry.errors.iter().find(|e| e.0 == named).unwrap().1
+		};
+		assert_eq!(why("starter"), "another preset has this id");
+		assert_eq!(why("big"), "its file is larger than a kept preset may be");
+		assert!(
+			why("long-line").chars().count() <= 301,
+			"{}",
+			why("long-line")
+		);
 
 		let again = index_of(&live).unwrap().read(&live);
 		assert_eq!(ids(&again), ["starter"]);

@@ -309,7 +309,7 @@ pub struct NewPreset {
 }
 
 /// The largest file kept: what a compose file may be, four times over.
-const MAX_FILE: usize = 1024 * 1024;
+pub(crate) const MAX_FILE: usize = 1024 * 1024;
 
 fn checked(new: &NewPreset, file: &str) -> AppResult<(String, String, String)> {
 	let name = new.name.trim();
