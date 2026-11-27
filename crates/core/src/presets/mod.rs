@@ -314,6 +314,7 @@ pub fn bind(
 	Ok((doc, Secrets(secrets)))
 }
 
+pub mod graph;
 mod routes;
 pub mod service;
 pub mod store;

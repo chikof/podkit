@@ -466,7 +466,7 @@ pub async fn build(
 /// A person-made network joins resources that the canvas draws in different frames (one of
 /// them is drawn in another such network): a dashed edge from the first member to each of
 /// those. Resources in one frame need no edge, the frame is the tie.
-fn network_edges(nodes: &[Node]) -> Vec<Edge> {
+pub(crate) fn network_edges(nodes: &[Node]) -> Vec<Edge> {
 	let mut by_net: HashMap<NetworkId, (&NetRef, Vec<&Node>)> = HashMap::new();
 	for node in nodes {
 		for net in node.nets.iter().filter(|n| !n.auto) {

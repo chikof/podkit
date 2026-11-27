@@ -257,3 +257,91 @@ engine = "nonsense"
 
 	assert!(dry_run("version = 1\n").is_err());
 }
+
+#[test]
+fn a_preset_is_drawn_as_the_graph_of_what_it_makes() {
+	let doc = parse(
+		r#"version = 1
+
+[projects.shop]
+name = "Shop"
+
+[projects.shop.environments.production]
+name = "Production"
+
+[projects.shop.environments.production.apps.web]
+server = "${choose}"
+slug = "${project}-web"
+image = "ghcr.io/example/web:1"
+port = 8080
+
+[[projects.shop.environments.production.apps.web.models]]
+model = "llm"
+
+[projects.shop.environments.production.databases.main]
+server = "${choose}"
+engine = "postgres"
+version = "17"
+
+[projects.shop.environments.production.models.llm]
+server = "${choose}"
+repo = "org/weights"
+revision = "main"
+engine = "ollama"
+
+[projects.shop.environments.staging]
+name = "Staging"
+
+[projects.shop.environments.staging.databases.main-staging]
+server = "${choose}"
+engine = "redis"
+
+[[projects.shop.networks]]
+name = "backend"
+server = "${choose}"
+
+[[projects.shop.networks.members]]
+environment = "production"
+kind = "application"
+name = "web"
+"#,
+	)
+	.unwrap();
+	let g = graph::graph(&doc).unwrap();
+
+	let drawn: Vec<(&str, &str, &str, &str)> = g
+		.nodes
+		.iter()
+		.map(|n| {
+			(
+				g.environment(n.environment).unwrap().name.as_str(),
+				n.key.kind.slug(),
+				n.name.as_str(),
+				n.detail.as_str(),
+			)
+		})
+		.collect();
+	assert_eq!(
+		drawn,
+		[
+			("Production", "application", "web", "ghcr.io/example/web:1"),
+			("Production", "database", "main", "postgres 17"),
+			("Production", "model", "llm", "org/weights"),
+			("Staging", "database", "main-staging", "redis"),
+		]
+	);
+
+	let name = |key| g.node(key).unwrap().name.as_str();
+	let links: Vec<(&str, &str, &str)> = g
+		.edges
+		.iter()
+		.map(|e| (name(e.from), name(e.to), e.label.as_str()))
+		.collect();
+	assert_eq!(links, [("web", "llm", "gateway")]);
+
+	let on: Vec<&str> = g.nodes[0].nets.iter().map(|n| n.label.as_str()).collect();
+	assert_eq!(on, ["backend"]);
+	assert!(g.nodes[1].nets.is_empty());
+
+	assert!(graph::graph(&Doc::new()).is_none());
+}
