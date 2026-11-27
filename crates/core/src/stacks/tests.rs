@@ -818,11 +818,9 @@ async fn an_unhealthy_dependency_fails_the_deploy_and_a_starting_one_is_waited_f
 		})
 	};
 	let (result, log) = s.deploy(id).await;
-	// A deploy that asked fewer than twice would leave the flip waiting forever.
-	tokio::time::timeout(std::time::Duration::from_secs(5), flip)
-		.await
-		.expect("the deploy ended after fewer than two polls")
-		.unwrap();
+	// A deploy that asked fewer than twice leaves the flip waiting: stop it, and let the
+	// deploy's own result and the poll count below say what went wrong.
+	flip.abort();
 	result.unwrap_or_else(|e| panic!("{e:?}\n{log}"));
 	assert!(
 		agent.health_polls.lock().unwrap().len() >= before + 3,
