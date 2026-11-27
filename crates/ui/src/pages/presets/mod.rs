@@ -50,6 +50,7 @@ pub fn router() -> Router<AppState> {
 			"/teams/{team_id}/presets/save/{project_id}",
 			get(save_page).post(save),
 		)
+		.route("/teams/{team_id}/presets/kept/{id}/remove", post(remove))
 		.route("/teams/{team_id}/presets/{source}/{id}", get(apply_page))
 		.route("/teams/{team_id}/presets/{source}/{id}/plan", post(plan))
 		.route("/teams/{team_id}/presets/{source}/{id}/apply", post(apply))
@@ -110,7 +111,13 @@ fn crumbs<'a>(ctx: &TeamCtx, leaf: Option<&'a str>) -> Vec<Crumb<'a>> {
 
 // ----- the list
 
-fn row(href: &str, name: &str, description: &str, tag: Option<Markup>) -> Markup {
+fn row(
+	href: &str,
+	name: &str,
+	description: &str,
+	tag: Option<Markup>,
+	remove: Option<Markup>,
+) -> Markup {
 	html! {
 		li class="flex items-center justify-between gap-4 py-3" {
 			div class="min-w-0" {
@@ -122,9 +129,48 @@ fn row(href: &str, name: &str, description: &str, tag: Option<Markup>) -> Markup
 					p class="text-sm text-muted-foreground" { (description) }
 				}
 			}
-			a class=(button_class(Variant::Outline, Size::Sm)) href=(href) { "Apply\u{2026}" }
+			div class="flex shrink-0 items-center gap-2" {
+				@if let Some(remove) = remove { (remove) }
+				a class=(button_class(Variant::Outline, Size::Sm)) href=(href) { "Apply\u{2026}" }
+			}
 		}
 	}
+}
+
+const REMOVE_DIALOG: &str = "preset-remove";
+
+/// The button of one kept preset: it says which one, and asks.
+fn remove_button(id: PresetId, name: &str) -> Markup {
+	let ask = format!(
+		"$_remove_id = {}; $_remove_name = {}; document.getElementById({}).showModal()",
+		js_string(&id.to_string()),
+		js_string(name),
+		js_string(REMOVE_DIALOG)
+	);
+	html! {
+		button type="button" class=(button_class(Variant::Ghost, Size::Sm)) aria-haspopup="dialog"
+			aria-label={ "Remove " (name) } "data-on:click"=(ask) { "Remove" }
+	}
+}
+
+fn remove_dialog(team: TeamId) -> Markup {
+	let post = format!(
+		"@post({} + $_remove_id + '/remove')",
+		js_string(&format!("{}/kept/", base(team)))
+	);
+	dialog(
+		REMOVE_DIALOG,
+		"Remove this preset?",
+		Some("Projects that were made from it stay as they are."),
+		&html! { p class="text-sm font-medium" "data-text"="$_remove_name" {} },
+		&html! {
+			form method="dialog" {
+				button class=(button_class(Variant::Outline, Size::Md)) autofocus { "Keep it" }
+			}
+			button type="button" class=(button_class(Variant::Destructive, Size::Md)) "data-on:click"=(post)
+				"data-indicator:_removing" "data-attr:disabled"="$_removing" { "Remove" }
+		},
+	)
 }
 
 fn keep_signals() -> String {
@@ -144,13 +190,14 @@ async fn list(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 		.await
 		.unwrap_or_default();
 	let can_keep = ctx.perms.can(Action::Create, Resource::Project);
+	let can_remove = ctx.perms.can(Action::Delete, Resource::Project);
 	let here = base(ctx.team.id);
 	let keep_post = format!(
 		"evt.preventDefault(); @post({})",
 		js_string(&format!("{here}/keep"))
 	);
 	let body = html! {
-		div class="ui-page-body" {
+		div class="ui-page-body" data-signals=(json!({ "_remove_id": "", "_remove_name": "", "_removing": false }).to_string()) {
 			header class="ui-page-head" {
 				div class="ui-page-title" {
 					p class="ui-eyebrow" { "Whole projects" }
@@ -170,7 +217,7 @@ async fn list(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 					} @else {
 						ul class="divide-y" {
 							@for p in &catalog {
-								(row(&format!("{here}/catalog/{}", p.id), &p.name, &p.description, None))
+								(row(&format!("{here}/catalog/{}", p.id), &p.name, &p.description, None, None))
 							}
 						}
 					}
@@ -189,12 +236,14 @@ async fn list(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 									&p.name,
 									&p.description,
 									(p.origin == Origin::Imported).then(|| badge(Tone::Warning, "Unofficial")),
+									can_remove.then(|| remove_button(p.id, &p.name)),
 								))
 							}
 						}
 					}
 				}))
 			}))
+			@if can_remove && !kept.is_empty() { (remove_dialog(ctx.team.id)) }
 			@if can_keep {
 				(card(&html! {
 					(card_section("Save a project as a preset", Some("You read what will be kept before it is saved."), None))
@@ -279,6 +328,18 @@ async fn keep(
 	};
 	match kept.await {
 		Ok(p) => sse::redirect(&format!("{}/kept/{}", base(ctx.team.id), p.id)).into_response(),
+		Err(e) => error::action(&e),
+	}
+}
+
+async fn remove(
+	State(s): State<AppState>,
+	ctx: TeamCtx,
+	Path((_, id)): Path<(TeamId, PresetId)>,
+) -> Response {
+	match service::remove(&s, ctx.user.id, ctx.team.id, id).await {
+		// The list is the page the button is on: it is loaded again, without the preset.
+		Ok(()) => sse::reload().into_response(),
 		Err(e) => error::action(&e),
 	}
 }

@@ -230,5 +230,30 @@ engine = "postgres"
 		"{issues:?}"
 	);
 
+	// A model's download exists only on a real server: the rest of the preset is planned.
+	let with_model = r#"version = 1
+[projects.chat]
+name = "Chat"
+[projects.chat.environments.production]
+name = "Production"
+[projects.chat.environments.production.models.small]
+server = "${choose}"
+repo = "example/small-GGUF"
+revision = "main"
+engine = "llamacpp"
+[projects.chat.environments.production.databases.main]
+server = "${choose}"
+engine = "postgres"
+[projects.chat.environments.production.databases.main-two]
+server = "${choose}"
+engine = "nonsense"
+"#;
+	let issues = dry_run(with_model).unwrap();
+	assert_eq!(issues.len(), 1, "{issues:?}");
+	assert!(
+		issues[0].contains("main-two"),
+		"only the database is wrong: {issues:?}"
+	);
+
 	assert!(dry_run("version = 1\n").is_err());
 }

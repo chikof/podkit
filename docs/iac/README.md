@@ -491,6 +491,9 @@ curl -s -H "Authorization: Bearer $PK_TOKEN" -H 'Content-Type: application/json'
   stack with a registry, the secrets to type in, and the ones podkit generates.
 - `target` is `{"new": {…}}` for a project made for the preset, or `{"project": <id>}` to add
   its objects to a project that exists. Adding removes nothing and does not rename the project.
+  An object the project already has under the same name is updated to what the preset says,
+  as with any project file, and a `${generate:NAME}` secret is made anew, which replaces the
+  value that object had. The plan lists each of these as an update before anything changes.
 
 A team keeps presets under the same address:
 

@@ -621,6 +621,11 @@ fn api_tokens_gate_table() {
 		(&all, M::GET, "/teams/x/projects".into(), Some(404)),
 		(&all, M::GET, "/auth/login".into(), Some(403)),
 		(&read, M::GET, "/me".into(), None),
+		(&read, M::POST, "/teams/7/presets/needs".into(), None),
+		(&read, M::POST, "/teams/7/presets/plan".into(), None),
+		(&read, M::POST, "/teams/7/presets/apply".into(), Some(403)),
+		// Only a preset's `needs` reads; the word alone does not.
+		(&read, M::POST, "/teams/7/servers/needs".into(), Some(403)),
 		(&all, M::POST, "/teams".into(), None),
 		(&read, M::POST, "/teams/7/members".into(), Some(403)),
 		(&all, M::POST, "/teams/7/members".into(), None),

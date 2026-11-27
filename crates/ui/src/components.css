@@ -1879,6 +1879,8 @@ a.ui-todo-name:focus-visible { outline: 2px solid var(--ring); outline-offset: 2
 .ui-iac-field { color: var(--muted-foreground); }
 .ui-iac-val { min-width: 0; }
 .ui-iac-pre { grid-column: 3; min-width: 0; max-height: 14rem; margin: 0; overflow: auto; white-space: pre-wrap; font: inherit; }
+/* A whole file to read in a card, not a value in the plan's third column. */
+.ui-card-b > .ui-iac-pre { grid-column: auto; max-height: 28rem; }
 .ui-iac-sub { margin: 0 0 var(--s-2); font-size: var(--fs-sm); font-weight: var(--fw-medium); }
 .ui-iac-extra-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); font-size: var(--fs-sm); }
 .ui-iac-leftover .ui-hint, .ui-iac-project .ui-iac-where { margin: 0; }
