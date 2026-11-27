@@ -23,6 +23,7 @@ pub mod mcp;
 pub mod models;
 pub mod networks;
 pub mod notifications;
+pub mod presets;
 pub mod profile;
 pub mod projects;
 pub mod quadlet;

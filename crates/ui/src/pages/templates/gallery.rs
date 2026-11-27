@@ -417,6 +417,12 @@ fn render(
 					}
 					@if let Some(p) = project {
 						p class="ui-lede" { "Ready-made services to deploy into " strong { (p.name) } "." }
+					} @else {
+						// The sidebar has no room for a sixth place: presets are reached from here.
+						p class="ui-lede" {
+							"A template is one service. For a whole project at once, see "
+							a href={ "/teams/" (ctx.team.id) "/presets" } { "presets" } "."
+						}
 					}
 				}
 			}
