@@ -278,7 +278,7 @@ fn replace(
 		}
 		Ok(registry)
 	})();
-	let registry = match unpacked {
+	let mut registry = match unpacked {
 		Ok(registry) => registry,
 		Err(e) => {
 			// A refused catalog leaves nothing behind.
@@ -293,6 +293,7 @@ fn replace(
 		let _ = std::fs::rename(&previous, live);
 		return Err(e);
 	}
+	live.clone_into(&mut registry.dir);
 	// The new catalog is in place: failing to delete the old one must not undo that.
 	let _ = std::fs::remove_dir_all(&previous);
 	Ok(registry)
@@ -438,6 +439,23 @@ mod tests {
 		assert!(!live.join("templates/old").exists());
 		assert!(!live.with_extension("old").exists());
 		assert!(!live.with_extension("new").exists());
+		// It was read in the staging folder: its logo is found where the catalog is now.
+		let logo = fixture("gotify", "logo.svg");
+		let served = |r: &registry::Registry| {
+			let bytes = std::fs::read(r.logo_file("gotify").unwrap()).unwrap();
+			assert_eq!(
+				registry::short_hash(&bytes),
+				r.templates["gotify"].logo.hash
+			);
+			bytes
+		};
+		assert_eq!(served(&registry), logo);
+		// And again when it replaces a catalog that was itself put there by a refresh.
+		let (bytes, parsed) = index("0123456789abcdef");
+		assert_eq!(
+			served(&replace(&live, &gotify(), &bytes, parsed).unwrap()),
+			logo
+		);
 
 		// What a restart reads is the same catalog.
 		let again = index_of(&live).unwrap().read(&live);
