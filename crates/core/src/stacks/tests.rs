@@ -803,13 +803,17 @@ async fn an_unhealthy_dependency_fails_the_deploy_and_a_starting_one_is_waited_f
 	assert!(message.contains("unhealthy"), "{message}");
 	assert_eq!(agent.deployed_services(), [format!("stack-{id}-db")]);
 
-	// Starting turns healthy while the job polls.
+	// Starting turns healthy once the job has asked twice and been told "starting": counted
+	// in polls, not in time, so a slow machine does not find it healthy at the first one.
 	agent.set_health(&db_container, Some("starting"), "running");
+	let before = agent.health_polls.lock().unwrap().len();
 	let flip = {
 		let agent = agent.clone();
 		let container = db_container.clone();
 		tokio::spawn(async move {
-			tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+			while agent.health_polls.lock().unwrap().len() < before + 2 {
+				tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+			}
 			agent.set_health(&container, Some("healthy"), "running");
 		})
 	};
@@ -817,7 +821,7 @@ async fn an_unhealthy_dependency_fails_the_deploy_and_a_starting_one_is_waited_f
 	flip.await.unwrap();
 	result.unwrap_or_else(|e| panic!("{e:?}\n{log}"));
 	assert!(
-		agent.health_polls.lock().unwrap().len() >= 3,
+		agent.health_polls.lock().unwrap().len() >= before + 3,
 		"it polled until healthy"
 	);
 	assert_eq!(s.detail(id).await["status"], "running");
