@@ -49,8 +49,8 @@ Memory (RSS) of a release build, after 10 minutes with no traffic and again afte
 | LLM gateway sidecar | 7.1 MB | | only while a model link exists |
 | Vulnerability scanner (Syft, Grype) | 0 MB | | only during a scan |
 
-The server is built with `scripts/build-ordered.sh`; a plain `cargo build --release`, which
-the container image still uses, idles at 22.9 MB. Hashing a password takes 64 MiB more for
+The server is built with `scripts/build-ordered.sh`, in the container image too; a plain
+`cargo build --release` idles at 22.9 MB. Hashing a password takes 64 MiB more for
 about 100 ms, one hash at a time, so a sign-in peaks near 100 MB: give the server's
 container 128 MB.
 
