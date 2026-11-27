@@ -36,9 +36,6 @@ pub struct ServiceInfo {
 pub struct Logo {
 	/// Media type.
 	pub media: &'static str,
-	/// Where a catalog template's logo is on disk. It is read when a browser asks for it:
-	/// held in memory, the catalog's logos were 4 MB that the kernel could not reclaim.
-	pub file: Option<PathBuf>,
 	/// First 8 hex digits of its SHA-256, the cache-busting part of its URL.
 	pub hash: String,
 }
@@ -150,7 +147,6 @@ pub fn load(
 	let logo = Logo {
 		media,
 		hash: short_hash(&bytes),
-		file: None,
 	};
 
 	let (services, warnings, plain_app) = translate_check(&template, &compose_text)?;
@@ -318,6 +314,20 @@ pub struct Registry {
 	pub errors: Vec<(String, String)>,
 	/// The catalog's presets that this podkit can read.
 	pub presets: Vec<CatalogPreset>,
+	/// The folder it was read from, and where it is now: a refresh reads it in a staging
+	/// folder and then moves that into place.
+	pub dir: PathBuf,
+}
+
+impl Registry {
+	/// Where the logo file of a catalog template is. It is read when a browser asks for it:
+	/// held in memory, the catalog's logos were 4 MB that the kernel could not reclaim.
+	/// `None` for a logo of podkit's own, which has no file.
+	#[must_use]
+	pub fn logo_file(&self, id: &str) -> Option<PathBuf> {
+		let name = &self.templates.get(id)?.template.logo;
+		(!name.starts_with('@')).then(|| self.dir.join("templates").join(id).join(name))
+	}
 }
 
 /// A preset of the catalog: a project file any team can apply ([`crate::presets`]), with
@@ -345,6 +355,7 @@ static CURRENT: RwLock<Option<Arc<Registry>>> = RwLock::new(None);
 pub fn read(dir: &Path, commit: String, revisions: &BTreeMap<String, String>) -> Registry {
 	let mut registry = Registry {
 		commit,
+		dir: dir.to_owned(),
 		..Registry::default()
 	};
 	let mut folders: Vec<_> = std::fs::read_dir(dir.join("templates"))
@@ -375,9 +386,6 @@ pub fn read(dir: &Path, commit: String, revisions: &BTreeMap<String, String>) ->
 		match load(&id, &file) {
 			Ok(mut loaded) => {
 				loaded.revision = revisions.get(&id).cloned().unwrap_or_default();
-				if !loaded.template.logo.starts_with('@') {
-					loaded.logo.file = Some(folder.join(&loaded.template.logo));
-				}
 				registry.templates.insert(id, Arc::new(loaded));
 			}
 			Err(e) => registry.errors.push((id, e.0)),

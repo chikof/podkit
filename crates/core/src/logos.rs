@@ -243,15 +243,16 @@ async fn serve(Path(file): Path<String>) -> Response {
 	{
 		return immutable(e.media, &e.hash, e.bytes, e.ext == "svg");
 	}
+	let registry = crate::templates::load_all();
 	if let Some(id) = name.strip_prefix("t-")
-		&& let Some(l) = crate::templates::find(id)
+		&& let Some(l) = registry.templates.get(id)
 		&& l.logo.hash == hash
-		&& let Some(path) = &l.logo.file
+		&& let Some(path) = registry.logo_file(id)
 	{
 		let svg = l.logo.media == "image/svg+xml";
 		let want = if svg { "svg" } else { "png" };
 		if want == ext
-			&& let Some(bytes) = file_with_hash(path, hash).await
+			&& let Some(bytes) = file_with_hash(&path, hash).await
 		{
 			return immutable(l.logo.media, &l.logo.hash, bytes, svg);
 		}

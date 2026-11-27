@@ -472,12 +472,12 @@ fn every_template_has_a_logo_that_resolves_to_a_file() {
 		let url = crate::logos::template_url(l);
 		assert!(url.starts_with("/static/logos/"), "{id}: {url:?}");
 		if let Some(name) = l.template.logo.strip_prefix('@') {
-			assert!(l.logo.file.is_none(), "{id}");
+			assert!(load_all().logo_file(id).is_none(), "{id}");
 			assert!(crate::logos::has(name), "{id}: registry logo {name}");
 		} else {
 			let ext = l.template.logo.rsplit('.').next().unwrap();
 			assert!(["svg", "png"].contains(&ext), "{id}: {}", l.template.logo);
-			let size = std::fs::metadata(l.logo.file.as_ref().unwrap())
+			let size = std::fs::metadata(load_all().logo_file(id).unwrap())
 				.unwrap()
 				.len();
 			assert!((1..=super::MAX_LOGO_BYTES as u64).contains(&size), "{id}");
