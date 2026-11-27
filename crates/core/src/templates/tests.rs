@@ -1262,7 +1262,16 @@ async fn hostile_template_files_are_refused_and_not_worked_through(db: PgPool) {
 	for n in 0..4999 {
 		let _ = writeln!(ring, "r{n:04} = \"${{r{:04}}}\"", n + 1);
 	}
+	// One 60 KB value, copied into two thousand settings: 120 MB from a 90 KB file.
+	let mut copies = format!(
+		"{base}[variables]\nbig = \"{}\"\n[config.env]\n",
+		"y".repeat(60_000)
+	);
+	for n in 0..2000 {
+		let _ = writeln!(copies, "E{n} = \"${{big}}\"");
+	}
 	for (what, template, status) in [
+		("a value copied everywhere", copies, StatusCode::BAD_REQUEST),
 		("a chain too deep", deep, StatusCode::BAD_REQUEST),
 		("a ring", ring, StatusCode::BAD_REQUEST),
 		("a value that grows", grows, StatusCode::BAD_REQUEST),

@@ -90,12 +90,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.100.0
       - uses: Swatinem/rust-cache@v2
       - run: scripts/build-ordered.sh
+      # The catalog the server downloads in the load pass, at one commit: "after use" is a
+      # server that holds it, and the numbers move with podkit, not with the catalog.
+      - uses: actions/checkout@v7
+        with:
+          repository: podoes/podkit-templates
+          ref: 9e23422721df01fae91e149866ddb36bc61c1b08
+          path: podkit-templates
+      - run: python3 podkit-templates/scripts/build.py
       # Starts the server and the agent (no Podman: the agent gets a stub socket),
       # leaves them idle and fails when an idle RSS is over scripts/footprint.budget.
       - name: idle RSS budgets
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: scripts/footprint.sh --check --out footprint.txt
+        run: scripts/footprint.sh --check --catalog podkit-templates/dist --out footprint.txt
       - if: always()
         run: cat footprint.txt || true
 

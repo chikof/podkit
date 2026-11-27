@@ -151,6 +151,11 @@ impl Builder<'_, '_> {
 		self.ctx.issue(Some(self.name), path, message);
 	}
 
+	/// One use of `bytes` from a variable or a file of the stack ([`super::Ctx::take`]).
+	fn take(&mut self, path: &str, bytes: usize) -> bool {
+		self.ctx.take(Some(self.name), path, bytes)
+	}
+
 	fn warn(&mut self, path: &str, message: impl Into<String>) {
 		self.ctx.warn(Some(self.name), path, message);
 	}
@@ -318,7 +323,9 @@ impl Builder<'_, '_> {
 				for (key, v) in map {
 					match v {
 						Value::Null => {
-							if let Some(found) = self.ctx.inputs.env.get(key) {
+							if let Some(found) = self.ctx.inputs.env.get(key)
+								&& self.take(path, found.len())
+							{
 								out.push((key.clone(), found.clone()));
 							}
 						}
@@ -341,7 +348,9 @@ impl Builder<'_, '_> {
 					match text.split_once('=') {
 						Some((key, v)) => out.push((key.to_string(), v.to_string())),
 						None => {
-							if let Some(found) = self.ctx.inputs.env.get(&text) {
+							if let Some(found) = self.ctx.inputs.env.get(&text)
+								&& self.take(path, found.len())
+							{
 								out.push((text.clone(), found.clone()));
 							}
 						}
@@ -383,7 +392,11 @@ impl Builder<'_, '_> {
 				continue;
 			}
 			match self.ctx.inputs.files.get(&normalized) {
-				Some(content) => out.extend(value::dotenv(content)),
+				Some(content) => {
+					if self.take(path, content.len()) {
+						out.extend(value::dotenv(content));
+					}
+				}
 				None => self.issue(
 					path,
 					format!("env_file {entry:?} is not supported; set the variables on the stack"),
@@ -791,13 +804,18 @@ impl Builder<'_, '_> {
 					continue;
 				}
 			};
-			let Some(content) = self.ctx.resources.get(&format!("{kind}.{source}")).cloned() else {
+			let key = format!("{kind}.{source}");
+			let Some(size) = self.ctx.resources.get(&key).map(String::len) else {
 				self.issue(
 					&item_path,
 					format!("{kind} {source:?} is not defined under the top-level `{kind}`"),
 				);
 				continue;
 			};
+			if !self.take(&item_path, size) {
+				return;
+			}
+			let content = self.ctx.resources[&key].clone();
 			let dir = if kind == "secrets" {
 				"/run/secrets/"
 			} else {
@@ -967,26 +985,38 @@ impl Builder<'_, '_> {
 			self.issue(path, format!("{source:?} points outside the stack's files"));
 			return;
 		}
-		let files = &self.ctx.inputs.files;
+		let files = self.ctx.inputs.files;
 		if let Some(content) = files.get(&normalized) {
-			s.mounts.push(Mount::File {
-				target: target.to_string(),
-				content: content.clone(),
-			});
+			if self.take(path, content.len()) {
+				s.mounts.push(Mount::File {
+					target: target.to_string(),
+					content: content.clone(),
+				});
+			}
 			return;
 		}
 		let prefix = format!("{}/", normalized.trim_end_matches('/'));
-		let nested: Vec<(String, String)> = if normalized.is_empty() {
-			files.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
-		} else {
-			files
-				.iter()
-				.filter_map(|(k, v)| {
-					k.strip_prefix(&prefix)
-						.map(|rest| (rest.to_string(), v.clone()))
-				})
-				.collect()
+		let under = |k: &String| {
+			if normalized.is_empty() {
+				Some(k.clone())
+			} else {
+				k.strip_prefix(&prefix).map(str::to_string)
+			}
 		};
+		// Each file under the folder is a use, an empty one too.
+		let (count, size) = files
+			.iter()
+			.filter(|(k, _)| under(k).is_some())
+			.fold((0usize, 0usize), |(n, bytes), (_, v)| {
+				(n + 1, bytes + v.len())
+			});
+		if count > 0 && !self.take(path, size + count * 64) {
+			return;
+		}
+		let nested: Vec<(String, String)> = files
+			.iter()
+			.filter_map(|(k, v)| under(k).map(|rest| (rest, v.clone())))
+			.collect();
 		if !nested.is_empty() {
 			for (rest, content) in nested {
 				s.mounts.push(Mount::File {
