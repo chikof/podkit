@@ -80,7 +80,7 @@ read after 20 s.
 | idle RSS | the cap, the promise | 60 MB | 25 MB | the number podkit advertises |
 | anonymous idle RSS (`RssAnon`: heap and stacks) | baseline + 20 % | 4.8 MB (measured 3.9 MB) | 1.5 MB (measured 1.1 MB) | a cache, a pool, a background loop |
 | RSS after use | the cap | 60 MB (measured 32.9 MB) | 25 MB (measured 9.4 MB) | what a server in use holds |
-| peak RSS | the cap plus one password hash (64 MiB) for the server | 124 MB (measured 79.4 MB) | 25 MB (measured 9.5 MB) | a moment that costs more than a sign-in |
+| peak RSS | the cap plus one password hash (64 MiB) for the server | 124 MB (measured 79.2 MB) | 25 MB (measured 9.5 MB) | a moment that costs more than a sign-in |
 | anonymous RSS after use | baseline + 20 % | 16.8 MB (measured 13.2 MB, with the catalog) | 1.5 MB (measured 1.2 MB) | a cache that fills and never empties |
 | binary size | baseline + 10 % | 25.6 MB (measured 23.0 MB) | 8.5 MB (measured 7.7 MB) | new code and dependencies |
 | shared libraries (`readelf -d`) | an allowlist | libc, libm, libgcc | the same | a second crypto or TLS stack |
@@ -95,7 +95,7 @@ of that kind (the split grew the server binary by 8 %); a new native library fai
 allowlist whatever its size.
 
 The server has one more check, on the file-backed part of its idle RSS (baseline + 20 %,
-12.0 MB, measured 9.2 MB here and 9.7 MB on CI). It holds what "Start-up order" below won.
+12.6 MB, measured 9.2 MB here and 9.5 to 10.4 MB on CI). It holds what "Start-up order" below won.
 
 ### After use
 
@@ -109,7 +109,7 @@ API lists, waits 5 s and samples again. A page that answers 5xx fails the run.
 | RSS | 13.0 MB | 32.9 MB | 79.2 MB |
 | anonymous | 3.8 MB | 13.2 MB | |
 
-The agent does not move (9.2 MB). Where the server's goes:
+The agent barely moves (9.2 MB to 9.4 MB). Where the server's goes:
 
 - **The catalog, 8.0 MB of anonymous memory.** Without `--catalog` the same run ends at
   23.9 MB, 5.2 MB of it anonymous. A refresh parses the 487 templates and keeps them with

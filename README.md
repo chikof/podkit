@@ -12,7 +12,7 @@ A self hosted PaaS on [Podman](https://podman.io) instead of Docker. Built in
 Rust for small hosts.
 
 Connect a repository, deploy it, and get a public URL. podkit is made for a
-homelab or a small server: the control plane idles at about 12 MB of memory.
+homelab or a small server: the control plane idles at about 13 MB of memory.
 
 ## What it does
 
