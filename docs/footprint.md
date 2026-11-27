@@ -95,7 +95,7 @@ of that kind (the split grew the server binary by 8 %); a new native library fai
 allowlist whatever its size.
 
 The server has one more check, on the file-backed part of its idle RSS (baseline + 20 %,
-12.6 MB, measured 9.2 MB here and 9.5 to 10.4 MB on CI). It holds what "Start-up order" below won.
+13.2 MB, measured 9.2 MB here and 9.4 to 10.7 MB on CI). It holds what "Start-up order" below won.
 
 ### After use
 

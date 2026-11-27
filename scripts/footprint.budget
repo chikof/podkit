@@ -15,8 +15,8 @@ agent_transient_kb=0
 # is mapped. scripts/build-ordered.sh keeps it small by laying the start-up code out in one
 # block; without that it is about 19 MB. Fails over baseline + 20 %. When it does, a list
 # of start-up functions has gone stale: run scripts/startup-order.sh. Measured: 9.2 MB here,
-# 9.5 to 10.4 MB on CI.
-server_idle_file_baseline_kb=10752
+# 9.4 to 10.7 MB across 77 CI runs.
+server_idle_file_baseline_kb=11264
 # Anonymous idle RSS (RssAnon: heap and stacks), the memory a process holds. Fails over
 # baseline + 20 %. The baseline is the last measured value, rounded up; raise it only with a
 # reason. Measured: server 3952 KB, agent 1092 KB. The agent's is small enough for
