@@ -35,6 +35,7 @@ use podkit_core::presets::store::Origin;
 use podkit_core::presets::{Bindings, Slot};
 use podkit_core::state::AppState;
 
+mod canvas;
 #[cfg(test)]
 mod tests;
 
@@ -386,6 +387,7 @@ async fn save_page(
 						li { "No server, SSH key or registry of this team: each reads " code { "${choose}" } "." }
 						li { "No hostname, and no application slug of its own: both are unique on an install. A slug is made from the project the preset is applied to." }
 					}
+					div class="mt-4" { (canvas::canvas(&file)) }
 					pre class="ui-iac-pre mt-4" tabindex="0" aria-label="The preset file" { (file) }
 				}))
 			}))
@@ -565,6 +567,7 @@ async fn apply_page(
 					@if !preset.description.is_empty() { p class="ui-lede" { (preset.description) } }
 				}
 			}
+			(canvas::canvas(&preset.file))
 			@if preset.unofficial {
 				(card(&html! {
 					(card_section(

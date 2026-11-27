@@ -45,7 +45,9 @@ fn main() -> AppResult<()> {
 
 #[allow(clippy::too_many_lines, reason = "start-up reads best straight down")]
 async fn run() -> AppResult<()> {
-	if let Some(code) = templates::catalog::check_cli() {
+	if let Some(code) =
+		templates::catalog::check_cli().or_else(podkit_core::presets::graph::canvas_cli)
+	{
 		std::process::exit(code);
 	}
 	#[cfg(debug_assertions)]

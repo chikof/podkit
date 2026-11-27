@@ -139,6 +139,9 @@ async fn presets_ui_a_file_handed_in_is_kept_marked_and_shown_whole_before_it_is
 	let main = page_main(&page);
 	assert_contains(main, "Unofficial");
 	assert_contains(main, "This preset came from a file");
+	// It is drawn as a canvas: its environment as a frame, a tile for each of its two parts.
+	assert_contains(main, "aria-label=\"Production environment\"");
+	assert_eq!(main.matches("class=\"ui-cv-node\"").count(), 2, "{main}");
 	// The whole file is there to be read, and each thing it asks is a field.
 	assert_contains(main, "ghost:5");
 	assert_contains(main, "production/app/web");
