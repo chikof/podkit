@@ -1,6 +1,6 @@
 services:
   homelable-backend:
-    image: ghcr.io/pouzor/homelable-backend:3.6.0
+    image: ghcr.io/pouzor/homelable-backend:3.8.0
     restart: unless-stopped
     environment:
       SECRET_KEY: ${SECRET_KEY}
