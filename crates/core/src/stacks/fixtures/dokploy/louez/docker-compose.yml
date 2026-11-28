@@ -1,6 +1,6 @@
 services:
   louez:
-    image: synapsr/louez:2.1.0
+    image: synapsr/louez:2.3.1
     restart: unless-stopped
     environment:
       LOUEZ_MODE: standalone
