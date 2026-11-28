@@ -72,7 +72,7 @@ tower.workspace = true
 webauthn-rs = { version = "=0.6.2", features = ["danger-allow-state-serialisation"] }
 qrcode = { version = "0.15.0", default-features = false }
 sha1 = "0.11.0"
-jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "12", default-features = false, features = ["rust_crypto"] }
 
 [lints]
 workspace = true
