@@ -20,7 +20,7 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: redis:8-alpine
     restart: unless-stopped
     # appendonly = durable across restarts; noeviction because this is Cut's
     # primary datastore, not a cache (don't drop links under memory pressure).
