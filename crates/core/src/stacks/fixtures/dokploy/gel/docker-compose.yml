@@ -1,6 +1,6 @@
 services:
   gel:
-    image: geldata/gel:6
+    image: geldata/gel:7
     restart: unless-stopped
     expose:
       - 5656
