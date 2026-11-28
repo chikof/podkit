@@ -25,7 +25,7 @@ services:
           cpus: "${CPU_LIMIT:-0.8}" # 0.8 will limit to 80% of CPU if one core. If 2 cores, you need to put 0.8*2=1.6
 
   mongo:
-    image: mongo:4.2
+    image: mongo:9.0
     restart: unless-stopped
     environment:
       - MONGO_INITDB_ROOT_USERNAME=${MONGO_USERNAME}
