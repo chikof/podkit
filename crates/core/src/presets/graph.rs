@@ -183,14 +183,52 @@ fn nodes<'a>(project: &'a ProjectDoc, draft: &mut Draft<'a>) {
 				Some(mark),
 			);
 		}
-		for name in e.stacks.keys() {
+		for (name, stack) in &e.stacks {
 			draft.add(
 				env,
 				ResourceKind::Stack,
 				name,
-				"compose file".to_owned(),
+				services(&stack.compose),
 				Some("docker"),
 			);
 		}
+	}
+	// A part wears the logo an applied one would: the catalog template's it is named after,
+	// else what its image is known as.
+	for node in &mut draft.graph.nodes {
+		let from_image = match node.key.kind {
+			ResourceKind::Application => crate::logos::for_image(&node.detail),
+			ResourceKind::Stack => None,
+			// A database or a model keeps its engine's mark, whatever it is called.
+			ResourceKind::Database | ResourceKind::Model => continue,
+		};
+		node.logo_url = crate::templates::find(&node.name)
+			.map(|template| crate::logos::template_url(&template))
+			.or(from_image);
+	}
+}
+
+/// `3 services`, as a stack's page says it; `compose file` when none is found.
+fn services(compose: &str) -> String {
+	// shortcut: counts the keys one level under `services:` by their indentation, without
+	// reading the YAML, which for a file handed in could be made to expand without end.
+	// Upgrade to the compose reader if a tile ever needs more than the count.
+	let mut inside = compose
+		.lines()
+		.skip_while(|line| line.trim_end() != "services:")
+		.skip(1)
+		.take_while(|line| line.is_empty() || line.starts_with([' ', '#']))
+		.filter(|line| !line.trim_start().starts_with('#') && !line.trim().is_empty());
+	let Some(first) = inside.next() else {
+		return "compose file".to_owned();
+	};
+	let indent = first.len() - first.trim_start().len();
+	let count = 1 + inside
+		.filter(|line| line.len() - line.trim_start().len() == indent)
+		.count();
+	if count == 1 {
+		"1 service".to_owned()
+	} else {
+		format!("{count} services")
 	}
 }
