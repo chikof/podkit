@@ -33,7 +33,7 @@ services:
       REDIS_PORT: 6379
 
   database:
-    image: postgres:18-alpine
+    image: postgres:19-alpine
     restart: unless-stopped
     volumes:
       - weblate-postgres-data:/var/lib/postgresql

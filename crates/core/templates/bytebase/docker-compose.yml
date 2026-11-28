@@ -12,7 +12,7 @@ services:
       - bytebase-db
 
   bytebase-db:
-    image: postgres:13
+    image: postgres:19
     restart: unless-stopped
     environment:
       - POSTGRES_USER=postgres
