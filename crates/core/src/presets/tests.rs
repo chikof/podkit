@@ -345,3 +345,56 @@ name = "web"
 
 	assert!(graph::graph(&Doc::new()).is_none());
 }
+
+#[test]
+fn a_part_of_a_preset_wears_its_template_s_logo_and_a_stack_says_its_services() {
+	let doc = parse(
+		r#"version = 1
+
+[projects.home]
+name = "Home"
+
+[projects.home.environments.production]
+name = "Production"
+
+[projects.home.environments.production.apps.gotify]
+server = "${choose}"
+slug = "${project}-gotify"
+image = "gotify/server:2"
+port = 80
+
+[projects.home.environments.production.databases.umami]
+server = "${choose}"
+engine = "postgres"
+
+[projects.home.environments.production.stacks.media]
+server = "${choose}"
+compose = '''
+# two of them
+services:
+  player:
+    image: example/player:1
+    volumes:
+      - library:/data
+
+  fetcher:
+    image: example/fetcher:1
+volumes:
+  library:
+'''
+"#,
+	)
+	.unwrap();
+	let g = graph::graph(&doc).unwrap();
+	let node = |name: &str| g.nodes.iter().find(|n| n.name == name).unwrap();
+
+	// Named after a catalog template: its logo. A database keeps its engine's mark even when
+	// a template has its name.
+	let logo = node("gotify").logo_url.as_deref().unwrap();
+	assert!(logo.starts_with("/static/logos/t-gotify."), "{logo}");
+	assert_eq!(node("umami").logo_url, None);
+	assert_eq!(node("umami").mark, Some("postgres"));
+
+	assert_eq!(node("media").detail, "2 services");
+	assert_eq!(node("media").logo_url, None);
+}

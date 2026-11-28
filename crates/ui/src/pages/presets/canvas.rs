@@ -4,11 +4,21 @@
 
 use maud::{Markup, html};
 
-use crate::components::{LogoSize, icon};
-use crate::pages::projects::cards::{logo_row, resource_logo};
+use crate::components::{LogoSize, Priority, icon, image_logo};
+use crate::pages::projects::cards::resource_logo;
 use podkit_core::projects::graph::layout::{COL_GAP, layout};
-use podkit_core::projects::graph::{EdgeKind, Graph};
-use podkit_core::projects::overview::ResourceLogo;
+use podkit_core::projects::graph::{EdgeKind, Graph, Node};
+
+/// The most logos a card shows before "+N", as a project's card does.
+const LOGOS_SHOWN: usize = 5;
+
+/// A part's logo: the catalog template's or its image's when there is one, else its mark.
+fn node_logo(n: &Node) -> Markup {
+	match &n.logo_url {
+		Some(url) => image_logo(url, LogoSize::Sm, Priority::Low),
+		None => resource_logo(n.mark, &n.name, LogoSize::Sm),
+	}
+}
 
 /// The canvas of the preset `file`; nothing when the file is not a preset or holds nothing.
 pub fn canvas(file: &str) -> Markup {
@@ -27,15 +37,20 @@ pub fn held(file: &str) -> Option<(Markup, String)> {
 		.ok()
 		.and_then(|doc| podkit_core::presets::graph::graph(&doc))
 		.filter(|g| !g.nodes.is_empty())?;
-	let logos: Vec<ResourceLogo> = graph
-		.nodes
-		.iter()
-		.map(|n| ResourceLogo {
-			kind: n.key.kind,
-			name: n.name.clone(),
-			mark: n.mark,
-		})
-		.collect();
+	let more = graph.nodes.len().saturating_sub(LOGOS_SHOWN);
+	let logos = html! {
+		div class="flex items-center gap-1.5" {
+			@for n in graph.nodes.iter().take(LOGOS_SHOWN) { (node_logo(n)) }
+			@if more > 0 { span class="text-xs font-medium text-muted-foreground" { "+" (more) } }
+			span class="sr-only" {
+				"Contains "
+				@for (i, n) in graph.nodes.iter().enumerate() {
+					@if i > 0 { ", " }
+					(n.name)
+				}
+			}
+		}
+	};
 	let count = |n: usize, one: &str| format!("{n} {one}{}", if n == 1 { "" } else { "s" });
 	let mut counts = vec![count(graph.environments.len(), "environment")];
 	let mut kinds: Vec<_> = graph.nodes.iter().map(|n| n.key.kind).collect();
@@ -45,7 +60,7 @@ pub fn held(file: &str) -> Option<(Markup, String)> {
 		let n = graph.nodes.iter().filter(|n| n.key.kind == kind).count();
 		counts.push(count(n, &kind.label().to_lowercase()));
 	}
-	Some((logo_row(&logos), counts.join(" \u{b7} ")))
+	Some((logos, counts.join(" \u{b7} ")))
 }
 
 fn world(graph: &Graph) -> Markup {
@@ -87,7 +102,7 @@ fn world(graph: &Graph) -> Markup {
 							@let (x, y) = l.pos.get(&n.key).copied().unwrap_or((0, 0));
 							li class="ui-cv-node" style={ "--x:" (x) "px;--y:" (y) "px" } {
 								div class="ui-cv-head" {
-									span class="ui-cv-ic" { (resource_logo(n.mark, &n.name, LogoSize::Sm)) }
+									span class="ui-cv-ic" { (node_logo(n)) }
 									span class="ui-cv-open" { (n.name) }
 								}
 								span class="ui-cv-sub" {
