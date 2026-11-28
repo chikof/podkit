@@ -3,7 +3,7 @@
 # To serve DNS on the standard port, free port 53 on the host and set SABLE_DNS_PORT=53.
 services:
   sable:
-    image: ghcr.io/drudge/sable:1.6.1
+    image: ghcr.io/drudge/sable:1.9.1
     restart: unless-stopped
     dns:
       - 1.1.1.1
