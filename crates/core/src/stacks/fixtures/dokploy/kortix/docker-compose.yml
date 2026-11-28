@@ -129,7 +129,7 @@ services:
       start_period: 20s
     mem_limit: 256m
   storage:
-    image: supabase/storage-api:v1.60.4@sha256:c8eb9858eafec891a97c27125470aaad54703c3f4eb4d55ca7f1bf6c6411febf
+    image: supabase/storage-api:v1.101.1@sha256:5599ff7a67047ed97cffbfa194f289151ebf600632f0077ceb91a89fe7321f7f
     restart: unless-stopped
     entrypoint:
     - /bin/sh
