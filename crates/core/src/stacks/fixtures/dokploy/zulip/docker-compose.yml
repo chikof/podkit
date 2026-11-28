@@ -63,7 +63,7 @@ services:
       - zulipRedisData:/data
 
   zulip:
-    image: ghcr.io/zulip/zulip-server:12.1-0
+    image: ghcr.io/zulip/zulip-server:12.5-0
     restart: unless-stopped
     depends_on:
       - database
