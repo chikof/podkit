@@ -1,7 +1,7 @@
 # dokploy: allow-host-ports — RTMP (1935/tcp), WebRTC (8000/udp) and SRT (10080/udp) are streaming protocols Traefik cannot route; they must be published on the host.
 services:
   oryx:
-    image: ossrs/oryx:5.15.20
+    image: ossrs/oryx:7.15.26
     restart: unless-stopped
     ports:
       # RTMP, WebRTC and SRT are not HTTP protocols, so Traefik cannot route
