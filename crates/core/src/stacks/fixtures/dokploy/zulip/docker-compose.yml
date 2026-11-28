@@ -30,7 +30,7 @@ services:
       MEMCACHED_PASSWORD_FILE: /run/secrets/zulip__memcached_password
 
   rabbitmq:
-    image: rabbitmq:4.2
+    image: rabbitmq:4.4
     restart: unless-stopped
     command:
       - sh
