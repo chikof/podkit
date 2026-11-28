@@ -1,6 +1,6 @@
 services:
   inngest:
-    image: inngest/inngest:v1.12.1
+    image: inngest/inngest:v1.53.0
     restart: unless-stopped
     command: >
       inngest start
