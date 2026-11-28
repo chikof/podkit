@@ -27,7 +27,7 @@ x-back-volumes: &default-back-volumes
 
 services:
   taiga-db:
-    image: postgres:12.3
+    image: postgres:19.0
     restart: unless-stopped
     environment:
       POSTGRES_DB: taiga

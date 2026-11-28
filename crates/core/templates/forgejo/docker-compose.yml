@@ -23,7 +23,7 @@ services:
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
   db:
-    image: postgres:17
+    image: postgres:19
     restart: always
     environment:
       - POSTGRES_USER=forgejo
