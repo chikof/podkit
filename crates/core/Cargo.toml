@@ -81,6 +81,6 @@ workspace = true
 outbound = { workspace = true, features = ["test-util"] }
 # Live model-download test runs the real agent in process.
 agent = { path = "../../agent" }
-jsonschema = { version = "=0.61.2", default-features = false }
+jsonschema = { version = "=0.63.2", default-features = false }
 tokio = { workspace = true, features = ["test-util"] }
 webauthn-authenticator-rs = { version = "=0.6.2", features = ["softpasskey"] }
