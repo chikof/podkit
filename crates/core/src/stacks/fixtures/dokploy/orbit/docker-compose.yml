@@ -34,7 +34,7 @@ services:
     restart: unless-stopped
   storage:
     # SeaweedFS S3 gateway (MinIO images are no longer publicly pullable).
-    image: chrislusf/seaweedfs:4.48
+    image: chrislusf/seaweedfs:4.55
     entrypoint:
     - /bin/sh
     - -c
