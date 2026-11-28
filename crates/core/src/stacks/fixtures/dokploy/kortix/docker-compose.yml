@@ -97,7 +97,7 @@ services:
       start_period: 120s
     mem_limit: 256m
   rest:
-    image: postgrest/postgrest:v14.12@sha256:54000f24847d01a2c2302e0041cf0618b875c57fb48507d743cfa9aaa50bf43c
+    image: postgrest/postgrest:v14.18@sha256:c7cd7e265a85b05248abf53f4473fcec7e327c282d0bd0cf60f1551996d09fcf
     restart: unless-stopped
     command:
     - postgrest
