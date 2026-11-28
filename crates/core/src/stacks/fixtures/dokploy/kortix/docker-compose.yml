@@ -175,7 +175,7 @@ services:
       start_period: 120s
     mem_limit: 384m
   kong:
-    image: kong/kong:3.9.1@sha256:6addf50e6bd8d578314cb9ce4f2d2d1e3781d2edecef59f707e00c6e05d384f5
+    image: kong/kong:3.9.5@sha256:4bbd3148c708da48a8495bc75d86b4863e62ca056b9f22d6ff52e982a2446da1
     restart: unless-stopped
     entrypoint:
     - /bin/sh
