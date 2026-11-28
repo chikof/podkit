@@ -175,7 +175,7 @@ services:
       start_period: 40s
 
   novu:
-    image: ghcr.io/novuhq/novu/dashboard:3.18.0
+    image: ghcr.io/novuhq/novu/dashboard:3.21.0
     restart: unless-stopped
     depends_on:
       api:
