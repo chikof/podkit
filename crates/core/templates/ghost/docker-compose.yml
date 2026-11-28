@@ -14,7 +14,7 @@ services:
       - ghost:/var/lib/ghost/content
 
   db:
-    image: mysql:8.0
+    image: mysql:26.10
     restart: always
 
     environment:
