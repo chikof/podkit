@@ -19,7 +19,7 @@ pub const NETWORK_LABEL: &str = "traefik.docker.network";
 /// Name of the Traefik container.
 pub const TRAEFIK_CONTAINER_NAME: &str = "podkit-traefik";
 /// Pinned Traefik image; `renovate.json` rewrites this literal.
-pub const TRAEFIK_IMAGE: &str = "docker.io/library/traefik:v3.7.19";
+pub const TRAEFIK_IMAGE: &str = "docker.io/library/traefik:v3.8.0";
 
 const CONFIG_HASH_LABEL: &str = "podkit.config-hash";
 
