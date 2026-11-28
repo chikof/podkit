@@ -98,6 +98,20 @@ pub async fn list(db: impl PgExecutor<'_>, team: TeamId) -> Result<Vec<Preset>, 
 	.await
 }
 
+/// A team's presets with their files, for a page that draws what each one holds.
+///
+/// # Errors
+/// Database failures.
+pub async fn list_whole(db: impl PgExecutor<'_>, team: TeamId) -> Result<Vec<Preset>, sqlx::Error> {
+	sqlx::query_as(
+		"SELECT id, team_id, slug, name, description, origin, file, created_by, created_at \
+		 FROM presets WHERE team_id = $1 ORDER BY name, id",
+	)
+	.bind(team)
+	.fetch_all(db)
+	.await
+}
+
 /// # Errors
 /// Database failures.
 pub async fn get(

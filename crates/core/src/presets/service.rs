@@ -374,6 +374,15 @@ pub async fn list(state: &AppState, user: UserId, team: TeamId) -> AppResult<Vec
 	Ok(store::list(&state.db, team).await?)
 }
 
+/// The team's kept presets with their files; needs `read project`.
+///
+/// # Errors
+/// `Forbidden`; database failures.
+pub async fn list_whole(state: &AppState, user: UserId, team: TeamId) -> AppResult<Vec<Preset>> {
+	authorize(&state.db, user, team, Action::Read, Resource::Project).await?;
+	Ok(store::list_whole(&state.db, team).await?)
+}
+
 /// One kept preset with its file; needs `read project`.
 ///
 /// # Errors
@@ -462,6 +471,12 @@ pub fn catalog() -> Vec<CatalogPreset> {
 			..p.clone()
 		})
 		.collect()
+}
+
+/// The presets the template catalog brought, each with its file.
+#[must_use]
+pub fn catalog_whole() -> Vec<CatalogPreset> {
+	crate::templates::load_all().presets.clone()
 }
 
 /// One preset of the catalog with its file.

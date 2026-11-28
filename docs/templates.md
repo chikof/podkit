@@ -129,10 +129,6 @@ the reason, and exits 1 when there is any. A plan sees what a parser lets throug
 databases of one name in a project; it cannot see what depends on an install, such as a slug
 that is taken. Run it on a checkout of podkit-templates before a change there is published.
 
-`server preset-canvas <dir>` prints, as one JSON object by preset id, where the project canvas
-puts each preset's environments, parts, networks and links. The catalog's website draws a
-preset from it, so it shows what the preset's page in podkit shows.
-
 A few templates stay in `crates/core/templates` for podkit's own tests. They are not in the
 binary.
 
