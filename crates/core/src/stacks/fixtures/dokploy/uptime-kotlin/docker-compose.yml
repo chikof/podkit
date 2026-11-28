@@ -1,6 +1,6 @@
 services:
   uptime-kotlin:
-    image: ghcr.io/theomeunier/uptime-kotlin:1.5.0
+    image: ghcr.io/theomeunier/uptime-kotlin:1.6.4
     restart: unless-stopped
     mem_limit: 512m
     expose:
