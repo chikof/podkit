@@ -27,7 +27,7 @@ services:
       start_period: 30s
     mem_limit: 1280m
   auth:
-    image: supabase/gotrue:v2.189.0@sha256:385184459f57569c54c25209f51f3b2be99ddd7c4ce9e3555b5d3eea8447b7cf
+    image: supabase/gotrue:v2.199.0@sha256:85c8323c05854ba911a8b2968c513e7e1b4cf7ebf75a30124ae923e7127cf01f
     restart: unless-stopped
     entrypoint:
     - /bin/sh
