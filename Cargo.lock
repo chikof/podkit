@@ -1279,9 +1279,9 @@ checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 
 [[package]]
 name = "datastar"
-version = "0.4.1"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27799c6e0b861af6c4bd0afc91454a0d3f2f9ac7560417bbf1bfd3da5d9d6205"
+checksum = "c4878c47442f15ba303632f9a241606e67f4deec016c69c8539e271d8eee3c12"
 dependencies = [
  "axum",
  "serde",
