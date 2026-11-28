@@ -44,7 +44,7 @@ services:
       start_period: 15s
 
   homelable:
-    image: ghcr.io/pouzor/homelable-frontend:3.6.0
+    image: ghcr.io/pouzor/homelable-frontend:3.8.0
     restart: unless-stopped
     depends_on:
       homelable-backend:
