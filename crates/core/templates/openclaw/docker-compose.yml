@@ -1,6 +1,6 @@
 services:
   openclaw:
-    image: docker.io/coollabsio/openclaw:2026.2.6
+    image: docker.io/coollabsio/openclaw:2026.11.10
     restart: unless-stopped
     environment:
       AUTH_USERNAME: ${AUTH_USERNAME}
