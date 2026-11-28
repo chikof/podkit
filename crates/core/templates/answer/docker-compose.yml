@@ -1,6 +1,6 @@
 services:
   answer:
-    image: apache/answer:1.4.1
+    image: apache/answer:1.7.1
     expose:
       - '80'
     restart: on-failure
