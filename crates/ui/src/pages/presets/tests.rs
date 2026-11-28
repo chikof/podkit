@@ -250,6 +250,24 @@ async fn presets_ui_saving_a_project_shows_what_is_kept_first(db: PgPool) {
 }
 
 #[db_test(migrator = "podkit_core::db::MIGRATOR")]
+async fn presets_ui_the_list_shows_each_preset_as_a_card_of_what_it_holds(db: PgPool) {
+	let w = World::new(db).await;
+	let kept = w.kept().await;
+	let (status, list) = w.page("").await;
+	assert_eq!(status, StatusCode::OK);
+	let main = page_main(&list);
+	// One card: the whole of it opens the preset's page, and it says what is inside.
+	assert_contains(main, "ui-link-card");
+	assert_contains(main, &format!("href=\"{}\"", w.url(&kept)));
+	assert_contains(main, "1 environment \u{b7} 1 application \u{b7} 1 database");
+	assert_contains(main, "Contains web, main");
+	// The canvas is on the preset's page, not in the list.
+	assert!(!main.contains("ui-cv-static"), "the list draws no canvas");
+	let (_, page) = w.page(&kept).await;
+	assert_contains(page_main(&page), "ui-cv-static");
+}
+
+#[db_test(migrator = "podkit_core::db::MIGRATOR")]
 async fn presets_ui_the_gallery_of_templates_points_to_presets(db: PgPool) {
 	let w = World::new(db).await;
 	let (_, _, gallery) = get_html(

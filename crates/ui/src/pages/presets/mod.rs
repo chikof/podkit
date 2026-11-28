@@ -20,8 +20,8 @@ use serde_json::{Value, json};
 
 use super::iac::plan_view;
 use crate::components::{
-	BUTTON, CHECKBOX, INPUT, LABEL, SELECT, Size, Tone, Variant, badge, button_class, card,
-	card_content, card_section, dialog, dialog_open_button, icon,
+	BUTTON, CHECKBOX, INPUT, LABEL, LogoSize, SELECT, Size, Tone, Variant, badge, button_class,
+	card, card_content, card_section, dialog, dialog_open_button, icon, logo,
 };
 use crate::extract::TeamCtx;
 use crate::layout::{Crumb, app_page, form_error};
@@ -112,27 +112,39 @@ fn crumbs<'a>(ctx: &TeamCtx, leaf: Option<&'a str>) -> Vec<Crumb<'a>> {
 
 // ----- the list
 
-fn row(
+/// One preset as a card: the logos of what it holds, its name and what it is for, and the
+/// count of its parts. The whole card opens its page, where it is drawn in full and applied.
+fn preset_card(
 	href: &str,
 	name: &str,
 	description: &str,
+	file: &str,
 	tag: Option<Markup>,
 	remove: Option<Markup>,
 ) -> Markup {
+	let held = canvas::held(file);
 	html! {
-		li class="flex items-center justify-between gap-4 py-3" {
-			div class="min-w-0" {
-				p class="font-medium" {
-					(name)
-					@if let Some(tag) = tag { " " (tag) }
+		li {
+			article class="ui-card ui-link-card h-full p-4" {
+				div class="flex h-full flex-col gap-3" {
+					@match &held {
+						Some((logos, _)) => (logos),
+						None => (logo(name, LogoSize::Sm)),
+					}
+					div class="flex min-w-0 flex-1 flex-col gap-1" {
+						h3 class="text-base leading-tight font-semibold" {
+							a href=(href) class="ui-link-card-link outline-hidden" { (name) }
+							@if let Some(tag) = tag { " " (tag) }
+						}
+						@if !description.is_empty() {
+							p class="line-clamp-3 text-sm text-muted-foreground" { (description) }
+						}
+					}
+					div class="flex min-h-7 items-center justify-between gap-3 text-xs text-muted-foreground" {
+						span { @if let Some((_, counts)) = &held { (counts) } }
+						@if let Some(remove) = remove { div class="relative z-10" { (remove) } }
+					}
 				}
-				@if !description.is_empty() {
-					p class="text-sm text-muted-foreground" { (description) }
-				}
-			}
-			div class="flex shrink-0 items-center gap-2" {
-				@if let Some(remove) = remove { (remove) }
-				a class=(button_class(Variant::Outline, Size::Sm)) href=(href) { "Apply\u{2026}" }
 			}
 		}
 	}
@@ -183,10 +195,10 @@ fn keep_signals() -> String {
 	reason = "one markup block: the page is read top to bottom like the page it draws"
 )]
 async fn list(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Response> {
-	let kept = service::list(&s, ctx.user.id, ctx.team.id)
+	let kept = service::list_whole(&s, ctx.user.id, ctx.team.id)
 		.await
 		.map_err(|e| error::page(&ctx, &e))?;
-	let catalog = service::catalog();
+	let catalog = service::catalog_whole();
 	let projects = podkit_core::projects::service::list(&s.db, ctx.user.id, ctx.team.id)
 		.await
 		.unwrap_or_default();
@@ -216,9 +228,9 @@ async fn list(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 							"None yet. They arrive when the administrator downloads or refreshes the template catalog."
 						}
 					} @else {
-						ul class="divide-y" {
+						ul class="ui-card-grid" {
 							@for p in &catalog {
-								(row(&format!("{here}/catalog/{}", p.id), &p.name, &p.description, None, None))
+								(preset_card(&format!("{here}/catalog/{}", p.id), &p.name, &p.description, &p.file, None, None))
 							}
 						}
 					}
@@ -230,12 +242,13 @@ async fn list(State(s): State<AppState>, ctx: TeamCtx) -> Result<Markup, Respons
 					@if kept.is_empty() {
 						p class="text-sm text-muted-foreground" { "None yet." }
 					} @else {
-						ul class="divide-y" {
+						ul class="ui-card-grid" {
 							@for p in &kept {
-								(row(
+								(preset_card(
 									&format!("{here}/kept/{}", p.id),
 									&p.name,
 									&p.description,
+									&p.file,
 									(p.origin == Origin::Imported).then(|| badge(Tone::Warning, "Unofficial")),
 									can_remove.then(|| remove_button(p.id, &p.name)),
 								))

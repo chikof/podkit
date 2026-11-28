@@ -5,9 +5,10 @@
 use maud::{Markup, html};
 
 use crate::components::{LogoSize, icon};
-use crate::pages::projects::cards::resource_logo;
+use crate::pages::projects::cards::{logo_row, resource_logo};
 use podkit_core::projects::graph::layout::{COL_GAP, layout};
 use podkit_core::projects::graph::{EdgeKind, Graph};
+use podkit_core::projects::overview::ResourceLogo;
 
 /// The canvas of the preset `file`; nothing when the file is not a preset or holds nothing.
 pub fn canvas(file: &str) -> Markup {
@@ -16,6 +17,35 @@ pub fn canvas(file: &str) -> Markup {
 		.and_then(|doc| podkit_core::presets::graph::graph(&doc))
 		.filter(|g| !g.nodes.is_empty())
 		.map_or_else(|| html! {}, |graph| world(&graph))
+}
+
+/// What a preset holds, for its card in the list: the logo of each part, and the count of
+/// its environments and of each kind of part ("2 environments · 4 databases"). `None` when
+/// the file is not a preset or holds nothing.
+pub fn held(file: &str) -> Option<(Markup, String)> {
+	let graph = podkit_core::iac::doc::parse(file)
+		.ok()
+		.and_then(|doc| podkit_core::presets::graph::graph(&doc))
+		.filter(|g| !g.nodes.is_empty())?;
+	let logos: Vec<ResourceLogo> = graph
+		.nodes
+		.iter()
+		.map(|n| ResourceLogo {
+			kind: n.key.kind,
+			name: n.name.clone(),
+			mark: n.mark,
+		})
+		.collect();
+	let count = |n: usize, one: &str| format!("{n} {one}{}", if n == 1 { "" } else { "s" });
+	let mut counts = vec![count(graph.environments.len(), "environment")];
+	let mut kinds: Vec<_> = graph.nodes.iter().map(|n| n.key.kind).collect();
+	kinds.sort();
+	kinds.dedup();
+	for kind in kinds {
+		let n = graph.nodes.iter().filter(|n| n.key.kind == kind).count();
+		counts.push(count(n, &kind.label().to_lowercase()));
+	}
+	Some((logo_row(&logos), counts.join(" \u{b7} ")))
 }
 
 fn world(graph: &Graph) -> Markup {
