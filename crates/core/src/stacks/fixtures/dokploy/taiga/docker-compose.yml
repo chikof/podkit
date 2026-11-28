@@ -122,7 +122,7 @@ services:
       SECRET_KEY: ${SECRET_KEY}
 
   taiga-gateway:
-    image: nginx:1.19-alpine
+    image: nginx:1.31-alpine
     restart: unless-stopped
     expose:
       - 80

@@ -2,7 +2,7 @@ name: ${DOCKER_NAME}
 services:
   nginx:
 
-    image: "nginx:1.21.3"
+    image: "nginx:1.31.10"
     expose:
       - 80
     volumes:
