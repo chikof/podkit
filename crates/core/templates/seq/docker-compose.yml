@@ -1,6 +1,6 @@
 services:
   seq:
-    image: datalust/seq:2025.2
+    image: datalust/seq:2026.1
     restart: unless-stopped
     environment:
       ACCEPT_EULA: "Y"
