@@ -1,6 +1,6 @@
 services:
   weblate:
-    image: weblate/weblate:2026.7.1.1
+    image: weblate/weblate:2026.11.2.1
     restart: unless-stopped
     depends_on:
       database:
