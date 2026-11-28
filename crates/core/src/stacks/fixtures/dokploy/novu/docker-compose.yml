@@ -93,7 +93,7 @@ services:
       start_period: 40s
 
   worker:
-    image: ghcr.io/novuhq/novu/worker:3.18.0
+    image: ghcr.io/novuhq/novu/worker:3.21.0
     restart: unless-stopped
     depends_on:
       mongodb:
