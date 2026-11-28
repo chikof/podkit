@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/logto-io/logto:1.41.0
+    image: ghcr.io/logto-io/logto:1.46.0
     restart: unless-stopped
     depends_on:
       postgres:
